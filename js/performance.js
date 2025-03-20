@@ -12,7 +12,7 @@ async function getData() {
         const statusElement = document.getElementById('server-status');
         if (!statusElement) {
             console.error("Error: #server-status element not found.");
-            return null;
+            throw new Error('HTML server status "server-status" element not found.');
         }
         if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -29,11 +29,18 @@ async function getData() {
         if (statusElement) {
             statusElement.innerHTML = '❌ Server is down';
         }
-        return null;
+        throw new Error("server is down");
     }
 }
 document.addEventListener('DOMContentLoaded', () => {
-    getData();//check for server connection
+    try{
+        getData();//check for server connection
+    } catch (error) {
+        console.log("error: ", error);
+    }
+    console.log("l41");
+    
+
     // Page Load Time
     const [navigationEntry] = performance.getEntriesByType('navigation');
     const x = navigationEntry.toJSON();
