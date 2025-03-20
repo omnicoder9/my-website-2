@@ -47,9 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const loadTimeInSeconds = ((navigationEntry.loadEventEnd - navigationEntry.startTime) / 1000).toFixed(5);
 
         // Update the HTML element with the measured load time
-        // console.log("here 2");
+       
         document.getElementById('pageLoadTime').innerText = `${loadTimeInSeconds} seconds`;
-        // console.log(loadTimeInSeconds);
     } else {
         document.getElementById('pageLoadTime').innerText = 'Performance data not available';
     }

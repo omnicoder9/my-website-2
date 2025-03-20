@@ -1,3 +1,7 @@
+//TO DO: 
+//- store spreadsheets in dictionary, dynamically render.
+
+
 //smooth scrolling for navigation
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
