@@ -1,5 +1,7 @@
 //TO DO: 
 //- store spreadsheets in dictionary, dynamically render.
+//api calls to retrieve ['riddle', 'theorem', 'equation', 'algorithm', 'element', 'chemical formula', 'quotation', 'philosophy publication', 'patent', 'rfc', 'xkcd', 'cwe', 'definition'] of the day
+
 
 
 //smooth scrolling for navigation
