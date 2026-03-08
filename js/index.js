@@ -4,19 +4,34 @@
 
 
 
-//smooth scrolling for navigation
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-      e.preventDefault();
-      document.querySelector(this.getAttribute('href')).scrollIntoView({
-        behavior: 'smooth'
-      });
-    });
+//smooth scrolling for navigation (works for dynamically injected headers too)
+document.addEventListener('click', (event) => {
+  const anchor = event.target.closest('a[href^="#"]');
+  if (!anchor) {
+    return;
+  }
+
+  const target = document.querySelector(anchor.getAttribute('href'));
+  if (!target) {
+    return;
+  }
+
+  event.preventDefault();
+  target.scrollIntoView({
+    behavior: 'smooth'
   });
+});
 
 //sticky nav bar
-const header = document.querySelector('header');
+function getPrimaryHeader() {
+  return document.querySelector('#site-header header') || document.querySelector('header');
+}
+
 window.addEventListener('scroll', () => {
+  const header = getPrimaryHeader();
+  if (!header) {
+    return;
+  }
   if (window.scrollY > 50) {
     header.classList.add('sticky');
   } else {

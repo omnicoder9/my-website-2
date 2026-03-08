@@ -32,7 +32,98 @@ async function getData() {
         throw new Error("server is down");
     }
 }
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = value;
+    }
+}
+
+function getBrowserInfo(userAgent) {
+    const ua = userAgent || "";
+    let browser = "Unknown browser";
+    let version = "unknown";
+
+    if (/Edg\/([\d.]+)/.test(ua)) {
+        browser = "Microsoft Edge";
+        version = ua.match(/Edg\/([\d.]+)/)[1];
+    } else if (/Chrome\/([\d.]+)/.test(ua) && !/Edg\//.test(ua)) {
+        browser = "Google Chrome";
+        version = ua.match(/Chrome\/([\d.]+)/)[1];
+    } else if (/Firefox\/([\d.]+)/.test(ua)) {
+        browser = "Mozilla Firefox";
+        version = ua.match(/Firefox\/([\d.]+)/)[1];
+    } else if (/Version\/([\d.]+).*Safari/.test(ua) && !/Chrome\//.test(ua)) {
+        browser = "Safari";
+        version = ua.match(/Version\/([\d.]+)/)[1];
+    }
+
+    return `${browser} ${version}`;
+}
+
+function getOsInfo(userAgent) {
+    const ua = userAgent || "";
+    if (/Windows NT/.test(ua)) return "Windows";
+    if (/Mac OS X/.test(ua)) return "macOS";
+    if (/Android/.test(ua)) return "Android";
+    if (/iPhone|iPad|iPod/.test(ua)) return "iOS";
+    if (/Linux/.test(ua)) return "Linux";
+    return "Unknown OS";
+}
+
+function getDeviceType(userAgent) {
+    const ua = userAgent || "";
+    if (/Tablet|iPad/.test(ua)) return "Tablet";
+    if (/Mobi|Android/.test(ua)) return "Phone";
+    return "Desktop";
+}
+
+async function populateVisitorInfo() {
+    const userAgent = navigator.userAgent || "";
+    const requestedPage = window.location.href;
+    const requestTime = new Date().toISOString();
+    const referrer = document.referrer || "Direct visit (no referrer)";
+    const language = navigator.language || "Unknown";
+    const screenResolution = `${window.screen.width}x${window.screen.height}`;
+    const networkType = (navigator.connection && (navigator.connection.effectiveType || navigator.connection.type))
+        ? `${navigator.connection.effectiveType || navigator.connection.type}`
+        : "Not available in this browser";
+    const navEntry = performance.getEntriesByType("navigation")[0];
+    const appProtocol = window.location.protocol.replace(":", "").toUpperCase();
+    const transportProtocol = navEntry && navEntry.nextHopProtocol ? navEntry.nextHopProtocol : "unknown transport";
+    const protocolInfo = `${appProtocol} / ${transportProtocol}; TLS version not exposed by browser`;
+
+    setText("visitorNetworkType", networkType);
+    setText("visitorBrowser", getBrowserInfo(userAgent));
+    setText("visitorOs", getOsInfo(userAgent));
+    setText("visitorDeviceType", getDeviceType(userAgent));
+    setText("visitorScreenResolution", screenResolution);
+    setText("visitorLanguage", language);
+    setText("visitorReferrer", referrer);
+    setText("visitorRequestedPage", requestedPage);
+    setText("visitorRequestTime", requestTime);
+    setText("visitorProtocolInfo", protocolInfo);
+
+    try {
+        const response = await fetch("https://ipapi.co/json/", { cache: "no-store" });
+        if (!response.ok) {
+            throw new Error("IP lookup failed");
+        }
+        const data = await response.json();
+        const ipAddress = data && data.ip ? data.ip : "Unavailable";
+        const isp = data && data.org ? data.org : "Unavailable";
+        setText("visitorIpAddress", ipAddress);
+        setText("visitorIsp", isp);
+    } catch (error) {
+        console.error("IP/ISP lookup failed:", error);
+        setText("visitorIpAddress", "Unavailable (blocked or offline)");
+        setText("visitorIsp", "Unavailable (blocked or offline)");
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    populateVisitorInfo();
     try{
         getData();//check for server connection
     } catch (error) {
