@@ -1,6 +1,8 @@
 # my-website-2
 static (initially), custom domain
 
+npm install -g http-server
+
 how to start front end server
 $ http-server -p 3000
 

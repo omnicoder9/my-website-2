@@ -5,6 +5,7 @@ async function loadBlogArticles() {
   }
 
   const articleFiles = [
+    'blog-articles/information-security-for-everyone.html',
     'blog-articles/why-digital-privacy-is-important.html',
     'blog-articles/levels-of-digital-privacy.html'
   ];
