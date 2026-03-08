@@ -85,6 +85,197 @@ const unitConversions = {
   cups: 240, // 1 cup = 240 mL
 };
 
+// resources taxonomy dropdown
+const resourceDropdown = document.getElementById('resourceDropdown');
+const resourceStatus = document.getElementById('resourceLoadStatus');
+const resourceRadios = document.querySelectorAll('input[name="resourceType"]');
+
+const resourceFiles = {
+  industry: 'data/industry2.json',
+  occupation: 'data/occupations.json',
+  academic: 'data/academic.json'
+};
+
+function uniqueKeepOrder(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    if (!item || seen.has(item)) {
+      return false;
+    }
+    seen.add(item);
+    return true;
+  });
+}
+
+function mergeEntriesKeepOrder(entries) {
+  const indexByLabel = new Map();
+  const merged = [];
+
+  entries.forEach((entry) => {
+    if (!entry || !entry.label) {
+      return;
+    }
+
+    if (!indexByLabel.has(entry.label)) {
+      indexByLabel.set(entry.label, merged.length);
+      merged.push({ label: entry.label, level: Math.max(0, entry.level || 0) });
+      return;
+    }
+
+    const idx = indexByLabel.get(entry.label);
+    merged[idx].level = Math.min(merged[idx].level, Math.max(0, entry.level || 0));
+  });
+
+  return merged;
+}
+
+function extractIndustryItems(data) {
+  const entries = [];
+  const sectors = (data && data.taxonomy && data.taxonomy.sectors) ? data.taxonomy.sectors : [];
+
+  sectors.forEach((sectorObj) => {
+    entries.push({ label: sectorObj.sector, level: 0 });
+    (sectorObj.industry_groups || []).forEach((groupObj) => {
+      entries.push({ label: groupObj.industry_group, level: 1 });
+      (groupObj.industries || []).forEach((industryObj) => {
+        entries.push({ label: industryObj.industry, level: 2 });
+        (industryObj.subindustries || []).forEach((subindustry) => entries.push({ label: subindustry, level: 3 }));
+      });
+    });
+  });
+
+  return mergeEntriesKeepOrder(entries);
+}
+
+function extractOccupationItems(data) {
+  const entries = [];
+  const groups = (data && data.occupation_taxonomy) ? data.occupation_taxonomy : [];
+
+  groups.forEach((majorGroup) => {
+    entries.push({ label: majorGroup.major_group, level: 0 });
+    (majorGroup.minor_groups || []).forEach((minorGroup) => {
+      entries.push({ label: minorGroup.minor_group, level: 1 });
+      (minorGroup.broad_occupations || []).forEach((broadOccupation) => {
+        entries.push({ label: broadOccupation.broad_occupation, level: 2 });
+        (broadOccupation.occupations || []).forEach((occupation) => entries.push({ label: occupation.title, level: 3 }));
+      });
+    });
+  });
+
+  return mergeEntriesKeepOrder(entries);
+}
+
+function extractAcademicItems(data) {
+  const nodes = (data && data.nodes) ? data.nodes : [];
+  const byId = new Map();
+  const memoDepth = new Map();
+  const visiting = new Set();
+
+  nodes.forEach((node) => {
+    byId.set(node.id, node);
+  });
+
+  function getDepth(nodeId) {
+    if (memoDepth.has(nodeId)) {
+      return memoDepth.get(nodeId);
+    }
+    if (visiting.has(nodeId)) {
+      return 0;
+    }
+
+    const node = byId.get(nodeId);
+    if (!node) {
+      return 0;
+    }
+
+    const parents = Array.isArray(node.parents) ? node.parents : [];
+    if (parents.length === 0) {
+      memoDepth.set(nodeId, 0);
+      return 0;
+    }
+
+    visiting.add(nodeId);
+    let minParentDepth = Infinity;
+    parents.forEach((parentId) => {
+      minParentDepth = Math.min(minParentDepth, getDepth(parentId));
+    });
+    visiting.delete(nodeId);
+
+    const depth = (minParentDepth === Infinity ? 0 : minParentDepth + 1);
+    memoDepth.set(nodeId, depth);
+    return depth;
+  }
+
+  const entries = nodes.map((node) => ({
+    label: node.name,
+    level: Math.min(getDepth(node.id), 4)
+  }));
+
+  return mergeEntriesKeepOrder(entries);
+}
+
+function getItemsForType(type, data) {
+  if (type === 'industry') {
+    return extractIndustryItems(data);
+  }
+  if (type === 'occupation') {
+    return extractOccupationItems(data);
+  }
+  return extractAcademicItems(data);
+}
+
+function renderDropdownOptions(items) {
+  resourceDropdown.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Choose an option...';
+  resourceDropdown.appendChild(placeholder);
+
+  items.forEach((item) => {
+    const option = document.createElement('option');
+    const label = typeof item === 'string' ? item : item.label;
+    const level = typeof item === 'string' ? 0 : (item.level || 0);
+    option.value = label;
+    option.textContent = `${'\u00A0\u00A0'.repeat(level)}${label}`;
+    resourceDropdown.appendChild(option);
+  });
+}
+
+async function loadResourceDropdown(type) {
+  if (!resourceDropdown || !resourceStatus) {
+    return;
+  }
+
+  resourceStatus.textContent = 'Loading...';
+
+  try {
+    const resourcePath = resourceFiles[type];
+    const response = await fetch(resourcePath, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Failed to load ${resourcePath}`);
+    }
+
+    const data = await response.json();
+    const items = getItemsForType(type, data);
+    renderDropdownOptions(items);
+    resourceStatus.textContent = `Loaded ${items.length} items for ${type}.`;
+  } catch (error) {
+    resourceDropdown.innerHTML = '<option value="">Unable to load data</option>';
+    resourceStatus.textContent = 'Error loading resource data. Use a local server (not file://).';
+    console.error(error);
+  }
+}
+
+if (resourceDropdown && resourceStatus && resourceRadios.length > 0) {
+  resourceRadios.forEach((radio) => {
+    radio.addEventListener('change', (event) => {
+      loadResourceDropdown(event.target.value);
+    });
+  });
+
+  const selectedRadio = document.querySelector('input[name="resourceType"]:checked');
+  loadResourceDropdown(selectedRadio ? selectedRadio.value : 'industry');
+}
 
 
 
