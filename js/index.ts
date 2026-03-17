@@ -69,6 +69,47 @@ const resourceFiles = {
 
 type IndexResourceType = keyof typeof resourceFiles;
 
+function formatMissionClockValue(date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone,
+    timeZoneName: "short"
+  }).format(date);
+}
+
+function formatMissionDateLine(date: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(date);
+}
+
+function initializeMissionControl(): void {
+  const utcClock = document.getElementById("missionUtcTime");
+  const localClock = document.getElementById("missionLocalTime");
+  const dateLine = document.getElementById("missionDateLine");
+
+  if (!utcClock || !localClock || !dateLine) {
+    return;
+  }
+
+  const updateMissionControl = () => {
+    const now = new Date();
+    utcClock.textContent = formatMissionClockValue(now, "UTC");
+    localClock.textContent = formatMissionClockValue(now);
+    dateLine.textContent = `Mission date ${formatMissionDateLine(now)}`;
+  };
+
+  updateMissionControl();
+  window.setInterval(updateMissionControl, 1000);
+}
+
+initializeMissionControl();
+
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   const anchor = target?.closest<HTMLAnchorElement>('a[href^="#"]');

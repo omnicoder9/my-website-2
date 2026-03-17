@@ -19,6 +19,7 @@ const fallbackHeaderMarkup = `
       <li><a href="index.html#contact">Contact</a></li>
       <li><a href="memes.html">Tech Memes</a></li>
       <li><a href="tools.html">Tools</a></li>
+      <li><a href="games.html">Games</a></li>
       <li><a href="privacy.html">Privacy</a></li>
       <li><a href="blog.html">Blog</a></li>
       <li><a href="other.html">Other</a></li>
@@ -27,7 +28,36 @@ const fallbackHeaderMarkup = `
 </header>
 `;
 
+function getSitePrefix(): string {
+  return window.location.pathname.includes("/blog-articles/") ? "../" : "";
+}
+
+function rewriteHeaderLinks(mountNode: HTMLElement): void {
+  const sitePrefix = getSitePrefix();
+  if (!sitePrefix) {
+    return;
+  }
+
+  mountNode.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((link) => {
+    const href = link.getAttribute("href");
+    if (
+      !href ||
+      href.startsWith("http") ||
+      href.startsWith("#") ||
+      href.startsWith("mailto:") ||
+      href.startsWith("tel:") ||
+      href.startsWith("../")
+    ) {
+      return;
+    }
+
+    link.setAttribute("href", `${sitePrefix}${href}`);
+  });
+}
+
 function normalizeHeaderLinks(mountNode: HTMLElement): void {
+  rewriteHeaderLinks(mountNode);
+
   const isIndexPage =
     window.location.pathname.endsWith("/index.html") ||
     window.location.pathname === "/" ||
@@ -52,7 +82,7 @@ function normalizeHeaderLinks(mountNode: HTMLElement): void {
   }
 
   try {
-    const response = await fetch("partials/header.html", { cache: "no-store" });
+    const response = await fetch(`${getSitePrefix()}partials/header.html`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error("Header partial request failed");
     }

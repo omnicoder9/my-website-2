@@ -6,6 +6,40 @@ const resourceFiles = {
     occupation: "data/occupations.json",
     academic: "data/academic.json"
 };
+function formatMissionClockValue(date, timeZone) {
+    return new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        hour12: false,
+        minute: "2-digit",
+        second: "2-digit",
+        timeZone,
+        timeZoneName: "short"
+    }).format(date);
+}
+function formatMissionDateLine(date) {
+    return new Intl.DateTimeFormat("en-US", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+    }).format(date);
+}
+function initializeMissionControl() {
+    const utcClock = document.getElementById("missionUtcTime");
+    const localClock = document.getElementById("missionLocalTime");
+    const dateLine = document.getElementById("missionDateLine");
+    if (!utcClock || !localClock || !dateLine) {
+        return;
+    }
+    const updateMissionControl = () => {
+        const now = new Date();
+        utcClock.textContent = formatMissionClockValue(now, "UTC");
+        localClock.textContent = formatMissionClockValue(now);
+        dateLine.textContent = `Mission date ${formatMissionDateLine(now)}`;
+    };
+    updateMissionControl();
+    window.setInterval(updateMissionControl, 1000);
+}
+initializeMissionControl();
 document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     const anchor = target === null || target === void 0 ? void 0 : target.closest('a[href^="#"]');
