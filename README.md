@@ -87,7 +87,7 @@ If the goal is to add every unnecessary bell and whistle possible, this is the b
 
 - Add share cards generated on the client with custom colors, page titles, and decorative frames.
 - Add profile cards and public mini-pages assembled from favorite tools, posts, and selected themes.
-- Add easter eggs, hidden routes, unlockable themes, and intentionally silly achievements.
+- DONE: Add easter eggs, hidden routes, unlockable themes, and intentionally silly achievements.
 - Add collaborative novelty features like guestbook notes, reaction walls, or anonymous prompts if a backend exists.
 - Add “send this page to future me” reminders with scheduled email or webhook integrations.
 
@@ -111,7 +111,8 @@ If the goal is to add every unnecessary bell and whistle possible, this is the b
 
 - Add a browser “desktop mode” where tools open as movable windows inside the page.
 - Add an ASCII mode, terminal mode, and magazine mode that completely restyle the same content.
-- Add a mascot, fake operating system boot screen, or synthetic “mission control” landing page.
+- Add a mascot, fake operating system boot screen, or 
+    - DONE: synthetic “mission control” landing page.
 - Add voice controls for generators and conversions just because it would be excessive.
 - Add a procedural homepage that rearranges featured content based on time, weather, or random seeds.
 

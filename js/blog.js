@@ -1,5 +1,23 @@
 const blogPosts = [
     {
+        path: "blog-articles/biology-engineering-challenge.html",
+        publishedAt: "2026-04-10",
+        summary: "A comparison between human-made complexity and the microscopic machinery of living systems.",
+        title: "Life's Impossible Machine: Biology as the Ultimate Engineering Challenge"
+    },
+    {
+        path: "blog-articles/engineering_as_philosophy.html",
+        publishedAt: "2026-04-08",
+        summary: "An essay on design, epistemology, and the hidden assumptions built into every system.",
+        title: "Engineering Is Philosophy in Disguise"
+    },
+    {
+        path: "blog-articles/mental_health_blog.html",
+        publishedAt: "2026-04-06",
+        summary: "A long-form look at the human, economic, and moral costs of untreated mental health problems.",
+        title: "The Elephant in the Room and the Trillion-Dollar Problem No One Is Trying to Solve"
+    },
+    {
         path: "blog-articles/information-security-for-everyone.html",
         publishedAt: "2026-03-14",
         summary: "A practical baseline for protecting your accounts, identity, money, and reputation.",
