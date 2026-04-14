@@ -3,6 +3,7 @@ type ToolsMassUnit = "grams" | "pounds";
 type ToolsFileFamily = "text" | "data" | "vector-image" | "image";
 type ToolsUsernameTheme = "animals" | "colors" | "space" | "nature" | "mythic";
 type ToolsUsernameStyle = "compact" | "underscore" | "dot";
+type ToolsPasswordScore = "empty" | "very-weak" | "weak" | "fair" | "strong" | "excellent";
 type ToolsFileFormat =
   | "txt"
   | "md"
@@ -33,6 +34,16 @@ type ToolsFileFormatDefinition = {
   shortLabel: string;
   family: ToolsFileFamily;
   mime: string;
+};
+
+type ToolsPasswordAnalysis = {
+  adjustedEntropyBits: number;
+  rawEntropyBits: number;
+  score: ToolsPasswordScore;
+  scoreLabel: string;
+  scorePercent: number;
+  summary: string;
+  findings: string[];
 };
 
 console.log("Tools");
@@ -165,6 +176,42 @@ const usernameAdjectivePool = [
   "electric",
   "crisp",
   "glowing"
+];
+
+const commonBreachedPasswordTerms = [
+  "123456",
+  "123456789",
+  "password",
+  "qwerty",
+  "abc123",
+  "letmein",
+  "welcome",
+  "admin",
+  "login",
+  "iloveyou",
+  "monkey",
+  "dragon",
+  "football",
+  "baseball",
+  "sunshine",
+  "princess",
+  "trustno1",
+  "starwars",
+  "superman",
+  "master",
+  "shadow",
+  "whatever",
+  "freedom",
+  "secret",
+  "pokemon"
+];
+
+const keyboardSequenceRows = [
+  "abcdefghijklmnopqrstuvwxyz",
+  "qwertyuiop",
+  "asdfghjkl",
+  "zxcvbnm",
+  "1234567890"
 ];
 
 function initializeToolsPage(): void {
@@ -351,13 +398,18 @@ function copyUsername(): void {
 function initializePasswordGenerator(): void {
   const generateButton = document.getElementById("generatePasswordBtn") as HTMLButtonElement | null;
   const copyButton = document.getElementById("copyPasswordBtn") as HTMLButtonElement | null;
+  const passwordStrengthInput = document.getElementById("passwordStrengthInput") as HTMLInputElement | null;
 
-  if (!generateButton || !copyButton) {
+  if (!generateButton || !copyButton || !passwordStrengthInput) {
     return;
   }
 
   generateButton.addEventListener("click", generatePassword);
   copyButton.addEventListener("click", copyPassword);
+  passwordStrengthInput.addEventListener("input", () => {
+    updatePasswordStrength(passwordStrengthInput.value);
+  });
+
   generatePassword();
 }
 
@@ -1224,12 +1276,13 @@ function generatePassword(): void {
   const numbersInput = document.getElementById("numbers") as HTMLInputElement | null;
   const capitalLettersInput = document.getElementById("capitalLetters") as HTMLInputElement | null;
   const passwordElement = document.getElementById("password");
+  const passwordStrengthInput = document.getElementById("passwordStrengthInput") as HTMLInputElement | null;
 
-  if (!lengthInput || !specialCharsInput || !numbersInput || !capitalLettersInput || !passwordElement) {
+  if (!lengthInput || !specialCharsInput || !numbersInput || !capitalLettersInput || !passwordElement || !passwordStrengthInput) {
     return;
   }
 
-  let length = Math.max(8, Math.min(40, parseInt(lengthInput.value, 10) || 8));
+  const length = Math.max(8, Math.min(40, parseInt(lengthInput.value, 10) || 8));
   lengthInput.value = String(length);
 
   let chars = "abcdefghijklmnopqrstuvwxyz";
@@ -1245,10 +1298,342 @@ function generatePassword(): void {
 
   let password = "";
   for (let index = 0; index < length; index += 1) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    password += chars.charAt(getSecureRandomIndex(chars.length));
   }
 
   passwordElement.textContent = password;
+  passwordStrengthInput.value = password;
+  updatePasswordStrength(password);
+}
+
+function getSecureRandomIndex(maxExclusive: number): number {
+  if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+    const randomValues = new Uint32Array(1);
+    const maxGeneratedValue = 0x100000000;
+    const rejectionLimit = maxGeneratedValue - (maxGeneratedValue % maxExclusive);
+
+    do {
+      window.crypto.getRandomValues(randomValues);
+    } while (randomValues[0] >= rejectionLimit);
+
+    return randomValues[0] % maxExclusive;
+  }
+
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+function updatePasswordStrength(password: string): void {
+  const strengthContainer = document.querySelector<HTMLElement>(".password-strength");
+  const labelElement = document.getElementById("passwordStrengthLabel");
+  const entropyElement = document.getElementById("passwordEntropyEstimate");
+  const summaryElement = document.getElementById("passwordStrengthSummary");
+  const searchSpaceElement = document.getElementById("passwordSearchSpace");
+  const crackEstimateElement = document.getElementById("passwordCrackEstimate");
+  const findingsElement = document.getElementById("passwordPatternFindings") as HTMLUListElement | null;
+  const strengthBar = document.getElementById("passwordStrengthBar") as HTMLSpanElement | null;
+
+  if (
+    !strengthContainer ||
+    !labelElement ||
+    !entropyElement ||
+    !summaryElement ||
+    !searchSpaceElement ||
+    !crackEstimateElement ||
+    !findingsElement ||
+    !strengthBar
+  ) {
+    return;
+  }
+
+  const analysis = analyzePasswordStrength(password);
+
+  strengthContainer.dataset.score = analysis.score;
+  labelElement.textContent = analysis.scoreLabel;
+  entropyElement.textContent = `${analysis.adjustedEntropyBits.toFixed(0)} bits`;
+  summaryElement.textContent = analysis.summary;
+  searchSpaceElement.textContent = `Search space: ${formatPasswordSearchSpace(analysis.adjustedEntropyBits)}`;
+  crackEstimateElement.textContent = `10B guesses/s: ${formatCrackTime(analysis.adjustedEntropyBits, 10_000_000_000)}`;
+  strengthBar.style.width = `${analysis.scorePercent}%`;
+
+  findingsElement.innerHTML = "";
+  analysis.findings.forEach((finding) => {
+    const listItem = document.createElement("li");
+    listItem.textContent = finding;
+    findingsElement.appendChild(listItem);
+  });
+}
+
+function analyzePasswordStrength(password: string): ToolsPasswordAnalysis {
+  if (!password) {
+    return {
+      adjustedEntropyBits: 0,
+      rawEntropyBits: 0,
+      score: "empty",
+      scoreLabel: "No password yet",
+      scorePercent: 0,
+      summary: "Generate a password or enter one to estimate strength.",
+      findings: ["Pattern checks will appear here."]
+    };
+  }
+
+  const rawEntropyBits = password.length * Math.log2(estimatePasswordPoolSize(password));
+  const findings: string[] = [];
+  let penaltyBits = 0;
+  let entropyCap = rawEntropyBits;
+
+  const addFinding = (message: string, penalty = 0, cap = rawEntropyBits): void => {
+    findings.push(message);
+    penaltyBits += penalty;
+    entropyCap = Math.min(entropyCap, cap);
+  };
+
+  const lowerPassword = password.toLowerCase();
+  const compactPassword = lowerPassword.replace(/[^a-z0-9]/g, "");
+  const leetNormalized = normalizePasswordLeetspeak(lowerPassword).replace(/[^a-z0-9]/g, "");
+
+  if (password.length < 8) {
+    addFinding("Very short passwords are usually cracked quickly.", 28, 18);
+  } else if (password.length < 12) {
+    addFinding("Length is below the usual 12-character minimum for general account passwords.", 14, 40);
+  } else if (password.length >= 16) {
+    findings.push("Length is doing useful work; 16+ characters raises brute-force cost.");
+  }
+
+  const exactCommonTerm = commonBreachedPasswordTerms.find((term) => compactPassword === term || leetNormalized === term);
+  if (exactCommonTerm) {
+    addFinding(`Matches a common breached-password pattern: "${exactCommonTerm}".`, 80, 12);
+  } else {
+    const containedCommonTerm = commonBreachedPasswordTerms.find((term) => {
+      return term.length >= 5 && (compactPassword.includes(term) || leetNormalized.includes(term));
+    });
+
+    if (containedCommonTerm) {
+      addFinding(`Contains a common password term: "${containedCommonTerm}".`, 24, 45);
+    }
+  }
+
+  if (leetNormalized !== compactPassword && commonBreachedPasswordTerms.some((term) => leetNormalized.includes(term))) {
+    addFinding("Common leetspeak substitutions are visible; attackers try those early.", 16, 42);
+  }
+
+  if (/^[A-Z]?[a-z]{4,}\d{1,4}[!?.@#$%&*]?$/.test(password)) {
+    addFinding("Looks like a word with a number or symbol suffix, a common breached-password shape.", 18, 44);
+  }
+
+  if (/(?:19|20)\d{2}/.test(password)) {
+    addFinding("Contains a year-like number; dates are common in leaked password patterns.", 10, 58);
+  }
+
+  if (/(?:0?[1-9]|1[0-2])[-/.]?(?:0?[1-9]|[12]\d|3[01])[-/.]?(?:\d{2}|\d{4})/.test(password)) {
+    addFinding("Contains a date-like pattern.", 12, 52);
+  }
+
+  const sequentialRun = findSequentialPasswordRun(compactPassword);
+  if (sequentialRun) {
+    addFinding(`Contains an obvious sequence: "${sequentialRun}".`, 18, 46);
+  }
+
+  if (/(.)\1{2,}/.test(password)) {
+    addFinding("Repeats the same character several times in a row.", 12, 45);
+  }
+
+  const repeatedChunk = password.match(/(.{2,5})\1{1,}/);
+  if (repeatedChunk) {
+    addFinding(`Repeats the chunk "${repeatedChunk[1]}".`, 14, 48);
+  }
+
+  if (/^[a-z]+$/i.test(password) || /^\d+$/.test(password)) {
+    addFinding("Uses only one character family.", 12, 42);
+  }
+
+  const uniqueCharacterCount = new Set(Array.from(password)).size;
+  if (uniqueCharacterCount <= 2) {
+    addFinding("Uses very few unique characters.", 22, 24);
+  } else if (password.length >= 10 && uniqueCharacterCount <= Math.ceil(password.length / 3)) {
+    addFinding("Character variety is low for this length.", 8, 55);
+  }
+
+  const adjustedEntropyBits = Math.max(0, Math.min(rawEntropyBits - penaltyBits, entropyCap));
+  const score = getPasswordScore(adjustedEntropyBits);
+  const scoreLabel = getPasswordScoreLabel(score);
+  const scorePercent = score === "empty" ? 0 : Math.max(8, Math.min(100, Math.round((adjustedEntropyBits / 95) * 100)));
+
+  if (findings.length === 0) {
+    findings.push("No obvious dictionary, sequence, date, or repetition patterns detected.");
+  }
+
+  return {
+    adjustedEntropyBits,
+    rawEntropyBits,
+    score,
+    scoreLabel,
+    scorePercent,
+    summary: `Estimated adjusted entropy: ${adjustedEntropyBits.toFixed(1)} bits. Raw character-space estimate: ${rawEntropyBits.toFixed(1)} bits.`,
+    findings
+  };
+}
+
+function estimatePasswordPoolSize(password: string): number {
+  let poolSize = 0;
+
+  if (/[a-z]/.test(password)) {
+    poolSize += 26;
+  }
+  if (/[A-Z]/.test(password)) {
+    poolSize += 26;
+  }
+  if (/\d/.test(password)) {
+    poolSize += 10;
+  }
+  if (/[^A-Za-z0-9\s]/.test(password)) {
+    poolSize += 33;
+  }
+  if (/\s/.test(password)) {
+    poolSize += 1;
+  }
+  if (/[^\x00-\x7F]/.test(password)) {
+    poolSize += 80;
+  }
+
+  return Math.max(poolSize, new Set(Array.from(password)).size, 1);
+}
+
+function normalizePasswordLeetspeak(value: string): string {
+  const substitutions: Record<string, string> = {
+    "0": "o",
+    "1": "l",
+    "3": "e",
+    "4": "a",
+    "5": "s",
+    "7": "t",
+    "8": "b",
+    "@": "a",
+    "$": "s",
+    "!": "i"
+  };
+
+  return Array.from(value)
+    .map((character) => substitutions[character] || character)
+    .join("");
+}
+
+function findSequentialPasswordRun(value: string): string {
+  if (value.length < 4) {
+    return "";
+  }
+
+  const rows: string[] = [];
+  keyboardSequenceRows.forEach((row) => {
+    rows.push(row, Array.from(row).reverse().join(""));
+  });
+
+  for (const row of rows) {
+    for (let length = Math.min(value.length, row.length); length >= 4; length -= 1) {
+      for (let start = 0; start <= row.length - length; start += 1) {
+        const sequence = row.slice(start, start + length);
+        if (value.includes(sequence)) {
+          return sequence;
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
+function getPasswordScore(entropyBits: number): ToolsPasswordScore {
+  if (entropyBits <= 0) {
+    return "empty";
+  }
+  if (entropyBits < 28) {
+    return "very-weak";
+  }
+  if (entropyBits < 45) {
+    return "weak";
+  }
+  if (entropyBits < 65) {
+    return "fair";
+  }
+  if (entropyBits < 85) {
+    return "strong";
+  }
+  return "excellent";
+}
+
+function getPasswordScoreLabel(score: ToolsPasswordScore): string {
+  const labels: Record<ToolsPasswordScore, string> = {
+    empty: "No password yet",
+    "very-weak": "Very weak",
+    weak: "Weak",
+    fair: "Fair",
+    strong: "Strong",
+    excellent: "Excellent"
+  };
+
+  return labels[score];
+}
+
+function formatPasswordSearchSpace(entropyBits: number): string {
+  if (entropyBits <= 0) {
+    return "none";
+  }
+
+  if (entropyBits < 60) {
+    return `${formatLargeNumber(Math.pow(2, entropyBits))} guesses`;
+  }
+
+  return `about 2^${entropyBits.toFixed(0)} guesses`;
+}
+
+function formatLargeNumber(value: number): string {
+  if (value < 1_000_000) {
+    return Math.round(value).toLocaleString("en-US");
+  }
+
+  const suffixes = [
+    { value: 1e18, suffix: "quintillion" },
+    { value: 1e15, suffix: "quadrillion" },
+    { value: 1e12, suffix: "trillion" },
+    { value: 1e9, suffix: "billion" },
+    { value: 1e6, suffix: "million" }
+  ];
+
+  const match = suffixes.find((item) => value >= item.value);
+  if (!match) {
+    return Math.round(value).toLocaleString("en-US");
+  }
+
+  return `${(value / match.value).toFixed(value / match.value >= 10 ? 1 : 2)} ${match.suffix}`;
+}
+
+function formatCrackTime(entropyBits: number, guessesPerSecond: number): string {
+  if (entropyBits <= 0) {
+    return "none";
+  }
+
+  const log2Seconds = entropyBits - Math.log2(guessesPerSecond);
+
+  if (log2Seconds < 0) {
+    return "less than a second";
+  }
+
+  const units = [
+    { label: "year", seconds: 31_536_000 },
+    { label: "day", seconds: 86_400 },
+    { label: "hour", seconds: 3_600 },
+    { label: "minute", seconds: 60 },
+    { label: "second", seconds: 1 }
+  ];
+
+  const unit = units.find((item) => log2Seconds >= Math.log2(item.seconds)) || units[units.length - 1];
+  const log2Value = log2Seconds - Math.log2(unit.seconds);
+
+  if (log2Value > 20) {
+    return `about 2^${log2Value.toFixed(0)} ${unit.label}s`;
+  }
+
+  const value = Math.pow(2, log2Value);
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit.label}${value === 1 ? "" : "s"}`;
 }
 
 function copyPassword(): void {
