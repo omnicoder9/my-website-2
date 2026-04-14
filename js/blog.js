@@ -1,5 +1,11 @@
 const blogPosts = [
     {
+        path: "blog-articles/limits-of-knowledge.html",
+        publishedAt: "2026-04-13",
+        summary: "A tour of the theorems, paradoxes, and epistemic boundaries that constrain human and machine intelligence.",
+        title: "The Walls of Reason: On the Limits of Knowledge and Intelligence"
+    },
+    {
         path: "blog-articles/biology-engineering-challenge.html",
         publishedAt: "2026-04-10",
         summary: "A comparison between human-made complexity and the microscopic machinery of living systems.",
