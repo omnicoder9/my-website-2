@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/fraud-and-ai.html",
+    publishedAt: "2026-04-15",
+    summary: "A history of fraud from ancient scams to AI-enabled deception, deepfakes, synthetic identities, and the future of trust.",
+    title: "The Oldest Game: Fraud in the Age of AI"
+  },
+  {
     path: "blog-articles/outages-are-inevitable.html",
     publishedAt: "2026-04-14",
     summary: "The physics, mathematics, and organizational science that make failure unavoidable in sufficiently complex systems.",
