@@ -61,9 +61,9 @@ If the goal is to add every unnecessary bell and whistle possible, this is the b
 
 ### Username and Password Madness
 
-- Add many more username themes: mythology, cyberpunk, fantasy tavern, biotech, ocean, medieval, retro arcade, astronomy catalog.
+- DONE: Add many more username themes: mythology, cyberpunk, fantasy tavern, biotech, ocean, medieval, retro arcade, astronomy catalog.
 - Add username composition rules: alliteration, syllable balancing, pronounceable mode, no repeated letters, brandable mode.
-- Add password strength visualization with entropy estimates, pattern detection, and breach-inspired heuristics.
+- DONE: Add password strength visualization with entropy estimates, pattern detection, and breach-inspired heuristics.
 - Add passphrase mode with wordlists, separators, emoji mode, and “memorable but not terrible” suggestions.
 - Add multiple copy/export formats: plain text, QR code, print card, hidden reveal mode.
 
@@ -94,7 +94,7 @@ If the goal is to add every unnecessary bell and whistle possible, this is the b
 ### Performance Theater
 
 - DONE: Add a visible performance dashboard that shows load timing, animation budget, paint counts, and asset weight.
-- Add progressive enhancement tiers that visibly announce whether the browser is in basic, enhanced, or absurd mode.
+- DONE: Add progressive enhancement tiers that visibly announce whether the browser is in basic, enhanced, or absurd mode.
 - Add offline/PWA support with install prompts, cached pages, and offline versions of the generators.
 - Add optional preloading logic that predicts likely next pages based on current page context.
 - Add “instant nav” with cached partial rendering and optimistic transitions between static pages.

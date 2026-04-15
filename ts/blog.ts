@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/outages-are-inevitable.html",
+    publishedAt: "2026-04-14",
+    summary: "The physics, mathematics, and organizational science that make failure unavoidable in sufficiently complex systems.",
+    title: "Outages Are Inevitable. Here's the Proof."
+  },
+  {
     path: "blog-articles/limits-of-knowledge.html",
     publishedAt: "2026-04-13",
     summary: "A tour of the theorems, paradoxes, and epistemic boundaries that constrain human and machine intelligence.",
@@ -23,6 +29,12 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-04-08",
     summary: "An essay on design, epistemology, and the hidden assumptions built into every system.",
     title: "Engineering Is Philosophy in Disguise"
+  },
+  {
+    path: "blog-articles/know-your-rights.html",
+    publishedAt: "2026-04-07",
+    summary: "A civic reference guide to constitutional protections, police encounters, and the rights Americans carry with them.",
+    title: "Know Your Rights: A Citizen's Field Guide"
   },
   {
     path: "blog-articles/mental_health_blog.html",

@@ -1,7 +1,20 @@
 type ToolsMassVolumeUnit = "grams" | "pounds" | "milliliters" | "cups";
 type ToolsMassUnit = "grams" | "pounds";
 type ToolsFileFamily = "text" | "data" | "vector-image" | "image";
-type ToolsUsernameTheme = "animals" | "colors" | "space" | "nature" | "mythic";
+type ToolsUsernameTheme =
+  | "animals"
+  | "colors"
+  | "space"
+  | "nature"
+  | "mythic"
+  | "mythology"
+  | "cyberpunk"
+  | "fantasy-tavern"
+  | "biotech"
+  | "ocean"
+  | "medieval"
+  | "retro-arcade"
+  | "astronomy-catalog";
 type ToolsUsernameStyle = "compact" | "underscore" | "dot";
 type ToolsPasswordScore = "empty" | "very-weak" | "weak" | "fair" | "strong" | "excellent";
 type ToolsFileFormat =
@@ -162,7 +175,151 @@ const usernameThemePools: Record<ToolsUsernameTheme, string[]> = {
   colors: ["amber", "indigo", "scarlet", "teal", "ivory", "cobalt", "sage", "coral", "umber", "silver"],
   space: ["nova", "quasar", "comet", "orbit", "zenith", "nebula", "eclipse", "cosmos", "pulsar", "asteroid"],
   nature: ["cedar", "river", "summit", "canyon", "fern", "stone", "meadow", "harbor", "thunder", "grove"],
-  mythic: ["phoenix", "griffin", "hydra", "atlas", "oracle", "pegasus", "sphinx", "titan", "drakon", "selene"]
+  mythic: ["phoenix", "griffin", "hydra", "atlas", "oracle", "pegasus", "sphinx", "titan", "drakon", "selene"],
+  mythology: [
+    "athena",
+    "apollo",
+    "artemis",
+    "odin",
+    "freya",
+    "loki",
+    "anansi",
+    "isis",
+    "osiris",
+    "quetzal",
+    "morrigan",
+    "perseus",
+    "eirene",
+    "raijin"
+  ],
+  cyberpunk: [
+    "netrunner",
+    "chrome",
+    "neon",
+    "cipher",
+    "datavault",
+    "gridlock",
+    "nanoshade",
+    "pulsejack",
+    "ghostware",
+    "bitrunner",
+    "synapse",
+    "holofox",
+    "mechbyte",
+    "voltdeck"
+  ],
+  "fantasy-tavern": [
+    "mugwarden",
+    "aleleaf",
+    "emberstew",
+    "questkeeper",
+    "bardstool",
+    "caskdragon",
+    "riddlemug",
+    "oakbarrel",
+    "moonmead",
+    "toastmage",
+    "pipebard",
+    "copperkeg",
+    "innsprite",
+    "supperquest"
+  ],
+  biotech: [
+    "codon",
+    "helix",
+    "plasmid",
+    "crispr",
+    "ribosome",
+    "biolume",
+    "sporelab",
+    "genekit",
+    "enzyme",
+    "chromatin",
+    "cellforge",
+    "mycelium",
+    "proteome",
+    "vectorcell"
+  ],
+  ocean: [
+    "kelp",
+    "reef",
+    "tidepool",
+    "narwhal",
+    "marlin",
+    "seaglass",
+    "maelstrom",
+    "coralfin",
+    "wavecrest",
+    "abyss",
+    "moonjelly",
+    "saltwind",
+    "bluewhale",
+    "trench"
+  ],
+  medieval: [
+    "squire",
+    "longbow",
+    "rampart",
+    "falchion",
+    "keep",
+    "lancer",
+    "banneret",
+    "quill",
+    "blacksmith",
+    "halberd",
+    "gildedstag",
+    "stonegate",
+    "ironhelm",
+    "woolcloak"
+  ],
+  "retro-arcade": [
+    "pixel",
+    "joystick",
+    "highscore",
+    "coinop",
+    "bosswave",
+    "glitch",
+    "bitblast",
+    "powerup",
+    "lasertag",
+    "bonusround",
+    "sprite",
+    "combo",
+    "scanline",
+    "warpzone"
+  ],
+  "astronomy-catalog": [
+    "messier31",
+    "ngc7000",
+    "ic434",
+    "barnard33",
+    "caldwell49",
+    "hipparcos",
+    "gaiadr3",
+    "kepler452b",
+    "trappist1",
+    "hd189733b",
+    "luyten7268",
+    "eso137001",
+    "psrb1919",
+    "wolf359"
+  ]
+};
+
+const usernameThemeLabels: Record<ToolsUsernameTheme, string> = {
+  animals: "animals",
+  colors: "colors",
+  space: "space",
+  nature: "nature",
+  mythic: "mythic",
+  mythology: "mythology",
+  cyberpunk: "cyberpunk",
+  "fantasy-tavern": "fantasy tavern",
+  biotech: "biotech",
+  ocean: "ocean",
+  medieval: "medieval",
+  "retro-arcade": "retro arcade",
+  "astronomy-catalog": "astronomy catalog"
 };
 
 const usernameAdjectivePool = [
@@ -1206,7 +1363,7 @@ function buildUsernameHint(
   const styleLabel = style === "compact" ? "compact" : style === "underscore" ? "underscore" : "dot separated";
   const mixinsLabel = mixins.length ? mixins.join(", ") : "theme only";
 
-  return `Theme: ${theme}. Format: ${styleLabel}. Mix: ${mixinsLabel}.`;
+  return `Theme: ${usernameThemeLabels[theme]}. Format: ${styleLabel}. Mix: ${mixinsLabel}.`;
 }
 
 function flashButtonLabel(button: HTMLButtonElement, label: string): void {
