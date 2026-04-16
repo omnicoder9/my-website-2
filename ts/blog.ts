@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/suffering_humans_vs_animals.html",
+    publishedAt: "2026-04-16",
+    summary: "A scientific and philosophical inquiry into pain, consciousness, emotional depth, and moral scale across humans and other animals.",
+    title: "Who Suffers More? Humans vs. Animals"
+  },
+  {
     path: "blog-articles/fraud-and-ai.html",
     publishedAt: "2026-04-15",
     summary: "A history of fraud from ancient scams to AI-enabled deception, deepfakes, synthetic identities, and the future of trust.",
