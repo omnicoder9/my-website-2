@@ -7,6 +7,24 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/medical_device_engineering_challenges.html",
+    publishedAt: "2026-04-21",
+    summary: "A systems-level tour of reliability, safety, power, software, cybersecurity, and regulatory constraints in electronic medical device engineering.",
+    title: "Engineering Challenges in Electronic Medical Device Design"
+  },
+  {
+    path: "blog-articles/us-citizen-politics-guide.html",
+    publishedAt: "2026-04-20",
+    summary: "A practical guide to political leverage for U.S. citizens, from voting and constituent contact to local elections and legislative tracking.",
+    title: "Your Voice, Your Government: A Citizen's Guide to Political Power"
+  },
+  {
+    path: "blog-articles/vegan-legislative-activism.html",
+    publishedAt: "2026-04-19",
+    summary: "A long-game view of vegan legislative and political activism through ballot measures, lobbying, litigation, and regulatory engagement.",
+    title: "The Long Game: Vegan Legislative and Political Activism"
+  },
+  {
     path: "blog-articles/suffering_humans_vs_animals.html",
     publishedAt: "2026-04-16",
     summary: "A scientific and philosophical inquiry into pain, consciousness, emotional depth, and moral scale across humans and other animals.",

@@ -29,6 +29,7 @@ const fallbackHeaderMarkup = `
 `;
 
 type EnhancementTier = "basic" | "enhanced" | "absurd";
+type WallpaperTime = "dawn" | "day" | "dusk" | "night";
 
 type EnhancementSignal = {
   label: string;
@@ -196,11 +197,59 @@ function normalizeHeaderLinks(mountNode: HTMLElement): void {
   });
 }
 
+function getWallpaperTime(date: Date): WallpaperTime {
+  const hour = date.getHours();
+
+  if (hour >= 5 && hour < 9) {
+    return "dawn";
+  }
+  if (hour >= 9 && hour < 17) {
+    return "day";
+  }
+  if (hour >= 17 && hour < 21) {
+    return "dusk";
+  }
+  return "night";
+}
+
+function renderWallpaperEngine(): void {
+  if (!document.body || document.querySelector(".wallpaper-engine")) {
+    return;
+  }
+
+  const wallpaper = document.createElement("div");
+  wallpaper.className = "wallpaper-engine";
+  wallpaper.setAttribute("aria-hidden", "true");
+  wallpaper.innerHTML = `
+    <span class="wallpaper-engine__orbit wallpaper-engine__orbit--one"><span></span></span>
+    <span class="wallpaper-engine__orbit wallpaper-engine__orbit--two"><span></span></span>
+    <span class="wallpaper-engine__orbit wallpaper-engine__orbit--three"><span></span></span>
+  `;
+
+  document.body.prepend(wallpaper);
+}
+
+function updateWallpaperTime(): void {
+  if (!document.body) {
+    return;
+  }
+
+  document.body.dataset.wallpaperTime = getWallpaperTime(new Date());
+}
+
+function initializeWallpaperEngine(): void {
+  updateWallpaperTime();
+  renderWallpaperEngine();
+  window.setInterval(updateWallpaperTime, 60 * 1000);
+}
+
 (async function loadSharedHeader(): Promise<void> {
   const mountNode = document.getElementById("site-header");
   if (!mountNode) {
     return;
   }
+
+  initializeWallpaperEngine();
 
   try {
     const response = await fetch(`${getSitePrefix()}partials/header.html`, { cache: "no-store" });

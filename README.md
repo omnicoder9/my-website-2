@@ -40,7 +40,7 @@ If the goal is to add every unnecessary bell and whistle possible, this is the b
 - Add animated page transitions with distinct personalities per page: tools feels like a control panel, memes feels chaotic, blog feels editorial.
 - Add a “cinematic mode” with ambient background shapes, parallax layers, and a subtle soundscape toggle.
 - Add a custom cursor system with context-aware states for links, buttons, draggable cards, and copy actions.
-- Add a “wallpaper engine” background with SVG noise, orbiting shapes, and time-of-day color shifts.
+- DONE: Add a “wallpaper engine” background with SVG noise, orbiting shapes, and time-of-day color shifts.
 
 ### Site-Wide Features
 
@@ -125,3 +125,71 @@ If this gets built out, the highest-return ridiculous additions are probably:
 3. Tool history, deep links, and export/import settings.
 4. A content pipeline for blog pages and metadata.
 5. A visual graph or dashboard layer that makes the site feel much more complex than it needs to be.
+
+---
+
+
+• Short answer: the site does not appear to use traditional first-party cookies, but it does use cookie-like/storage and third-party embeds
+  in ways that may require consent in the EU/UK. For a US-only personal site with no ads/analytics, you probably do not need a full cookie
+  consent banner, but you should still disclose the third-party services. If you expect EU/UK visitors, I would add consent or change the
+  implementation.
+
+  What I found in the repo:
+
+  - No direct document.cookie usage.
+  - No Google Analytics, Tag Manager, Meta Pixel, ads, Hotjar, etc.
+  - localStorage is used for game achievements/themes in ts/games.ts:201 and ts/games.ts:226.
+  - The header briefly writes/removes a localStorage test key in ts/header.ts:61.
+  - The homepage embeds YouTube using regular youtube.com/embed in index.html:293.
+  - The homepage calls https://ipapi.co/json/ to display visitor IP/ISP in ts/performance.ts:501.
+  - Several blog posts load Google Fonts from fonts.googleapis.com.
+
+  Consent Risk By Item
+
+  | Feature | Cookie consent needed? | Notes |
+  |---|---:|---|
+  | First-party cookies | No obvious use | I found no document.cookie or server Set-Cookie logic. |
+  | localStorage game progress/themes | Maybe, for EU/UK | ICO says cookie rules also apply to technologies that store/access info on the
+  device, including web storage. Optional game achievements are not strictly necessary. |
+  | YouTube iframe | Likely yes, for EU/UK unless gated | Current standard embed loads YouTube on page load. Better to use youtube-
+  nocookie.com and ideally click-to-load. |
+  | Google Fonts | Usually no cookie consent | Google says Google Fonts API does not set or log cookies, but it receives IP address and
+  request headers. Disclose or self-host fonts. |
+  | ipapi.co lookup | Not cookie consent, but privacy disclosure/opt-in recommended | Sends visitor IP to a third party. This is personal-
+  data/privacy-notice territory, not classic cookie-banner territory. |
+  | Browser performance metrics | Usually no | Mostly local browser APIs, no storage by themselves. |
+
+  My Recommendation
+
+  If you want a low-friction compliant posture:
+
+  1. Replace the YouTube iframe with either:
+      - https://www.youtube-nocookie.com/embed/Ac7G7xOG2Ag, or
+      - better: a placeholder button that only loads YouTube after the user clicks “Load YouTube video.”
+  2. Stop auto-calling ipapi.co on page load. Make it opt-in, or remove the visitor IP/ISP metric. It is not essential to the site.
+  3. Keep localStorage only after user interaction, or add a small “site preferences/game progress” notice. If targeting EU/UK users, ask
+     consent before storing optional achievement/theme state.
+  4. Add a short privacy/cookie notice page saying:
+      - no advertising cookies;
+      - no analytics cookies;
+      - local storage is used for optional game/theme progress;
+      - YouTube may receive data when videos are loaded;
+      - Google Fonts receives basic request data unless fonts are self-hosted;
+      - IP lookup is used only if you keep that feature.
+
+  For US-only operation, especially without targeted ads or analytics, this is probably not a “must show cookie banner before page load”
+  situation. For EU/UK visitors, the conservative answer is: yes, get consent before optional localStorage, YouTube embeds, and third-party
+  visitor lookup.
+
+  Sources used: ICO guidance on cookies and similar technologies says consent is required for non-essential cookies and similar storage/
+  access technologies, including web storage; it also gives the strictly necessary exception. Google Fonts states its Fonts API does not set
+  or log cookies but receives IP/request data. YouTube’s docs recommend youtube-nocookie.com for privacy-enhanced mode. California AG
+  guidance focuses more on opt-out for sale/sharing of personal information, especially targeted advertising, rather than blanket opt-in
+  cookie consent.
+  Links: ICO cookies guidance
+  (https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/),
+  ICO storage/access technologies
+  (https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/what-are-storage-and-access-technologies/),
+  Google Fonts privacy FAQ (https://developers.google.com/fonts/faq/privacy), YouTube privacy-enhanced embeds
+  (https://support.google.com/youtube/answer/171780), California CCPA overview (https://www.oag.ca.gov/privacy/ccpa).
+  
