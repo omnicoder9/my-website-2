@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/industrial-protocol-design.html",
+    publishedAt: "2026-04-22",
+    summary: "A protocol-engineering essay on determinism, interoperability, security debt, TSN, OPC UA, MQTT, and the trade-offs behind industrial automation networks.",
+    title: "The Wiring Problem: Industrial Protocol Design"
+  },
+  {
     path: "blog-articles/medical_device_engineering_challenges.html",
     publishedAt: "2026-04-21",
     summary: "A systems-level tour of reliability, safety, power, software, cybersecurity, and regulatory constraints in electronic medical device engineering.",
