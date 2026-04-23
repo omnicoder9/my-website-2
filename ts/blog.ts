@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/smart-grid-challenges.html",
+    publishedAt: "2026-04-24",
+    summary: "A systems-level survey of renewable integration, interoperability, cybersecurity, data management, aging infrastructure, and regulation in smart grid engineering.",
+    title: "Powering the Future, Securing the Present: Smart Grid Engineering Challenges"
+  },
+  {
     path: "blog-articles/vegan-activism-incentives.html",
     publishedAt: "2026-04-23",
     summary: "A case for shifting vegan activism toward incentives, procurement, defaults, price signals, and market competition rather than moral persuasion alone.",
