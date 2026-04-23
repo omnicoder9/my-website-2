@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/vegan-activism-incentives.html",
+    publishedAt: "2026-04-23",
+    summary: "A case for shifting vegan activism toward incentives, procurement, defaults, price signals, and market competition rather than moral persuasion alone.",
+    title: "Don't Ask Nicely. Win the Market: A New Theory of Vegan Activism"
+  },
+  {
     path: "blog-articles/industrial-protocol-design.html",
     publishedAt: "2026-04-22",
     summary: "A protocol-engineering essay on determinism, interoperability, security debt, TSN, OPC UA, MQTT, and the trade-offs behind industrial automation networks.",

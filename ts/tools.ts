@@ -16,6 +16,13 @@ type ToolsUsernameTheme =
   | "retro-arcade"
   | "astronomy-catalog";
 type ToolsUsernameStyle = "compact" | "underscore" | "dot";
+type ToolsUsernameCompositionOptions = {
+  alliteration: boolean;
+  brandable: boolean;
+  noRepeatedLetters: boolean;
+  pronounceable: boolean;
+  syllableBalance: boolean;
+};
 type ToolsPasswordScore = "empty" | "very-weak" | "weak" | "fair" | "strong" | "excellent";
 type ToolsFileFormat =
   | "txt"
@@ -335,6 +342,81 @@ const usernameAdjectivePool = [
   "glowing"
 ];
 
+const usernameBrandablePrefixes = [
+  "aero",
+  "alto",
+  "brio",
+  "coda",
+  "dyna",
+  "elara",
+  "kivo",
+  "luma",
+  "mira",
+  "nexa",
+  "orbi",
+  "pavo",
+  "quali",
+  "rivo",
+  "sola",
+  "tova",
+  "vanta",
+  "zuno"
+];
+
+const usernameBrandableSuffixes = [
+  "bit",
+  "craft",
+  "deck",
+  "forge",
+  "grid",
+  "haus",
+  "kit",
+  "lab",
+  "loop",
+  "ly",
+  "nest",
+  "nova",
+  "pilot",
+  "press",
+  "scope",
+  "works"
+];
+
+const usernamePronounceableSyllables = [
+  "ba",
+  "be",
+  "bi",
+  "bo",
+  "ca",
+  "co",
+  "da",
+  "de",
+  "di",
+  "do",
+  "fa",
+  "fi",
+  "ka",
+  "ki",
+  "la",
+  "lo",
+  "mi",
+  "mo",
+  "na",
+  "no",
+  "pa",
+  "po",
+  "ra",
+  "ri",
+  "sa",
+  "si",
+  "ta",
+  "to",
+  "va",
+  "vi",
+  "za",
+  "zo"
+];
+
 const commonBreachedPasswordTerms = [
   "123456",
   "123456789",
@@ -444,22 +526,48 @@ function initializeRandomNumberGenerator(): void {
     return;
   }
 
-  generateButton.addEventListener("click", () => {
-    const min = parseInt(minInput.value, 10);
-    const max = parseInt(maxInput.value, 10);
+  const generateRandomNumber = () => {
+    const min = Number(minInput.value);
+    const max = Number(maxInput.value);
 
-    if (Number.isNaN(min) || Number.isNaN(max)) {
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
       resultElement.textContent = "Please enter valid numbers for both minimum and maximum values.";
       return;
     }
 
-    if (min >= max) {
-      resultElement.textContent = "Minimum value must be less than the maximum value.";
+    if (!Number.isInteger(min) || !Number.isInteger(max)) {
+      resultElement.textContent = "Please enter whole numbers. Decimal values are not supported by this generator.";
       return;
     }
 
-    const randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max)) {
+      resultElement.textContent = "Please enter values between Number.MIN_SAFE_INTEGER and Number.MAX_SAFE_INTEGER.";
+      return;
+    }
+
+    if (min > max) {
+      resultElement.textContent = "Minimum value must be less than or equal to the maximum value.";
+      return;
+    }
+
+    const rangeSize = max - min + 1;
+    if (!Number.isSafeInteger(rangeSize) || rangeSize <= 0 || rangeSize > 4294967296) {
+      resultElement.textContent = "Please use a range containing 4,294,967,296 or fewer possible values.";
+      return;
+    }
+
+    const randomNumber = min + getSecureRandomIndex(rangeSize);
     resultElement.textContent = `Random Number: ${randomNumber}`;
+  };
+
+  generateButton.addEventListener("click", generateRandomNumber);
+  [minInput, maxInput].forEach((input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        generateRandomNumber();
+      }
+    });
   });
 }
 
@@ -471,6 +579,11 @@ function initializeUsernameGenerator(): void {
   const addColorsInput = document.getElementById("usernameAddColors") as HTMLInputElement | null;
   const addAdjectivesInput = document.getElementById("usernameAddAdjectives") as HTMLInputElement | null;
   const addNumbersInput = document.getElementById("usernameAddNumbers") as HTMLInputElement | null;
+  const alliterationInput = document.getElementById("usernameAlliteration") as HTMLInputElement | null;
+  const syllableBalanceInput = document.getElementById("usernameSyllableBalance") as HTMLInputElement | null;
+  const pronounceableInput = document.getElementById("usernamePronounceable") as HTMLInputElement | null;
+  const noRepeatedLettersInput = document.getElementById("usernameNoRepeatedLetters") as HTMLInputElement | null;
+  const brandableInput = document.getElementById("usernameBrandable") as HTMLInputElement | null;
 
   if (
     !generateButton ||
@@ -479,7 +592,12 @@ function initializeUsernameGenerator(): void {
     !styleSelect ||
     !addColorsInput ||
     !addAdjectivesInput ||
-    !addNumbersInput
+    !addNumbersInput ||
+    !alliterationInput ||
+    !syllableBalanceInput ||
+    !pronounceableInput ||
+    !noRepeatedLettersInput ||
+    !brandableInput
   ) {
     return;
   }
@@ -487,7 +605,18 @@ function initializeUsernameGenerator(): void {
   generateButton.addEventListener("click", generateUsername);
   copyButton.addEventListener("click", copyUsername);
 
-  [themeSelect, styleSelect, addColorsInput, addAdjectivesInput, addNumbersInput].forEach((control) => {
+  [
+    themeSelect,
+    styleSelect,
+    addColorsInput,
+    addAdjectivesInput,
+    addNumbersInput,
+    alliterationInput,
+    syllableBalanceInput,
+    pronounceableInput,
+    noRepeatedLettersInput,
+    brandableInput
+  ].forEach((control) => {
     control.addEventListener("change", generateUsername);
   });
 
@@ -500,6 +629,11 @@ function generateUsername(): void {
   const addColorsInput = document.getElementById("usernameAddColors") as HTMLInputElement | null;
   const addAdjectivesInput = document.getElementById("usernameAddAdjectives") as HTMLInputElement | null;
   const addNumbersInput = document.getElementById("usernameAddNumbers") as HTMLInputElement | null;
+  const alliterationInput = document.getElementById("usernameAlliteration") as HTMLInputElement | null;
+  const syllableBalanceInput = document.getElementById("usernameSyllableBalance") as HTMLInputElement | null;
+  const pronounceableInput = document.getElementById("usernamePronounceable") as HTMLInputElement | null;
+  const noRepeatedLettersInput = document.getElementById("usernameNoRepeatedLetters") as HTMLInputElement | null;
+  const brandableInput = document.getElementById("usernameBrandable") as HTMLInputElement | null;
   const resultElement = document.getElementById("usernameResult");
   const hintElement = document.getElementById("usernameHint");
 
@@ -509,6 +643,11 @@ function generateUsername(): void {
     !addColorsInput ||
     !addAdjectivesInput ||
     !addNumbersInput ||
+    !alliterationInput ||
+    !syllableBalanceInput ||
+    !pronounceableInput ||
+    !noRepeatedLettersInput ||
+    !brandableInput ||
     !resultElement ||
     !hintElement
   ) {
@@ -520,25 +659,25 @@ function generateUsername(): void {
   const includeColors = addColorsInput.checked;
   const includeAdjectives = addAdjectivesInput.checked;
   const includeNumbers = addNumbersInput.checked;
-  const parts: string[] = [];
-
-  if (includeAdjectives) {
-    parts.push(pickRandomItem(usernameAdjectivePool));
-  }
-  if (includeColors) {
-    parts.push(pickRandomItem(usernameThemePools.colors));
-  }
-  parts.push(pickRandomItem(usernameThemePools[theme]));
-  if (includeNumbers) {
-    parts.push(String(randomInteger(10, 9999)));
-  }
+  const compositionOptions: ToolsUsernameCompositionOptions = {
+    alliteration: alliterationInput.checked,
+    brandable: brandableInput.checked,
+    noRepeatedLetters: noRepeatedLettersInput.checked,
+    pronounceable: pronounceableInput.checked,
+    syllableBalance: syllableBalanceInput.checked
+  };
+  const parts = createUsernameParts(theme, {
+    includeAdjectives,
+    includeColors,
+    includeNumbers
+  }, compositionOptions);
 
   resultElement.textContent = formatUsernameParts(parts, style);
   hintElement.textContent = buildUsernameHint(theme, style, {
     includeColors,
     includeAdjectives,
     includeNumbers
-  });
+  }, compositionOptions);
 }
 
 function copyUsername(): void {
@@ -1307,6 +1446,195 @@ function isToolsUsernameStyle(value: string): value is ToolsUsernameStyle {
   return value === "compact" || value === "underscore" || value === "dot";
 }
 
+function createUsernameParts(
+  theme: ToolsUsernameTheme,
+  mixins: {
+    includeAdjectives: boolean;
+    includeColors: boolean;
+    includeNumbers: boolean;
+  },
+  compositionOptions: ToolsUsernameCompositionOptions
+): string[] {
+  if (compositionOptions.brandable) {
+    return createBrandableUsernameParts(mixins.includeNumbers, compositionOptions);
+  }
+
+  const attempts = compositionOptions.noRepeatedLetters || compositionOptions.alliteration || compositionOptions.syllableBalance ? 40 : 1;
+  let bestParts: string[] = [];
+  let bestScore = -Infinity;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const parts = createStandardUsernameParts(theme, mixins, compositionOptions);
+    const score = scoreUsernameParts(parts, compositionOptions);
+
+    if (score > bestScore) {
+      bestParts = parts;
+      bestScore = score;
+    }
+
+    if (score >= 100) {
+      return parts;
+    }
+  }
+
+  return bestParts.length ? bestParts : createStandardUsernameParts(theme, mixins, compositionOptions);
+}
+
+function createStandardUsernameParts(
+  theme: ToolsUsernameTheme,
+  mixins: {
+    includeAdjectives: boolean;
+    includeColors: boolean;
+    includeNumbers: boolean;
+  },
+  compositionOptions: ToolsUsernameCompositionOptions
+): string[] {
+  const targetLetter = compositionOptions.alliteration ? pickRandomItem(getAvailableInitials(theme, mixins)) : "";
+  const parts: string[] = [];
+
+  if (mixins.includeAdjectives) {
+    parts.push(pickUsernameWord(usernameAdjectivePool, targetLetter, compositionOptions));
+  }
+  if (mixins.includeColors) {
+    parts.push(pickUsernameWord(usernameThemePools.colors, targetLetter, compositionOptions));
+  }
+
+  const baseWord = compositionOptions.pronounceable
+    ? createPronounceableWord(randomInteger(2, 3), targetLetter)
+    : pickUsernameWord(usernameThemePools[theme], targetLetter, compositionOptions);
+  parts.push(baseWord);
+
+  if (mixins.includeNumbers) {
+    parts.push(String(randomInteger(10, 9999)));
+  }
+
+  return parts;
+}
+
+function createBrandableUsernameParts(
+  includeNumbers: boolean,
+  compositionOptions: ToolsUsernameCompositionOptions
+): string[] {
+  const targetLetter = compositionOptions.alliteration ? pickRandomItem(getInitials(usernameBrandablePrefixes)) : "";
+  const attempts = compositionOptions.noRepeatedLetters ? 40 : 1;
+  let bestParts: string[] = [];
+  let bestScore = -Infinity;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const prefix = pickUsernameWord(usernameBrandablePrefixes, targetLetter, compositionOptions);
+    const suffixPool = compositionOptions.alliteration
+      ? usernameBrandableSuffixes.filter((suffix) => suffix.charAt(0) === prefix.charAt(0))
+      : usernameBrandableSuffixes;
+    const suffix = pickUsernameWord(suffixPool.length ? suffixPool : usernameBrandableSuffixes, "", compositionOptions);
+    const parts = [compositionOptions.pronounceable ? createPronounceableWord(3, targetLetter || prefix.charAt(0)) : `${prefix}${suffix}`];
+
+    if (includeNumbers) {
+      parts.push(String(randomInteger(10, 99)));
+    }
+
+    const score = scoreUsernameParts(parts, compositionOptions);
+    if (score > bestScore) {
+      bestParts = parts;
+      bestScore = score;
+    }
+  }
+
+  return bestParts;
+}
+
+function pickUsernameWord(
+  pool: string[],
+  initial: string,
+  compositionOptions: ToolsUsernameCompositionOptions
+): string {
+  const alliterativePool = initial ? pool.filter((word) => word.charAt(0).toLowerCase() === initial) : pool;
+  const balancedPool = compositionOptions.syllableBalance ? getSyllableBalancedPool(alliterativePool.length ? alliterativePool : pool) : [];
+  const candidatePool = balancedPool.length ? balancedPool : alliterativePool.length ? alliterativePool : pool;
+  return pickRandomItem(candidatePool);
+}
+
+function getAvailableInitials(
+  theme: ToolsUsernameTheme,
+  mixins: {
+    includeAdjectives: boolean;
+    includeColors: boolean;
+  }
+): string[] {
+  const pools = [usernameThemePools[theme]];
+  if (mixins.includeAdjectives) {
+    pools.push(usernameAdjectivePool);
+  }
+  if (mixins.includeColors) {
+    pools.push(usernameThemePools.colors);
+  }
+
+  const sharedInitials = pools
+    .map(getInitials)
+    .reduce((left, right) => left.filter((initial) => right.indexOf(initial) !== -1));
+
+  return sharedInitials.length ? sharedInitials : getInitials(usernameThemePools[theme]);
+}
+
+function getInitials(words: string[]): string[] {
+  return Array.from(new Set(words.map((word) => word.charAt(0).toLowerCase()).filter(Boolean)));
+}
+
+function getSyllableBalancedPool(words: string[]): string[] {
+  if (words.length <= 1) {
+    return words;
+  }
+
+  const scoredWords = words.map((word) => ({ count: countApproximateSyllables(word), word }));
+  const target = Math.round(scoredWords.reduce((sum, item) => sum + item.count, 0) / scoredWords.length);
+  return scoredWords.filter((item) => Math.abs(item.count - target) <= 1).map((item) => item.word);
+}
+
+function createPronounceableWord(syllableCount: number, initial = ""): string {
+  const syllables: string[] = [];
+  const firstPool = initial ? usernamePronounceableSyllables.filter((syllable) => syllable.charAt(0) === initial) : [];
+
+  syllables.push(pickRandomItem(firstPool.length ? firstPool : usernamePronounceableSyllables));
+  while (syllables.length < syllableCount) {
+    syllables.push(pickRandomItem(usernamePronounceableSyllables));
+  }
+
+  return syllables.join("");
+}
+
+function countApproximateSyllables(word: string): number {
+  const matches = word.toLowerCase().match(/[aeiouy]+/g);
+  return Math.max(1, matches ? matches.length : 1);
+}
+
+function scoreUsernameParts(parts: string[], compositionOptions: ToolsUsernameCompositionOptions): number {
+  const wordParts = parts.filter((part) => !/^\d+$/.test(part));
+  let score = 100;
+
+  if (compositionOptions.alliteration && wordParts.length > 1) {
+    const initial = wordParts[0].charAt(0).toLowerCase();
+    if (!wordParts.every((part) => part.charAt(0).toLowerCase() === initial)) {
+      score -= 35;
+    }
+  }
+
+  if (compositionOptions.noRepeatedLetters && hasRepeatedLetters(wordParts.join(""))) {
+    score -= 35;
+  }
+
+  if (compositionOptions.syllableBalance && wordParts.length > 1) {
+    const syllableCounts = wordParts.map(countApproximateSyllables);
+    if (Math.max(...syllableCounts) - Math.min(...syllableCounts) > 1) {
+      score -= 20;
+    }
+  }
+
+  return score;
+}
+
+function hasRepeatedLetters(value: string): boolean {
+  return /([a-z])\1/i.test(value);
+}
+
 function pickRandomItem<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -1346,9 +1674,11 @@ function buildUsernameHint(
     includeColors: boolean;
     includeAdjectives: boolean;
     includeNumbers: boolean;
-  }
+  },
+  compositionOptions: ToolsUsernameCompositionOptions
 ): string {
   const mixins: string[] = [];
+  const rules: string[] = [];
 
   if (options.includeAdjectives) {
     mixins.push("adjectives");
@@ -1359,11 +1689,27 @@ function buildUsernameHint(
   if (options.includeNumbers) {
     mixins.push("numbers");
   }
+  if (compositionOptions.alliteration) {
+    rules.push("alliteration");
+  }
+  if (compositionOptions.syllableBalance) {
+    rules.push("syllable balance");
+  }
+  if (compositionOptions.pronounceable) {
+    rules.push("pronounceable");
+  }
+  if (compositionOptions.noRepeatedLetters) {
+    rules.push("no repeated letters");
+  }
+  if (compositionOptions.brandable) {
+    rules.push("brandable");
+  }
 
   const styleLabel = style === "compact" ? "compact" : style === "underscore" ? "underscore" : "dot separated";
   const mixinsLabel = mixins.length ? mixins.join(", ") : "theme only";
+  const rulesLabel = rules.length ? rules.join(", ") : "standard composition";
 
-  return `Theme: ${usernameThemeLabels[theme]}. Format: ${styleLabel}. Mix: ${mixinsLabel}.`;
+  return `Theme: ${usernameThemeLabels[theme]}. Format: ${styleLabel}. Mix: ${mixinsLabel}. Rules: ${rulesLabel}.`;
 }
 
 function flashButtonLabel(button: HTMLButtonElement, label: string): void {
