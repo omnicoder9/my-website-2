@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/corporate-vegan-pressure.html",
+    publishedAt: "2026-04-24",
+    summary: "An evidence-driven look at corporate campaigns, shareholder activism, institutional defaults, and supply-chain pressure as scalable vegan advocacy tactics.",
+    title: "The Corporate Lever: Vegan Activism Beyond the Individual"
+  },
+  {
     path: "blog-articles/smart-grid-challenges.html",
     publishedAt: "2026-04-24",
     summary: "A systems-level survey of renewable integration, interoperability, cybersecurity, data management, aging infrastructure, and regulation in smart grid engineering.",
