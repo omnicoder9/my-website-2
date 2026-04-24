@@ -7,6 +7,12 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/learning-modalities.html",
+    publishedAt: "2026-04-24",
+    summary: "A research-heavy comparison of lectures, webinars, video, print, digital reading, hands-on learning, and audio through cognitive load and retention evidence.",
+    title: "How We Learn: A Scientific Reckoning with Every Major Learning Medium"
+  },
+  {
     path: "blog-articles/corporate-vegan-pressure.html",
     publishedAt: "2026-04-24",
     summary: "An evidence-driven look at corporate campaigns, shareholder activism, institutional defaults, and supply-chain pressure as scalable vegan advocacy tactics.",
