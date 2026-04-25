@@ -7,6 +7,18 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/edge-iot-networking.html",
+    publishedAt: "2026-04-25",
+    summary: "A technical survey of edge and IoT networking, from MQTT's origins and brokered messaging to device-gateway-cloud architecture and current design trade-offs.",
+    title: "Edge & IoT Networking Models: The Architecture of the Always-On World"
+  },
+  {
+    path: "blog-articles/vegan_business_models.html",
+    publishedAt: "2026-04-24",
+    summary: "A strategy essay on venture infrastructure, institutional defaults, subsidy reform, insurance, and investor pressure as business levers against factory farming.",
+    title: "The Market for Mercy: How Business Is Ending Factory Farming"
+  },
+  {
     path: "blog-articles/learning-modalities.html",
     publishedAt: "2026-04-24",
     summary: "A research-heavy comparison of lectures, webinars, video, print, digital reading, hands-on learning, and audio through cognitive load and retention evidence.",
