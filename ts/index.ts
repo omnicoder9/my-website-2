@@ -137,9 +137,18 @@ function getPrimaryHeader(): HTMLElement | null {
   return document.querySelector<HTMLElement>("#site-header header") || document.querySelector<HTMLElement>("header");
 }
 
+function isBlogArticlePage(): boolean {
+  return document.body.classList.contains("blog-article-page");
+}
+
 window.addEventListener("scroll", () => {
   const header = getPrimaryHeader();
   if (!header) {
+    return;
+  }
+
+  if (isBlogArticlePage()) {
+    header.classList.remove("sticky");
     return;
   }
 

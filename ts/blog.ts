@@ -7,6 +7,36 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/investigations-exposure-article.html",
+    publishedAt: "2026-04-27",
+    summary: "A long-form analysis of undercover investigations, whistleblowers, ag-gag laws, and exposure tactics as one of the movement's most effective tools against factory farming secrecy.",
+    title: "Eyes Behind the Wall: Investigations and Exposure in Animal Activism"
+  },
+  {
+    path: "blog-articles/vegan_cultural_change.html",
+    publishedAt: "2026-04-26",
+    summary: "An essay on narrative, documentary film, identity, norms, language, and religion as the slow but durable machinery of vegan cultural change.",
+    title: "The Long Game: How Culture Becomes the Most Powerful Engine of Vegan Change"
+  },
+  {
+    path: "blog-articles/network-layered-models.html",
+    publishedAt: "2026-04-26",
+    summary: "A long-form history and comparison of the OSI and TCP/IP models, from ARPANET and standards politics to modern cloud and SDN abstractions.",
+    title: "The Architecture of Everything: Network Layered Models Explained"
+  },
+  {
+    path: "blog-articles/vegan-behavioral-interventions.html",
+    publishedAt: "2026-04-26",
+    summary: "A research synthesis on defaults, nudges, product placement, habits, commitment devices, and framing as behavioral levers for plant-based eating.",
+    title: "The Architecture of Choice: Behavioral Science and Plant-Based Eating"
+  },
+  {
+    path: "blog-articles/zero-trust-architecture.html",
+    publishedAt: "2026-04-26",
+    summary: "A long-form analysis of zero trust architecture, from the collapse of perimeter security to identity-centric access control and microsegmentation.",
+    title: "The Death of the Moat: Zero Trust and the End of the Perimeter"
+  },
+  {
     path: "blog-articles/edge-iot-networking.html",
     publishedAt: "2026-04-25",
     summary: "A technical survey of edge and IoT networking, from MQTT's origins and brokered messaging to device-gateway-cloud architecture and current design trade-offs.",
@@ -143,9 +173,17 @@ function formatBlogDate(dateString: string): string {
 }
 
 function getSortedBlogPosts(): BlogDirectoryPost[] {
-  return [...blogPosts].sort((left, right) => {
-    return new Date(right.publishedAt).getTime() - new Date(left.publishedAt).getTime();
-  });
+  return blogPosts
+    .map((post, index) => ({ index, post }))
+    .sort((left, right) => {
+      const dateDelta = new Date(right.post.publishedAt).getTime() - new Date(left.post.publishedAt).getTime();
+      if (dateDelta !== 0) {
+        return dateDelta;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ post }) => post);
 }
 
 function renderBlogArticles(searchTerm: string): void {
