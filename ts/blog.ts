@@ -1,6 +1,7 @@
 type BlogDirectoryPost = {
   path: string;
-  publishedAt: string;
+  publishedAt?: string;
+  publishedLabel?: string;
   summary: string;
   title: string;
 };
@@ -161,6 +162,108 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-03-07",
     summary: "Why privacy matters in ordinary life, security, autonomy, and real-world decision-making.",
     title: "Why Digital Privacy Is Important"
+  },
+  {
+    path: "blog-articles/event-driven-networks.html",
+    publishedAt: "2026-04-30",
+    summary: "How event-driven and messaging networks rewrote the rules of distributed computing, from early pub/sub systems through Kafka-scale event streaming.",
+    title: "The Architecture of Asynchrony"
+  },
+  {
+    path: "blog-articles/networks-performance-reliability.html",
+    publishedAt: "2026-04-28",
+    summary: "An examination of latency, throughput, caching, redundancy, failover, and the design patterns that make modern networks fast and resilient.",
+    title: "Performance & Reliability Models in Computer Networks"
+  },
+  {
+    path: "blog-articles/ui-structure-concepts.html",
+    publishedAt: "2026-05-04",
+    summary: "A practitioner's guide to the structural concepts that determine how pages are organized, layered, and delivered across the modern web.",
+    title: "The Architecture of the Visible Web"
+  },
+  {
+    path: "blog-articles/vegan-activism-frmwrk.html",
+    publishedAt: "2026-05-03",
+    summary: "A cross-cutting strategy model for vegan activism that maps how legislation, markets, culture, and interpersonal persuasion reinforce one another.",
+    title: "The Architecture of Change: A Cross-Cutting Framework for Vegan Activism"
+  },
+  {
+    path: "blog-articles/vegan-education.html",
+    publishedAt: "2026-05-02",
+    summary: "Why education, research literacy, curriculum design, and myth-busting are foundational long-term levers for plant-based cultural change.",
+    title: "The Knowledge Revolution: Education as the Engine of Vegan Change"
+  },
+  {
+    path: "blog-articles/vegan-infrastructure.html",
+    publishedAt: "2026-05-01",
+    summary: "How apps, databases, certification systems, and product-discovery tools reduce friction and make vegan choices easier at scale.",
+    title: "The Infrastructure of Choice"
+  },
+  {
+    path: "blog-articles/making-animal-use-obsolete.html",
+    publishedAt: "2026-04-17",
+    summary: "A strategic survey of plant-based meat, cultivated meat, precision fermentation, and next-generation materials as technologies that can make animal exploitation obsolete.",
+    title: "Making Animal Use Obsolete"
+  },
+  {
+    path: "blog-articles/network_topologies.html",
+    publishedAt: "2026-04-29",
+    summary: "The physical and logical frameworks that determine how data moves, from bus and ring networks to leaf-spine fabrics in modern data centers.",
+    title: "Network Topologies: The Architecture of Connectivity"
+  },
+  {
+    path: "blog-articles/cloud-microservices-networking.html",
+    publishedAt: "2026-04-16",
+    summary: "A technical survey of VPCs, subnet design, API gateways, service meshes, and the east-west and north-south flows of cloud-native systems.",
+    title: "Cloud & Microservices Networking: Architecture, Patterns, and Frontiers"
+  },
+  {
+    path: "blog-articles/mass-media-vegan-activism.html",
+    publishedAt: "2026-04-22",
+    summary: "An analysis of documentaries, advertising, influencers, investigative journalism, and other mass-media channels for vegan advocacy.",
+    title: "Reaching Millions: The Promise and Limits of Mass Persuasion"
+  },
+  {
+    path: "blog-articles/protocol-oriented-design.html",
+    publishedAt: "2026-04-27",
+    summary: "From TCP handshakes to QUIC and HTTP/3, a long-form look at how protocol design decisions shape the internet's performance and behavior.",
+    title: "Protocol-Oriented Design: How Communication Rules Shape the Internet"
+  },
+  {
+    path: "blog-articles/vegan-advocacy-interpersonal.html",
+    publishedAt: "2026-04-21",
+    summary: "A research-grounded guide to one-on-one vegan advocacy, including street outreach, personal conversations, and the psychology of persuasion.",
+    title: "The Art of the Conversation"
+  },
+  {
+    path: "blog-articles/vegan-community.html",
+    publishedAt: "2026-04-20",
+    summary: "Why meetups, mentorship, online communities, and shared identity are central to helping people stay vegan over time.",
+    title: "Together We Root: Making Veganism Socially Sustainable"
+  },
+  {
+    path: "blog-articles/ui-components-article.html",
+    publishedAt: "2026-04-26",
+    summary: "A practitioner's guide to component taxonomy, interaction patterns, and the design theory behind robust user interfaces.",
+    title: "The Anatomy of a User Interface"
+  },
+  {
+    path: "blog-articles/pl-philosophy.html",
+    publishedAt: "2026-05-05",
+    summary: "A long-form essay on how logic, ideology, abstraction, and language design shape the philosophy of programming languages.",
+    title: "The Art of Language: Philosophy, Ideology, and the Design of Programming Languages"
+  },
+  {
+    path: "blog-articles/graph-theory-networks.html",
+    publishedAt: "2026-05-05",
+    summary: "An extended exploration of nodes, edges, paths, spanning structures, and why graph theory is the mathematical grammar of networking.",
+    title: "The Graph Behind the Network: A Mathematical Anatomy of Routing"
+  },
+  {
+    path: "blog-articles/hierarchical-network-design.html",
+    publishedAt: "2026-05-05",
+    summary: "A history and analysis of hierarchical enterprise network design, from classic three-tier campus models to spine-leaf fabrics and SDN-era adaptations.",
+    title: "Hierarchical Design Models in Enterprise Networking"
   }
 ];
 
@@ -176,7 +279,9 @@ function getSortedBlogPosts(): BlogDirectoryPost[] {
   return blogPosts
     .map((post, index) => ({ index, post }))
     .sort((left, right) => {
-      const dateDelta = new Date(right.post.publishedAt).getTime() - new Date(left.post.publishedAt).getTime();
+      const leftTime = left.post.publishedAt ? new Date(`${left.post.publishedAt}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+      const rightTime = right.post.publishedAt ? new Date(`${right.post.publishedAt}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+      const dateDelta = rightTime - leftTime;
       if (dateDelta !== 0) {
         return dateDelta;
       }
@@ -184,6 +289,23 @@ function getSortedBlogPosts(): BlogDirectoryPost[] {
       return left.index - right.index;
     })
     .map(({ post }) => post);
+}
+
+function getPublishedLabel(post: BlogDirectoryPost): string {
+  if (post.publishedLabel) {
+    return post.publishedLabel;
+  }
+
+  if (post.publishedAt) {
+    return formatBlogDate(post.publishedAt);
+  }
+
+  return "Undated";
+}
+
+function getFilenameLabel(post: BlogDirectoryPost): string {
+  const segments = post.path.split("/");
+  return segments[segments.length - 1] || post.path;
 }
 
 function renderBlogArticles(searchTerm: string): void {
@@ -196,7 +318,8 @@ function renderBlogArticles(searchTerm: string): void {
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
   const filteredPosts = getSortedBlogPosts().filter((post) => {
-    return post.title.toLowerCase().includes(normalizedSearchTerm);
+    const searchHaystack = `${post.title} ${getFilenameLabel(post)}`.toLowerCase();
+    return searchHaystack.includes(normalizedSearchTerm);
   });
 
   if (filteredPosts.length === 0) {
@@ -214,7 +337,7 @@ function renderBlogArticles(searchTerm: string): void {
     .map((post) => {
       return `
         <article class="privacy-section blog-directory-card">
-          <p class="blog-directory-card__date">${formatBlogDate(post.publishedAt)}</p>
+          <p class="blog-directory-card__date">${getPublishedLabel(post)}</p>
           <h2><a href="${post.path}">${post.title}</a></h2>
           <p>${post.summary}</p>
           <a class="blog-directory-card__link" href="${post.path}">Read article</a>
