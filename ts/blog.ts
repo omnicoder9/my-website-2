@@ -248,6 +248,18 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "The Anatomy of a User Interface"
   },
   {
+    path: "blog-articles/privacy.html",
+    publishedAt: "2026-05-06",
+    summary: "A practical guide to reducing browser tracking, mobile telemetry, identity correlation, and common forms of quiet data leakage.",
+    title: "Practical Defenses Against Tracking and Data Leakage"
+  },
+  {
+    path: "blog-articles/distributed-systems-networks.html",
+    publishedAt: "2026-05-06",
+    summary: "A distributed-systems view of computer networks, covering coordination, failure, service discovery, CAP trade-offs, and the architecture of resilient communication.",
+    title: "The Network as a System: A Distributed Computing Perspective"
+  },
+  {
     path: "blog-articles/pl-philosophy.html",
     publishedAt: "2026-05-05",
     summary: "A long-form essay on how logic, ideology, abstraction, and language design shape the philosophy of programming languages.",
