@@ -30,6 +30,10 @@ go run server.go
 
 The Go server serves the static site and exposes `/api/health`. If it is down, the site still works in static-only mode and frontend features are expected to degrade gracefully instead of breaking.
 
+```
+npm run validate
+```
+
 ## Overengineered Ideas
 
 If the goal is to add every unnecessary bell and whistle possible, this is the backlog.

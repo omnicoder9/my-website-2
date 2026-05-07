@@ -8,6 +8,36 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/digital-privacy-levels.html",
+    publishedAt: "2026-05-07",
+    summary: "An editorial guide to four practical privacy levels, from default exposure and basic hygiene to browser compartmentation and targeted-risk protection.",
+    title: "The Four Levels of Digital Privacy"
+  },
+  {
+    path: "blog-articles/digital-privacy-l4-l5.html",
+    publishedAt: "2026-05-07",
+    summary: "A long-form analysis of high-risk digital privacy practice, covering metadata exposure, hardened endpoints, adversarial environments, and the defensive lessons of Level 4 and Level 5 tradecraft.",
+    title: "Hostile Terrain: Digital Privacy at Levels 4 and 5"
+  },
+  {
+    path: "blog-articles/grc-enterprise-ai-data-governance.html",
+    publishedAt: "2026-05-06",
+    summary: "A long-form analysis of how enterprise GRC models need to adapt for AI, with emphasis on data governance, model accountability, monitoring, and regulatory readiness.",
+    title: "GRC for Enterprise AI: Rethinking Data Governance from the Ground Up"
+  },
+  {
+    path: "blog-articles/sdn-ibn-article.html",
+    publishedAt: "2026-05-06",
+    summary: "A long-form technical survey of software-defined networking and intent-based networking, from control-plane separation and OpenFlow to policy automation and programmable data planes.",
+    title: "The Programmable Network: SDN and Intent-Based Networking"
+  },
+  {
+    path: "blog-articles/market-based-vegan-activism.html",
+    publishedAt: "2026-05-06",
+    summary: "A strategy essay on venture capital, price parity, procurement, and market-shaping tactics as mechanisms for scaling vegan change beyond persuasion alone.",
+    title: "The Market Is the Message: Market-Based Vegan Activism"
+  },
+  {
     path: "blog-articles/investigations-exposure-article.html",
     publishedAt: "2026-04-27",
     summary: "A long-form analysis of undercover investigations, whistleblowers, ag-gag laws, and exposure tactics as one of the movement's most effective tools against factory farming secrecy.",

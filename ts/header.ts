@@ -116,10 +116,19 @@ function detectEnhancementProfile(): EnhancementProfile {
 
 function createEnhancementTierElement(profile: EnhancementProfile): HTMLElement {
   const banner = document.createElement("aside");
+  const tooltipText =
+    `Progressive enhancement status for this browser. ` +
+    `Basic: readable core experience with advanced widgets mostly quiet. ` +
+    `Enhanced: interactive tools and runtime diagnostics are available. ` +
+    `Absurd: extra browser APIs are available for the site's more theatrical upgrades. ` +
+    `Current capability scan: ${profile.detail}.`;
   banner.className = "enhancement-tier";
   banner.dataset.tier = profile.tier;
+  banner.dataset.tooltip = tooltipText;
   banner.setAttribute("aria-live", "polite");
+  banner.setAttribute("aria-label", tooltipText);
   banner.setAttribute("role", "status");
+  banner.tabIndex = 0;
 
   const tiers: EnhancementTier[] = ["basic", "enhanced", "absurd"];
   const meterMarkup = tiers
