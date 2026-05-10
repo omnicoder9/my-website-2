@@ -8,6 +8,54 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/drl-humanoid-robotics.html",
+    publishedAt: "2026-05-10",
+    summary: "A technical review of deep reinforcement learning for humanoid robotics, covering actor-critic methods, sim-to-real transfer, locomotion, manipulation, and emerging embodied AI paradigms.",
+    title: "Deep Reinforcement Learning for Humanoid Robotics"
+  },
+  {
+    path: "blog-articles/causal_ai.html",
+    publishedAt: "2026-05-10",
+    summary: "A technical essay on causal AI, tracing the shift from correlational machine learning toward structural causal models, interventions, counterfactuals, and mechanism-aware intelligence.",
+    title: "Causal AI: From Association to Mechanism"
+  },
+  {
+    path: "blog-articles/cache-timing-attacks.html",
+    publishedAt: "2026-05-10",
+    summary: "A technical deep dive into cache timing attacks, covering CPU cache architecture, Prime+Probe and Flush+Reload techniques, Spectre and Meltdown, and defense strategies across hardware and software.",
+    title: "Cache Timing Attacks: A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/hidden-animal-ingredients.html",
+    publishedAt: "2026-05-10",
+    summary: "A reference guide to hidden animal-derived ingredients in food, pharmaceuticals, cosmetics, and consumer goods, with labeling pitfalls and activist strategy implications.",
+    title: "Animal Ingredients Hidden in Plain Sight"
+  },
+  {
+    path: "blog-articles/action-model-learning.html",
+    publishedAt: "2026-05-08",
+    summary: "A technical survey of action model learning in automated planning, covering STRIPS and PDDL model induction, observability constraints, symbolic and neural methods, and open research challenges.",
+    title: "Action Model Learning in Automated Planning"
+  },
+  {
+    path: "blog-articles/explainable-ai-lime-shap.html",
+    publishedAt: "2026-05-08",
+    summary: "A technical deep dive into LIME and SHAP, covering local explanation methods, Shapley-value foundations, implementation trade-offs, failure modes, and regulated use cases.",
+    title: "Explainable AI: LIME & SHAP — A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/insects-and-small-animals.html",
+    publishedAt: "2026-05-08",
+    summary: "An ethics-focused examination of insect sentience, small-animal exploitation, pest control, and how vegan advocacy should reason about trillions of overlooked animals.",
+    title: "The Overlooked Trillions: Insects, Small Animals, and the Frontiers of Vegan Ethics"
+  },
+  {
+    path: "blog-articles/automated-planning.html",
+    publishedAt: "2026-05-07",
+    summary: "A technical survey of classical AI planning and scheduling, covering state-space search, regression, partial-order planning, STRIPS, PDDL, and modern research directions.",
+    title: "Automated Planning and Scheduling Algorithms"
+  },
+  {
     path: "blog-articles/digital-privacy-levels.html",
     publishedAt: "2026-05-07",
     summary: "An editorial guide to four practical privacy levels, from default exposure and basic hygiene to browser compartmentation and targeted-risk protection.",

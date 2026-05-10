@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache Timing Attacks: A Technical Deep Dive</title>
+<link rel="stylesheet" href="../css/article-header.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@300;400;500;700&family=Barlow+Condensed:wght@300;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0b0e14;
+    --surface:   #111520;
+    --surface2:  #161c2b;
+    --border:    #1e2a40;
+    --accent:    #00d4ff;
+    --accent2:   #ff4e6a;
+    --accent3:   #7fff8c;
+    --text:      #c9d6e8;
+    --text-dim:  #6a7d99;
+    --text-head: #e8eef8;
+    --mono:      'JetBrains Mono', monospace;
+    --serif:     'Libre Baskerville', Georgia, serif;
+    --cond:      'Barlow Condensed', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.8;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999; opacity: 0.5;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    padding: 0;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .header-scan {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.015) 2px,
+      rgba(0,212,255,0.015) 4px
+    );
+    pointer-events: none;
+  }
+
+  .header-glow {
+    position: absolute;
+    top: -80px; left: 50%;
+    transform: translateX(-50%);
+    width: 800px; height: 300px;
+    background: radial-gradient(ellipse, rgba(0,212,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .header-inner {
+    position: relative;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 60px 40px 48px;
+  }
+
+  .header-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-eyebrow::before {
+    content: '';
+    display: block;
+    width: 32px; height: 1px;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--cond);
+    font-size: clamp(42px, 7vw, 86px);
+    font-weight: 800;
+    color: var(--text-head);
+    line-height: 1;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  h1 span {
+    color: var(--accent);
+  }
+
+  .header-subtitle {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 18px;
+    color: var(--text-dim);
+    margin: 24px 0 36px;
+    max-width: 680px;
+    line-height: 1.6;
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+  .header-meta span { color: var(--accent3); }
+
+  /* ── LAYOUT ── */
+  .page-wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 40px 80px;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 60px;
+    align-items: start;
+  }
+
+  main { min-width: 0; padding-top: 56px; }
+
+  /* ── SIDEBAR ── */
+  aside {
+    padding-top: 56px;
+    position: sticky;
+    top: 32px;
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  .toc-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .toc ol {
+    list-style: none;
+    counter-reset: toc;
+  }
+  .toc li {
+    counter-increment: toc;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .toc li::before {
+    content: counter(toc, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .toc a {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    text-decoration: none;
+    line-height: 1.4;
+    transition: color 0.2s;
+  }
+  .toc a:hover { color: var(--accent); }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .stat-card .stat-num {
+    font-family: var(--cond);
+    font-size: 38px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-card .stat-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .stat-card .stat-note {
+    font-family: var(--serif);
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    font-style: italic;
+  }
+
+  /* ── TYPOGRAPHY ── */
+  .article-section {
+    margin-bottom: 64px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  h2 {
+    font-family: var(--cond);
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--text-head);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  h2 .section-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 400;
+    letter-spacing: 0.2em;
+    border: 1px solid var(--accent);
+    padding: 2px 8px;
+    flex-shrink: 0;
+  }
+
+  h3 {
+    font-family: var(--cond);
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--text-head);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 36px 0 14px;
+  }
+
+  h4 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent3);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin: 28px 0 10px;
+  }
+
+  p { margin-bottom: 18px; }
+
+  p:first-of-type::first-letter {
+    font-family: var(--cond);
+    font-size: 64px;
+    font-weight: 800;
+    color: var(--accent);
+    float: left;
+    line-height: 0.85;
+    margin: 4px 12px 0 0;
+  }
+
+  .no-dropcap::first-letter { all: unset; }
+
+  sup {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    vertical-align: super;
+    font-weight: 700;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── PULL QUOTE ── */
+  .pull-quote {
+    border-left: 4px solid var(--accent2);
+    margin: 36px 0;
+    padding: 20px 28px;
+    background: linear-gradient(90deg, rgba(255,78,106,0.06) 0%, transparent 100%);
+    position: relative;
+  }
+  .pull-quote::before {
+    content: '"';
+    font-family: var(--cond);
+    font-size: 100px;
+    color: var(--accent2);
+    opacity: 0.2;
+    position: absolute;
+    top: -10px; left: 12px;
+    line-height: 1;
+  }
+  .pull-quote p {
+    font-size: 18px;
+    font-style: italic;
+    color: var(--text-head);
+    margin: 0;
+    line-height: 1.6;
+  }
+  .pull-quote p::first-letter { all: unset; }
+  .pull-quote cite {
+    display: block;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent2);
+    letter-spacing: 0.1em;
+    font-style: normal;
+  }
+
+  /* ── CALLOUT BOX ── */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent3);
+    padding: 22px 26px;
+    margin: 32px 0;
+  }
+  .callout .callout-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent3);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .callout p { margin: 0; font-size: 15px; }
+  .callout p::first-letter { all: unset; }
+
+  /* ── WARNING BOX ── */
+  .warning {
+    background: rgba(255,78,106,0.06);
+    border: 1px solid rgba(255,78,106,0.3);
+    border-left: 4px solid var(--accent2);
+    padding: 22px 26px;
+    margin: 32px 0;
+  }
+  .warning .callout-label { color: var(--accent2); }
+  .warning p { margin: 0; font-size: 15px; }
+  .warning p::first-letter { all: unset; }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background: #070a10;
+    border: 1px solid var(--border);
+    margin: 28px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .code-lang {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-weight: 700;
+  }
+  .code-dots {
+    display: flex; gap: 6px;
+  }
+  .code-dots span {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+  .code-dots span:nth-child(1) { background: #ff5f57; }
+  .code-dots span:nth-child(2) { background: #febc2e; }
+  .code-dots span:nth-child(3) { background: #28c840; }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: #abb2bf;
+    padding: 24px;
+    overflow-x: auto;
+    margin: 0;
+  }
+
+  /* Minimal syntax coloring via spans */
+  .kw  { color: #c678dd; }
+  .fn  { color: #61afef; }
+  .tp  { color: #e5c07b; }
+  .cm  { color: #5c6370; font-style: italic; }
+  .st  { color: #98c379; }
+  .nm  { color: #d19a66; }
+  .op  { color: #56b6c2; }
+  .pp  { color: #e06c75; }
+  .lbl { color: var(--accent3); }
+
+  /* ── ATTACK TABLE ── */
+  .attack-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 28px 0;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .attack-table th {
+    background: var(--surface2);
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 2px solid var(--accent);
+    font-size: 11px;
+  }
+  .attack-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  .attack-table tr:hover td { background: var(--surface); }
+
+  .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+  }
+  .badge-hi  { color: var(--accent2); }
+  .badge-med { color: #f0a500; }
+  .badge-lo  { color: var(--accent3); }
+
+  /* ── TIMELINE ── */
+  .timeline { position: relative; padding-left: 32px; margin: 32px 0; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+  }
+  .tl-item {
+    position: relative;
+    margin-bottom: 32px;
+  }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -36px; top: 5px;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,212,255,0.2);
+  }
+  .tl-year {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    margin-bottom: 4px;
+  }
+  .tl-title {
+    font-family: var(--cond);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-head);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .tl-body {
+    font-size: 15px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* ── DIAGRAM ── */
+  .cache-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 32px;
+    margin: 32px 0;
+    font-family: var(--mono);
+    overflow-x: auto;
+  }
+  .diag-title {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    font-weight: 700;
+  }
+
+  .cache-levels {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .cache-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .cache-lbl {
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 120px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .cache-bar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #0b0e14;
+    position: relative;
+    transition: opacity 0.2s;
+  }
+  .cache-bar:hover { opacity: 0.85; }
+  .cache-bar .timing {
+    position: absolute;
+    right: 16px;
+    font-size: 10px;
+    opacity: 0.8;
+    font-weight: 400;
+  }
+  .bar-cpu  { background: var(--accent); width: 180px; }
+  .bar-l1   { background: #38b2f0; width: 260px; }
+  .bar-l2   { background: #5a82c0; width: 380px; }
+  .bar-l3   { background: #6a5acd; width: 500px; }
+  .bar-ram  { background: var(--accent2); width: 600px; }
+
+  /* ── REFERENCES ── */
+  .references {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 32px;
+    margin-top: 64px;
+  }
+  .ref-title {
+    font-family: var(--cond);
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-head);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-list {
+    list-style: none;
+    counter-reset: refs;
+  }
+  .ref-list li {
+    counter-increment: refs;
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    align-items: baseline;
+  }
+  .ref-list li::before {
+    content: counter(refs) '.';
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+    min-width: 24px;
+  }
+  .ref-list li span { color: var(--text-dim); }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 40px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 800px) {
+    .page-wrap { grid-template-columns: 1fr; gap: 0; }
+    aside { position: static; padding-top: 0; }
+    h1 { font-size: 44px; }
+    .header-inner { padding: 40px 24px 32px; }
+    .page-wrap { padding: 0 24px 60px; }
+    footer { flex-direction: column; gap: 8px; text-align: center; }
+    .bar-l3 { width: 320px; }
+    .bar-ram { width: 360px; }
+  }
+
+  .blog-post-backlink {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 1.2rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .blog-post-backlink:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent2);
+    text-decoration: none;
+  }
+</style>
+</head>
+<body class="blog-article-page">
+<div id="site-header"></div>
+
+<header>
+  <div class="header-scan"></div>
+  <div class="header-glow"></div>
+  <div class="header-inner">
+    <h1>Cache <span>Timing</span><br>Attacks</h1>
+    <p class="header-subtitle">How adversaries silently extract cryptographic secrets, passwords, and kernel memory by listening to the echoes left behind in shared CPU cache hierarchies — without executing a single instruction in the victim process.</p>
+    <div class="header-meta">
+      <div>authored by <span>Nicholas Knapp</span></div>
+      <div>published <span>May 10, 2026</span></div>
+    </div>
+    <p><a class="blog-post-backlink" href="../blog.html">Back to all articles</a></p>
+  </div>
+</header>
+
+<div class="page-wrap">
+
+  <!-- SIDEBAR -->
+  <aside>
+    <div class="toc">
+      <div class="toc-title">Table of Contents</div>
+      <ol>
+        <li><a href="#intro">Introduction</a></li>
+        <li><a href="#background">Cache Architecture</a></li>
+        <li><a href="#history">Historical Timeline</a></li>
+        <li><a href="#mechanisms">Attack Mechanisms</a></li>
+        <li><a href="#evict-time">Evict + Time</a></li>
+        <li><a href="#prime-probe">Prime + Probe</a></li>
+        <li><a href="#flush-reload">Flush + Reload</a></li>
+        <li><a href="#flush-flush">Flush + Flush</a></li>
+        <li><a href="#spectre">Spectre &amp; Meltdown</a></li>
+        <li><a href="#targets">Real-World Targets</a></li>
+        <li><a href="#code">Source Code Examples</a></li>
+        <li><a href="#defenses">Defenses</a></li>
+        <li><a href="#references">References</a></li>
+      </ol>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-num">~4ns</div>
+      <div class="stat-label">L1 Cache Hit Latency</div>
+      <div class="stat-note">vs. ~100ns for a cache miss (DRAM access) — a 25× timing difference exploitable by attackers<sup>[11]</sup></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">AES Key Recovery</div>
+      <div class="stat-note">Bernstein demonstrated full 128-bit AES key recovery via cache timing in 2005 using ~2²⁷ measurements<sup>[1]</sup></div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-num">1.2B+</div>
+      <div class="stat-label">CPUs Affected by Spectre</div>
+      <div class="stat-note">Virtually all modern out-of-order processors were vulnerable at disclosure in 2018<sup>[6]</sup></div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main>
+
+    <!-- ── 1. INTRODUCTION ── -->
+    <section class="article-section" id="intro">
+      <h2><span class="section-num">§01</span> Introduction</h2>
+
+      <p>A <em>cache timing attack</em> is a class of side-channel attack in which an adversary infers secret information — cryptographic keys, passwords, memory contents — by observing how long cache operations take in a shared computing environment, rather than by directly accessing the protected data.<sup>[11]</sup> The attack exploits a fundamental property of modern processor design: memory accesses to recently used data are dramatically faster than accesses to data that must be fetched from main memory, and that timing difference is measurable from an unprivileged process.</p>
+
+      <p class="no-dropcap">Unlike software vulnerabilities such as buffer overflows or injection flaws, cache timing attacks require no bug in the victim's code. They are <em>implementation attacks</em>: the victim's program can be provably correct and still leak secrets through the physical timing behaviour of the hardware it runs on.<sup>[11]</sup> This makes them uniquely dangerous and unusually difficult to detect or patch.</p>
+
+      <p class="no-dropcap">The threat is not theoretical. Researchers have demonstrated full recovery of AES-128 secret keys,<sup>[1]</sup> RSA private keys,<sup>[15]</sup> and arbitrary kernel memory pages<sup>[5]</sup> using these techniques. In cloud environments, where multiple tenants share the same physical CPU, cache attacks cross virtual machine boundaries and have been used to extract cryptographic keys from co-resident virtual machines.<sup>[12]</sup></p>
+
+      <div class="pull-quote">
+        <p>The attacker does not read the victim's memory. They listen to the rhythm of its access patterns — and the cache, designed for performance, becomes an acoustic microphone for secrets.</p>
+        <cite>— Synthesized from Ge et al., A Survey of Microarchitectural Timing Attacks, 2018<sup>[11]</sup></cite>
+      </div>
+    </section>
+
+    <!-- ── 2. BACKGROUND ── -->
+    <section class="article-section" id="background">
+      <h2><span class="section-num">§02</span> CPU Cache Architecture</h2>
+
+      <p>To understand how cache timing attacks work, one must first understand the memory hierarchy of a modern processor. CPUs operate at multi-gigahertz clock rates, while DRAM main memory has latencies measured in tens to hundreds of nanoseconds — a gap of two to three orders of magnitude that would strangle processor performance if not bridged by intermediate storage.<sup>[11]</sup></p>
+
+      <p class="no-dropcap">The solution is the <em>cache</em>: a small, fast, on-chip memory that stores copies of recently or frequently accessed data. Modern processors implement several cache levels with increasing size and decreasing speed.</p>
+
+      <div class="cache-diagram">
+        <div class="diag-title">// Memory Hierarchy — Access Latency &amp; Relative Size</div>
+        <div class="cache-levels">
+          <div class="cache-row">
+            <div class="cache-lbl">CPU Registers</div>
+            <div class="cache-bar bar-cpu">Registers <span class="timing">&lt;1 cycle</span></div>
+          </div>
+          <div class="cache-row">
+            <div class="cache-lbl">L1 Cache (32–64 KB)</div>
+            <div class="cache-bar bar-l1">L1 Cache <span class="timing">~4 cycles</span></div>
+          </div>
+          <div class="cache-row">
+            <div class="cache-lbl">L2 Cache (256 KB–1 MB)</div>
+            <div class="cache-bar bar-l2">L2 Cache <span class="timing">~12 cycles</span></div>
+          </div>
+          <div class="cache-row">
+            <div class="cache-lbl">L3 Cache (4–64 MB)</div>
+            <div class="cache-bar bar-l3">L3 Cache <span class="timing">~40 cycles</span></div>
+          </div>
+          <div class="cache-row">
+            <div class="cache-lbl">DRAM (GBs)</div>
+            <div class="cache-bar bar-ram">DRAM <span class="timing">~200 cycles</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="no-dropcap">Critically, L3 (last-level) caches are typically <em>shared across all cores</em> on a single chip, and in some architectures across processor sockets.<sup>[7]</sup> This sharing is the root cause of cache timing attacks in multi-tenant environments: a spy process on one core can observe the cache behaviour of a victim process on a different core by measuring how long its own memory accesses take.</p>
+
+      <h3>Cache Organisation and Set-Associativity</h3>
+
+      <p class="no-dropcap">Caches are organised into <em>sets</em> and <em>ways</em>. A set-associative cache divides its capacity into a number of sets, each capable of holding a fixed number of cache lines (ways).<sup>[11]</sup> A given memory address maps to exactly one set (determined by bits from the physical address), but can occupy any of the ways within that set. When all ways in a set are occupied, a replacement policy — typically least recently used (LRU) or a pseudo-LRU approximation — evicts one line to make room.</p>
+
+      <p class="no-dropcap">This deterministic mapping from physical addresses to cache sets is a critical property that attackers exploit in <em>Prime+Probe</em> attacks: by knowing which addresses map to which sets, an attacker can precisely monitor a victim's memory access patterns.<sup>[2]</sup></p>
+
+      <div class="callout">
+        <div class="callout-label">Key Concept — Cache Line</div>
+        <p>The unit of transfer between memory levels is the <strong>cache line</strong>, typically 64 bytes on x86 architectures. A single read of one byte loads the entire surrounding 64-byte block into the cache. This means that accessing a lookup table at index <em>i</em> brings adjacent table entries into the same cache line, and a spy can determine <em>which block</em> of the table the victim accessed — revealing which index was used, which may encode secret key material.</p>
+      </div>
+
+      <h3>The RDTSC Instruction and High-Resolution Timing</h3>
+
+      <p class="no-dropcap">On x86 processors, the <code>RDTSC</code> (Read Time-Stamp Counter) instruction returns the current value of the processor's time-stamp counter — a 64-bit register incremented at the processor's reference frequency.<sup>[11]</sup> This provides sub-nanosecond timing resolution sufficient to distinguish L1 cache hits (~4 cycles) from DRAM accesses (~200 cycles), making it the instrument of choice for cache timing measurements. The instruction requires no special privilege level in most configurations, meaning any user-space process can time its own memory accesses with cycle-level granularity.</p>
+    </section>
+
+    <!-- ── 3. HISTORY ── -->
+    <section class="article-section" id="history">
+      <h2><span class="section-num">§03</span> Historical Timeline</h2>
+
+      <p>Cache timing attacks did not emerge fully formed. They evolved over two decades from theoretical observations about timing variability into highly practical exploits affecting the most widely deployed cryptographic implementations and processor architectures in the world.</p>
+
+      <div class="timeline">
+
+        <div class="tl-item">
+          <div class="tl-year">1996</div>
+          <div class="tl-title">Kocher — Timing Attacks on Crypto Implementations</div>
+          <div class="tl-body">Paul Kocher published the foundational paper demonstrating that timing variations in cryptographic computations leak secret information.<sup>[4]</sup> Targeting RSA, Diffie-Hellman, and DSS implementations, Kocher showed that an adversary measuring the time taken to process different inputs could recover the private key. While this work focused on algorithmic timing rather than cache effects specifically, it established the theoretical framework for all subsequent side-channel research.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2002</div>
+          <div class="tl-title">Page — Theoretical Analysis of Cache Timing Leakage</div>
+          <div class="tl-body">Dan Page formalised the theoretical basis for cache-based side-channel attacks, demonstrating that table-based implementations of block ciphers could leak key information through cache access patterns.<sup>[11]</sup> This established the first rigorous framework specifically addressing cache memory as a side channel.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2005</div>
+          <div class="tl-title">Bernstein — Full AES-128 Key Recovery</div>
+          <div class="tl-body">Daniel J. Bernstein demonstrated the first practical, complete cache timing attack against AES-128, recovering the full 128-bit secret key from OpenSSL's AES implementation using approximately 2²⁷ adaptive chosen-plaintext queries.<sup>[1]</sup> The attack worked against the standard table-based AES implementation used by virtually every production cryptographic library at the time, triggering an industry-wide re-evaluation of constant-time cryptography.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2006</div>
+          <div class="tl-title">Osvik, Shamir &amp; Tromer — Prime+Probe Against AES</div>
+          <div class="tl-body">Osvik, Shamir, and Tromer introduced the <em>Prime+Probe</em> technique and demonstrated end-to-end AES key recovery in a process-isolation scenario, requiring no shared memory between attacker and victim.<sup>[2]</sup> Crucially, they showed that an attacker could monitor another process on the same machine, circumventing operating system process isolation. This paper also introduced the <em>Evict+Time</em> primitive and formalised the taxonomy of cache-based attacks that is still used today.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2005</div>
+          <div class="tl-title">Percival — HyperThreading and L1 Cache Attacks</div>
+          <div class="tl-body">Colin Percival demonstrated that Intel's HyperThreading technology, which shares L1 cache between logical cores on the same physical core, creates an additional attack surface.<sup>[15]</sup> His work showed that co-scheduled HyperThreaded processes leak cache information at a dramatically higher bandwidth than attacks through the shared L3 cache, enabling RSA private key extraction.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2010</div>
+          <div class="tl-title">Tromer, Osvik &amp; Shamir — Efficient Cache Attacks</div>
+          <div class="tl-body">An extended journal version of the 2006 work providing a comprehensive treatment of cache attack techniques, countermeasures, and their limitations, establishing the reference framework for cache attack efficiency analysis.<sup>[10]</sup></div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2012</div>
+          <div class="tl-title">Zhang et al. — Cross-VM Key Extraction in the Cloud</div>
+          <div class="tl-body">Zhang, Juels, Reiter, and Ristenpart demonstrated that cache timing attacks are practical across virtual machine boundaries in Infrastructure-as-a-Service cloud platforms.<sup>[12]</sup> Using Prime+Probe on the shared last-level cache, they extracted ElGamal private keys from a co-resident virtual machine on Amazon EC2, demonstrating that cloud multi-tenancy fundamentally cannot be assumed secure against microarchitectural attacks.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2014</div>
+          <div class="tl-title">Yarom &amp; Falkner — FLUSH+RELOAD</div>
+          <div class="tl-body">Yuval Yarom and Katrina Falkner introduced Flush+Reload, a dramatically more precise cache attack exploiting <em>shared memory pages</em> created by the operating system's memory deduplication mechanisms.<sup>[3]</sup> Using the x86 <code>CLFLUSH</code> instruction to evict cache lines and then timing their reload, the attack achieved near-perfect precision in monitoring individual cache lines of victim code and data, enabling attacks with as few as a single observation per key bit.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2015</div>
+          <div class="tl-title">Liu et al. — Practical Last-Level Cache Attacks</div>
+          <div class="tl-body">Liu and colleagues demonstrated that Prime+Probe attacks on the last-level cache are practical across processor cores with no shared memory, recovering ElGamal keys from GnuPG in a controlled environment and demonstrating feasibility on commercial cloud platforms.<sup>[7]</sup></div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2016</div>
+          <div class="tl-title">Gruss et al. — FLUSH+FLUSH: A Stealthy Variant</div>
+          <div class="tl-body">Gruss, Maurice, Wagner, and Mangard demonstrated that even the <code>CLFLUSH</code> instruction itself has data-dependent timing — a flushed line that is cached takes longer to flush than one already absent.<sup>[8]</sup> This gave rise to Flush+Flush, an attack that never generates cache misses (which are detectable by performance counters), making it significantly stealthier than all prior techniques.</div>
+        </div>
+
+        <div class="tl-item">
+          <div class="tl-year">2018</div>
+          <div class="tl-title">Spectre &amp; Meltdown — Transient Execution Attacks</div>
+          <div class="tl-body">The disclosure of Spectre<sup>[6]</sup> and Meltdown<sup>[5]</sup> in January 2018 fundamentally altered the security landscape. Both attacks used cache timing as the <em>covert channel</em> to extract data that had been speculatively or transiently processed by the CPU. Meltdown broke the kernel/user-space isolation boundary; Spectre broke isolation between separate processes and even JavaScript sandboxes. Virtually every modern processor was affected.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── 4. MECHANISMS ── -->
+    <section class="article-section" id="mechanisms">
+      <h2><span class="section-num">§04</span> Core Attack Mechanisms</h2>
+
+      <p>All cache timing attacks share a common three-phase structure: the attacker manipulates the cache state, triggers victim activity, and then measures the resulting changes to the cache to infer what the victim accessed.<sup>[11]</sup> The four principal technique families differ in how they achieve cache manipulation and measurement.</p>
+
+      <table class="attack-table">
+        <thead>
+          <tr>
+            <th>Technique</th>
+            <th>Shared Memory</th>
+            <th>Cross-Core</th>
+            <th>Stealthiness</th>
+            <th>Resolution</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Evict+Time</strong></td>
+            <td>Not Required</td>
+            <td>No</td>
+            <td><span class="badge badge-med">Medium</span></td>
+            <td>Cache-set level</td>
+          </tr>
+          <tr>
+            <td><strong>Prime+Probe</strong></td>
+            <td>Not Required</td>
+            <td>Yes (L3)</td>
+            <td><span class="badge badge-med">Medium</span></td>
+            <td>Cache-set level</td>
+          </tr>
+          <tr>
+            <td><strong>Flush+Reload</strong></td>
+            <td>Required</td>
+            <td>Yes</td>
+            <td><span class="badge badge-med">Medium</span></td>
+            <td>Cache-line level</td>
+          </tr>
+          <tr>
+            <td><strong>Flush+Flush</strong></td>
+            <td>Required</td>
+            <td>Yes</td>
+            <td><span class="badge badge-hi">High</span></td>
+            <td>Cache-line level</td>
+          </tr>
+          <tr>
+            <td><strong>Spectre/Meltdown</strong></td>
+            <td>Not Required</td>
+            <td>Yes</td>
+            <td><span class="badge badge-lo">Low</span></td>
+            <td>Byte level</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── 5. EVICT+TIME ── -->
+    <section class="article-section" id="evict-time">
+      <h2><span class="section-num">§05</span> Evict + Time</h2>
+
+      <p>Evict+Time is the oldest and conceptually simplest cache attack primitive, introduced by Osvik, Shamir, and Tromer in 2006.<sup>[2]</sup> The attacker does not need shared memory with the victim — only the ability to trigger the victim's execution repeatedly.</p>
+
+      <h4>Algorithm</h4>
+      <p class="no-dropcap">The attack proceeds in three steps repeated for each cache set of interest:</p>
+      <p class="no-dropcap">First, the attacker <em>evicts</em> a specific cache set by accessing enough memory to fill all ways in that set with its own data, displacing any victim data. Second, the attacker <em>triggers</em> the victim's computation (e.g., an encryption operation). Third, the attacker <em>times</em> the victim's execution: if the victim's computation accessed the evicted cache set, it will have incurred a cache miss and the execution time will be longer than if the set was not accessed.</p>
+
+      <p class="no-dropcap">By repeating this for each cache set, the attacker builds a profile of which cache sets are accessed by the victim for different inputs, which directly correlates to which table indices (and therefore which key bytes) the victim used.<sup>[2]</sup></p>
+
+      <div class="warning">
+        <div class="callout-label">Limitation</div>
+        <p>Evict+Time measures the total execution time of the victim's computation. Any noise from operating system scheduling, interrupts, or other concurrent processes degrades signal quality. It is also difficult to apply when the attacker cannot directly invoke the victim's computation. These limitations motivated the development of Prime+Probe.</p>
+      </div>
+    </section>
+
+    <!-- ── 6. PRIME+PROBE ── -->
+    <section class="article-section" id="prime-probe">
+      <h2><span class="section-num">§06</span> Prime + Probe</h2>
+
+      <p>Prime+Probe, also introduced by Osvik, Shamir, and Tromer,<sup>[2]</sup> eliminates the need to time the victim's execution directly. Instead, the attacker measures the latency of its own memory accesses after the victim has run, thereby detecting which cache sets were disturbed.</p>
+
+      <h4>Phase 1: Prime</h4>
+      <p class="no-dropcap">The attacker fills all ways of a target cache set with its own data by accessing a carefully chosen set of memory addresses that map to that set. After this phase, the attacker's data occupies all available lines in the set — no victim data remains.<sup>[7]</sup></p>
+
+      <h4>Phase 2: Wait (Victim Executes)</h4>
+      <p class="no-dropcap">The attacker yields control — or simply waits — for the victim to execute the operation of interest. During this time, the victim's memory accesses may evict some of the attacker's primed lines from the monitored set.</p>
+
+      <h4>Phase 3: Probe</h4>
+      <p class="no-dropcap">The attacker re-accesses each of its primed memory addresses and measures the time for each access. A fast access means the line is still in cache (the victim did not touch that set). A slow access (cache miss) indicates that the victim evicted the attacker's line — meaning the victim accessed a memory address that maps to that cache set.<sup>[7]</sup></p>
+
+      <div class="callout">
+        <div class="callout-label">Cross-VM Applicability</div>
+        <p>Because Prime+Probe requires no shared memory, it operates entirely through the physical cache structure. This makes it effective across virtual machine boundaries, across process isolation boundaries, and even across separate enclaves. Liu et al. demonstrated full GnuPG key extraction across VM boundaries on commercial cloud infrastructure using this technique.<sup>[7]</sup></p>
+      </div>
+
+      <h3>Reverse Engineering Cache Sets</h3>
+      <p class="no-dropcap">For Prime+Probe to work precisely, the attacker must know which physical addresses map to which cache sets. On systems that use physical address-based cache indexing — as most L3 caches do — the attacker must either know the physical addresses of its own virtual addresses (requiring root privileges or a privileged side channel), or use probabilistic eviction by accessing a larger pool of congruent addresses than the number of ways.<sup>[7]</sup> On systems with DRAM-speed set selection, the latter approach — called <em>eviction sets</em> construction — has been automated using algorithmic techniques that work without any privileged information.<sup>[11]</sup></p>
+    </section>
+
+    <!-- ── 7. FLUSH+RELOAD ── -->
+    <section class="article-section" id="flush-reload">
+      <h2><span class="section-num">§07</span> Flush + Reload</h2>
+
+      <p>Flush+Reload, introduced by Yarom and Falkner in 2014,<sup>[3]</sup> achieves significantly finer-grained resolution than Prime+Probe by monitoring individual cache lines rather than entire cache sets. It is considered among the most precise side-channel attack techniques available without hardware access.</p>
+
+      <h4>Prerequisites</h4>
+      <p class="no-dropcap">Flush+Reload requires <em>shared memory</em> between attacker and victim. This condition is frequently satisfied because modern operating systems use memory deduplication: read-only pages of shared libraries (such as libcrypto, libc, or the OpenSSL shared object) are mapped once in physical memory and referenced by multiple processes. Any process sharing a host with the victim that has the same library loaded will share physical pages with it.<sup>[3]</sup></p>
+
+      <h4>Phase 1: Flush</h4>
+      <p class="no-dropcap">The attacker uses the x86 <code>CLFLUSH</code> instruction to evict a target cache line — a specific 64-byte region of the shared library or memory — from all levels of the cache hierarchy. Because the cache line is shared, flushing from the attacker's virtual address also evicts it from the victim's perspective.<sup>[3]</sup></p>
+
+      <h4>Phase 2: Wait</h4>
+      <p class="no-dropcap">The attacker waits a defined time window — typically a few hundred to a few thousand CPU cycles — for the victim to execute. If the victim's code path brings the flushed line back into cache (because the victim accessed a function or table entry in the monitored region), the line will be resident.</p>
+
+      <h4>Phase 3: Reload</h4>
+      <p class="no-dropcap">The attacker accesses the monitored address and measures the latency. A fast access (~4 cycles) indicates a cache hit: the victim loaded the line during the wait window. A slow access (~200 cycles) indicates a cache miss: the victim did not access that line.<sup>[3]</sup></p>
+
+      <div class="pull-quote">
+        <p>Flush+Reload can detect whether a single specific function was called by the victim in a given time window, with false-positive rates below 1% and false-negative rates below 0.5% in controlled conditions.</p>
+        <cite>— Yarom &amp; Falkner, FLUSH+RELOAD: A High Resolution, Low Noise, L3 Cache Side-Channel Attack, 2014<sup>[3]</sup></cite>
+      </div>
+
+      <h3>GnuPG RSA Key Extraction</h3>
+      <p class="no-dropcap">The canonical Flush+Reload demonstration targeted GnuPG's RSA implementation using the square-and-multiply algorithm for modular exponentiation.<sup>[3]</sup> The algorithm processes each bit of the private key exponent sequentially: a <em>1</em> bit triggers both a squaring and a multiplication operation; a <em>0</em> bit triggers only a squaring. By monitoring the cache lines corresponding to the multiply and square functions, the attacker can read off the private key bit-by-bit. Yarom and Falkner demonstrated complete 4096-bit RSA key recovery using a single decryption operation as the observation window.</p>
+    </section>
+
+    <!-- ── 8. FLUSH+FLUSH ── -->
+    <section class="article-section" id="flush-flush">
+      <h2><span class="section-num">§08</span> Flush + Flush</h2>
+
+      <p>Flush+Flush, developed by Gruss, Maurice, Wagner, and Mangard in 2016,<sup>[8]</sup> exploits a subtle microarchitectural property: the latency of the <code>CLFLUSH</code> instruction itself is data-dependent. Flushing a cache line that is <em>currently cached</em> takes approximately 10 cycles longer than flushing one that is already absent from the cache.</p>
+
+      <p class="no-dropcap">This means the attacker can perform the monitor-measure cycle using only <code>CLFLUSH</code> instructions — no memory loads required. The critical advantage is that <code>CLFLUSH</code> operations generate no cache misses, producing no signal in hardware performance counters (L3 cache miss rates) that intrusion detection systems might monitor.<sup>[8]</sup> Flush+Flush achieves a detection rate equivalent to Flush+Reload while evading all performance-counter-based monitoring tools known at the time of publication.</p>
+
+      <div class="callout">
+        <div class="callout-label">Stealthiness Advantage</div>
+        <p>Flush+Flush generates approximately <strong>zero L3 cache misses</strong> from the attacker process during the monitoring phase, compared to Flush+Reload (which generates one miss per monitored line per time slot). Detection systems that monitor cache miss rates as an indicator of side-channel activity are blind to Flush+Flush.<sup>[8]</sup></p>
+      </div>
+    </section>
+
+    <!-- ── 9. SPECTRE & MELTDOWN ── -->
+    <section class="article-section" id="spectre">
+      <h2><span class="section-num">§09</span> Spectre &amp; Meltdown</h2>
+
+      <p>Disclosed simultaneously in January 2018 by independent research teams, Spectre<sup>[6]</sup> and Meltdown<sup>[5]</sup> represent the most consequential cache timing attacks ever discovered. Both use cache-based covert channels not to observe normal victim memory accesses, but to exfiltrate data that was <em>transiently</em> computed by the processor's speculative execution engine — data that would never be architecturally visible to the attacking code.</p>
+
+      <h3>Speculative Execution: The Foundation</h3>
+      <p class="no-dropcap">Modern out-of-order processors do not simply execute instructions sequentially. To hide memory and branch latencies, they <em>speculatively execute</em> instructions along predicted paths before it is known whether those paths will actually be taken.<sup>[6]</sup> If the prediction is wrong, the speculatively executed instructions are rolled back — their architectural effects (register values, memory writes) are undone — and execution resumes on the correct path. No architectural trace remains.</p>
+
+      <p class="no-dropcap">However, microarchitectural state changes — specifically, cache contents — are <em>not rolled back</em>. Speculatively executed instructions that load data into the cache leave those cache lines resident, measurable by a timing-based covert channel.<sup>[6]</sup> This is the foundation of both Spectre and Meltdown.</p>
+
+      <h3>Meltdown</h3>
+      <p class="no-dropcap">Meltdown exploits the fact that on many Intel and some ARM processors, the permission check that prevents user-space code from reading kernel memory is performed <em>after</em> the speculative load — not before it.<sup>[5]</sup> An attacker can speculatively access kernel memory, use the transiently loaded secret byte to index into an array in user space (bringing a cache line dependent on the secret value into cache), and then time accesses to that array to determine which index was used and thus recover the secret byte.</p>
+
+      <p class="no-dropcap">Lipp and colleagues demonstrated reading kernel memory at rates of up to 503 KB/s with low error rates, enabling complete extraction of kernel memory including cryptographic keys, password hashes, and other sensitive data.<sup>[5]</sup></p>
+
+      <h3>Spectre</h3>
+      <p class="no-dropcap">Spectre is broader and more fundamental than Meltdown. Rather than breaking privilege boundaries, Spectre exploits speculative execution to break the isolation between processes or between a process and the JavaScript sandbox.<sup>[6]</sup> By training the branch predictor to speculatively execute a code gadget in the victim's address space that reads secret memory and encodes it into cache state, the attacker can then use Flush+Reload or Prime+Probe to read the cache-encoded result.</p>
+
+      <div class="warning">
+        <div class="callout-label">Ongoing Threat</div>
+        <p>As of 2024, new Spectre variants continue to be discovered. SpectreRSB (2018), Spectre-v4 / Speculative Store Bypass (2018), MDS attacks / Fallout (2019), LVI (2020), and Retbleed (2022) all represent variations on the same fundamental theme. Complete mitigation of all speculative execution attacks remains an open problem, with current defenses imposing significant performance overhead.<sup>[6]</sup></p>
+      </div>
+    </section>
+
+    <!-- ── 10. REAL-WORLD TARGETS ── -->
+    <section class="article-section" id="targets">
+      <h2><span class="section-num">§10</span> Real-World Targets &amp; Attack Scenarios</h2>
+
+      <h3>Table-Based AES</h3>
+      <p>The most extensively studied target is the standard software implementation of AES using precomputed lookup tables (T-tables). The textbook AES implementation computes each round using four 1 KB lookup tables, where the table index depends directly on a XOR of the plaintext and key bytes.<sup>[1]</sup> A cache observation that reveals which 16-byte block of a T-table was accessed directly reveals the corresponding key bits. Bernstein's 2005 attack<sup>[1]</sup> and subsequent work by Tromer et al.<sup>[10]</sup> demonstrated complete key recovery using this approach.</p>
+
+      <h3>RSA Square-and-Multiply</h3>
+      <p class="no-dropcap">RSA implementations that use the simple square-and-multiply algorithm for modular exponentiation leak the private exponent bit-by-bit through the sequence of multiply versus square operations they perform.<sup>[15]</sup> Flush+Reload monitoring of the multiply function's cache lines allows recovery of the full exponent.<sup>[3]</sup> Modern RSA implementations use constant-time Montgomery multiplication or m-ary exponentiation to resist this class of attack.</p>
+
+      <h3>Elliptic Curve Cryptography</h3>
+      <p class="no-dropcap">Implementations of elliptic curve scalar multiplication that use non-constant-time point doubling and addition algorithms are susceptible to analogous attacks.<sup>[11]</sup> The sequence of double and add operations encodes the scalar (private key), and cache observations can recover it. The OpenSSL ECDSA implementation prior to version 1.0.2 was vulnerable to this class of attack.</p>
+
+      <h3>Cross-VM Cloud Attacks</h3>
+      <p class="no-dropcap">Zhang and colleagues demonstrated AES and ElGamal key extraction across virtual machine boundaries on commercial cloud infrastructure.<sup>[12]</sup> The attack required co-locating a spy VM with the target VM on the same physical host — a condition that can often be engineered by an attacker with cloud accounts — and then running a Prime+Probe attack through the shared last-level cache. The inter-VM channel operates at lower bandwidth and higher noise than same-process attacks, but is still sufficient for key extraction given sufficient observation time.</p>
+
+      <h3>Browser-Based Attacks</h3>
+      <p class="no-dropcap">Spectre variants can be implemented in JavaScript executing inside a web browser, attacking the browser process itself or other processes on the system.<sup>[6]</sup> The primary mitigations applied by browser vendors — reducing the precision of <code>performance.now()</code>, disabling <code>SharedArrayBuffer</code> (which was used to create a shared-memory high-resolution timer), and disabling site isolation features — reflect the recognition that JavaScript-based cache timing attacks are a credible real-world threat.</p>
+    </section>
+
+    <!-- ── 11. SOURCE CODE ── -->
+    <section class="article-section" id="code">
+      <h2><span class="section-num">§11</span> Source Code Examples</h2>
+
+      <h3>1. Measuring Cache vs. DRAM Latency (x86, C)</h3>
+      <p>The following code illustrates the fundamental timing measurement primitive used in all cache attacks: using RDTSC to distinguish a cache hit from a cache miss.<sup>[11]</sup></p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-lang">C — x86_64</div>
+          <div class="code-dots"><span></span><span></span><span></span></div>
+        </div>
+        <pre><span class="pp">#include</span> <span class="st">&lt;stdint.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;stdio.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;x86intrin.h&gt;</span>   <span class="cm">/* for __rdtsc(), _mm_clflush() */</span>
+
+<span class="cm">/* Returns current CPU timestamp counter value */</span>
+<span class="kw">static inline</span> <span class="tp">uint64_t</span> <span class="fn">rdtsc</span>() {
+    <span class="kw">unsigned int</span> lo, hi;
+    <span class="cm">/* CPUID serialises the pipeline to prevent out-of-order
+       execution from skewing the timing measurement */</span>
+    __asm__ __volatile__ (<span class="st">"cpuid\n\t rdtsc\n\t"</span>
+        <span class="op">:</span> <span class="st">"=a"</span>(lo), <span class="st">"=d"</span>(hi)
+        <span class="op">::</span> <span class="st">"%rbx"</span>, <span class="st">"%rcx"</span>);
+    <span class="kw">return</span> ((<span class="tp">uint64_t</span>)hi <span class="op">&lt;&lt;</span> <span class="nm">32</span>) <span class="op">|</span> lo;
+}
+
+<span class="cm">/* Measure the access latency of a single memory address in cycles */</span>
+<span class="tp">uint64_t</span> <span class="fn">measure_access_time</span>(<span class="kw">void</span> <span class="op">*</span>addr) {
+    <span class="tp">uint64_t</span> t1, t2;
+    <span class="kw">volatile</span> <span class="tp">uint8_t</span> <span class="op">*</span>p <span class="op">=</span> (<span class="kw">volatile</span> <span class="tp">uint8_t</span> <span class="op">*</span>)addr;
+
+    t1 <span class="op">=</span> <span class="fn">rdtsc</span>();
+    (void) <span class="op">*</span>p;        <span class="cm">/* access the target memory location */</span>
+    t2 <span class="op">=</span> <span class="fn">rdtsc</span>();
+
+    <span class="kw">return</span> t2 <span class="op">-</span> t1;
+}
+
+<span class="kw">int</span> <span class="fn">main</span>() {
+    <span class="tp">uint8_t</span> mem[<span class="nm">4096</span>];
+    <span class="tp">uint64_t</span> t_hit, t_miss;
+
+    <span class="cm">/* Warm up: access the target to ensure it is in L1 cache */</span>
+    (void) mem[<span class="nm">0</span>];
+    t_hit <span class="op">=</span> <span class="fn">measure_access_time</span>(&amp;mem[<span class="nm">0</span>]);
+
+    <span class="cm">/* Evict the target from all cache levels */</span>
+    _mm_clflush(&amp;mem[<span class="nm">0</span>]);
+    __asm__ __volatile__ (<span class="st">"mfence"</span>);   <span class="cm">/* memory fence: ensure flush completes */</span>
+
+    t_miss <span class="op">=</span> <span class="fn">measure_access_time</span>(&amp;mem[<span class="nm">0</span>]);
+
+    <span class="fn">printf</span>(<span class="st">"Cache HIT  latency: %lu cycles\n"</span>, t_hit);
+    <span class="fn">printf</span>(<span class="st">"Cache MISS latency: %lu cycles\n"</span>, t_miss);
+    <span class="cm">/* On typical x86-64: HIT ~4-10 cycles, MISS ~150-250 cycles */</span>
+
+    <span class="kw">return</span> <span class="nm">0</span>;
+}</pre>
+      </div>
+
+      <h3>2. Flush + Reload Attack Core (C)</h3>
+      <p>This example demonstrates the Flush+Reload attack loop, monitoring whether a victim process accessed a specific byte in a shared memory region.<sup>[3]</sup> This is the building block used in GnuPG key extraction attacks.</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-lang">C — Flush+Reload Monitor</div>
+          <div class="code-dots"><span></span><span></span><span></span></div>
+        </div>
+        <pre><span class="pp">#include</span> <span class="st">&lt;stdint.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;string.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;stdio.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;x86intrin.h&gt;</span>
+
+<span class="pp">#define</span> <span class="lbl">THRESHOLD</span>   <span class="nm">80</span>     <span class="cm">/* cycles; below = cache hit, above = miss */</span>
+<span class="pp">#define</span> <span class="lbl">SLOTS</span>       <span class="nm">256</span>    <span class="cm">/* for a full byte probe array */</span>
+<span class="pp">#define</span> <span class="lbl">STRIDE</span>      <span class="nm">512</span>    <span class="cm">/* stride to avoid hardware prefetcher */</span>
+
+<span class="cm">/*
+ * probe_array: 256 x 512-byte array
+ * Each slot is STRIDE bytes apart to ensure each slot maps to a
+ * different cache line and avoids hardware prefetcher interference.
+ */</span>
+<span class="tp">uint8_t</span> probe_array[<span class="lbl">SLOTS</span> <span class="op">*</span> <span class="lbl">STRIDE</span>];
+
+<span class="cm">/* Step 1: Flush the entire probe array from cache */</span>
+<span class="kw">void</span> <span class="fn">flush_probe_array</span>() {
+    <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="lbl">SLOTS</span>; i<span class="op">++</span>) {
+        _mm_clflush(&amp;probe_array[i <span class="op">*</span> <span class="lbl">STRIDE</span>]);
+    }
+    __asm__ __volatile__ (<span class="st">"mfence"</span>);
+}
+
+<span class="cm">/*
+ * Step 2 (victim's secret computation happens here in a real attack)
+ * In a real Spectre/AES attack, the victim speculatively or normally
+ * accesses: probe_array[secret_byte * STRIDE]
+ * We simulate this for demonstration:
+ */</span>
+<span class="kw">void</span> <span class="fn">victim_access</span>(<span class="tp">uint8_t</span> secret) {
+    <span class="cm">/* Victim (or speculative gadget) encodes secret into cache */</span>
+    <span class="kw">volatile</span> <span class="tp">uint8_t</span> junk <span class="op">=</span> probe_array[secret <span class="op">*</span> <span class="lbl">STRIDE</span>];
+    (void) junk;
+}
+
+<span class="cm">/* Step 3: Probe all slots and measure; return the inferred secret byte */</span>
+<span class="tp">int</span> <span class="fn">reload_and_detect</span>() {
+    <span class="tp">uint64_t</span> t1, t2, time;
+    <span class="tp">int</span> scores[<span class="lbl">SLOTS</span>] <span class="op">=</span> {<span class="nm">0</span>};
+    <span class="tp">int</span> best_slot <span class="op">=</span> <span class="op">-</span><span class="nm">1</span>;
+    <span class="tp">uint64_t</span> best_time <span class="op">=</span> <span class="nm">UINT64_MAX</span>;
+
+    <span class="cm">/* Randomise probe order to reduce timing correlation artifacts */</span>
+    <span class="tp">int</span> order[<span class="lbl">SLOTS</span>];
+    <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="lbl">SLOTS</span>; i<span class="op">++</span>) order[i] <span class="op">=</span> i;
+    <span class="cm">/* (Fisher-Yates shuffle omitted for brevity) */</span>
+
+    <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="lbl">SLOTS</span>; i<span class="op">++</span>) {
+        <span class="tp">int</span> idx <span class="op">=</span> order[i];
+        <span class="kw">volatile</span> <span class="tp">uint8_t</span> <span class="op">*</span>p <span class="op">=</span> &amp;probe_array[idx <span class="op">*</span> <span class="lbl">STRIDE</span>];
+
+        t1 <span class="op">=</span> __rdtscp((<span class="kw">unsigned int</span> <span class="op">*</span>)&amp;t2);  <span class="cm">/* RDTSCP: serialising RDTSC */</span>
+        (void) <span class="op">*</span>p;
+        t2 <span class="op">=</span> __rdtscp((<span class="kw">unsigned int</span> <span class="op">*</span>)&amp;t1);
+        time <span class="op">=</span> t2 <span class="op">-</span> t1;
+
+        <span class="kw">if</span> (time <span class="op">&lt;</span> <span class="lbl">THRESHOLD</span> <span class="op">&amp;&amp;</span> time <span class="op">&lt;</span> best_time) {
+            best_time <span class="op">=</span> time;
+            best_slot <span class="op">=</span> idx;   <span class="cm">/* cache hit: this slot encodes the secret */</span>
+        }
+    }
+    <span class="kw">return</span> best_slot;  <span class="cm">/* inferred secret byte value */</span>
+}
+
+<span class="kw">int</span> <span class="fn">main</span>() {
+    <span class="tp">uint8_t</span> secret <span class="op">=</span> <span class="nm">0x41</span>;   <span class="cm">/* 'A' — attacker does not know this */</span>
+    <span class="kw">int</span> inferred, trials <span class="op">=</span> <span class="nm">100</span>, hits[<span class="lbl">SLOTS</span>] <span class="op">=</span> {<span class="nm">0</span>};
+
+    memset(probe_array, <span class="nm">1</span>, <span class="kw">sizeof</span>(probe_array));  <span class="cm">/* page in all memory */</span>
+
+    <span class="kw">for</span> (<span class="kw">int</span> t <span class="op">=</span> <span class="nm">0</span>; t <span class="op">&lt;</span> trials; t<span class="op">++</span>) {
+        <span class="fn">flush_probe_array</span>();            <span class="cm">/* 1. Flush */</span>
+        <span class="fn">victim_access</span>(secret);         <span class="cm">/* 2. Victim encodes secret */</span>
+        __asm__ __volatile__ (<span class="st">"mfence"</span>);
+        inferred <span class="op">=</span> <span class="fn">reload_and_detect</span>();  <span class="cm">/* 3. Reload + measure */</span>
+        <span class="kw">if</span> (inferred <span class="op">&gt;=</span> <span class="nm">0</span>) hits[inferred]<span class="op">++</span>;
+    }
+
+    <span class="kw">int</span> best <span class="op">=</span> <span class="nm">0</span>;
+    <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">1</span>; i <span class="op">&lt;</span> <span class="lbl">SLOTS</span>; i<span class="op">++</span>)
+        <span class="kw">if</span> (hits[i] <span class="op">&gt;</span> hits[best]) best <span class="op">=</span> i;
+
+    <span class="fn">printf</span>(<span class="st">"Inferred secret byte: 0x%02X ('%c')\n"</span>, best, best);
+    <span class="fn">printf</span>(<span class="st">"Actual   secret byte: 0x%02X ('%c')\n"</span>, secret, secret);
+    <span class="kw">return</span> <span class="nm">0</span>;
+}</pre>
+      </div>
+
+      <h3>3. Spectre Variant 1 — Proof of Concept (C)</h3>
+      <p>This illustrates the core Spectre Variant 1 gadget from the original Kocher et al. paper,<sup>[6]</sup> where bounds checking is bypassed by speculative execution and the secret byte is encoded into cache state via the probe array.</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-lang">C — Spectre Variant 1 (Bounds Check Bypass)</div>
+          <div class="code-dots"><span></span><span></span><span></span></div>
+        </div>
+        <pre><span class="pp">#include</span> <span class="st">&lt;stdint.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;stdio.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;string.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;x86intrin.h&gt;</span>
+
+<span class="pp">#define</span> <span class="lbl">CACHE_HIT_THRESHOLD</span> <span class="nm">80</span>
+<span class="pp">#define</span> <span class="lbl">STRIDE</span>             <span class="nm">512</span>
+
+<span class="tp">uint8_t</span> probe_array[<span class="nm">256</span> <span class="op">*</span> <span class="lbl">STRIDE</span>];  <span class="cm">/* covert channel output array */</span>
+
+<span class="cm">/* Victim data — "safe" region */</span>
+<span class="tp">uint8_t</span> victim_array[<span class="nm">16</span>] <span class="op">=</span> {<span class="nm">1</span>,<span class="nm">2</span>,<span class="nm">3</span>,<span class="nm">4</span>,<span class="nm">5</span>,<span class="nm">6</span>,<span class="nm">7</span>,<span class="nm">8</span>,<span class="nm">9</span>,<span class="nm">10</span>,<span class="nm">11</span>,<span class="nm">12</span>,<span class="nm">13</span>,<span class="nm">14</span>,<span class="nm">15</span>,<span class="nm">16</span>};
+<span class="tp">size_t</span>  victim_array_size <span class="op">=</span> <span class="kw">sizeof</span>(victim_array);
+
+<span class="cm">/* Secret string located BEYOND the bounds of victim_array */</span>
+<span class="kw">const</span> <span class="tp">char</span> <span class="op">*</span>secret <span class="op">=</span> <span class="st">"SPECTRE_SECRET_KEY_12345"</span>;
+
+<span class="cm">/*
+ * victim_function: contains the vulnerable code pattern.
+ * The bounds check (x < victim_array_size) is architecturally correct,
+ * but the processor speculatively executes the body before the check
+ * resolves if x has been recently predicted as in-bounds.
+ */</span>
+<span class="kw">void</span> <span class="fn">victim_function</span>(<span class="tp">size_t</span> x) {
+    <span class="kw">if</span> (x <span class="op">&lt;</span> victim_array_size) {          <span class="cm">/* bounds check — slow to resolve */</span>
+        <span class="cm">/* Speculatively executed even when x is out of bounds:
+           loads victim_array[x] (which may be secret data beyond array),
+           then uses it as an index into the probe array, encoding the
+           secret byte into the cache via a data-dependent load address. */</span>
+        <span class="tp">uint8_t</span> val <span class="op">=</span> victim_array[x];          <span class="cm">/* out-of-bounds read! */</span>
+        <span class="kw">volatile</span> <span class="tp">uint8_t</span> junk <span class="op">=</span>
+            probe_array[val <span class="op">*</span> <span class="lbl">STRIDE</span>];          <span class="cm">/* cache encoding */</span>
+        (void) junk;
+    }
+}
+
+<span class="cm">/* Train branch predictor to expect in-bounds access,
+   then provide an out-of-bounds index pointing to secret memory */</span>
+<span class="kw">void</span> <span class="fn">spectre_attack</span>(<span class="tp">size_t</span> target_offset, <span class="tp">uint8_t</span> <span class="op">*</span>out) {
+    <span class="tp">int</span> scores[<span class="nm">256</span>] <span class="op">=</span> {<span class="nm">0</span>};
+
+    <span class="kw">for</span> (<span class="kw">int</span> trial <span class="op">=</span> <span class="nm">0</span>; trial <span class="op">&lt;</span> <span class="nm">1000</span>; trial<span class="op">++</span>) {
+
+        <span class="cm">/* Flush probe array from cache */</span>
+        <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="nm">256</span>; i<span class="op">++</span>)
+            _mm_clflush(&amp;probe_array[i <span class="op">*</span> <span class="lbl">STRIDE</span>]);
+
+        <span class="cm">/* Flush the bounds variable so the check is slow to resolve */</span>
+        _mm_clflush(&amp;victim_array_size);
+        __asm__ __volatile__ (<span class="st">"mfence"</span>);
+
+        <span class="cm">/* Train the branch predictor with 5 valid accesses,
+           then perform the malicious out-of-bounds access (x5 pattern) */</span>
+        <span class="kw">for</span> (<span class="kw">int</span> t <span class="op">=</span> <span class="nm">0</span>; t <span class="op">&lt;</span> <span class="nm">6</span>; t<span class="op">++</span>) {
+            <span class="tp">size_t</span> x <span class="op">=</span> (t <span class="op">%</span> <span class="nm">5</span>) <span class="op">?</span>
+                (<span class="nm">1</span> <span class="op">%</span> victim_array_size) :    <span class="cm">/* training: in-bounds */</span>
+                target_offset;              <span class="cm">/* attack:   out-of-bounds */</span>
+            _mm_clflush(&amp;victim_array_size);
+            <span class="fn">victim_function</span>(x);
+        }
+
+        <span class="cm">/* Reload: measure cache to recover the encoded secret byte */</span>
+        <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="nm">256</span>; i<span class="op">++</span>) {
+            <span class="tp">uint64_t</span> t1 <span class="op">=</span> __rdtsc();
+            (void) probe_array[i <span class="op">*</span> <span class="lbl">STRIDE</span>];
+            <span class="tp">uint64_t</span> t2 <span class="op">=</span> __rdtsc();
+            <span class="kw">if</span> ((t2 <span class="op">-</span> t1) <span class="op">&lt;</span> <span class="lbl">CACHE_HIT_THRESHOLD</span>) scores[i]<span class="op">++</span>;
+        }
+    }
+
+    <span class="cm">/* Find the highest-scored byte */</span>
+    <span class="kw">int</span> best <span class="op">=</span> <span class="nm">0</span>;
+    <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">1</span>; i <span class="op">&lt;</span> <span class="nm">256</span>; i<span class="op">++</span>)
+        <span class="kw">if</span> (scores[i] <span class="op">&gt;</span> scores[best]) best <span class="op">=</span> i;
+    <span class="op">*</span>out <span class="op">=</span> (<span class="tp">uint8_t</span>) best;
+}
+
+<span class="kw">int</span> <span class="fn">main</span>() {
+    memset(probe_array, <span class="nm">1</span>, <span class="kw">sizeof</span>(probe_array));  <span class="cm">/* page in */</span>
+
+    <span class="fn">printf</span>(<span class="st">"Reading secret bytes via Spectre Variant 1:\n"</span>);
+    <span class="fn">printf</span>(<span class="st">"  Offset │ Inferred │ Actual\n"</span>);
+    <span class="fn">printf</span>(<span class="st">"  ───────┼──────────┼───────\n"</span>);
+
+    <span class="kw">for</span> (<span class="tp">size_t</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="nm">24</span>; i<span class="op">++</span>) {
+        <span class="cm">/* Compute offset from victim_array base to secret[i] */</span>
+        <span class="tp">size_t</span> offset <span class="op">=</span> (<span class="tp">size_t</span>)(secret <span class="op">+</span> i) <span class="op">-</span> (<span class="tp">size_t</span>)victim_array;
+        <span class="tp">uint8_t</span> inferred;
+        <span class="fn">spectre_attack</span>(offset, &amp;inferred);
+        <span class="fn">printf</span>(<span class="st">"  %6zu │  0x%02X '%c' │ 0x%02X '%c'\n"</span>,
+               i, inferred, inferred, secret[i], secret[i]);
+    }
+    <span class="kw">return</span> <span class="nm">0</span>;
+}</pre>
+      </div>
+
+      <div class="warning">
+        <div class="callout-label">Educational Context</div>
+        <p>The code examples above are presented for educational and research purposes, following the conventions of academic security publications.<sup>[6]</sup> The Spectre example demonstrates the attack on data within the same process; real-world cross-process exploitation is substantially more complex and hardware/OS-specific. All major operating systems and processor vendors have deployed mitigations that make unmodified versions of these proofs-of-concept ineffective on patched systems.</p>
+      </div>
+
+      <h3>4. Constant-Time AES Lookup (Defense Example)</h3>
+      <p class="no-dropcap">The following illustrates the constant-time approach used to defeat table-based cache attacks on AES. Instead of table lookups whose cache behaviour depends on key bits, the implementation uses only bitwise operations, ensuring every execution path touches the same cache lines.<sup>[11]</sup></p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-lang">C — Bitsliced / Constant-Time S-Box (Sketch)</div>
+          <div class="code-dots"><span></span><span></span><span></span></div>
+        </div>
+        <pre><span class="cm">/*
+ * Constant-time AES SubBytes via the "tower field" bitsliced representation.
+ * All operations are bitwise — no data-dependent memory accesses occur.
+ * This is the approach used by BearSSL, BoringSSL, and libsodium for
+ * software AES on platforms without AES-NI hardware acceleration.
+ *
+ * Reference: Bernstein & Schwabe, "New AES software speed records", 2008.
+ */</span>
+
+<span class="cm">/* Finite field GF(2^8) inversion, constant-time via tower decomposition.
+   All branches and memory accesses are independent of the input byte. */</span>
+<span class="kw">static inline</span> <span class="tp">uint8_t</span> <span class="fn">gf256_inv_ct</span>(<span class="tp">uint8_t</span> x) {
+    <span class="cm">/* Decompose x into GF(2^4) elements a, b where x = a*w + b, w in GF(2^8) */</span>
+    <span class="tp">uint8_t</span> a <span class="op">=</span> x <span class="op">&gt;&gt;</span> <span class="nm">4</span>;          <span class="cm">/* high nibble */</span>
+    <span class="tp">uint8_t</span> b <span class="op">=</span> x <span class="op">&amp;</span> <span class="nm">0x0F</span>;        <span class="cm">/* low nibble */</span>
+
+    <span class="cm">/* All subsequent operations are GF(2^4) arithmetic — no lookups */</span>
+    <span class="tp">uint8_t</span> ab   <span class="op">=</span> <span class="fn">gf16_mul</span>(a, b);    <span class="cm">/* constant-time GF(16) multiply */</span>
+    <span class="tp">uint8_t</span> a2   <span class="op">=</span> <span class="fn">gf16_sq_scl</span>(a);   <span class="cm">/* square and scale by w */</span>
+    <span class="tp">uint8_t</span> d    <span class="op">=</span> <span class="fn">gf16_inv</span>(a2 <span class="op">^</span> ab); <span class="cm">/* invert discriminant, CT */</span>
+    <span class="tp">uint8_t</span> a_i  <span class="op">=</span> <span class="fn">gf16_mul</span>(d, b);
+    <span class="tp">uint8_t</span> b_i  <span class="op">=</span> <span class="fn">gf16_mul</span>(d, a);
+
+    <span class="kw">return</span> (a_i <span class="op">&lt;&lt;</span> <span class="nm">4</span>) <span class="op">|</span> b_i;      <span class="cm">/* recombine — result is GF(2^8) inverse */</span>
+}
+
+<span class="cm">/* Full SubBytes step: apply affine transform + inversion to each byte */</span>
+<span class="kw">void</span> <span class="fn">aes_subbytes_ct</span>(<span class="tp">uint8_t</span> state[<span class="nm">16</span>]) {
+    <span class="kw">for</span> (<span class="kw">int</span> i <span class="op">=</span> <span class="nm">0</span>; i <span class="op">&lt;</span> <span class="nm">16</span>; i<span class="op">++</span>) {
+        <span class="tp">uint8_t</span> inv <span class="op">=</span> <span class="fn">gf256_inv_ct</span>(state[i]);  <span class="cm">/* no table lookup */</span>
+        <span class="cm">/* Affine transformation over GF(2) — bitwise only */</span>
+        state[i] <span class="op">=</span> inv <span class="op">^</span> <span class="fn">rol8</span>(inv,<span class="nm">1</span>) <span class="op">^</span> <span class="fn">rol8</span>(inv,<span class="nm">2</span>) <span class="op">^</span>
+                   <span class="fn">rol8</span>(inv,<span class="nm">3</span>) <span class="op">^</span> <span class="fn">rol8</span>(inv,<span class="nm">4</span>) <span class="op">^</span> <span class="nm">0x63</span>;
+    }
+}</pre>
+      </div>
+    </section>
+
+    <!-- ── 12. DEFENSES ── -->
+    <section class="article-section" id="defenses">
+      <h2><span class="section-num">§12</span> Defenses &amp; Mitigations</h2>
+
+      <p>Defense against cache timing attacks operates at multiple layers: the hardware, the operating system, the cryptographic library, and the application. No single defense is universally sufficient — effective protection typically requires mitigations at all levels.<sup>[11]</sup></p>
+
+      <h3>Constant-Time Programming</h3>
+      <p class="no-dropcap">The most robust algorithmic defense is to write cryptographic code such that execution time and memory access patterns are independent of secret data.<sup>[11]</sup> This means eliminating data-dependent branches, data-dependent memory accesses (table lookups indexed by secrets), and data-dependent loop counts. Modern cryptographic libraries — including libsodium, BoringSSL, and BearSSL — implement all secret-dependent computations in constant-time form. Verification tools such as <em>ct-verif</em> and <em>Vale</em> can formally verify constant-time properties of cryptographic code.</p>
+
+      <h3>Hardware AES-NI</h3>
+      <p class="no-dropcap">The Intel AES-NI instruction set extension, introduced in 2010 and now supported by virtually all modern x86 processors, provides hardware-accelerated AES operations that are inherently constant-time and immune to T-table cache attacks.<sup>[11]</sup> Using AES-NI via the <code>AESENC</code>/<code>AESENCLAST</code> instructions rather than software T-table implementations eliminates the largest class of practical cache attacks against symmetric encryption.</p>
+
+      <h3>Cache Partitioning and Isolation</h3>
+      <p class="no-dropcap">Intel's Cache Allocation Technology (CAT) and similar features on AMD processors allow the OS or hypervisor to partition the shared last-level cache, allocating disjoint cache ways to different security domains.<sup>[11]</sup> This prevents cross-tenant cache interference in cloud environments. Complete isolation requires that no cache sets are shared between tenant VMs — a constraint that dramatically reduces effective cache capacity.</p>
+
+      <h3>Spectre and Meltdown Mitigations</h3>
+      <p class="no-dropcap">Operating system vendors deployed a series of software mitigations following the Spectre and Meltdown disclosures in 2018. Kernel Page Table Isolation (KPTI / KAISER) maps the kernel into a separate address space unavailable to user-space processes, defeating Meltdown.<sup>[5]</sup> Retpoline replaces indirect branches with a trampoline construct that prevents the branch target predictor from being trained by an attacker to redirect speculative execution.<sup>[6]</sup> Microcode updates to Intel, AMD, and ARM processors deployed additional hardware-level mitigations including IBRS (Indirect Branch Restricted Speculation) and STIBP (Single Thread Indirect Branch Predictors).</p>
+
+      <div class="callout">
+        <div class="callout-label">Performance Impact</div>
+        <p>KPTI imposes overhead of 5–30% on workloads that frequently transition between user and kernel space (e.g., system-call-heavy applications, databases).<sup>[5]</sup> Retpoline adds overhead on indirect-branch-heavy code. These costs reflect the fundamental tension between performance optimisations (speculative execution, cache sharing) and security.</p>
+      </div>
+
+      <h3>Fuzzy Time and Timer Reduction</h3>
+      <p class="no-dropcap">Browser vendors responded to Spectre by reducing the resolution of JavaScript timers and disabling <code>SharedArrayBuffer</code>, which had been used to construct a high-resolution timer via a counting thread.<sup>[6]</sup> While these measures raise the bar for browser-based cache attacks, they do not eliminate them — lower-resolution timers can be compensated by averaging over more samples, and new timer oracles have been discovered (e.g., CSS animations, server-timing headers).</p>
+
+      <h3>Hardware-Level Isolation: Intel SGX</h3>
+      <p class="no-dropcap">Intel Software Guard Extensions (SGX) provides hardware-enforced enclaves that protect code and data from the OS and hypervisor. However, SGX enclaves are themselves vulnerable to cache timing attacks from co-located non-enclave code, and numerous cache-based attacks against SGX have been demonstrated.<sup>[11]</sup> SGX does not solve the cache timing problem; it shifts the threat model.</p>
+    </section>
+
+    <!-- REFERENCES -->
+    <div class="references" id="references">
+      <div class="ref-title">References</div>
+      <ol class="ref-list">
+        <li><span>Bernstein DJ. Cache-timing attacks on AES [Internet]. 2005 Apr 14 [cited 2024 Jan 15]. Available from: https://cr.yp.to/antiforgery/cachetiming-20050414.pdf</span></li>
+        <li><span>Osvik DA, Shamir A, Tromer E. Cache attacks and countermeasures: the case of AES. In: Pointcheval D, editor. Topics in Cryptology – CT-RSA 2006. Lecture Notes in Computer Science, vol 3860. Berlin: Springer; 2006. p. 1–20.</span></li>
+        <li><span>Yarom Y, Falkner K. FLUSH+RELOAD: a high resolution, low noise, L3 cache side-channel attack. In: Proceedings of the 23rd USENIX Security Symposium; 2014 Aug 20–22; San Diego, CA. Berkeley: USENIX Association; 2014. p. 719–732.</span></li>
+        <li><span>Kocher PC. Timing attacks on implementations of Diffie-Hellman, RSA, DSS, and other systems. In: Koblitz N, editor. Advances in Cryptology – CRYPTO '96. Lecture Notes in Computer Science, vol 1109. Berlin: Springer; 1996. p. 104–113.</span></li>
+        <li><span>Lipp M, Schwarz M, Gruss D, Prescher T, Haas W, Fogh A, et al. Meltdown: reading kernel memory from user space. In: Proceedings of the 27th USENIX Security Symposium; 2018 Aug 15–17; Baltimore, MD. Berkeley: USENIX Association; 2018. p. 973–990.</span></li>
+        <li><span>Kocher P, Horn J, Fogh A, Genkin D, Gruss D, Haas W, et al. Spectre attacks: exploiting speculative execution. In: Proceedings of the 40th IEEE Symposium on Security and Privacy; 2019 May 19–23; San Francisco, CA. IEEE; 2019. p. 1–19.</span></li>
+        <li><span>Liu F, Yarom Y, Ge Q, Heiser G, Lee RB. Last-level cache side-channel attacks are practical. In: Proceedings of the 36th IEEE Symposium on Security and Privacy; 2015 May 18–20; San Jose, CA. IEEE; 2015. p. 605–622.</span></li>
+        <li><span>Gruss D, Maurice C, Wagner K, Mangard S. Flush+Flush: a fast and stealthy cache attack. In: Conti M, Schunter M, Askoxylakis I, editors. Detection of Intrusions and Malware, and Vulnerability Assessment – DIMVA 2016. Lecture Notes in Computer Science, vol 9721. Cham: Springer; 2016. p. 279–299.</span></li>
+        <li><span>Irazoqui G, Eisenbarth T, Sunar B. S$A: a shared cache attack that works across cores and defies VM sandboxing — and its application to AES. In: Proceedings of the 36th IEEE Symposium on Security and Privacy; 2015 May 18–20; San Jose, CA. IEEE; 2015. p. 591–604.</span></li>
+        <li><span>Tromer E, Osvik DA, Shamir A. Efficient cache attacks on AES, and countermeasures. J Cryptol. 2010 Jan;23(1):37–71.</span></li>
+        <li><span>Ge Q, Yarom Y, Cock D, Heiser G. A survey of microarchitectural timing attacks and countermeasures on contemporary hardware. J Cryptogr Eng. 2018 Mar;8(1):1–27.</span></li>
+        <li><span>Zhang Y, Juels A, Reiter MK, Ristenpart T. Cross-VM side channels and their use to extract private keys. In: Proceedings of the 2012 ACM Conference on Computer and Communications Security; 2012 Oct 16–18; Raleigh, NC. New York: ACM; 2012. p. 305–316.</span></li>
+        <li><span>Briongos S, Irazoqui G, Malagón P, Eisenbarth T. CacheShield: detecting cache attacks through self-observation. In: Proceedings of the 8th ACM Conference on Data and Application Security and Privacy; 2018 Mar 19–21; Tempe, AZ. New York: ACM; 2018. p. 224–235.</span></li>
+        <li><span>Gruss D, Lettner J, Schuster F, Ohrimenko O, Haller I, Costa M. Strong and efficient cache side-channel protection using hardware transactional memory. In: Proceedings of the 26th USENIX Security Symposium; 2017 Aug 16–18; Vancouver, BC. Berkeley: USENIX Association; 2017. p. 217–233.</span></li>
+        <li><span>Percival C. Cache missing for fun and profit. In: BSDCan 2005; 2005 May 13–14; Ottawa, Canada. 2005. Available from: http://www.daemonology.net/papers/cachemissing.pdf</span></li>
+      </ol>
+    </div>
+
+  </main>
+</div>
+
+<footer style="display:block; text-align:center;">&copy; 2026 Nicholas Knapp. All rights reserved.</footer>
+
+<script src="../dist/js/header.js"></script>
+</body>
+</html>
