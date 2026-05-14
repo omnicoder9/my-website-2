@@ -8,6 +8,84 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/spring-testing-article.html",
+    publishedAt: "2026-05-14",
+    summary: "A practical technical guide to testing Spring applications across unit, slice, integration, security, persistence, and Testcontainers-based workflows.",
+    title: "Testing Spring Applications: A Comprehensive Technical Guide"
+  },
+  {
+    path: "blog-articles/signal-conditioning-hardware.html",
+    publishedAt: "2026-05-14",
+    summary: "A hardware-focused deep dive into amplification, filtering, isolation, bridge circuits, ADC interfacing, and the analog front-end techniques that turn noisy measurements into usable data.",
+    title: "Signal Conditioning Hardware — From Raw Noise to Reliable Data"
+  },
+  {
+    path: "blog-articles/planning-reduction-sat-modelchecking.html",
+    publishedAt: "2026-05-14",
+    summary: "A technical article on automated planning by reduction, explaining how SAT encodings, SATplan, bounded horizons, and model-checking ideas solve planning problems.",
+    title: "Automated Planning by Reduction: SAT and Model Checking"
+  },
+  {
+    path: "blog-articles/math-geometry-competitive-programming.html",
+    publishedAt: "2026-05-14",
+    summary: "A competitive programming guide to geometric reasoning, numeric techniques, line and polygon operations, and the mathematical patterns that show up in contest problems.",
+    title: "Math & Geometry in Competitive Programming"
+  },
+  {
+    path: "blog-articles/java-build-tools.html",
+    publishedAt: "2026-05-14",
+    summary: "A technical deep dive into Java build tools, covering Maven, Gradle, Ant, dependency management, build lifecycles, and the trade-offs between ecosystem approaches.",
+    title: "Java Build Tools: A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/entertainment-sport-spectacle.html",
+    publishedAt: "2026-05-14",
+    summary: "An analysis of how animals are used in entertainment, sport, and public spectacle, with attention to cultural normalization, welfare rhetoric, and structural harm.",
+    title: "The Spectacle of Suffering: Animals in Entertainment, Sport, and Display"
+  },
+  {
+    path: "blog-articles/embedded-compute-layer.html",
+    publishedAt: "2026-05-14",
+    summary: "A systems-level look at embedded compute platforms, covering MCUs, MPUs, memory, real-time constraints, sensor interfaces, and the processing layer behind connected devices.",
+    title: "The Embedded Compute Layer: The Brain Behind the Sensor"
+  },
+  {
+    path: "blog-articles/cps-physical-layer.html",
+    publishedAt: "2026-05-14",
+    summary: "A technical article on the physical layer of cyber-physical systems, connecting sensors, actuators, transducers, timing, and real-world signal behavior to higher-level system design.",
+    title: "The Physical Layer of Cyber-Physical Systems"
+  },
+  {
+    path: "blog-articles/ai-model-vulnerabilities.html",
+    publishedAt: "2026-05-14",
+    summary: "A field guide to AI model vulnerabilities, covering prompt injection, jailbreaks, data leakage, tool abuse, adversarial behavior, and practical red-team thinking for model security.",
+    title: "Model Vulnerabilities: An AI Red Teamer's Field Guide"
+  },
+  {
+    path: "blog-articles/animal-research-science-education.html",
+    publishedAt: "2026-05-14",
+    summary: "An analysis of animal use in biomedical research, product testing, and education, examining scientific claims, institutional incentives, ethics, and alternatives.",
+    title: "The Scientific Use of Animals: Biomedical Research, Testing, and Education"
+  },
+  {
+    path: "blog-articles/humane-ethical-small-scale-animal-use.html",
+    publishedAt: "2026-05-11",
+    summary: "A critical analysis of welfare branding, humanewashing, and small-scale animal use, arguing that 'humane' and 'ethical' framing relieves moral pressure without changing the underlying structure of exploitation.",
+    title: "The Moral Escape Valve: \"Humane,\" \"Ethical,\" and Small-Scale Animal Use"
+  },
+  {
+    path: "blog-articles/api-security-best-practices.html",
+    publishedAt: "2026-05-10",
+    summary: "A technical reference on API security covering the OWASP API Top 10, authentication, JWT, OAuth 2.0, access control, input validation, rate limiting, and runtime monitoring.",
+    title: "API Security Best Practices — A Technical Reference"
+  },
+  {
+    path: "blog-articles/newtons_second_law_dynamics.html",
+    publishedAt: "2026-05-10",
+    summary: "A dynamics-focused technical article on Newton's second law for particles and systems, connecting force balances, coordinate frames, free-body diagrams, and structural dynamics formulations.",
+    title: "Newton's Second Law for a Particle & System — The Cornerstone Equation of Dynamics"
+  },
+  {
     path: "blog-articles/drl-humanoid-robotics.html",
     publishedAt: "2026-05-10",
     summary: "A technical review of deep reinforcement learning for humanoid robotics, covering actor-critic methods, sim-to-real transfer, locomotion, manipulation, and emerging embodied AI paradigms.",
