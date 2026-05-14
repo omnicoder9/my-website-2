@@ -1,3 +1,20 @@
+const blogCategoryLabels = [
+  "AI & Machine Learning",
+  "Cyber-Physical Systems",
+  "Engineering",
+  "Math & Physics",
+  "Networks",
+  "Philosophy & Learning",
+  "Privacy",
+  "Programming & Software",
+  "Security",
+  "Society & Civics",
+  "Veganism",
+  "Web & UI"
+] as const;
+
+type BlogCategory = typeof blogCategoryLabels[number];
+
 type BlogDirectoryPost = {
   path: string;
   publishedAt?: string;
@@ -435,6 +452,80 @@ const blogPosts: BlogDirectoryPost[] = [
   }
 ];
 
+const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/spring-testing-article.html": ["Programming & Software", "Security"],
+  "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],
+  "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/java-build-tools.html": ["Programming & Software"],
+  "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
+  "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/ai-model-vulnerabilities.html": ["AI & Machine Learning", "Security"],
+  "blog-articles/animal-research-science-education.html": ["Veganism", "Society & Civics"],
+  "blog-articles/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
+  "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software"],
+  "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering"],
+  "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/causal_ai.html": ["AI & Machine Learning"],
+  "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software"],
+  "blog-articles/hidden-animal-ingredients.html": ["Veganism"],
+  "blog-articles/action-model-learning.html": ["AI & Machine Learning", "Programming & Software"],
+  "blog-articles/explainable-ai-lime-shap.html": ["AI & Machine Learning"],
+  "blog-articles/insects-and-small-animals.html": ["Veganism", "Philosophy & Learning"],
+  "blog-articles/automated-planning.html": ["AI & Machine Learning", "Programming & Software"],
+  "blog-articles/digital-privacy-levels.html": ["Privacy", "Security"],
+  "blog-articles/digital-privacy-l4-l5.html": ["Privacy", "Security"],
+  "blog-articles/grc-enterprise-ai-data-governance.html": ["AI & Machine Learning", "Security", "Society & Civics"],
+  "blog-articles/sdn-ibn-article.html": ["Networks", "Programming & Software"],
+  "blog-articles/market-based-vegan-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/investigations-exposure-article.html": ["Veganism", "Society & Civics"],
+  "blog-articles/vegan_cultural_change.html": ["Veganism", "Society & Civics"],
+  "blog-articles/network-layered-models.html": ["Networks"],
+  "blog-articles/vegan-behavioral-interventions.html": ["Veganism", "Society & Civics"],
+  "blog-articles/zero-trust-architecture.html": ["Security", "Networks"],
+  "blog-articles/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems"],
+  "blog-articles/vegan_business_models.html": ["Veganism", "Society & Civics"],
+  "blog-articles/learning-modalities.html": ["Philosophy & Learning", "Society & Civics"],
+  "blog-articles/corporate-vegan-pressure.html": ["Veganism", "Society & Civics"],
+  "blog-articles/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
+  "blog-articles/vegan-activism-incentives.html": ["Veganism", "Society & Civics"],
+  "blog-articles/industrial-protocol-design.html": ["Cyber-Physical Systems", "Networks", "Security"],
+  "blog-articles/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
+  "blog-articles/us-citizen-politics-guide.html": ["Society & Civics"],
+  "blog-articles/vegan-legislative-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/suffering_humans_vs_animals.html": ["Veganism", "Philosophy & Learning"],
+  "blog-articles/fraud-and-ai.html": ["AI & Machine Learning", "Security", "Society & Civics"],
+  "blog-articles/outages-are-inevitable.html": ["Engineering", "Philosophy & Learning"],
+  "blog-articles/limits-of-knowledge.html": ["Philosophy & Learning", "AI & Machine Learning"],
+  "blog-articles/biology-engineering-challenge.html": ["Engineering", "Philosophy & Learning"],
+  "blog-articles/engineering_as_philosophy.html": ["Engineering", "Philosophy & Learning"],
+  "blog-articles/know-your-rights.html": ["Society & Civics"],
+  "blog-articles/mental_health_blog.html": ["Society & Civics"],
+  "blog-articles/information-security-for-everyone.html": ["Security", "Privacy"],
+  "blog-articles/levels-of-digital-privacy.html": ["Privacy", "Security"],
+  "blog-articles/why-digital-privacy-is-important.html": ["Privacy", "Security"],
+  "blog-articles/event-driven-networks.html": ["Networks", "Programming & Software"],
+  "blog-articles/networks-performance-reliability.html": ["Networks", "Engineering"],
+  "blog-articles/ui-structure-concepts.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/vegan-activism-frmwrk.html": ["Veganism", "Society & Civics"],
+  "blog-articles/vegan-education.html": ["Veganism", "Philosophy & Learning", "Society & Civics"],
+  "blog-articles/vegan-infrastructure.html": ["Veganism", "Programming & Software", "Society & Civics"],
+  "blog-articles/making-animal-use-obsolete.html": ["Veganism", "Engineering"],
+  "blog-articles/network_topologies.html": ["Networks"],
+  "blog-articles/cloud-microservices-networking.html": ["Networks", "Programming & Software"],
+  "blog-articles/mass-media-vegan-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/protocol-oriented-design.html": ["Networks", "Programming & Software"],
+  "blog-articles/vegan-advocacy-interpersonal.html": ["Veganism", "Society & Civics"],
+  "blog-articles/vegan-community.html": ["Veganism", "Society & Civics"],
+  "blog-articles/ui-components-article.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/privacy.html": ["Privacy", "Security"],
+  "blog-articles/distributed-systems-networks.html": ["Networks", "Programming & Software"],
+  "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy & Learning"],
+  "blog-articles/graph-theory-networks.html": ["Networks", "Math & Physics"],
+  "blog-articles/hierarchical-network-design.html": ["Networks"]
+};
+
 function formatBlogDate(dateString: string): string {
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
@@ -476,7 +567,60 @@ function getFilenameLabel(post: BlogDirectoryPost): string {
   return segments[segments.length - 1] || post.path;
 }
 
-function renderBlogArticles(searchTerm: string): void {
+function getBlogPostCategories(post: BlogDirectoryPost): BlogCategory[] {
+  return blogPostCategoriesByPath[post.path] || [];
+}
+
+function isBlogCategory(value: string): value is BlogCategory {
+  return blogCategoryLabels.indexOf(value as BlogCategory) !== -1;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case "\"":
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
+function getBlogCategoryPostCount(category: BlogCategory): number {
+  return blogPosts.filter((post) => getBlogPostCategories(post).indexOf(category) !== -1).length;
+}
+
+function renderBlogCategoryOptions(selectElement: HTMLSelectElement): void {
+  const categoryOptions = blogCategoryLabels
+    .map((category) => {
+      const count = getBlogCategoryPostCount(category);
+      return `<option value="${escapeHtml(category)}">${escapeHtml(category)} (${count})</option>`;
+    })
+    .join("");
+
+  selectElement.innerHTML = `<option value="">All categories</option>${categoryOptions}`;
+}
+
+function renderBlogCategoryChips(post: BlogDirectoryPost): string {
+  const categories = getBlogPostCategories(post);
+  if (categories.length === 0) {
+    return "";
+  }
+
+  const chips = categories
+    .map((category) => `<span class="blog-category-chip">${escapeHtml(category)}</span>`)
+    .join("");
+
+  return `<div class="blog-category-chips" aria-label="Categories">${chips}</div>`;
+}
+
+function renderBlogArticles(searchTerm: string, categoryValue: string): void {
   const target = document.getElementById("blog-articles");
   const statusElement = document.getElementById("blogResultsStatus");
 
@@ -485,16 +629,19 @@ function renderBlogArticles(searchTerm: string): void {
   }
 
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
   const filteredPosts = getSortedBlogPosts().filter((post) => {
     const searchHaystack = `${post.title} ${getFilenameLabel(post)}`.toLowerCase();
-    return searchHaystack.includes(normalizedSearchTerm);
+    const matchesSearch = searchHaystack.includes(normalizedSearchTerm);
+    const matchesCategory = activeCategory === "" || getBlogPostCategories(post).indexOf(activeCategory) !== -1;
+    return matchesSearch && matchesCategory;
   });
 
   if (filteredPosts.length === 0) {
     target.innerHTML = `
       <section class="privacy-section blog-empty-state">
         <h2>No matching articles</h2>
-        <p>Try a different title search.</p>
+        <p>Try a different title search or category.</p>
       </section>
     `;
     statusElement.textContent = "0 articles shown.";
@@ -506,27 +653,44 @@ function renderBlogArticles(searchTerm: string): void {
       return `
         <article class="privacy-section blog-directory-card">
           <p class="blog-directory-card__date">${getPublishedLabel(post)}</p>
-          <h2><a href="${post.path}">${post.title}</a></h2>
-          <p>${post.summary}</p>
-          <a class="blog-directory-card__link" href="${post.path}">Read article</a>
+          ${renderBlogCategoryChips(post)}
+          <h2><a href="${escapeHtml(post.path)}">${escapeHtml(post.title)}</a></h2>
+          <p>${escapeHtml(post.summary)}</p>
+          <a class="blog-directory-card__link" href="${escapeHtml(post.path)}">Read article</a>
         </article>
       `;
     })
     .join("");
 
-  statusElement.textContent = `${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown. Sorted newest first.`;
+  const categoryStatus = activeCategory ? ` in ${activeCategory}` : "";
+  statusElement.textContent = `${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown${categoryStatus}. Sorted newest first.`;
 }
 
 function initializeBlogDirectory(): void {
   const searchInput = document.getElementById("blogSearchInput") as HTMLInputElement | null;
+  const categorySelect = document.getElementById("blogCategorySelect") as HTMLSelectElement | null;
   if (!searchInput) {
     return;
   }
 
-  renderBlogArticles("");
+  if (categorySelect) {
+    renderBlogCategoryOptions(categorySelect);
+  }
+
+  const updateBlogDirectory = (): void => {
+    renderBlogArticles(searchInput.value, categorySelect ? categorySelect.value : "");
+  };
+
+  updateBlogDirectory();
   searchInput.addEventListener("input", () => {
-    renderBlogArticles(searchInput.value);
+    updateBlogDirectory();
   });
+
+  if (categorySelect) {
+    categorySelect.addEventListener("change", () => {
+      updateBlogDirectory();
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", initializeBlogDirectory);
