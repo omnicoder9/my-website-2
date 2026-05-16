@@ -25,6 +25,60 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/threat-hunter-role.html",
+    publishedAt: "2026-05-16",
+    summary: "A technical role guide to threat hunting, covering investigative workflows, detection strategy, threat intelligence use, tooling, and the organizational function of proactive adversary pursuit.",
+    title: "The Threat Hunter: Proactive Pursuit in the Age of Advanced Adversaries"
+  },
+  {
+    path: "blog-articles/swift-programming-language.html",
+    publishedAt: "2026-05-16",
+    summary: "A comprehensive technical portrait of Swift, tracing its design philosophy, language evolution, performance model, ecosystem position, and growing reach beyond Apple platforms.",
+    title: "Swift: Safe, Fast, and Expressive by Design"
+  },
+  {
+    path: "blog-articles/senior-engineer-thinking.html",
+    publishedAt: "2026-05-16",
+    summary: "A practical essay on senior engineer judgment across architecture, tradeoffs, scalability, maintainability, leadership, mentoring, and build-vs-buy decision-making.",
+    title: "Senior Engineer Thinking: Architecture, Tradeoffs, Growth, and Technical Leadership"
+  },
+  {
+    path: "blog-articles/red-teamer-infosec.html",
+    publishedAt: "2026-05-16",
+    summary: "An inside look at professional red teaming, including adversary emulation, offensive methodology, tooling, credentials, and how red teams test whether security defenses truly hold.",
+    title: "The Red Teamer: Thinking Like the Adversary"
+  },
+  {
+    path: "blog-articles/mcp.html",
+    publishedAt: "2026-05-16",
+    summary: "A deep technical review of the Model Context Protocol, covering its architecture, deployment patterns, security risks, ecosystem evolution, and why it matters for modern AI agents.",
+    title: "Model Context Protocol: Architecture, Deployment, and the Agentic Future"
+  },
+  {
+    path: "blog-articles/info-access-debate.html",
+    publishedAt: "2026-05-16",
+    summary: "A historical and economic analysis of the access-to-knowledge debate, from open access and scholarly publishing to shadow libraries and new community-owned information commons.",
+    title: "Information Wants to Be Free… Or Should It?"
+  },
+  {
+    path: "blog-articles/embedded-firmware-layer.html",
+    publishedAt: "2026-05-16",
+    summary: "A systems-level survey of the embedded software and firmware layer in cyber-physical systems, from bare-metal programming and RTOS design to embedded Linux and secure boot.",
+    title: "The Embedded Software & Firmware Layer"
+  },
+  {
+    path: "blog-articles/edge-computing-layer.html",
+    publishedAt: "2026-05-16",
+    summary: "A technical guide to the edge computing layer of cyber-physical systems, focusing on local processing, protocol translation, resilience, orchestration, and real-time operational constraints.",
+    title: "The Edge Computing Layer of Cyber-Physical Systems"
+  },
+  {
+    path: "blog-articles/device-drivers-cps.html",
+    publishedAt: "2026-05-16",
+    summary: "A technical survey of device drivers and hardware interfaces in cyber-physical systems, spanning bus protocols, driver architecture, and the tradeoffs behind hardware-software integration.",
+    title: "Device Drivers & Hardware Interfaces"
+  },
+  {
     path: "blog-articles/spring-testing-article.html",
     publishedAt: "2026-05-14",
     summary: "A practical technical guide to testing Spring applications across unit, slice, integration, security, persistence, and Testcontainers-based workflows.",
@@ -453,6 +507,15 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/threat-hunter-role.html": ["Security"],
+  "blog-articles/swift-programming-language.html": ["Programming & Software"],
+  "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
+  "blog-articles/red-teamer-infosec.html": ["Security"],
+  "blog-articles/mcp.html": ["AI & Machine Learning", "Programming & Software", "Security"],
+  "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy & Learning"],
+  "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software"],
+  "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
+  "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
   "blog-articles/spring-testing-article.html": ["Programming & Software", "Security"],
   "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],

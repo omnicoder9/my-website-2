@@ -34,6 +34,53 @@ The Go server serves the static site and exposes `/api/health`. If it is down, t
 npm run validate
 ```
 
+## Blog Content Approach
+
+Right now, each blog post is stored as its own standalone `.html` file under `blog-articles/`.
+
+### Benefits
+
+- Very simple deployment model: no CMS, no database, no runtime rendering.
+- Each article can have completely custom markup, styling, and layout.
+- Easy to host anywhere that can serve static files.
+- Articles remain durable artifacts with no build dependency needed to read them.
+
+### Downsides
+
+- Shared page chrome is easy to drift. Navbar, footer, metadata, and scripts have to be kept in sync manually.
+- Blog index metadata is duplicated. Title, summary, date, and categories live separately from the article body.
+- Cross-cutting changes are expensive. Updating analytics, accessibility fixes, headers, or footer structure means editing many files.
+- Validation is weaker. It is easy for one article to miss `body.blog-article-page`, the header mount, or shared scripts.
+- Search, feeds, tags, related posts, and sitemap generation become manual or partially manual.
+- Authoring is slower for content-heavy posts because every article requires full HTML authoring rather than just writing content.
+- Reuse is poor. References, callouts, footnotes, code blocks, and article metadata patterns are repeated by hand.
+
+### Practical Alternatives
+
+1. Keep static HTML, but add a per-article metadata manifest.
+   Store canonical metadata in `data/blog-posts.json` or similar, then use it to generate the blog index, categories, and validation checks while keeping the article bodies as HTML files.
+
+2. Move article bodies to Markdown and generate HTML at build time.
+   This is the most common static-site approach. Authors write Markdown with frontmatter for `title`, `summary`, `publishedAt`, and `categories`, and a build step outputs the final HTML files.
+
+3. Use HTML partials or templates.
+   Keep articles in HTML, but render them through a template system so navbar, footer, head metadata, and scripts are shared instead of copied into every file.
+
+4. Use MDX or a component-friendly content format.
+   This is useful if posts need richer embedded UI, diagrams, or custom components while still reducing repetitive hand-written page scaffolding.
+
+5. Use a lightweight headless CMS only for metadata and authoring.
+   This helps if non-technical editing matters, but it adds operational complexity and is probably unnecessary for a static personal site unless content volume grows a lot.
+
+### Recommendation For This Repo
+
+For this site, the most pragmatic next step is:
+
+1. Keep articles as static files for now.
+2. Introduce a single source of truth for blog metadata.
+3. Add a lightweight article template or shared partial for navbar, footer, and scripts.
+4. Move to Markdown only if article volume keeps growing or editing raw HTML becomes the bottleneck.
+
 ## Overengineered Ideas
 
 If the goal is to add every unnecessary bell and whistle possible, this is the backlog.
