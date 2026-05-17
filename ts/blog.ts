@@ -25,6 +25,24 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/lua-programming-language.html",
+    publishedAt: "2026-05-17",
+    summary: "A technical portrait of Lua, examining its embedded-language design, unusual influence, and the engineering reasons it quietly powers games, servers, tools, and scripting-heavy systems.",
+    title: "Lua: The Language That Hides in Plain Sight"
+  },
+  {
+    path: "blog-articles/cyber-defense-forensics-analyst.html",
+    publishedAt: "2026-05-17",
+    summary: "A role profile of the cyber defense forensics analyst, covering evidence handling, incident reconstruction, host and disk analysis, reporting, and the place of forensics in modern security operations.",
+    title: "Cyber Defense Forensics Analyst"
+  },
+  {
+    path: "blog-articles/vgn-pressure-campaigns.html",
+    publishedAt: "2026-05-17",
+    summary: "A strategic analysis of vegan pressure campaigns, focusing on escalation, leverage, corporate and institutional targets, movement discipline, and the conditions under which pressure tactics work.",
+    title: "The Art and Science of the Pressure Campaign"
+  },
+  {
     path: "blog-articles/threat-hunter-role.html",
     publishedAt: "2026-05-16",
     summary: "A technical role guide to threat hunting, covering investigative workflows, detection strategy, threat intelligence use, tooling, and the organizational function of proactive adversary pursuit.",
@@ -507,6 +525,9 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/lua-programming-language.html": ["Programming & Software"],
+  "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
+  "blog-articles/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
   "blog-articles/threat-hunter-role.html": ["Security"],
   "blog-articles/swift-programming-language.html": ["Programming & Software"],
   "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
