@@ -25,6 +25,54 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/api-authentication.html",
+    publishedAt: "2026-05-19",
+    summary: "A technical guide to API authentication, covering identity, API keys, bearer tokens, JWT, OAuth 2.0, mutual TLS, session design, and the tradeoffs behind each approach.",
+    title: "Proof of Identity — A Technical Guide to API Authentication"
+  },
+  {
+    path: "blog-articles/bit-manipulation.html",
+    publishedAt: "2026-05-19",
+    summary: "A competitive programmer's field guide to bitwise thinking, including masks, XOR patterns, popcount, range tricks, and the problem-solving habits that make bit manipulation useful.",
+    title: "Thinking in Bits — A Competitive Programmer's Field Guide"
+  },
+  {
+    path: "blog-articles/error-prevention-high-stakes.html",
+    publishedAt: "2026-05-19",
+    summary: "A long-form essay on error prevention in high-stakes systems, from high-reliability organizations and Swiss-cheese defenses to software failures, drift, and safety culture.",
+    title: "When Failure Is Not an Option — The Science of Averting Catastrophe"
+  },
+  {
+    path: "blog-articles/Farm_Bill_2026.html",
+    publishedAt: "2026-05-19",
+    summary: "An analysis of the 2026 Farm Bill, focusing on subsidies, SNAP, climate politics, animal welfare, and the legislative struggle over food and agricultural power.",
+    title: "The 2026 Farm Bill: A High-Stakes Battle Over Food, Farming, and Welfare"
+  },
+  {
+    path: "blog-articles/frontend-performance.html",
+    publishedAt: "2026-05-19",
+    summary: "A practitioner's guide to frontend performance, spanning rendering internals, Core Web Vitals, bottlenecks, optimization tactics, tooling, and performance budgets.",
+    title: "The Performance Ledger — A Practitioner's Guide to Frontend Speed"
+  },
+  {
+    path: "blog-articles/purple-teamer-role.html",
+    publishedAt: "2026-05-19",
+    summary: "A role profile of the purple teamer, examining how offensive and defensive security are fused into collaborative validation, detection tuning, and continuous improvement.",
+    title: "The Purple Teamer: Adversary Empathy at the Heart of Modern Defence"
+  },
+  {
+    path: "blog-articles/service-mesh.html",
+    publishedAt: "2026-05-19",
+    summary: "A technical deep dive into service meshes, including sidecars, control planes, mTLS, observability, routing policy, operational tradeoffs, and mesh implementation choices.",
+    title: "The Service Mesh — An Infrastructure Layer for the Age of Microservices"
+  },
+  {
+    path: "blog-articles/system-design-interview-prep.html",
+    publishedAt: "2026-05-19",
+    summary: "A practical system design interview guide covering requirements, scale estimation, tradeoffs, bottlenecks, architecture communication, and common application patterns.",
+    title: "System Design Interview Preparation: Requirements, Scale, Tradeoffs, and Common Architectures"
+  },
+  {
     path: "blog-articles/lua-programming-language.html",
     publishedAt: "2026-05-17",
     summary: "A technical portrait of Lua, examining its embedded-language design, unusual influence, and the engineering reasons it quietly powers games, servers, tools, and scripting-heavy systems.",
@@ -525,6 +573,14 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/api-authentication.html": ["Security", "Programming & Software"],
+  "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/error-prevention-high-stakes.html": ["Engineering"],
+  "blog-articles/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
+  "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/purple-teamer-role.html": ["Security"],
+  "blog-articles/service-mesh.html": ["Networks", "Programming & Software"],
+  "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering"],
   "blog-articles/lua-programming-language.html": ["Programming & Software"],
   "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
   "blog-articles/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
