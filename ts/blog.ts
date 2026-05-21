@@ -25,6 +25,42 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/autonomous-vehicles.html",
+    publishedAt: "2026-05-21",
+    summary: "An engineering analysis of why fully autonomous driving still fails at the edge cases that matter, from perception and long-tail uncertainty to embodied reasoning in open-world traffic.",
+    title: "The Hardest Robotics Problem on Earth — Why Fully Autonomous Driving Has Resisted Five Decades of Engineering"
+  },
+  {
+    path: "blog-articles/building-developer-communities.html",
+    publishedAt: "2026-05-21",
+    summary: "A practitioner's field manual on identifying audiences, choosing platforms, drafting governance, and cultivating the conditions in which developer communities actually thrive.",
+    title: "The Architecture of Belonging — Building, Managing, and Engaging Developer Communities"
+  },
+  {
+    path: "blog-articles/data-quality.html",
+    publishedAt: "2026-05-21",
+    summary: "A comprehensive examination of what makes data fit for purpose, from the roots of quality management through dimensions, tools, governance frameworks, and operational practice.",
+    title: "Data Quality: Foundations, Dimensions, and Practice"
+  },
+  {
+    path: "blog-articles/efficient-edge-ai.html",
+    publishedAt: "2026-05-21",
+    summary: "A technical essay on the shift from cloud-centralized AI toward on-device and edge intelligence, driven by latency, bandwidth, privacy, and deployment economics.",
+    title: "Efficient & Edge AI — From Cloud Centralization to Intelligence at the Edge"
+  },
+  {
+    path: "blog-articles/vibe-coding-risk-framework.html",
+    publishedAt: "2026-05-21",
+    summary: "A risk-management framework for AI-assisted software development, focused on distinguishing productive low-stakes use from the cases where governance, ownership, and controls are non-negotiable.",
+    title: "A Risk Management Framework for Vibe Coding"
+  },
+  {
+    path: "blog-articles/wireless-networking.html",
+    publishedAt: "2026-05-21",
+    summary: "A field manual for wireless networking, covering radio fundamentals, standards, deployment craft, and the security posture required to operate on a shared and physically constrained medium.",
+    title: "The Invisible Wire — A Field Manual for Wireless Networking"
+  },
+  {
     path: "blog-articles/api-authentication.html",
     publishedAt: "2026-05-19",
     summary: "A technical guide to API authentication, covering identity, API keys, bearer tokens, JWT, OAuth 2.0, mutual TLS, session design, and the tradeoffs behind each approach.",
@@ -573,6 +609,12 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
+  "blog-articles/data-quality.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
+  "blog-articles/efficient-edge-ai.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "Programming & Software", "Security"],
+  "blog-articles/wireless-networking.html": ["Networks", "Security"],
   "blog-articles/api-authentication.html": ["Security", "Programming & Software"],
   "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software"],
   "blog-articles/error-prevention-high-stakes.html": ["Engineering"],
