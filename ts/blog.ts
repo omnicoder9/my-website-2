@@ -1,12 +1,18 @@
 const blogCategoryLabels = [
   "AI & Machine Learning",
+  "Android",
   "Cyber-Physical Systems",
+  "DevSecOps",
+  "Docker",
   "Engineering",
+  "Kubernetes",
   "Math & Physics",
+  "Mobile App Development",
   "Networks",
   "Philosophy & Learning",
   "Privacy",
   "Programming & Software",
+  "Robotics",
   "Security",
   "Society & Civics",
   "Veganism",
@@ -24,6 +30,48 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/android-app-components.html",
+    publishedAt: "2026-05-23",
+    summary: "A technical deep dive into Android's core app model, covering activities, services, broadcast receivers, content providers, intents, manifests, lifecycle behavior, and process boundaries.",
+    title: "Android App Components: A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/control_pyramid.html",
+    publishedAt: "2026-05-23",
+    summary: "A long-form survey of the industrial control pyramid, from PLC and DCS history to vendor lock-in, industrial protocols, SCADA, OPC UA, and the modernization pressures reshaping plant-floor systems.",
+    title: "The Control Pyramid — Vendors, Protocols, and Power on the Plant Floor"
+  },
+  {
+    path: "blog-articles/docker-data-persistence.html",
+    publishedAt: "2026-05-23",
+    summary: "An infrastructure article on Docker persistence, explaining volumes, bind mounts, tmpfs, storage drivers, CSI, backups, security boundaries, and the operational tradeoffs behind stateful containers.",
+    title: "The Persistence Problem — Data Outside the Container"
+  },
+  {
+    path: "blog-articles/go-language.html",
+    publishedAt: "2026-05-23",
+    summary: "A technical profile of Go's design, history, concurrency model, standard library, cloud-native ecosystem, adoption patterns, and the engineering philosophy behind its deliberate simplicity.",
+    title: "The Go Programming Language: Engineering Simplicity at Scale"
+  },
+  {
+    path: "blog-articles/kubernetes-deployment-patterns.html",
+    publishedAt: "2026-05-23",
+    summary: "A technical reference for Kubernetes deployment patterns, including rolling updates, blue-green releases, canaries, Helm, GitOps, CI/CD integration, rollback strategy, and production tradeoffs.",
+    title: "Kubernetes Deployment Patterns — A Technical Reference"
+  },
+  {
+    path: "blog-articles/malware-analysis.html",
+    publishedAt: "2026-05-23",
+    summary: "A defensive field guide to malware analysis, covering static and dynamic techniques, sandboxing, reverse engineering, indicators, YARA, anti-analysis behavior, and machine-learning-based classification.",
+    title: "Reverse Engineering the Adversary — A Field Guide to Malware Analysis"
+  },
+  {
+    path: "blog-articles/mojo.html",
+    publishedAt: "2026-05-23",
+    summary: "A language profile of Mojo, examining its Python-shaped syntax, MLIR foundation, GPU programming goals, performance model, ecosystem status, and the open question of AI infrastructure adoption.",
+    title: "Mojo: The Pythonic Language That Wants to Talk to Your GPU"
+  },
   {
     path: "blog-articles/autonomous-vehicles.html",
     publishedAt: "2026-05-21",
@@ -609,25 +657,32 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
-  "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
+  "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
+  "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "DevSecOps"],
+  "blog-articles/go-language.html": ["Programming & Software"],
+  "blog-articles/kubernetes-deployment-patterns.html": ["Programming & Software", "Engineering", "Networks", "Kubernetes", "DevSecOps"],
+  "blog-articles/malware-analysis.html": ["Security"],
+  "blog-articles/mojo.html": ["Programming & Software", "AI & Machine Learning"],
+  "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
   "blog-articles/data-quality.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
   "blog-articles/efficient-edge-ai.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "Programming & Software", "Security"],
+  "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "Programming & Software", "Security", "DevSecOps"],
   "blog-articles/wireless-networking.html": ["Networks", "Security"],
-  "blog-articles/api-authentication.html": ["Security", "Programming & Software"],
+  "blog-articles/api-authentication.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software"],
   "blog-articles/error-prevention-high-stakes.html": ["Engineering"],
   "blog-articles/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
   "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
   "blog-articles/purple-teamer-role.html": ["Security"],
-  "blog-articles/service-mesh.html": ["Networks", "Programming & Software"],
+  "blog-articles/service-mesh.html": ["Networks", "Programming & Software", "Kubernetes", "DevSecOps"],
   "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering"],
   "blog-articles/lua-programming-language.html": ["Programming & Software"],
   "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
   "blog-articles/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
   "blog-articles/threat-hunter-role.html": ["Security"],
-  "blog-articles/swift-programming-language.html": ["Programming & Software"],
+  "blog-articles/swift-programming-language.html": ["Programming & Software", "Mobile App Development"],
   "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
   "blog-articles/red-teamer-infosec.html": ["Security"],
   "blog-articles/mcp.html": ["AI & Machine Learning", "Programming & Software", "Security"],
@@ -635,7 +690,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software"],
   "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
   "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
-  "blog-articles/spring-testing-article.html": ["Programming & Software", "Security"],
+  "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker"],
   "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],
   "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software"],
@@ -643,12 +698,12 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
   "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
-  "blog-articles/ai-model-vulnerabilities.html": ["AI & Machine Learning", "Security"],
+  "blog-articles/ai-model-vulnerabilities.html": ["AI & Machine Learning", "Security", "DevSecOps"],
   "blog-articles/animal-research-science-education.html": ["Veganism", "Society & Civics"],
   "blog-articles/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
-  "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software"],
+  "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering"],
-  "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/causal_ai.html": ["AI & Machine Learning"],
   "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software"],
   "blog-articles/hidden-animal-ingredients.html": ["Veganism"],
@@ -665,7 +720,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/vegan_cultural_change.html": ["Veganism", "Society & Civics"],
   "blog-articles/network-layered-models.html": ["Networks"],
   "blog-articles/vegan-behavioral-interventions.html": ["Veganism", "Society & Civics"],
-  "blog-articles/zero-trust-architecture.html": ["Security", "Networks"],
+  "blog-articles/zero-trust-architecture.html": ["Security", "Networks", "DevSecOps"],
   "blog-articles/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems"],
   "blog-articles/vegan_business_models.html": ["Veganism", "Society & Civics"],
   "blog-articles/learning-modalities.html": ["Philosophy & Learning", "Society & Civics"],
