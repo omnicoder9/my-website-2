@@ -116,6 +116,8 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-05-28",
     summary: "A technical guide to ASP.NET Core dependency injection, covering built-in service lifetimes, composition roots, Scrutor assembly scanning, decoration, interception, and practical registration patterns.",
     title: "ASP.NET Core Dependency Injection: Lifetimes, Scrutor, and Beyond"
+  },
+  {
     path: "blog-articles/android-app-components.html",
     publishedAt: "2026-05-23",
     summary: "A technical deep dive into Android's core app model, covering activities, services, broadcast receivers, content providers, intents, manifests, lifecycle behavior, and process boundaries.",
@@ -756,7 +758,6 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/aspnet-core-testing.html": ["ASP.NET", "Programming & Software"],
   "blog-articles/anonymous_comm.html": ["Privacy", "Security", "Networks"],
   "blog-articles/aspnet-dependency-injection.html": ["ASP.NET", "Programming & Software"],
-  "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
   "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
   "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "DevSecOps"],
