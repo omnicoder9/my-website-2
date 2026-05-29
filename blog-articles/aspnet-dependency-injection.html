@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASP.NET Core Dependency Injection: Lifetimes, Scrutor, and Beyond</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.7;
+            max-width: 960px;
+            margin: 40px auto;
+            padding: 0 20px;
+            color: #1e1e1e;
+            background: #fcfcfc;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 6px;
+        }
+        h1 { font-size: 2.2rem; margin-top: 0; }
+        h2 { font-size: 1.6rem; margin-top: 2rem; }
+        h3 { font-size: 1.3rem; margin-top: 1.5rem; }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 18px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        code {
+            font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.92rem;
+            color: #c0392b;
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+            color: inherit;
+            font-size: inherit;
+        }
+        sup {
+            font-size: 0.8em;
+            color: #2980b9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #bdc3c7;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        th {
+            background: #ecf0f1;
+            font-weight: 600;
+        }
+        .reference {
+            font-size: 0.92rem;
+            word-break: break-word;
+        }
+        .ref-list {
+            background: #f9f9f9;
+            padding: 18px 28px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ASP.NET Core Dependency Injection: Lifetimes, Scrutor, and Beyond</h1>
+    <p><em>Published: 28 May 2026</em></p>
+
+    <h2>1. Introduction</h2>
+    <p>
+        Dependency injection (DI) is a first-class citizen in ASP.NET Core, embedded into the framework from its inception. The built‑in container – <code>Microsoft.Extensions.DependencyInjection</code> – provides a lightweight, performant, and opinionated way to manage service lifetimes and composition<sup>[1]</sup>. While this default container covers the majority of scenarios, it intentionally omits features such as automatic assembly scanning, interception, and decoration. The open-source library <strong>Scrutor</strong> fills these gaps, extending the built‑in container without replacing it<sup>[2]</sup>.
+    </p>
+    <p>
+        This article explores the three core service lifetimes (transient, scoped, singleton) in depth, details the history and capabilities of Scrutor, and demonstrates practical examples integrating both the standard container and Scrutor’s extensions. All facts are referenced using the Vancouver citation style.
+    </p>
+
+    <h2>2. Dependency Injection in ASP.NET Core: A Brief History</h2>
+    <p>
+        Before ASP.NET Core, DI in .NET web applications relied on third‑party containers such as Unity, Autofac, or Ninject. With the release of <em>ASP.NET 5</em> (later renamed ASP.NET Core 1.0) in June 2016, Microsoft introduced a built‑in DI abstraction in the <code>Microsoft.Extensions.DependencyInjection</code> namespace<sup>[1]</sup>. The design was intentionally minimal:
+    </p>
+    <ul>
+        <li>An <code>IServiceCollection</code> to register services.</li>
+        <li>An <code>IServiceProvider</code> as the composition root.</li>
+        <li>Three clear lifetimes: Transient, Scoped, Singleton.</li>
+        <li>Support for open generics and factory-based registration.</li>
+    </ul>
+    <p>
+        Crucially, the DI container remains replaceable; developers can swap in Autofac, Lamar, or others. However, many projects prefer to stay on the default stack and augment it with scanning and decoration – the exact purpose that Scrutor was built to serve<sup>[2]</sup>.
+    </p>
+    <p>
+        Scrutor was created by <strong>Kristian Hellang</strong> and first released on NuGet in August 2016. The name derives from the Latin <em>scrūtārī</em>, meaning “to search” or “to examine thoroughly” – a nod to its assembly scanning capabilities<sup>[3]</sup>. As of version 5.0 (2024), it supports .NET 6 through .NET 9 and introduces interception helpers that work with the built‑in container.
+    </p>
+
+    <h2>3. Built‑in Service Lifetimes</h2>
+    <p>
+        Understanding lifetimes is essential for correct resource management and thread safety. ASP.NET Core defines three<sup>[1,4]</sup>:
+    </p>
+
+    <table>
+        <thead>
+            <tr><th>Lifetime</th><th>Created</th><th>Disposed</th><th>Typical Use</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Transient</strong></td>
+                <td>Every time they are requested from the container.</td>
+                <td>When the service scope ends (the consumer does not dispose them).</td>
+                <td>Lightweight, stateless services (e.g., <code>IEmailSender</code>, <code>IValidator</code>).</td>
+            </tr>
+            <tr>
+                <td><strong>Scoped</strong></td>
+                <td>Once per scope (in ASP.NET Core, one scope per HTTP request).</td>
+                <td>At the end of the scope (request).</td>
+                <td>Per‑request data, unit‑of‑work (e.g., <code>DbContext</code>, <code>IUserContext</code>).</td>
+            </tr>
+            <tr>
+                <td><strong>Singleton</strong></td>
+                <td>Once per application lifetime (root container).</td>
+                <td>When the application shuts down.</td>
+                <td>Stateless, thread‑safe, expensive‑to‑create services (e.g., cache, configuration).</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>3.1 Registration Examples</h3>
+    <pre><code>// Standard Microsoft.Extensions.DependencyInjection
+builder.Services.AddTransient&lt;IEmailService, SmtpEmailService&gt;();
+builder.Services.AddScoped&lt;IOrderRepository, SqlOrderRepository&gt;();
+builder.Services.AddSingleton&lt;ICacheProvider, RedisCacheProvider&gt;();</code></pre>
+
+    <h3>3.2 Lifetime Traps and Best Practices</h3>
+    <ul>
+        <li><strong>Captive dependencies:</strong> Never inject a scoped service into a singleton; the scoped instance will be kept alive beyond its intended scope, leading to disposed‑object exceptions or stale data<sup>[5]</sup>.</li>
+        <li><strong>Transient inside singleton:</strong> Allowed, but each transient instance becomes a permanent child of the singleton (no re‑creation per request).</li>
+        <li><strong>Validation:</strong> In development mode, ASP.NET Core validates scopes to catch captive dependencies early. Enable with <code>Host.CreateDefaultBuilder</code> default settings or <code>ValidateScopes = true</code>.</li>
+    </ul>
+
+    <h2>4. The Role of Scrutor: Extending Microsoft.Extensions.DependencyInjection</h2>
+    <h3>4.1 What is Scrutor?</h3>
+    <p>
+        Scrutor is not a replacement DI container. It sits on top of <code>Microsoft.Extensions.DependencyInjection</code> and provides extension methods for <code>IServiceCollection</code> to automate registration and apply decoration patterns<sup>[2,3]</sup>. Key features include:
+    </p>
+    <ul>
+        <li>Assembly scanning for convention‑based registration.</li>
+        <li>Service decoration (wrapper/decorator pattern).</li>
+        <li>Open‑generic decoration.</li>
+        <li>Lifetime control per discovered type.</li>
+        <li>Interception support (via <code>Scrutor.Intercept</code>).</li>
+    </ul>
+    <p>
+        Because Scrutor operates directly on <code>IServiceCollection</code>, it integrates seamlessly with any application that uses the default container, including ASP.NET Core, Worker Services, and Blazor<sup>[2]</sup>.
+    </p>
+
+    <h3>4.2 Scanning for Convention‑Based Registration</h3>
+    <p>
+        Manual registration of dozens of services becomes tedious. Scrutor’s <code>Scan()</code> method allows you to select assemblies, filter types, and specify lifetime and interface mapping fluently.
+    </p>
+    <pre><code>// Assembly scanning: register all classes that implement IMyService
+services.Scan(scan =&gt; scan
+    .FromAssemblyOf&lt;IMyService&gt;()               // Scan the assembly containing IMyService
+    .AddClasses(classes =&gt; classes.AssignableTo&lt;IMyService&gt;()) // Filter
+    .AsImplementedInterfaces()                  // Register as their implemented interfaces
+    .WithScopedLifetime());                     // Set lifetime
+
+// Multiple rules in one scan
+services.Scan(scan =&gt; scan
+    .FromAssemblies(Assembly.GetExecutingAssembly())
+        .AddClasses(c =&gt; c.Where(t =&gt; t.Name.EndsWith("Service")))
+            .AsSelf()
+            .WithTransientLifetime()
+        .AddClasses(c =&gt; c.AssignableTo&lt;IValidator&gt;())
+            .AsImplementedInterfaces()
+            .WithSingletonLifetime());</code></pre>
+
+    <p>
+        Scrutor can also use attributes like <code>[ServiceDescriptor]</code> (from <code>Microsoft.Extensions.DependencyInjection</code>, not built-in but often user-defined) or its own <code>[Service]</code> marker attribute when combined with <code>.UsingAttributes()</code>.
+    </p>
+
+    <h3>4.3 Decoration and Interception</h3>
+    <p>
+        The decorator pattern is a powerful way to add cross‑cutting concerns (logging, caching, validation) without modifying original services. Scrutor provides <code>Decorate()</code> and <code>Intercept()</code> methods.
+    </p>
+    <pre><code>// Decorate all instances of IRepository&lt;T&gt; with CachedRepository&lt;T&gt;
+services.Decorate(typeof(IRepository&lt;&gt;), typeof(CachedRepository&lt;&gt;));
+
+// Keyed decoration (since .NET 8 with keyed services)
+services.Decorate&lt;IHandler, LoggingHandler&gt;(serviceKey: "default");
+
+// Interception using a proxy (requires Scrutor.Intercept and Castle.Core)
+services.Scan(scan =&gt; scan
+    .FromAssemblyOf&lt;IMyService&gt;()
+    .AddClasses()
+    .UsingRegistrationStrategy(RegistrationStrategy.Skip)
+    .AsImplementedInterfaces()
+    .WithScopedLifetime());
+services.Intercept&lt;IMyService, LoggingInterceptor&gt;();</code></pre>
+
+    <p>
+        The <code>Decorate</code> method rewrites the <code>ServiceDescriptor</code> so that the original implementation is injected into the decorator’s constructor, while the decorator itself is registered as the service<sup>[6]</sup>. Interception works similarly but uses a proxy generator (Castle DynamicProxy) under the hood.
+    </p>
+
+    <h3>4.4 Advanced Features</h3>
+    <ul>
+        <li><strong>Conditional decoration:</strong> <code>TryDecorate()</code> only applies if the service exists.</li>
+        <li><strong>Service lifetime overriding:</strong> Combine scanning with <code>.WithLifetime()</code> to enforce a specific lifetime for all matched types.</li>
+        <li><strong>Open‑generic support:</strong> Both scanning and decoration handle generic types naturally.</li>
+        <li><strong>Registration strategies:</strong> <code>RegistrationStrategy.Skip</code>, <code>.Replace</code>, <code>.Append</code>, etc., control what happens when a service is already registered.</li>
+    </ul>
+
+    <h2>5. Practical Examples</h2>
+    <h3>5.1 Basic Registration via Scanning</h3>
+    <p>Consider a typical clean architecture project with services, repositories, and validators. Register them all in a few lines:</p>
+    <pre><code>using Scrutor;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.Scan(scan =&gt; scan
+    .FromApplicationDependencies()   // all assemblies referenced by app
+        .AddClasses(c =&gt; c.AssignableTo&lt;IUseCase&gt;())
+            .AsSelf()
+            .WithScopedLifetime()
+        .AddClasses(c =&gt; c.AssignableTo&lt;IRepository&gt;())
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+        .AddClasses(c =&gt; c.InNamespaces("MyApp.Validators"))
+            .AsImplementedInterfaces()
+            .WithTransientLifetime());</code></pre>
+
+    <h3>5.2 Implementing the Decorator Pattern</h3>
+    <p>Wrap every <code>IOrderService</code> with a logging decorator that records execution time.</p>
+    <pre><code>// Original service
+public class OrderService : IOrderService { /* ... */ }
+
+// Decorator
+public class LoggingOrderService : IOrderService
+{
+    private readonly IOrderService _inner;
+    private readonly ILogger&lt;LoggingOrderService&gt; _logger;
+    public LoggingOrderService(IOrderService inner, ILogger&lt;LoggingOrderService&gt; logger)
+    {
+        _inner = inner;
+        _logger = logger;
+    }
+    public async Task ProcessAsync(Order order)
+    {
+        var sw = Stopwatch.StartNew();
+        await _inner.ProcessAsync(order);
+        _logger.LogInformation("Order processed in {Elapsed} ms", sw.ElapsedMilliseconds);
+    }
+}
+
+// Registration: register original, then decorate
+builder.Services.AddScoped&lt;IOrderService, OrderService&gt;();
+builder.Services.Decorate&lt;IOrderService, LoggingOrderService&gt;();</code></pre>
+
+    <h3>5.3 Full Web API Integration</h3>
+    <p>
+        A typical ASP.NET Core Web API using both built‑in DI and Scrutor. The following example scans the assembly, decorates the repository, and configures DbContext with a scoped lifetime.
+    </p>
+    <pre><code>using Microsoft.EntityFrameworkCore;
+using Scrutor;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddDbContext&lt;AppDbContext&gt;(options =&gt;
+    options.UseSqlServer(builder.Configuration.GetConnectionString("Default")),
+    ServiceLifetime.Scoped);
+
+// Scrutor scan for services and repositories
+builder.Services.Scan(scan =&gt; scan
+    .FromAssemblies(typeof(Program).Assembly)
+        .AddClasses(c =&gt; c.AssignableTo&lt;IRepository&gt;())
+            .AsImplementedInterfaces()
+            .WithScopedLifetime()
+        .AddClasses(c =&gt; c.AssignableTo&lt;IService&gt;())
+            .AsSelf()
+            .WithTransientLifetime());
+
+// Add a caching decorator for all IRepository&lt;T&gt;
+builder.Services.Decorate(typeof(IRepository&lt;&gt;), typeof(CachedRepository&lt;&gt;));
+
+// Controllers are already registered by AddControllers()
+builder.Services.AddControllers();
+
+var app = builder.Build();
+app.MapControllers();
+app.Run();</code></pre>
+
+    <h2>6. Integration with Other Tools and Frameworks</h2>
+    <p>
+        Scrutor does not replace the container; it works alongside any library that uses <code>IServiceCollection</code>. This makes it compatible with:
+    </p>
+    <ul>
+        <li><strong>Entity Framework Core:</strong> <code>AddDbContext</code> and repository scanning.</li>
+        <li><strong>MediatR / FluentValidation:</strong> Often combined to auto‑register handlers and validators.</li>
+        <li><strong>Refit / HttpClientFactory:</strong> Register typed clients and decorate them for resilience.</li>
+        <li><strong>ASP.NET Core Minimal APIs and Blazor:</strong> Same DI composition root.</li>
+    </ul>
+    <p>
+        Moreover, Scrutor can be used in <em>any</em> .NET host (console, worker, MAUI) because it only needs <code>Microsoft.Extensions.DependencyInjection</code><sup>[2]</sup>. It does not interfere with third‑party containers if you decide to swap later; you simply stop using Scrutor extensions.
+    </p>
+
+    <h2>7. Source Code Insights</h2>
+    <p>
+        Scrutor’s implementation is a masterclass in fluent API design over <code>IServiceCollection</code>. The core types reside in the <code>Scrutor</code> namespace:
+    </p>
+    <ul>
+        <li><strong>ServiceCollectionExtensions:</strong> Entry points (<code>Scan</code>, <code>Decorate</code>, <code>Intercept</code>).</li>
+        <li><strong>ITypeSelector / IImplementationTypeSelector:</strong> Fluent interfaces for filtering classes.</li>
+        <li><strong>DecorationStrategy / RegistrationStrategy:</strong> Control how descriptors are modified.</li>
+    </ul>
+    <p>
+        When you call <code>Scan()</code>, it builds an internal list of <code>ServiceDescriptor</code> objects and then calls <code>IServiceCollection.Add()</code> for each – exactly what you would do manually, but automated. Decoration re‑wires the dependency graph by replacing the original descriptor with a factory that constructs the decorator, passing the original as a dependency<sup>[6]</sup>.
+    </p>
+    <p>
+        The library is distributed under the MIT license, and the source code is available on GitHub<sup>[3]</sup>. Development remains active, with community contributions adding support for newer .NET features like keyed services and interception.
+    </p>
+
+    <h2>8. Conclusion</h2>
+    <p>
+        The built‑in DI container in ASP.NET Core provides a solid foundation with its three lifetimes – transient, scoped, and singleton. Scrutor elegantly extends this foundation with assembly scanning, decoration, and interception, all while preserving the container’s simplicity and replaceability. By understanding these tools and their proper usage, developers can keep their composition roots clean, reduce boilerplate, and apply cross‑cutting concerns without heavy‑weight alternatives. The combination of Microsoft’s DI abstractions and Scrutor’s fluent extensions has become a de facto standard in many modern .NET applications.
+    </p>
+
+    <h2>9. References</h2>
+    <div class="ref-list">
+        <ol class="reference">
+            <li>
+                Dependency injection in ASP.NET Core. Microsoft Learn. Available at: 
+                <a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection" target="_blank" rel="noopener">https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection</a>. 
+                Updated 2025. Accessed May 28, 2026.
+            </li>
+            <li>
+                Scrutor – DI container extensions for Microsoft.Extensions.DependencyInjection. 
+                Available at: <a href="https://github.com/khellang/Scrutor" target="_blank" rel="noopener">https://github.com/khellang/Scrutor</a>. Accessed May 28, 2026.
+            </li>
+            <li>
+                Hellang K. Scrutor NuGet package. NuGet Gallery. 
+                Available at: <a href="https://www.nuget.org/packages/Scrutor" target="_blank" rel="noopener">https://www.nuget.org/packages/Scrutor</a>. 
+                Published 2016–2026. Accessed May 28, 2026.
+            </li>
+            <li>
+                Service lifetimes in ASP.NET Core. Microsoft Learn. 
+                Available at: <a href="https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection#service-lifetimes" target="_blank" rel="noopener">https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection#service-lifetimes</a>. 
+                Updated 2025. Accessed May 28, 2026.
+            </li>
+            <li>
+                Captive dependency detection in ASP.NET Core. Microsoft Learn. 
+                Available at: <a href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/host/web-host?view=aspnetcore-9.0#captive-dependency" target="_blank" rel="noopener">https://learn.microsoft.com/en-us/aspnet/core/fundamentals/host/web-host</a>. 
+                Updated 2025. Accessed May 28, 2026.
+            </li>
+            <li>
+                Scrutor decoration internals. Scrutor GitHub repository, src/Scrutor/DecorationStrategy.cs. 
+                Available at: <a href="https://github.com/khellang/Scrutor/blob/main/src/Scrutor/DecorationStrategy.cs" target="_blank" rel="noopener">https://github.com/khellang/Scrutor/blob/main/src/Scrutor/DecorationStrategy.cs</a>. 
+                Accessed May 28, 2026.
+            </li>
+        </ol>
+    </div>
+</body>
+</html>

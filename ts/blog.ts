@@ -1,5 +1,6 @@
 const blogCategoryLabels = [
   "AI & Machine Learning",
+  "ASP.NET",
   "Android",
   "Cyber-Physical Systems",
   "DevSecOps",
@@ -9,9 +10,11 @@ const blogCategoryLabels = [
   "Math & Physics",
   "Mobile App Development",
   "Networks",
+  "Operating Systems",
   "Philosophy & Learning",
   "Privacy",
   "Programming & Software",
+  "Python",
   "Robotics",
   "Security",
   "Society & Civics",
@@ -31,6 +34,88 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/version_control.html",
+    publishedAt: "2026-05-29",
+    summary: "A comprehensive technical guide to Git fundamentals, repository hosting platforms, and the integrations that connect version control to CI/CD, project management, and team communication.",
+    title: "Mastering Modern Version Control: Git & Repository Hosting Services"
+  },
+  {
+    path: "blog-articles/soft-robotics.html",
+    publishedAt: "2026-05-29",
+    summary: "A technical field guide to compliant robots, soft actuators, underactuation, sensing, modeling, control, fabrication, and applications in messy physical environments.",
+    title: "Soft Robotics: Underactuation, Compliance, Actuation, Sensing, and Control"
+  },
+  {
+    path: "blog-articles/sfi.html",
+    publishedAt: "2026-05-29",
+    summary: "A systems-security deep dive into Software Fault Isolation, from address masking and inline reference monitors to Native Client, WebAssembly, control-flow integrity, and bypasses.",
+    title: "The Sandbox in the Same Address Space — Software Fault Isolation"
+  },
+  {
+    path: "blog-articles/rewriting_history_git.html",
+    publishedAt: "2026-05-29",
+    summary: "A practical guide to reshaping Git history safely, including force-with-lease workflows, autosquash, stacked pull requests, reflog recovery, and repository safety rails.",
+    title: "Rewriting History Without Losing Your Team (or Your Mind)"
+  },
+  {
+    path: "blog-articles/os-vm-isolation.html",
+    publishedAt: "2026-05-29",
+    summary: "A field guide to operating-system and virtual-machine isolation, covering address spaces, privilege rings, hypervisors, containers, VM escapes, and microarchitectural side channels.",
+    title: "The Walls Between Us — A Field Guide to OS and VM Isolation"
+  },
+  {
+    path: "blog-articles/network-observability.html",
+    publishedAt: "2026-05-29",
+    summary: "A practitioner-oriented survey of network observability, from packet capture and flow telemetry to SNMP, Prometheus, Grafana, commercial platforms, eBPF, and encrypted traffic.",
+    title: "The Transparent Wire: A Field Guide to Network Observability"
+  },
+  {
+    path: "blog-articles/mlops.html",
+    publishedAt: "2026-05-29",
+    summary: "A field guide to MLOps and LLMOps, covering production ML infrastructure, lifecycle automation, CI/CD/CT, model observability, governance, feature stores, and platform tooling.",
+    title: "The Operations of Learning — A Field Guide to MLOps"
+  },
+  {
+    path: "blog-articles/messaging-security.html",
+    publishedAt: "2026-05-29",
+    summary: "A cryptographic architecture guide to secure messaging, including threat modeling, the Signal Protocol, Double Ratchet, X3DH, group key agreement, MLS, metadata protection, and key transparency.",
+    title: "Messaging Security: Cryptographic Architecture from Signal to MLS"
+  },
+  {
+    path: "blog-articles/csharp.html",
+    publishedAt: "2026-05-29",
+    summary: "A technical portrait of C#, covering its history, runtime architecture, language design, ecosystem, frameworks, tooling, open-source position, and future direction.",
+    title: "C# — The Language of a Generation"
+  },
+  {
+    path: "blog-articles/concurrency_python.html",
+    publishedAt: "2026-05-29",
+    summary: "A technical guide to Python concurrency, including the GIL, multithreading, multiprocessing, asyncio, decision tradeoffs, ecosystem tools, and the impact of PEP 703 free-threading.",
+    title: "Concurrency in Python: A Comprehensive Technical Guide"
+  },
+  {
+    path: "blog-articles/aspnet-orm.html",
+    publishedAt: "2026-05-29",
+    summary: "A technical guide to data-access choices in ASP.NET Core, comparing Entity Framework Core, Dapper, RepoDB, and NHibernate across architecture, performance, testing, and operations.",
+    title: "ASP.NET Core Object-Relational Mapping with Entity Framework Core, Dapper, RepoDB, and NHibernate"
+  },
+  {
+    path: "blog-articles/aspnet-core-testing.html",
+    publishedAt: "2026-05-29",
+    summary: "A field guide to ASP.NET Core testing, from unit tests and assertions through fakes, mocks, integration testing, BDD workflows, and browser-driven end-to-end coverage.",
+    title: "The Discipline of Doubt — A Field Guide to Testing in ASP.NET Core"
+  },
+  {
+    path: "blog-articles/anonymous_comm.html",
+    publishedAt: "2026-05-29",
+    summary: "An expert guide to anonymous communication systems, covering onion routing, Tor internals, onion services, mix networks, traffic analysis, pluggable transports, and unlinkability limits.",
+    title: "Anonymous Communication: Onion Routing, Mix Networks, Traffic Analysis, and the Engineering Limits of Unlinkability"
+  },
+  {
+    path: "blog-articles/aspnet-dependency-injection.html",
+    publishedAt: "2026-05-28",
+    summary: "A technical guide to ASP.NET Core dependency injection, covering built-in service lifetimes, composition roots, Scrutor assembly scanning, decoration, interception, and practical registration patterns.",
+    title: "ASP.NET Core Dependency Injection: Lifetimes, Scrutor, and Beyond"
     path: "blog-articles/android-app-components.html",
     publishedAt: "2026-05-23",
     summary: "A technical deep dive into Android's core app model, covering activities, services, broadcast receivers, content providers, intents, manifests, lifecycle behavior, and process boundaries.",
@@ -657,6 +742,21 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/version_control.html": ["Programming & Software"],
+  "blog-articles/soft-robotics.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
+  "blog-articles/rewriting_history_git.html": ["Programming & Software"],
+  "blog-articles/os-vm-isolation.html": ["Operating Systems", "Security", "Programming & Software"],
+  "blog-articles/network-observability.html": ["Networks", "Security"],
+  "blog-articles/mlops.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
+  "blog-articles/messaging-security.html": ["Security", "Privacy", "Programming & Software"],
+  "blog-articles/csharp.html": ["Programming & Software"],
+  "blog-articles/concurrency_python.html": ["Python", "Programming & Software"],
+  "blog-articles/aspnet-orm.html": ["ASP.NET", "Programming & Software"],
+  "blog-articles/aspnet-core-testing.html": ["ASP.NET", "Programming & Software"],
+  "blog-articles/anonymous_comm.html": ["Privacy", "Security", "Networks"],
+  "blog-articles/aspnet-dependency-injection.html": ["ASP.NET", "Programming & Software"],
+  "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
   "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
   "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "DevSecOps"],

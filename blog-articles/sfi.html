@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Sandbox in the Same Address Space — Software Fault Isolation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f3eee2;
+    --paper-2:#ece5d4;
+    --ink:#1c1815;
+    --ink-soft:#3b342c;
+    --muted:#6f6555;
+    --rule:#d7cdb8;
+    --rule-strong:#b9ac8f;
+    --ox:#8a1c1c;
+    --ox-deep:#5e1414;
+    --slate:#2f4858;
+    --slate-soft:#52677a;
+    --amber:#a8650f;
+    --panel:#221d18;
+    --panel-2:#2c2620;
+    --code-fg:#e9e0cf;
+    --code-comment:#9a8f76;
+    --code-kw:#e0a35a;
+    --code-str:#9bbf8a;
+    --code-num:#d98a8a;
+    --maxw:760px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Newsreader",Georgia,serif;
+    font-size:20px;
+    line-height:1.66;
+    font-optical-sizing:auto;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(138,28,28,0.025), transparent 40%),
+      radial-gradient(circle at 88% 92%, rgba(47,72,88,0.03), transparent 42%);
+  }
+  /* subtle paper grain */
+  body::before{
+    content:"";
+    position:fixed;inset:0;pointer-events:none;z-index:1;
+    opacity:0.04;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap{position:relative;z-index:2;max-width:var(--maxw);margin:0 auto;padding:0 26px;}
+
+  /* ---------- Masthead ---------- */
+  header.masthead{
+    max-width:980px;margin:0 auto;padding:54px 26px 0;position:relative;z-index:2;
+  }
+  .topbar{
+    display:flex;justify-content:space-between;align-items:center;gap:16px;
+    font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:0.22em;
+    text-transform:uppercase;color:var(--muted);
+    border-top:2px solid var(--ink);border-bottom:1px solid var(--rule-strong);
+    padding:11px 0;flex-wrap:wrap;
+  }
+  .topbar .dot{color:var(--ox);}
+  .kicker{
+    font-family:"JetBrains Mono",monospace;font-size:12.5px;letter-spacing:0.3em;
+    text-transform:uppercase;color:var(--ox);margin:46px 0 18px;font-weight:500;
+  }
+  h1.title{
+    font-family:"Fraunces",serif;font-weight:900;font-size:clamp(2.6rem,7vw,5.1rem);
+    line-height:0.99;letter-spacing:-0.018em;margin:0 0 26px;color:var(--ink);
+    max-width:14ch;
+  }
+  h1.title em{font-style:italic;font-weight:500;color:var(--ox);}
+  .deck{
+    font-family:"Newsreader",serif;font-size:clamp(1.15rem,2.4vw,1.5rem);
+    line-height:1.5;font-style:italic;color:var(--ink-soft);max-width:46ch;
+    margin:0 0 38px;font-weight:400;
+  }
+  .byline{
+    display:flex;gap:26px;flex-wrap:wrap;align-items:baseline;
+    font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:0.1em;
+    text-transform:uppercase;color:var(--muted);
+    border-top:1px solid var(--rule-strong);border-bottom:2px solid var(--ink);
+    padding:14px 0;margin-bottom:8px;
+  }
+  .byline strong{color:var(--ink);font-weight:700;}
+
+  /* ---------- Body ---------- */
+  main{padding-top:46px;padding-bottom:80px;}
+  section{margin-bottom:18px;}
+  .sec-head{margin:64px 0 26px;}
+  .sec-num{
+    font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:0.25em;
+    color:var(--ox);text-transform:uppercase;display:block;margin-bottom:10px;
+  }
+  h2{
+    font-family:"Fraunces",serif;font-weight:700;font-size:clamp(1.7rem,3.6vw,2.5rem);
+    line-height:1.08;letter-spacing:-0.012em;margin:0;color:var(--ink);
+    padding-bottom:14px;border-bottom:1px solid var(--rule);
+  }
+  h3{
+    font-family:"Fraunces",serif;font-weight:600;font-size:1.33rem;line-height:1.2;
+    margin:40px 0 12px;color:var(--ink);letter-spacing:-0.01em;
+  }
+  h4{
+    font-family:"JetBrains Mono",monospace;font-weight:700;font-size:0.8rem;
+    letter-spacing:0.16em;text-transform:uppercase;color:var(--slate);
+    margin:30px 0 8px;
+  }
+  p{margin:0 0 21px;}
+  p.lead-first::first-letter{
+    font-family:"Fraunces",serif;font-weight:900;float:left;font-size:5.4rem;
+    line-height:0.74;padding:8px 12px 0 0;color:var(--ox);
+  }
+  a{color:var(--ox-deep);text-decoration:underline;text-decoration-thickness:1px;
+    text-underline-offset:2px;text-decoration-color:var(--rule-strong);}
+  a:hover{text-decoration-color:var(--ox);}
+  strong{font-weight:600;color:var(--ink);}
+  em{font-style:italic;}
+  code{
+    font-family:"JetBrains Mono",monospace;font-size:0.82em;
+    background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;
+    padding:1px 5px;color:var(--ox-deep);
+  }
+
+  /* citations */
+  sup.cite{font-family:"JetBrains Mono",monospace;font-size:0.62em;line-height:0;
+    vertical-align:super;font-weight:500;}
+  sup.cite a{color:var(--ox);text-decoration:none;padding:0 1px;}
+  sup.cite a:hover{text-decoration:underline;}
+
+  /* ---------- Code blocks ---------- */
+  pre{
+    background:var(--panel);color:var(--code-fg);border-radius:8px;
+    border:1px solid #000;border-left:3px solid var(--ox);
+    padding:20px 22px;margin:28px 0;overflow-x:auto;
+    font-family:"JetBrains Mono",monospace;font-size:13.5px;line-height:1.62;
+    box-shadow:0 14px 30px -20px rgba(0,0,0,0.5);
+  }
+  pre .c{color:var(--code-comment);font-style:italic;}
+  pre .k{color:var(--code-kw);}
+  pre .s{color:var(--code-str);}
+  pre .n{color:var(--code-num);}
+  pre .label{
+    display:block;font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;
+    color:var(--code-comment);margin-bottom:12px;border-bottom:1px solid #3a332b;
+    padding-bottom:7px;
+  }
+
+  /* ---------- Figures / diagrams ---------- */
+  figure{margin:36px 0;}
+  figure svg{width:100%;height:auto;display:block;
+    background:var(--paper-2);border:1px solid var(--rule-strong);border-radius:8px;}
+  figcaption{
+    font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:0.04em;
+    color:var(--muted);margin-top:12px;line-height:1.5;
+    padding-left:14px;border-left:2px solid var(--ox);
+  }
+  figcaption b{color:var(--slate);font-weight:700;}
+
+  /* ---------- Aside / sidebar ---------- */
+  aside.note{
+    background:var(--paper-2);border:1px solid var(--rule-strong);
+    border-radius:8px;padding:22px 26px;margin:32px 0;
+    font-size:0.94em;line-height:1.6;position:relative;
+  }
+  aside.note .tag{
+    font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:0.2em;
+    text-transform:uppercase;color:var(--ox);display:block;margin-bottom:10px;font-weight:700;
+  }
+  aside.note h4{margin-top:0;}
+  aside.note p:last-child{margin-bottom:0;}
+
+  /* ---------- Pull quote ---------- */
+  blockquote{
+    margin:44px 0;padding:0 0 0 4px;border:none;
+  }
+  blockquote p{
+    font-family:"Fraunces",serif;font-weight:500;font-style:italic;
+    font-size:clamp(1.35rem,3vw,1.85rem);line-height:1.3;color:var(--ox-deep);
+    letter-spacing:-0.01em;margin:0;
+    text-indent:-0.4em;
+  }
+  blockquote p::before{content:"\201C";}
+  blockquote p::after{content:"\201D";}
+
+  /* ---------- Tables ---------- */
+  .tablewrap{overflow-x:auto;margin:30px 0;}
+  table{border-collapse:collapse;width:100%;font-size:0.85em;
+    font-family:"Newsreader",serif;}
+  caption{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:0.1em;
+    text-transform:uppercase;color:var(--muted);text-align:left;margin-bottom:10px;}
+  th,td{border:1px solid var(--rule-strong);padding:9px 13px;text-align:left;
+    vertical-align:top;}
+  th{background:var(--ink);color:var(--paper);font-family:"JetBrains Mono",monospace;
+    font-size:0.78em;letter-spacing:0.06em;text-transform:uppercase;font-weight:500;}
+  tbody tr:nth-child(even){background:var(--paper-2);}
+  td code{font-size:0.86em;}
+
+  ul,ol{margin:0 0 22px;padding-left:1.3em;}
+  li{margin-bottom:9px;}
+  li::marker{color:var(--ox);}
+
+  hr.divider{border:none;height:1px;background:var(--rule-strong);
+    margin:54px auto;max-width:120px;position:relative;}
+  hr.divider::after{content:"\00A7";position:absolute;left:50%;top:-13px;
+    transform:translateX(-50%);background:var(--paper);padding:0 12px;
+    color:var(--ox);font-size:18px;}
+
+  /* ---------- References ---------- */
+  .refs{margin-top:70px;border-top:2px solid var(--ink);padding-top:30px;}
+  .refs h2{border:none;padding-bottom:0;}
+  ol.reflist{list-style:none;counter-reset:ref;padding-left:0;margin-top:24px;}
+  ol.reflist li{
+    counter-increment:ref;position:relative;padding-left:46px;margin-bottom:15px;
+    font-size:0.82em;line-height:1.5;color:var(--ink-soft);
+    font-family:"Newsreader",serif;
+  }
+  ol.reflist li::before{
+    content:counter(ref);position:absolute;left:0;top:1px;
+    font-family:"JetBrains Mono",monospace;font-size:0.86em;font-weight:700;
+    color:var(--paper);background:var(--ox);width:30px;height:22px;
+    display:flex;align-items:center;justify-content:center;border-radius:3px;
+  }
+  ol.reflist li:target{background:var(--paper-2);outline:2px solid var(--ox);
+    border-radius:4px;padding-top:4px;padding-bottom:4px;}
+  ol.reflist cite{font-style:italic;}
+
+  footer.colophon{
+    max-width:var(--maxw);margin:50px auto 70px;padding:26px;
+    font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:0.08em;
+    color:var(--muted);text-align:center;line-height:1.8;
+    border-top:1px solid var(--rule-strong);
+  }
+
+  ::selection{background:var(--ox);color:var(--paper);}
+
+  @media (max-width:640px){
+    body{font-size:18px;}
+    .topbar{font-size:10px;letter-spacing:0.12em;}
+    pre{font-size:12px;}
+    p.lead-first::first-letter{font-size:4.2rem;}
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="topbar">
+    <span><span class="dot">&#9679;</span>&nbsp; Systems &amp; Security</span>
+    <span>Isolation Primitives / No.&nbsp;14</span>
+    <span>≈ 34 min read</span>
+  </div>
+
+  <p class="kicker">Untrusted Code, Trusted Process</p>
+  <h1 class="title">The Sandbox in the <em>Same</em> Address Space</h1>
+  <p class="deck">Software Fault Isolation turns a hostile binary into a well-behaved tenant — not by walling it off with hardware, but by rewriting its arithmetic until escape becomes impossible. A field guide to address masking, control-flow integrity, Native Client, WebAssembly, and the bypasses that keep the discipline honest.</p>
+
+  <div class="byline">
+    <span>An <strong>Engineering Deep-Dive</strong></span>
+    <span>Topic / <strong>SFI</strong></span>
+    <span>Level / <strong>Advanced</strong></span>
+    <span>27 References</span>
+  </div>
+</header>
+
+<div class="wrap">
+<main>
+
+  <!-- =================== 1. MOTIVATION =================== -->
+  <section>
+    <p class="lead-first">The cheapest way to contain a program you do not trust is to give it its own address space. Spin up a process, let the memory-management unit and the kernel's privilege rings do the work, and a fault in the guest cannot reach across the page tables into the host. This is the textbook isolation boundary, and for coarse-grained, loosely-coupled components it remains the right answer. The problem is that the boundary is expensive precisely where you most want it to be cheap: between two pieces of code that need to talk to each other constantly. Every cross-domain call becomes a system call or an IPC round-trip, with a trap into the kernel, a context switch, TLB pressure, and cache pollution on each side of the transition. When Wahbe, Lucco, Anderson, and Graham introduced the technique that would come to be called Software Fault Isolation, their opening observation was exactly this: placing each module in a separate address space gives fault isolation, but for tightly-coupled modules the context-switch overhead is prohibitive.<sup class="cite"><a href="#ref-1" id="c1">1</a></sup></p>
+
+    <p>The motivating scenario in 1993 was extensibility. Systems researchers wanted to load third-party modules — a database access method, a packet filter, a rendering plug-in — directly into the address space of a host application or operating system, where they could call host services and be called back at the speed of a direct branch. The danger is obvious: a buggy or malicious extension sharing the host's address space can read any secret, scribble over any data structure, and divert control anywhere it likes. The question SFI answered was whether you could keep the in-process performance while recovering the isolation guarantee that the process boundary normally provides — and do it <em>in software</em>, on stock hardware, without trusting the module's source language, its compiler, or even its good intentions.</p>
+
+    <p>That question never went away; it only changed clothes. The same structural tension — untrusted code that must run in-process, fast, with a narrow and policed interface to everything around it — reappears in the browser running a downloaded native module, in the edge-compute platform multiplexing thousands of customer functions inside one server process, in the application that links an untrusted media or font parser written in memory-unsafe C, and in the serverless runtime that wants microsecond cold starts. Each of these is a setting where a fresh process per tenant is too slow, too heavy, or too coarse, and where the only economical place to draw the trust boundary is <em>inside</em> a single virtual address space. SFI is the family of techniques that makes such a boundary enforceable.</p>
+
+    <h3>What an in-process boundary has to defend</h3>
+
+    <p>To appreciate the design space it helps to be precise about the adversary. The untrusted module is delivered as machine code (or as bytecode that the host will compile to machine code). We assume it may be actively malicious and may have been crafted with full knowledge of the host and the isolation mechanism. Once it executes, it shares the host's hardware-defined address space, register file, and — absent countermeasures — the host's full authority. A successful escape is any of: reading host memory outside the region the module was granted; writing host memory outside its writable region; or transferring control to any instruction the policy did not sanction, including into the middle of a host instruction or into the module's own code at an unintended offset. The last category matters because on variable-length instruction sets the byte stream is not self-delimiting: a jump to the wrong offset can decode an entirely different, attacker-chosen instruction sequence out of bytes the compiler intended as something else.</p>
+
+    <p>The classical reference-monitor formulation gives us the language to reason about this. A reference monitor mediates every access a subject makes to an object, and to be trustworthy it must be tamper-proof, always invoked, and small enough to verify — the properties James Anderson laid out in 1972.<sup class="cite"><a href="#ref-2" id="c2">2</a></sup> Schneider later formalized exactly which security policies are enforceable by a monitor that runs alongside the target and can halt it: the <em>safety</em> properties, those expressible as a prohibition on some bad finite prefix of execution, recognizable by a security automaton.<sup class="cite"><a href="#ref-3" id="c3">3</a></sup> SFI is best understood as a way to <em>compile</em> such a monitor into the untrusted code itself, so that the checks are inlined ahead of every dangerous operation and there is no separate, bypassable guard to trap into. That insight — the monitor as inlined instrumentation rather than an external sentry — is what later work named the inline reference monitor, and it is the connective tissue running through everything that follows.</p>
+
+    <aside class="note">
+      <span class="tag">Why not just use the MMU?</span>
+      <p>Page-table protection is real isolation, and SFI does not replace it — production systems layer the two. The MMU's limitation is granularity and transition cost, not strength. It protects at page boundaries with a handful of permission bits, switches domains only via the kernel, and cannot express &ldquo;this thread may call that function but may not read this adjacent object.&rdquo; SFI buys sub-page, intra-process, language-agnostic mediation at the cost of trusting a rewriter/verifier and paying a per-operation instruction tax. The interesting engineering is in making that tax small while keeping the verifier small enough to trust.</p>
+    </aside>
+
+    <blockquote><p>SFI does not ask the untrusted code to behave. It rewrites the code so that misbehavior is not expressible in the instruction stream the CPU will accept.</p></blockquote>
+  </section>
+
+  <!-- =================== 2. FUNDAMENTALS =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 02 — Fundamentals</span>
+      <h2>Software-Based Fault Isolation, from first principles</h2>
+    </div>
+
+    <p>The original construction is elegant enough to state in a paragraph. Partition the host address space and reserve a contiguous, power-of-two-aligned region for the untrusted module — Wahbe et al. called it a <em>fault domain</em>.<sup class="cite"><a href="#ref-1" id="c1b">1</a></sup> Choose the region so that every legal address inside it shares a common high-order bit pattern, the <em>segment identifier</em>. The module's code and its data each get such a region. Now transform the module's machine code so that <em>every</em> memory store, every memory load you wish to confine, and every computed (indirect) control transfer is preceded by instructions that force the target address into the correct region before it is used. Because the confinement is established immediately before each unsafe instruction, the module can compute any address it likes — the instrumentation guarantees the address that actually reaches the bus or the program counter lies inside the sandbox. The transformation is applied by a trusted tool; a separate, very small <em>verifier</em> then checks the finished binary to confirm the invariants hold, so that the much larger rewriter need not itself be trusted.</p>
+
+    <h3>Sandboxing versus checking</h3>
+
+    <p>There are two ways to enforce the address invariant, and the distinction recurs in every later system. The first is <strong>address checking</strong>: before the unsafe access, compare the target against the region bounds and branch to a fault handler if it is out of range. This catches the violation and can report precisely which instruction misbehaved, but it adds a compare-and-conditional-branch — and branches are exactly what you do not want sprinkled through a hot loop. The second is <strong>address sandboxing</strong> (also called <em>address masking</em> or <em>forcing</em>): instead of checking whether the address is legal, unconditionally <em>coerce</em> it to be legal, typically by clearing the high bits and setting the segment identifier with a couple of bitwise operations. Sandboxing is branchless and therefore friendlier to the pipeline, but it sacrifices the ability to pinpoint the offending access — an illegal pointer is silently redirected somewhere harmless inside the sandbox rather than reported. Wahbe et al. chose sandboxing for performance and accepted the loss of diagnosis; most production SFI since has done the same.<sup class="cite"><a href="#ref-1" id="c1c">1</a></sup></p>
+
+    <pre><span class="label">Address sandboxing — the canonical idiom (pseudo-x86)</span><span class="c">; goal: confine the address in %rax to the data region whose</span>
+<span class="c">; segment id is in the high bits encoded by DATA_MASK / SEG_ID.</span>
+<span class="c">; rewriter emits this immediately before the real store.</span>
+
+    <span class="k">and</span>   %rax, $DATA_MASK    <span class="c">; clear the high "segment" bits → offset within region</span>
+    <span class="k">or</span>    %rax, $SEG_ID       <span class="c">; stamp in the sandbox's segment identifier</span>
+    <span class="k">mov</span>   (%rax), %rbx        <span class="c">; now provably in-region; the store cannot escape</span></pre>
+
+    <p>A naive reading suggests the masking sequence is two extra instructions per memory operation, which would be ruinous. The 1993 paper's central contribution was showing it need not be. Three optimizations carried the day. First, a <strong>dedicated register</strong> holds the segment identifier so the <code>or</code> is a register operation rather than an immediate load, and the rewriter reserves a small number of registers (five, in the original RISC implementation) as <em>dedicated</em> — guaranteed by the verifier never to be used as the base of an unsandboxed access. Second, the mask-then-stamp can frequently be folded: if the segment shift is a constant, a single masking step can both clear out-of-region bits and rely on the region's base being a known constant. Third, and most importantly, the cost is paid only at the point of an unsafe operation, and the compiler's existing optimizations (hoisting an invariant address computation out of a loop, for instance) hoist the sandboxing with it. The measured result was an average runtime overhead in the low single digits to low double digits depending on the workload — small enough that the in-process model was clearly worth it for tightly-coupled extensions.<sup class="cite"><a href="#ref-1" id="c1d">1</a></sup></p>
+
+    <h3>The crucial subtlety on CISC: where does an instruction begin?</h3>
+
+    <p>On a fixed-width RISC instruction set, control flow is comparatively tame: every instruction starts on a four-byte boundary, so a verifier can decode the program unambiguously and an indirect jump can be masked to land on a valid instruction boundary by clearing its low bits. On a variable-length CISC architecture such as x86, the same byte stream decodes to <em>different</em> instructions depending on where you start reading. An attacker who can direct a jump into the middle of a legitimate instruction can synthesize instructions — including the privileged or unsafe ones the rewriter carefully avoided emitting — out of the immediate operands and bytes of innocent code. This is the same primitive that return-oriented programming exploits to assemble malicious computation from borrowed instruction fragments, or <em>gadgets</em>.<sup class="cite"><a href="#ref-4" id="c4">4</a></sup> Confining data accesses is therefore not enough on x86; you must also confine control flow to a set of instruction boundaries you actually intended.</p>
+
+    <p>McCamant and Morrisett solved this for x86 in their PittSFIeld system with a disarmingly simple idea: artificially impose alignment that the hardware does not. Divide the code region into fixed-size <em>chunks</em> — sixteen bytes in their implementation — and have the rewriter insert no-op padding so that no instruction ever straddles a chunk boundary, every jump target is moved to the start of a chunk, and every call is placed at the end of a chunk so the return address it pushes is itself chunk-aligned. The control-flow sandboxing mask then clears the low four bits of any computed jump target, which forces it to a chunk start — and because each chunk is, by construction, an atomic unit you cannot enter except at its first instruction, you can never land mid-instruction.<sup class="cite"><a href="#ref-5" id="c5">5</a></sup> Their measured overheads were modest, and just as significant, they verified the safety of the scheme with a machine-checked proof in ACL2, establishing a methodological standard — a small trusted verifier whose correctness is mechanically proved — that later systems would inherit.<sup class="cite"><a href="#ref-5" id="c5b">5</a></sup></p>
+
+    <figure>
+      <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of chunk-aligned code with padding">
+        <style>
+          .lbl{font-family:"JetBrains Mono",monospace;font-size:12px;fill:#3b342c;}
+          .lblw{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#f3eee2;}
+          .ttl{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#6f6555;letter-spacing:1px;}
+          .ox{fill:#8a1c1c;}.sl{fill:#2f4858;}.nop{fill:#b9ac8f;}
+        </style>
+        <text x="20" y="26" class="ttl">CODE REGION — 16-BYTE CHUNKS, NO INSTRUCTION CROSSES A BOUNDARY</text>
+        <!-- chunk boundaries -->
+        <g>
+          <rect x="20" y="50" width="160" height="46" rx="4" class="sl"/>
+          <rect x="190" y="50" width="160" height="46" rx="4" class="sl"/>
+          <rect x="360" y="50" width="160" height="46" rx="4" class="sl"/>
+          <rect x="530" y="50" width="160" height="46" rx="4" class="sl"/>
+        </g>
+        <!-- instructions inside -->
+        <rect x="26" y="56" width="78" height="34" rx="3" class="ox"/><text x="34" y="78" class="lblw">insn A</text>
+        <rect x="108" y="56" width="40" height="34" rx="3" class="nop"/><text x="113" y="78" class="lbl" style="font-size:10px">nop</text>
+        <rect x="196" y="56" width="118" height="34" rx="3" class="ox"/><text x="204" y="78" class="lblw">insn B (target)</text>
+        <rect x="366" y="56" width="70" height="34" rx="3" class="ox"/><text x="374" y="78" class="lblw">insn C</text>
+        <rect x="440" y="56" width="74" height="34" rx="3" class="nop"/><text x="448" y="78" class="lbl" style="font-size:10px">nop pad</text>
+        <rect x="536" y="56" width="148" height="34" rx="3" class="ox"/><text x="544" y="78" class="lblw">call (chunk end)</text>
+        <!-- boundary ticks -->
+        <g stroke="#1c1815" stroke-width="2">
+          <line x1="20" y1="44" x2="20" y2="102"/><line x1="190" y1="44" x2="190" y2="102"/>
+          <line x1="360" y1="44" x2="360" y2="102"/><line x1="530" y1="44" x2="530" y2="102"/>
+          <line x1="690" y1="44" x2="690" y2="102"/>
+        </g>
+        <text x="20" y="120" class="lbl" style="font-size:10px">0x..0</text>
+        <text x="178" y="120" class="lbl" style="font-size:10px">0x..10</text>
+        <text x="348" y="120" class="lbl" style="font-size:10px">0x..20</text>
+        <text x="518" y="120" class="lbl" style="font-size:10px">0x..30</text>
+        <!-- masking line -->
+        <text x="20" y="168" class="ttl">INDIRECT JUMP IS MASKED TO A CHUNK START — CANNOT LAND MID-INSTRUCTION</text>
+        <rect x="20" y="180" width="670" height="40" rx="5" fill="#221d18"/>
+        <text x="34" y="205" class="lblw" style="font-size:12.5px;fill:#e0a35a">and  %target, 0xFFFFFFF0   </text>
+        <text x="300" y="205" class="lblw" style="font-size:12.5px;fill:#9a8f76"> ; force low 4 bits to zero → align to 16-byte chunk</text>
+      </svg>
+      <figcaption><b>Chunk alignment on a variable-length ISA.</b> By padding so instructions never cross 16-byte boundaries and masking indirect targets to a chunk start, PittSFIeld makes mid-instruction entry impossible — the prerequisite for trusting any data-sandboxing on x86.<sup class="cite"><a href="#ref-5" id="c5c">5</a></sup></figcaption>
+    </figure>
+
+    <h3>The architecture of a complete SFI system</h3>
+
+    <p>Strip away implementation detail and every SFI system is the same three-part machine. A <strong>transformer</strong> (in the compiler back end or as a binary rewriter) emits code that already satisfies the sandboxing invariants. A <strong>verifier</strong> — the only large piece that must be trusted, and deliberately kept tiny — independently re-checks the delivered binary against the invariants without trusting how it was produced. And a <strong>runtime / trusted runtime</strong> mediates the narrow set of operations the sandbox is allowed to perform on the outside world: entering and leaving the sandbox, and invoking host services through a controlled gate. The separation of transformer from verifier is the linchpin of the trust argument. You can use an aggressive, bug-prone optimizing compiler to generate the module, because nothing the compiler does is believed; the small verifier has the final word, and if the binary does not provably stay inside the lines, it is rejected before it ever runs.</p>
+  </section>
+
+  <hr class="divider">
+
+  <!-- =================== 3. MEMORY SANDBOXING =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 03 — Memory</span>
+      <h2>Address masking and guard zones</h2>
+    </div>
+
+    <p>The memory side of SFI reduces to one obligation: no load or store performed by the untrusted module may touch memory outside the regions it was granted. There are two broad strategies for discharging it, and the cleverest implementations combine them.</p>
+
+    <h3>Bit-masking and the one-instruction store</h3>
+
+    <p>If the sandbox region is <code>2^k</code> bytes, aligned to a <code>2^k</code> boundary, then an address is in-region exactly when its high bits equal the region's base. Masking enforces this in one or two ALU operations, as shown earlier. The refinement that makes it nearly free is choosing the region geometry to collapse the mask into a single instruction. If the architecture offers segmentation, you can do better still: load the segment register once with the sandbox base and limit, and let the hardware add the base and bounds-check every access for free. This is precisely why the first version of Native Client on 32-bit x86 was so fast — it leaned on the legacy x86 segmentation hardware to confine data accesses with essentially zero per-access software cost, reserving the software masking only for control flow.<sup class="cite"><a href="#ref-11" id="c11">11</a></sup> The catch is that segmentation in this form does not exist on x86-64 (the segment limits were largely dropped) or on ARM, which forced the field back onto pure software masking and motivated the next idea.</p>
+
+    <h3>Guard zones: trading address space for instructions</h3>
+
+    <p>A guard zone (or guard page) is a band of unmapped, inaccessible virtual address space placed immediately around the sandbox region. Its purpose is to let you <em>weaken</em> the masking obligation and recover speed. Consider an access of the form <code>base + index</code> where <code>index</code> is a small, bounded displacement — the common case for structure-field and array accesses with a compile-time-bounded offset. If you have masked <code>base</code> to lie within the region, then <code>base + index</code> can stray at most <code>index</code> bytes past the region's end. If the guard zone is at least as large as the maximum possible displacement, any such stray access lands in unmapped memory and faults rather than escaping — so you do not need to re-mask the full effective address, only the base. On 64-bit machines, where virtual address space is effectively free, you can be lavish: reserve a multi-gigabyte region with enormous guard bands on either side, mask a pointer to a fixed number of low bits, and let any 32-bit displacement be absorbed harmlessly by the guard. This is the structural trick behind both 64-bit Native Client and the WebAssembly linear-memory model discussed below.</p>
+
+    <figure>
+      <svg viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sandbox region flanked by guard zones in the virtual address space">
+        <style>
+          .a{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#3b342c;}
+          .aw{font-family:"JetBrains Mono",monospace;font-size:12px;fill:#f3eee2;}
+          .at{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#6f6555;letter-spacing:1px;}
+        </style>
+        <text x="20" y="26" class="at">VIRTUAL ADDRESS SPACE LAYOUT — 64-BIT SFI / WASM LINEAR MEMORY</text>
+        <!-- guard low -->
+        <rect x="20" y="50" width="120" height="70" rx="4" fill="#b9ac8f" opacity="0.5"/>
+        <text x="34" y="80" class="a">GUARD</text><text x="34" y="98" class="a">(unmapped)</text>
+        <!-- sandbox -->
+        <rect x="140" y="50" width="320" height="70" rx="4" fill="#2f4858"/>
+        <text x="160" y="82" class="aw">SANDBOX REGION (mapped, e.g. 4 GiB)</text>
+        <text x="160" y="102" class="aw" style="font-size:10.5px;fill:#cdd6dd">module reads/writes confined here</text>
+        <!-- guard high -->
+        <rect x="460" y="50" width="240" height="70" rx="4" fill="#b9ac8f" opacity="0.5"/>
+        <text x="476" y="80" class="a">GUARD — absorbs any in-range displacement</text>
+        <text x="476" y="98" class="a">a strayed access faults instead of escaping</text>
+        <!-- arrows -->
+        <g stroke="#8a1c1c" stroke-width="2" fill="none">
+          <path d="M300 140 L300 122" marker-end="url(#arr)"/>
+        </g>
+        <defs><marker id="arr" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#8a1c1c"/></marker></defs>
+        <text x="150" y="168" class="a" style="fill:#8a1c1c">base = mask(ptr)  →  guaranteed in SANDBOX</text>
+        <text x="150" y="190" class="a">effective = base + disp  →  worst case lands in GUARD, never in host memory</text>
+      </svg>
+      <figcaption><b>Guard zones let you mask less.</b> When displacements are bounded and the guard band is at least that large, only the base pointer needs masking; an out-of-bounds effective address traps in unmapped memory. Cheap on 64-bit, where address space is abundant.</figcaption>
+    </figure>
+
+    <aside class="note">
+      <span class="tag">Read / write asymmetry</span>
+      <p>Many systems sandbox <em>writes</em> aggressively and treat <em>reads</em> more permissively, because an out-of-bounds write that corrupts host state is catastrophic, while an out-of-bounds read is &ldquo;merely&rdquo; an information leak. Confining only writes (and control flow) is sometimes enough for an integrity-only threat model and roughly halves the instrumentation. Whether that is acceptable depends entirely on whether confidentiality of host memory is in scope — and, as the bypasses section shows, transient-execution attacks have made &ldquo;merely a read&rdquo; far less comfortable than it once sounded.</p>
+    </aside>
+
+    <h3>Data sandboxing as a verified policy</h3>
+
+    <p>The masking discipline is only sound if the verifier can be convinced that <em>every</em> dangerous memory operation is preceded by a correct mask, with no path that reaches the operation while skipping the mask. This is harder than it looks because the mask and the access can be separated by other instructions and by control flow. Zeng, Tan, and Morrisett showed how to make the verification tractable and trustworthy by combining a control-flow-integrity substrate with a static data-flow analysis: CFI first pins down the set of possible execution paths, and a lightweight range analysis over that constrained graph then proves that the masked value reaching each access has not been clobbered in between, allowing redundant masks to be elided while preserving a checkable safety argument.<sup class="cite"><a href="#ref-12" id="c12">12</a></sup> The lesson is structural and worth stating plainly: <strong>memory sandboxing depends on control-flow integrity.</strong> If the adversary can jump to the access while bypassing its guard, no amount of masking helps. That dependency is why CFI is not a separate topic bolted on beside SFI but a load-bearing primitive underneath it.</p>
+  </section>
+
+  <!-- =================== 4. CFI =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 04 — Control Flow</span>
+      <h2>Control-Flow Integrity as an SFI primitive</h2>
+    </div>
+
+    <p>Control-Flow Integrity, introduced by Abadi, Budiu, Erlingsson, and Ligatti at CCS 2005, states a property and an enforcement mechanism in one breath. The property: program execution must follow a path through a <em>control-flow graph</em> (CFG) determined ahead of time, so that every indirect branch — every computed call, every indirect jump, every function return — transfers control only to a target permitted by the graph.<sup class="cite"><a href="#ref-7" id="c7">7</a></sup> The mechanism: assign each valid target a small <em>label</em> (an identifying bit pattern embedded at the destination), and instrument each indirect transfer to check, immediately before it jumps, that the destination carries the expected label, halting otherwise.<sup class="cite"><a href="#ref-7" id="c7b">7</a></sup> Direct branches need no check because their targets are fixed in the code and protected by the same integrity argument that protects the code region itself. The authors gave the property a formal treatment and a companion paper establishing its guarantees against a powerful adversary who can write arbitrary data memory at any time — exactly the adversary SFI must survive.<sup class="cite"><a href="#ref-8" id="c8">8</a></sup></p>
+
+    <pre><span class="label">Label-based CFI check on an indirect call (schematic)</span><span class="c">; at the call site: ensure the target is a sanctioned entry point</span>
+    <span class="k">mov</span>   (%rax), %r11        <span class="c">; fetch the bytes at the call target</span>
+    <span class="k">cmp</span>   %r11, $LABEL_F      <span class="c">; does it carry function F's CFI label?</span>
+    <span class="k">jne</span>   cfi_violation       <span class="c">; mismatch → halt; never branch into the void</span>
+    <span class="k">call</span>  %rax                <span class="c">; only now is the indirect transfer permitted</span>
+
+<span class="c">; at every legal entry point the compiler embeds the matching label:</span>
+F:  <span class="k">.long</span> $LABEL_F           <span class="c">; the "ID" CFI looks for, ignored at runtime</span>
+    <span class="c">... function body ...</span></pre>
+
+    <h3>Why SFI needs CFI, and why CFI alone is not SFI</h3>
+
+    <p>The relationship runs in one direction with a twist. SFI <em>requires</em> a form of CFI: the entire data-sandboxing argument collapses if control can reach a memory operation while skipping its mask, or land mid-instruction to decode an unmasked store. So every SFI system embeds at least a tailored control-flow discipline — Native Client's bundle alignment and PittSFIeld's chunk masking are CFI mechanisms specialized to the sandbox's needs. The twist is that general CFI, as a defensive retrofit for trusted-but-buggy programs, aims at a different goal than SFI's. CFI's classic use case is hardening a program you wrote and compiled yourself against an attacker who has already achieved a memory-corruption foothold and wants to hijack control. SFI's use case is confining a program you did <em>not</em> write and do <em>not</em> trust at all. The threat models overlap but are not identical, and that difference shows up in how precise the CFG needs to be.</p>
+
+    <h3>Forward edges, backward edges, and the precision problem</h3>
+
+    <p>Indirect transfers split into <em>forward edges</em> (indirect calls and jumps, dispatched through function pointers and vtables) and <em>backward edges</em> (returns, which pop a target off the stack). The two demand different defenses. Forward-edge protection has been productized: the compilers shipped a coarse but cheap form in which each indirect call is checked against a class of permitted targets. Tice and colleagues described the forward-edge CFI implementations added to GCC and LLVM, including virtual-table verification and indirect-function-call checks, with overheads low enough for production use.<sup class="cite"><a href="#ref-9" id="c9">9</a></sup> Backward edges are harder: the precise defense is a <em>shadow stack</em>, a protected, separate copy of return addresses against which each return is validated, which is exactly the &ldquo;protected shadow call stack&rdquo; the original CFI paper proposed building on top of the CFI substrate.<sup class="cite"><a href="#ref-8" id="c8b">8</a></sup></p>
+
+    <p>The precision problem is the crux of CFI's security and the seam most bypasses pry at. The static CFG is necessarily an over-approximation: pointer analysis cannot resolve every indirect call to a single target, so many call sites are permitted to reach an entire <em>equivalence class</em> of targets sharing one label. The coarser the labelling — the larger those classes — the more freedom an attacker retains while still satisfying the check. A single shared label for &ldquo;any function that is ever called indirectly&rdquo; is cheap but admits enormous latitude. We return to what that latitude buys an attacker in the bypasses section; for now the point is that <strong>CFI's strength is a function of CFG precision, and precision costs analysis effort and runtime checks.</strong> XFI, from Erlingsson and colleagues, is the system that most directly fused this CFI machinery with full SFI memory confinement and a host-call interface, packaging the whole inline-reference-monitor stack — control-flow integrity, a protected stack, and data-access guards — into a single binary-level mechanism for sandboxing system extensions.<sup class="cite"><a href="#ref-10" id="c10">10</a></sup></p>
+
+    <blockquote><p>CFI is the floor under memory sandboxing. Take away the guarantee that execution follows a known graph, and every other invariant in the system becomes a suggestion.</p></blockquote>
+  </section>
+
+  <hr class="divider">
+
+  <!-- =================== 5. NACL =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 05 — Native Client</span>
+      <h2>Google Native Client: SFI shipped to a billion browsers</h2>
+    </div>
+
+    <p>Native Client (NaCl) is the system that took SFI from a systems-research technique to production infrastructure. Yee and colleagues described it in 2009 as a sandbox for portable, untrusted x86 native code, built to give browser applications the computational performance of native code without compromising safety, by combining software fault isolation with a secure runtime that funnels all system interaction and side effects through interfaces NaCl controls.<sup class="cite"><a href="#ref-11" id="c11b">11</a></sup> The goal was to let a web page ship a compiled C or C++ module — a physics engine, a codec, a game — and run it at near-native speed inside the browser's process while guaranteeing it could not touch anything outside its sandbox or reach the operating system except through a vetted gate.</p>
+
+    <h3>Two sandboxes, nested</h3>
+
+    <p>NaCl's architecture is a sandbox within a sandbox. The <strong>inner sandbox</strong> is classic SFI: the untrusted module is compiled and rewritten so that its memory accesses and control flow are confined, and a static validator checks the binary before execution to confirm the confinement. The 32-bit x86 implementation took the elegant shortcut of using the legacy x86 segmentation hardware to bound data accesses, so that data confinement cost essentially nothing per access; control flow was confined in software by requiring that the code be laid out in 32-byte <em>bundles</em>, that no instruction cross a bundle boundary, and that every indirect branch be masked to a bundle start — the same chunk-alignment idea PittSFIeld pioneered, with NaCl supplying a careful, auditable validator.<sup class="cite"><a href="#ref-11" id="c11c">11</a></sup> The <strong>outer sandbox</strong> is a second, independent line of defense at the system-call boundary: even if the inner sandbox were defeated, the trusted service runtime constrains what the module can ask the operating system to do, so a single failure does not hand over the host.<sup class="cite"><a href="#ref-11" id="c11d">11</a></sup></p>
+
+    <h3>Entering and leaving the sandbox: trampolines and springboards</h3>
+
+    <p>Because the sandboxed code is forbidden from executing the segment-manipulation and far-call instructions that a domain transition requires, NaCl provides trusted control-transfer stubs that <em>are</em> allowed to contain those instructions. A <strong>trampoline</strong> carries control out of the sandbox into the trusted runtime to request a service; a <strong>springboard</strong> carries control back in. These stubs are patched into known, aligned addresses during module loading and are the only sanctioned doorways through the wall, so the set of ways control can cross the boundary is finite and audited rather than open-ended.<sup class="cite"><a href="#ref-11" id="c11e">11</a></sup> This is the inline-reference-monitor pattern made concrete: the &ldquo;mediation of every cross-domain access&rdquo; is compiled into a fixed gateway the untrusted code cannot bypass.</p>
+
+    <aside class="note">
+      <span class="tag">A verification milestone</span>
+      <p>The NaCl x86 validator is small but security-critical, and getting its instruction decoder exactly right on x86 is notoriously error-prone. Morrisett, Tan, Tassarotti, Tristan, and Gan built <strong>RockSalt</strong>, a checker that is smaller and faster than NaCl's original validator and carries a much smaller trusted computing base, because the bulk of its analysis is generated automatically from a declarative description tied to a formal model of a subset of the x86 instruction set — and machine-checked in Coq.<sup class="cite"><a href="#ref-13" id="c13">13</a></sup> RockSalt is a landmark: a complete, executable, formally proved-correct SFI checker for a real instruction set.</p>
+    </aside>
+
+    <h3>Portability: from x86-64 and ARM to PNaCl</h3>
+
+    <p>The 32-bit segmentation trick did not survive the move to x86-64 and ARM, neither of which offers the same cheap hardware bounding. Sehr and colleagues re-engineered SFI for these architectures using pure software masking with guard regions, and reported the result as the best-known SFI implementations for those targets at the time, with average performance overhead under 5% on ARM and around 7% on x86-64 — low enough that the in-process sandbox remained eminently practical on contemporary hardware.<sup class="cite"><a href="#ref-6" id="c6">6</a></sup> Other user-level x86 sandboxes of the era, such as Ford and Cox's Vx32, reached similar conclusions about the viability of confining native code without kernel support.<sup class="cite"><a href="#ref-27" id="c27">27</a></sup> They also observed that the instrumentation tends to overlap well with instruction-level parallelism and has particularly small impact on data-memory-bound workloads, properties that flatter the technique on modern out-of-order cores.<sup class="cite"><a href="#ref-6" id="c6b">6</a></sup></p>
+
+    <p>Two further problems had to be solved for the web. First, native code is not portable across instruction sets, which is anathema to the web's &ldquo;write once, run anywhere&rdquo; ideal; Google's answer was <strong>Portable Native Client (PNaCl)</strong>, which shipped a target-independent LLVM-bitcode-based format that the client translated to NaCl for the local architecture. Second, just-in-time compilers and self-modifying code generate executable instructions <em>at runtime</em>, which the static validator never saw; Ansel and colleagues extended the model with mechanisms to sandbox dynamically generated code and JIT output without abandoning the validation guarantee.<sup class="cite"><a href="#ref-14" id="c14">14</a></sup> NaCl and PNaCl ultimately shipped in Chrome and ran real applications at scale. They were, however, browser-specific and architecturally heavyweight, and when a cross-vendor standard emerged that captured the same safety properties in a cleaner package, Google announced it would deprecate PNaCl in favor of WebAssembly.<sup class="cite"><a href="#ref-15" id="c15">15</a></sup> NaCl's intellectual legacy is enormous: it proved that compiled, untrusted native code could be run safely in-process at scale, and nearly every idea in it — nested sandboxes, a small audited validator, masked control flow, a fixed host-call gateway — reappears, refined, in what came next.</p>
+
+    <figure>
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Native Client nested sandbox architecture">
+        <style>
+          .t{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#6f6555;letter-spacing:1px;}
+          .b{font-family:"Newsreader",serif;font-size:13px;fill:#1c1815;}
+          .bw{font-family:"Newsreader",serif;font-size:13px;fill:#f3eee2;}
+          .m{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#3b342c;}
+        </style>
+        <text x="20" y="24" class="t">NATIVE CLIENT — NESTED ISOLATION INSIDE ONE BROWSER PROCESS</text>
+        <!-- outer -->
+        <rect x="20" y="40" width="680" height="240" rx="10" fill="none" stroke="#2f4858" stroke-width="2" stroke-dasharray="6 5"/>
+        <text x="34" y="62" class="m" style="fill:#2f4858">OUTER SANDBOX — trusted service runtime mediates all OS calls</text>
+        <!-- inner -->
+        <rect x="48" y="80" width="430" height="170" rx="8" fill="#f3eee2" stroke="#8a1c1c" stroke-width="2"/>
+        <text x="62" y="102" class="m" style="fill:#8a1c1c">INNER SANDBOX — SFI: masked control flow + confined memory</text>
+        <rect x="68" y="118" width="180" height="48" rx="5" fill="#2f4858"/><text x="82" y="147" class="bw">untrusted .nexe module</text>
+        <rect x="68" y="178" width="390" height="56" rx="5" fill="#ece5d4" stroke="#b9ac8f"/>
+        <text x="82" y="200" class="b">bundle-aligned code · indirect jumps masked</text>
+        <text x="82" y="220" class="b">static validator checks the binary before it runs</text>
+        <!-- trusted runtime -->
+        <rect x="500" y="118" width="180" height="116" rx="8" fill="#221d18"/>
+        <text x="516" y="140" class="bw" style="font-size:12px">TRUSTED RUNTIME</text>
+        <text x="516" y="166" class="bw" style="font-size:11px;fill:#e0a35a">trampoline →  exit</text>
+        <text x="516" y="186" class="bw" style="font-size:11px;fill:#e0a35a">springboard ← enter</text>
+        <text x="516" y="212" class="bw" style="font-size:11px;fill:#9a8f76">vetted host services</text>
+        <!-- arrows between -->
+        <g stroke="#8a1c1c" stroke-width="2" fill="none">
+          <path d="M478 150 L500 150" marker-end="url(#a2)"/>
+          <path d="M500 180 L478 180" marker-end="url(#a2)"/>
+        </g>
+        <defs><marker id="a2" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#8a1c1c"/></marker></defs>
+      </svg>
+      <figcaption><b>NaCl's defense in depth.</b> The inner SFI sandbox confines memory and control flow; the outer sandbox independently restricts OS interaction; trampolines and springboards are the only sanctioned doorways between untrusted code and the trusted runtime.<sup class="cite"><a href="#ref-11" id="c11f">11</a></sup></figcaption>
+    </figure>
+  </section>
+
+  <!-- =================== 6. WASM =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 06 — WebAssembly</span>
+      <h2>The WebAssembly sandbox model</h2>
+    </div>
+
+    <p>WebAssembly (Wasm) is what you get when the SFI agenda is pursued not by rewriting and validating arbitrary machine code, but by designing a new low-level bytecode whose very structure makes the dangerous operations inexpressible. Haas and colleagues described it in 2017 as a portable low-level bytecode, collaboratively designed by engineers from the major browser vendors, offering compact representation, fast and simple validation and compilation, and safe execution with low to no overhead.<sup class="cite"><a href="#ref-16" id="c16">16</a></sup> Where NaCl confines code after the fact, Wasm achieves confinement by construction — and crucially, it is the first mainstream language designed with a formal semantics from the outset, so its safety claims can be stated and reasoned about precisely.<sup class="cite"><a href="#ref-16" id="c16b">16</a></sup> A revised account later appeared in <cite>Communications of the ACM</cite>,<sup class="cite"><a href="#ref-17" id="c17">17</a></sup> and the W3C standardized the core specification, giving the model a single normative definition across implementations.<sup class="cite"><a href="#ref-18" id="c18">18</a></sup></p>
+
+    <h3>How the structure does the work</h3>
+
+    <p>Several deliberate design choices, taken together, are what let a Wasm engine run untrusted code safely with little of SFI's explicit per-access instrumentation:</p>
+
+    <ul>
+      <li><strong>Separation of code and data, by representation.</strong> Wasm code is not bytes in the same linear memory the program reads and writes; it lives in a distinct space the program cannot address as data, cannot read, and cannot overwrite. This makes code injection and self-modification structurally impossible at the bytecode level — the single most consequential difference from native machine code.<sup class="cite"><a href="#ref-19" id="c19">19</a></sup></li>
+      <li><strong>Linear memory as a single bounded sandbox.</strong> A module's heap is one contiguous, zero-based <em>linear memory</em> — a flat byte array. Every memory access is an offset into this array, and the engine guarantees the access stays within bounds, either by an explicit bounds check or, on 64-bit hosts, by the guard-zone trick: reserve a large virtual region with guard bands so that a 32-bit offset cannot reach host memory and an out-of-bounds access faults harmlessly. This is SFI memory sandboxing, expressed as a property of the memory model rather than as masking instructions the programmer wrote.</li>
+      <li><strong>Structured control flow.</strong> Wasm has no arbitrary <code>goto</code>. Control flow is built from structured blocks, loops, and <code>if</code> constructs with statically determined, properly nested branch targets; branches can only target enclosing constructs. There is no way to jump to an arbitrary byte offset, so the &ldquo;land mid-instruction&rdquo; problem simply does not arise.</li>
+      <li><strong>Typed, table-mediated indirect calls.</strong> Indirect calls do not take a raw address. They take an index into a <em>function table</em>, and the call is checked at runtime against the callee's declared type signature. This is CFI promoted into the type system: the set of indirect targets is the table, and a type mismatch traps. An attacker who corrupts a function-pointer-equivalent can at worst select a different, type-compatible table entry — not jump to arbitrary code.<sup class="cite"><a href="#ref-19" id="c19b">19</a></sup></li>
+      <li><strong>A protected, non-addressable call stack and typed locals.</strong> Return addresses and the operand stack are managed by the engine and are not part of the linear memory the program can corrupt. Local variables and the value stack are typed and validated. Classic return-address smashing has nothing to smash.</li>
+      <li><strong>Linear-time validation.</strong> Before a module runs, the engine type-checks the bytecode in a single pass: every instruction's operand types are verified, every branch target is checked to be in scope, every function's signature is confirmed. Validation is the inline-reference-monitor's &ldquo;verifier&rdquo; role, made cheap enough to do on every module load.<sup class="cite"><a href="#ref-16" id="c16c">16</a></sup></li>
+    </ul>
+
+    <p>The capability boundary follows the same philosophy. A Wasm module has no ambient authority — it cannot make system calls, open files, or touch the network on its own. It can only call functions the host explicitly <em>imports</em> into it. On the web that host is the JavaScript engine and the browser APIs; outside the browser, the WebAssembly System Interface (WASI) defines a capability-style set of host functions. Either way, the &ldquo;host-call gateway&rdquo; that NaCl built out of trampolines is, in Wasm, just the import table: the finite, declared set of functions through which the sandbox can affect the outside world.</p>
+
+    <blockquote><p>NaCl asked, &ldquo;how do we confine this machine code?&rdquo; WebAssembly asked, &ldquo;what would a machine code look like that needs no confining?&rdquo;</p></blockquote>
+
+    <h3>Beyond the browser</h3>
+
+    <p>Because the safety properties are intrinsic to the bytecode rather than to a browser, Wasm became the default substrate for in-process isolation far from its origin. Edge and serverless platforms run many mutually distrusting customer functions inside a single server process, isolated as Wasm instances, to get near-zero cold-start times that a process-per-tenant model cannot match. And in a striking inversion of the original SFI motivation — untrusted plug-ins inside a trusted host — Mozilla used Wasm to sandbox <em>trusted-but-buggy</em> third-party C libraries inside Firefox: a font shaper or media decoder is compiled to Wasm and then back to native code, so that a memory-safety bug in the library is contained to its linear memory and cannot corrupt the browser. The RLBox framework by Narayan and colleagues made this retrofit practical by using the type system to force the host code to validate every value crossing the sandbox boundary, catching the integration mistakes that otherwise undermine such isolation.<sup class="cite"><a href="#ref-20" id="c20">20</a></sup></p>
+
+    <table>
+      <caption>Table 1 — Comparing the in-process isolation strategies</caption>
+      <thead>
+        <tr><th>Property</th><th>Classic SFI (Wahbe '93)</th><th>Native Client</th><th>WebAssembly</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Input</td><td>Arbitrary machine code</td><td>Arbitrary x86/ARM, validated</td><td>Purpose-built bytecode</td></tr>
+        <tr><td>Memory confinement</td><td>Address masking</td><td>Segmentation (x86-32) / masking + guards</td><td>Bounded linear memory + guards</td></tr>
+        <tr><td>Control flow</td><td>Mask indirect targets</td><td>Bundle alignment + masking</td><td>Structured CF + typed call tables</td></tr>
+        <tr><td>Code vs. data</td><td>Same space; alignment enforced</td><td>Same space; bundle-aligned</td><td><strong>Separate spaces</strong> by design</td></tr>
+        <tr><td>Verifier</td><td>Small custom checker</td><td>Static validator (RockSalt-class)</td><td>Linear-time type checker</td></tr>
+        <tr><td>Host interface</td><td>Sanctioned stubs</td><td>Trampolines / springboards</td><td>Import table / WASI</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <hr class="divider">
+
+  <!-- =================== 7. IRM =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 07 — Reference Monitors</span>
+      <h2>Inline reference monitors and policy enforcement</h2>
+    </div>
+
+    <p>Step back from the individual systems and SFI is a special case of a more general idea: the <strong>inline reference monitor (IRM)</strong>. A reference monitor, in Anderson's original sense, is a mechanism that mediates every access and can be trusted because it is always invoked, tamper-proof, and verifiable.<sup class="cite"><a href="#ref-2" id="c2b">2</a></sup> The classical realization is external — a kernel that traps every system call. An inline reference monitor instead <em>merges the monitor into the target program itself</em>, rewriting the code so that the policy checks execute inline, ahead of each regulated action, with no separate guard to bypass and no trap to pay. SFI is the IRM whose policy is precisely &ldquo;stay inside your memory regions and follow your control-flow graph.&rdquo;</p>
+
+    <h3>What policies can an IRM enforce?</h3>
+
+    <p>The theory here is Schneider's. The policies enforceable by a monitor that observes execution and can halt the program are exactly the <em>safety</em> properties — those that forbid some bad thing from ever happening, characterizable as a security automaton that reads the execution as a sequence of events and rejects on the first prohibited step.<sup class="cite"><a href="#ref-3" id="c3b">3</a></sup> Liveness properties (&ldquo;something good eventually happens&rdquo;) and information-flow properties that quantify over multiple possible executions fall outside this class and cannot, in general, be enforced by inlined runtime checks alone. This is not an academic footnote: it tells you in advance which guarantees SFI can deliver (no out-of-bounds access ever occurs; no disallowed control transfer ever occurs — both safety properties) and which it cannot (e.g., &ldquo;this module never leaks a secret through a timing side channel,&rdquo; a non-safety property no inlined check can catch).</p>
+
+    <p>Erlingsson and Schneider's SASI work demonstrated the IRM approach concretely by merging a security automaton, specified as a policy, directly into the instruction stream of the target, and reflecting on what that buys and costs.<sup class="cite"><a href="#ref-3" id="c3c">3</a></sup> The crucial move that makes inlining sound is the same one that makes SFI sound: the rewriter is not trusted, the <em>verifier</em> is. After the policy automaton is woven in, a checker confirms that the result genuinely mediates every regulated event — that there is no path to a dangerous operation that evades the inlined check — and only then is the program permitted to run.</p>
+
+    <aside class="note">
+      <span class="tag">The IRM design contract</span>
+      <p>An inline reference monitor is trustworthy only if three obligations are met, and every SFI system is an exercise in meeting them. <b>Complete mediation:</b> no path reaches a regulated operation without passing its inlined check — this is what control-flow integrity guarantees, and why CFI is foundational. <b>Tamper-proofness:</b> the untrusted code cannot rewrite the checks or the policy state at runtime — which requires the code region to be immutable and the monitor's data (shadow stacks, dedicated registers) to be out of the sandbox's reach. <b>Verifiability:</b> a small, trusted checker can confirm the first two hold. Break any one and the monitor is theater.</p>
+    </aside>
+
+    <h3>Generalizing the policy</h3>
+
+    <p>Once you see SFI as an IRM, richer policies become natural. XFI is the clearest example: it layers a configurable IRM atop the SFI substrate, enforcing not just memory and control-flow confinement but additional integrity constraints — a protected stack, restrictions on which host functions may be called and with what arguments, and fine-grained access rules on specific memory regions — all compiled inline and independently verified.<sup class="cite"><a href="#ref-10" id="c10b">10</a></sup> The general pattern is: express the policy as a safety automaton over the events you can observe at the instruction level (memory accesses, control transfers, host calls), inline the automaton's checks, and verify complete mediation. SFI's memory-and-control-flow policy is the indispensable base layer because it is what guarantees the higher-level checks cannot themselves be bypassed.</p>
+  </section>
+
+  <!-- =================== 8. LIMITATIONS =================== -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">§ 08 — Limits</span>
+      <h2>Limitations and known bypasses</h2>
+    </div>
+
+    <p>A discipline this old has a well-mapped failure surface. The bypasses fall into a few families, and understanding them is the difference between deploying SFI as real isolation and deploying it as a comforting story.</p>
+
+    <h3>1 · CFI is only as strong as its graph</h3>
+
+    <p>Coarse-grained control-flow integrity — the kind cheap enough to deploy widely — was systematically shown to be insufficient. Because static analysis cannot resolve indirect targets precisely, practical CFI lumps many call sites and many targets into large equivalence classes that share a label, and an attacker who confines their gadget chain to transfers that satisfy those coarse labels can still compute arbitrary results. Göktaş and colleagues demonstrated this directly, building working exploits that respect a coarse CFI policy yet defeat its intent.<sup class="cite"><a href="#ref-23" id="c23">23</a></sup> Davi and colleagues independently stitched together gadget chains that pass coarse-grained checks, arguing such protections are ineffective against a determined attacker.<sup class="cite"><a href="#ref-24" id="c24">24</a></sup> Most pointedly, Carlini and colleagues showed with their &ldquo;control-flow bending&rdquo; work that even <em>fully precise</em> static CFI — the strongest the model allows without a shadow stack — can be subverted: an attacker can make the program follow a path that is entirely valid in the CFG yet still performs the attacker's chosen malicious computation, because a static graph cannot capture which valid path is the <em>intended</em> one at a given moment.<sup class="cite"><a href="#ref-25" id="c25">25</a></sup> The remediation is precision plus a shadow stack for backward edges — but precision and shadow stacks cost performance and engineering, and the gap between &ldquo;CFI&rdquo; as a checkbox and CFI as a real defense is exactly this cost.</p>
+
+    <h3>2 · Confinement is not memory safety <em>within</em> the sandbox</h3>
+
+    <p>This is the most widely misunderstood limitation, and Wasm makes it vivid. SFI guarantees the untrusted module cannot escape its sandbox; it says <em>nothing</em> about whether the module corrupts itself <em>inside</em> the sandbox. Lehmann, Kinder, and Pradel showed that many classic memory-corruption vulnerabilities, which modern native toolchains have largely neutralized with stack canaries, ASLR, guard pages, and hardened allocators, are <em>fully exploitable</em> inside a WebAssembly module precisely because the protective mitigations of the native world are absent from the linear-memory model.<sup class="cite"><a href="#ref-19" id="c19c">19</a></sup> Their attack primitives let an adversary write arbitrary locations within linear memory, overwrite data the source language considered constant, and corrupt the heap via a stack overflow — and because Wasm's linear memory has no internal page permissions, a buffer overflow in the module can clobber the module's own &ldquo;read-only&rdquo; data or function-table indices, redirecting a type-compatible indirect call.<sup class="cite"><a href="#ref-19" id="c19d">19</a></sup> The sandbox holds — the host is safe — but the computation inside the sandbox can be fully hijacked, which matters enormously when the module itself processes secrets or makes security decisions. The structural irony they named is exact: everything old is new again.</p>
+
+    <h3>3 · Transient execution: the microarchitecture below the model</h3>
+
+    <p>SFI's guarantees are about the <em>architectural</em> execution the instruction set defines. Modern CPUs also execute <em>transiently</em> — speculatively, down mispredicted paths, with the wrong-path effects later squashed at the architectural level but leaving measurable traces in caches and other microarchitectural state. Spectre-class attacks weaponize exactly this gap, inducing the processor to speculatively perform accesses that the architectural semantics forbid and then exfiltrating the result through a timing side channel.<sup class="cite"><a href="#ref-21" id="c21">21</a></sup> For SFI this is devastating in principle: a sandboxed module can train the branch predictor so that the CPU <em>speculatively</em> executes past a bounds check or a CFI label check that, architecturally, would have trapped — reading host memory outside the sandbox during the speculation window and leaking it through the cache. The masking and checking instructions SFI relies on are bypassed not by defeating them but by racing ahead of them. Worse, transient execution turns the &ldquo;merely a read&rdquo; concession of read-permissive sandboxes into a full confidentiality breach. Mitigations exist but are unpleasant: serializing fences that stall speculation (with large overheads), masking that is designed to be speculation-safe, and hardware features (memory-protection keys, control-flow-enforcement instructions) repurposed to bound speculation. Narayan and colleagues' Swivel hardened WebAssembly specifically against Spectre, presenting both a software-only scheme for existing CPUs and a hardware-assisted scheme using newer processor extensions, and quantifying the uncomfortable spread between cheap-but-probabilistic mitigation and expensive-but-complete elimination.<sup class="cite"><a href="#ref-22" id="c22">22</a></sup></p>
+
+    <figure>
+      <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Speculation racing past a bounds check">
+        <style>
+          .t{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#6f6555;letter-spacing:1px;}
+          .m{font-family:"JetBrains Mono",monospace;font-size:11.5px;fill:#3b342c;}
+          .mw{font-family:"JetBrains Mono",monospace;font-size:11.5px;fill:#f3eee2;}
+        </style>
+        <text x="20" y="24" class="t">WHY SFI CHECKS DO NOT BIND SPECULATION</text>
+        <rect x="20" y="40" width="320" height="150" rx="8" fill="#ece5d4" stroke="#b9ac8f"/>
+        <text x="36" y="64" class="m" style="fill:#2f4858">ARCHITECTURAL (what the ISA says)</text>
+        <text x="36" y="92" class="m">cmp idx, bound</text>
+        <text x="36" y="112" class="m">ja  trap        ; out of range → halt</text>
+        <text x="36" y="132" class="m">load mem[idx]   ; only reached if safe</text>
+        <text x="36" y="168" class="m" style="fill:#8a1c1c">✓ guarantee holds at retirement</text>
+
+        <rect x="380" y="40" width="320" height="150" rx="8" fill="#221d18"/>
+        <text x="396" y="64" class="mw" style="fill:#e0a35a">TRANSIENT (what the core does)</text>
+        <text x="396" y="92" class="mw">predict "in range" →</text>
+        <text x="396" y="112" class="mw" style="fill:#d98a8a">load mem[idx]  speculatively!</text>
+        <text x="396" y="132" class="mw">leak via cache timing</text>
+        <text x="396" y="168" class="mw" style="fill:#9a8f76">squashed later — trace remains</text>
+      </svg>
+      <figcaption><b>The check runs; the speculation ignores it.</b> A mispredicted branch lets the load execute before the bounds check resolves. SFI binds architectural state, not the microarchitectural traces transient execution leaves behind.<sup class="cite"><a href="#ref-21" id="c21b">21</a></sup></figcaption>
+    </figure>
+
+    <h3>4 · The trusted computing base is small but not zero</h3>
+
+    <p>Every SFI system rests on a verifier, a runtime, and an instruction decoder, and a bug in any of them is a full escape. The history is littered with validator bugs — subtle errors in modeling the x86 instruction set, in handling instruction prefixes, in the corner cases of self-modifying or JIT-generated code — which is precisely the motivation for the formal-verification lineage from PittSFIeld's ACL2 proof through RockSalt's Coq-checked decoder.<sup class="cite"><a href="#ref-13" id="c13b">13</a></sup> The same concern drove work to push the trust further back: rather than verify the binary after an untrusted compiler produces it, prove the <em>compiler's</em> sandboxing pass correct once and for all, so that no separate per-binary verifier is needed — the approach Kroll, Stewart, and Appel took with portable software fault isolation built on a verified compiler.<sup class="cite"><a href="#ref-26" id="c26">26</a></sup> Even with proofs, the trust does not vanish; it relocates to the proof's assumptions, the proof checker, and the formal model's fidelity to the real silicon — which, as Spectre demonstrated, can diverge from the architecture in security-relevant ways.</p>
+
+    <h3>5 · Side channels, resource exhaustion, and the policy gap</h3>
+
+    <p>Finally, the safety-property boundary from Schneider's theory is a hard limit, not a soft one.<sup class="cite"><a href="#ref-3" id="c3d">3</a></sup> SFI's inlined checks cannot enforce confidentiality against timing or cache side channels, cannot bound a sandboxed module's CPU or memory consumption without a separate scheduling/quota mechanism, and cannot stop a module from doing perfectly legal things maliciously through whatever host interface it was granted. A sandbox that exports a powerful host call confines memory and control flow flawlessly while still permitting abuse through that call — confinement of the <em>mechanism</em> is not confinement of the <em>capability</em>. This is why mature deployments pair SFI's intra-process confinement with the very process and OS isolation it was invented to economize on: SFI for speed and fine granularity at the inner boundary, hardware and kernel isolation as the outer backstop, exactly the layered posture NaCl modeled with its two nested sandboxes.<sup class="cite"><a href="#ref-11" id="c11g">11</a></sup></p>
+
+    <h3>The standing assessment</h3>
+
+    <p>None of this makes SFI a failure; it makes it a tool with a precisely known envelope. For integrity confinement of untrusted code against an adversary who has not reached down to the microarchitecture, a well-implemented, precisely-CFI'd, verifier-backed SFI system — WebAssembly being the current high-water mark — is fast, sound within its model, and deployed at planetary scale. Its limits are real and they cluster at the edges of that model: in the imprecision of static control-flow graphs, in the absence of intra-sandbox memory safety, in the chasm between architectural and transient execution, and in the residual trust placed in a small but non-empty trusted computing base. The thirty-year arc from Wahbe's fault domains to Wasm's linear memory is, read one way, the story of shrinking that trusted computing base and tightening that control-flow graph — and read another, the story of attackers patiently finding the layer of the machine that the current model forgot to describe.</p>
+  </section>
+
+  <!-- =================== REFERENCES =================== -->
+  <section class="refs">
+    <h2>References</h2>
+    <ol class="reflist">
+      <li id="ref-1">Wahbe R, Lucco S, Anderson TE, Graham SL. Efficient software-based fault isolation. In: <cite>Proceedings of the 14th ACM Symposium on Operating Systems Principles (SOSP '93)</cite>. Asheville, NC: ACM; 1993. p. 203&ndash;16. doi:10.1145/168619.168635.</li>
+      <li id="ref-2">Anderson JP. <cite>Computer Security Technology Planning Study</cite>. ESD-TR-73-51, Vol. II. Bedford, MA: Electronic Systems Division, US Air Force; 1972.</li>
+      <li id="ref-3">Schneider FB. Enforceable security policies. <cite>ACM Transactions on Information and System Security</cite>. 2000;3(1):30&ndash;50. (See also Erlingsson &Uacute;, Schneider FB. SASI enforcement of security policies: a retrospective. In: <cite>Proceedings of the New Security Paradigms Workshop (NSPW '99)</cite>. ACM; 1999.)</li>
+      <li id="ref-4">Shacham H. The geometry of innocent flesh on the bone: return-into-libc without function calls (on the x86). In: <cite>Proceedings of the 14th ACM Conference on Computer and Communications Security (CCS '07)</cite>. ACM; 2007. p. 552&ndash;61.</li>
+      <li id="ref-5">McCamant S, Morrisett G. Evaluating SFI for a CISC architecture. In: <cite>Proceedings of the 15th USENIX Security Symposium</cite>. Vancouver, BC: USENIX Association; 2006. p. 209&ndash;24.</li>
+      <li id="ref-6">Sehr D, Muth R, Biffle C, Khimenko V, Pasko E, Schimpf K, Yee B, Chen B. Adapting software fault isolation to contemporary CPU architectures. In: <cite>Proceedings of the 19th USENIX Security Symposium</cite>. Washington, DC: USENIX Association; 2010. p. 1&ndash;12.</li>
+      <li id="ref-7">Abadi M, Budiu M, Erlingsson &Uacute;, Ligatti J. Control-flow integrity. In: <cite>Proceedings of the 12th ACM Conference on Computer and Communications Security (CCS '05)</cite>. Alexandria, VA: ACM; 2005. p. 340&ndash;53. doi:10.1145/1102120.1102165.</li>
+      <li id="ref-8">Abadi M, Budiu M, Erlingsson &Uacute;, Ligatti J. Control-flow integrity: principles, implementations, and applications. <cite>ACM Transactions on Information and System Security</cite>. 2009;13(1):Article 4. doi:10.1145/1609956.1609960.</li>
+      <li id="ref-9">Tice C, Roeder T, Collingbourne P, Checkoway S, Erlingsson &Uacute;, Lozano L, Pike G. Enforcing forward-edge control-flow integrity in GCC &amp; LLVM. In: <cite>Proceedings of the 23rd USENIX Security Symposium</cite>. San Diego, CA: USENIX Association; 2014. p. 941&ndash;55.</li>
+      <li id="ref-10">Erlingsson &Uacute;, Abadi M, Vrable M, Budiu M, Necula GC. XFI: software guards for system address spaces. In: <cite>Proceedings of the 7th USENIX Symposium on Operating Systems Design and Implementation (OSDI '06)</cite>. Seattle, WA: USENIX Association; 2006. p. 75&ndash;88.</li>
+      <li id="ref-11">Yee B, Sehr D, Dardyk G, Chen JB, Muth R, Ormandy T, Okasaka S, Narula N, Fullagar N. Native Client: a sandbox for portable, untrusted x86 native code. In: <cite>Proceedings of the 2009 30th IEEE Symposium on Security and Privacy</cite>. Oakland, CA: IEEE; 2009. p. 79&ndash;93.</li>
+      <li id="ref-12">Zeng B, Tan G, Morrisett G. Combining control-flow integrity and static analysis for efficient and validated data sandboxing. In: <cite>Proceedings of the 18th ACM Conference on Computer and Communications Security (CCS '11)</cite>. ACM; 2011. p. 29&ndash;40.</li>
+      <li id="ref-13">Morrisett G, Tan G, Tassarotti J, Tristan JB, Gan E. RockSalt: better, faster, stronger SFI for the x86. In: <cite>Proceedings of the 33rd ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '12)</cite>. Beijing: ACM; 2012. p. 395&ndash;404.</li>
+      <li id="ref-14">Ansel J, Marchenko P, Erlingsson &Uacute;, Taylor E, Chen B, Schuff DL, Sehr D, Biffle CL, Yee B. Language-independent sandboxing of just-in-time compilation and self-modifying code. In: <cite>Proceedings of the 32nd ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '11)</cite>. ACM; 2011. p. 355&ndash;66.</li>
+      <li id="ref-15">Nelson B. Goodbye PNaCl, hello WebAssembly! <cite>The Chromium Blog</cite> [Internet]. 2017 May 30 [cited 2026 May 28]. Available from: https://blog.chromium.org/2017/05/goodbye-pnacl-hello-webassembly.html</li>
+      <li id="ref-16">Haas A, Rossberg A, Schuff DL, Titzer BL, Holman M, Gohman D, Wagner L, Zakai A, Bastien JF. Bringing the web up to speed with WebAssembly. In: <cite>Proceedings of the 38th ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '17)</cite>. Barcelona: ACM; 2017. p. 185&ndash;200. doi:10.1145/3062341.3062363.</li>
+      <li id="ref-17">Rossberg A, Titzer BL, Haas A, Schuff DL, Gohman D, Wagner L, Zakai A, Bastien JF, Holman M. Bringing the web up to speed with WebAssembly. <cite>Communications of the ACM</cite>. 2018;61(12):107&ndash;15.</li>
+      <li id="ref-18">World Wide Web Consortium. <cite>WebAssembly Core Specification</cite>. W3C Recommendation [Internet]. 2019 Dec 5 [cited 2026 May 28]. Available from: https://www.w3.org/TR/wasm-core-1/</li>
+      <li id="ref-19">Lehmann D, Kinder J, Pradel M. Everything old is new again: binary security of WebAssembly. In: <cite>Proceedings of the 29th USENIX Security Symposium</cite>. USENIX Association; 2020. p. 217&ndash;34.</li>
+      <li id="ref-20">Narayan S, Disselkoen C, Garfinkel T, Froyd N, Rahm E, Lerner S, Shacham H, Stefan D. Retrofitting fine grain isolation in the Firefox renderer. In: <cite>Proceedings of the 29th USENIX Security Symposium</cite>. USENIX Association; 2020. p. 699&ndash;716.</li>
+      <li id="ref-21">Kocher P, Horn J, Fogh A, Genkin D, Gruss D, Haas W, Hamburg M, Lipp M, Mangard S, Prescher T, Schwarz M, Yarom Y. Spectre attacks: exploiting speculative execution. In: <cite>Proceedings of the 2019 IEEE Symposium on Security and Privacy</cite>. San Francisco, CA: IEEE; 2019. p. 1&ndash;19.</li>
+      <li id="ref-22">Narayan S, Disselkoen C, Moghimi D, Cauligi S, Johnson E, Gang Z, Vahldiek-Oberwagner A, Sahita R, Shacham H, Tullsen D, Stefan D. Swivel: hardening WebAssembly against Spectre. In: <cite>Proceedings of the 30th USENIX Security Symposium</cite>. USENIX Association; 2021. p. 1433&ndash;50.</li>
+      <li id="ref-23">G&ouml;kta&scaron; E, Athanasopoulos E, Bos H, Portokalidis G. Out of control: overcoming control-flow integrity. In: <cite>Proceedings of the 2014 IEEE Symposium on Security and Privacy</cite>. San Jose, CA: IEEE; 2014. p. 575&ndash;89.</li>
+      <li id="ref-24">Davi L, Sadeghi AR, Lehmann D, Monrose F. Stitching the gadgets: on the ineffectiveness of coarse-grained control-flow integrity protection. In: <cite>Proceedings of the 23rd USENIX Security Symposium</cite>. San Diego, CA: USENIX Association; 2014. p. 401&ndash;16.</li>
+      <li id="ref-25">Carlini N, Barresi A, Payer M, Wagner D, Gross TR. Control-flow bending: on the effectiveness of control-flow integrity. In: <cite>Proceedings of the 24th USENIX Security Symposium</cite>. Washington, DC: USENIX Association; 2015. p. 161&ndash;76.</li>
+      <li id="ref-26">Kroll JA, Stewart G, Appel AW. Portable software fault isolation. In: <cite>Proceedings of the 2014 IEEE 27th Computer Security Foundations Symposium (CSF)</cite>. Vienna: IEEE; 2014. p. 18&ndash;32.</li>
+      <li id="ref-27">Ford B, Cox R. Vx32: lightweight user-level sandboxing on the x86. In: <cite>Proceedings of the 2008 USENIX Annual Technical Conference</cite>. Boston, MA: USENIX Association; 2008. p. 293&ndash;306.</li>
+    </ol>
+  </section>
+
+</main>
+</div>
+
+<footer class="colophon">
+  THE SANDBOX IN THE SAME ADDRESS SPACE &nbsp;·&nbsp; SOFTWARE FAULT ISOLATION<br>
+  An engineering deep-dive &nbsp;·&nbsp; 27 references, Vancouver style &nbsp;·&nbsp; set in Fraunces, Newsreader &amp; JetBrains Mono<br>
+  Verify before you trust &nbsp;·&nbsp; the verifier, not the rewriter, has the last word.
+</footer>
+
+</body>
+</html>
