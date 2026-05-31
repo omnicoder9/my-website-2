@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Performance in Angular: Deferrable Views, Image Optimisation, Zone Pollution, Slow Computations & Hydration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,400&family=Barlow+Condensed:wght@400;600;800&display=swap" rel="stylesheet" />
+<style>
+  /* ── Reset & base ─────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0d0f14;
+    --surface:     #141720;
+    --surface2:    #1b1f2c;
+    --border:      #252a3a;
+    --text:        #dde2ee;
+    --muted:       #7a82a0;
+    --accent:      #e05f3b;
+    --accent2:     #5b8af0;
+    --accent3:     #3dbf8a;
+    --accent4:     #c97cf0;
+    --highlight:   #f5c842;
+    --code-bg:     #111420;
+    --code-border: #2a3050;
+
+    --font-serif:   'Source Serif 4', Georgia, serif;
+    --font-display: 'Playfair Display', serif;
+    --font-cond:    'Barlow Condensed', sans-serif;
+    --font-mono:    'IBM Plex Mono', 'Fira Code', monospace;
+
+    --max-w: 780px;
+    --gutter: 2.5rem;
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-serif);
+    font-size: clamp(1rem, 1.05vw, 1.125rem);
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Scrollbar ────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Masthead ─────────────────────────────────────── */
+  .masthead {
+    background: linear-gradient(160deg, #0d1021 0%, #111627 50%, #0d0f14 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 4rem var(--gutter) 3.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .masthead::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 80% 30%, rgba(91,138,240,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 60% at 15% 80%, rgba(224,95,59,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .masthead-inner { max-width: 900px; margin: 0 auto; position: relative; }
+
+  .kicker {
+    font-family: var(--font-cond);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .kicker::before {
+    content: '';
+    display: block;
+    width: 2rem;
+    height: 2px;
+    background: var(--accent);
+  }
+
+  h1.headline {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3.6rem);
+    font-weight: 900;
+    line-height: 1.1;
+    color: #fff;
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.01em;
+  }
+  h1.headline em {
+    font-style: italic;
+    color: var(--accent2);
+  }
+
+  .deck {
+    font-family: var(--font-serif);
+    font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+    color: var(--muted);
+    font-weight: 300;
+    max-width: 660px;
+    line-height: 1.65;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+    font-family: var(--font-cond);
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .meta-tag {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 0.25rem 0.6rem;
+    color: var(--text);
+  }
+
+  /* ── Layout ───────────────────────────────────────── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr min(var(--max-w), 100%) 1fr;
+    padding: 0 var(--gutter);
+  }
+  .layout > * { grid-column: 2; }
+
+  /* ── Sidebar / ToC ────────────────────────────────── */
+  .toc-wrap {
+    grid-column: 1;
+    padding-right: 1.5rem;
+    padding-top: 3rem;
+  }
+  @media (max-width: 1100px) { .toc-wrap { display: none; } }
+
+  .toc {
+    position: sticky;
+    top: 2rem;
+    width: 200px;
+    border-left: 2px solid var(--border);
+    padding-left: 1rem;
+  }
+  .toc-heading {
+    font-family: var(--font-cond);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+  }
+  .toc a {
+    display: block;
+    font-family: var(--font-cond);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.3rem 0;
+    line-height: 1.3;
+    transition: color 0.2s;
+    border-bottom: none;
+  }
+  .toc a:hover { color: var(--accent2); }
+  .toc a.sub {
+    padding-left: 0.75rem;
+    font-weight: 400;
+    font-size: 0.76rem;
+  }
+
+  /* ── Content ──────────────────────────────────────── */
+  .content {
+    padding-top: 3.5rem;
+    padding-bottom: 6rem;
+  }
+
+  /* Typography */
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
+    font-weight: 700;
+    color: #fff;
+    margin-top: 4rem;
+    margin-bottom: 1.25rem;
+    line-height: 1.2;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  h2:first-of-type { margin-top: 0; border-top: none; padding-top: 0; }
+
+  h3 {
+    font-family: var(--font-cond);
+    font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  h4 {
+    font-family: var(--font-cond);
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent3);
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  p { margin-bottom: 1.4rem; }
+
+  a {
+    color: var(--accent2);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  a:hover { color: var(--highlight); }
+
+  /* Drop cap */
+  .drop-cap::first-letter {
+    font-family: var(--font-display);
+    font-size: 4.5em;
+    font-weight: 900;
+    float: left;
+    line-height: 0.78;
+    margin-right: 0.12em;
+    margin-top: 0.06em;
+    color: var(--accent);
+  }
+
+  /* ── Code blocks ──────────────────────────────────── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 4px;
+    padding: 1.5rem;
+    overflow-x: auto;
+    margin: 1.75rem 0;
+    position: relative;
+  }
+  pre .lang-label {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    font-family: var(--font-cond);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    line-height: 1.7;
+    color: #c9d1e8;
+  }
+  p code, li code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.1em 0.4em;
+    font-size: 0.85em;
+    color: var(--highlight);
+  }
+
+  /* Syntax highlight tokens */
+  .kw  { color: #c97cf0; }
+  .fn  { color: #5b8af0; }
+  .str { color: #3dbf8a; }
+  .cmt { color: #4a5270; font-style: italic; }
+  .dec { color: #e05f3b; }
+  .num { color: #f5c842; }
+  .typ { color: #7ddbf0; }
+
+  /* ── Stat cards ───────────────────────────────────── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+  }
+  .stat-card .num {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 0.4rem;
+  }
+  .stat-card .label {
+    font-family: var(--font-cond);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ── Pull quote ───────────────────────────────────── */
+  .pull-quote {
+    border-left: 4px solid var(--accent);
+    margin: 2.5rem 0;
+    padding: 1.25rem 1.5rem;
+    background: var(--surface);
+    border-radius: 0 4px 4px 0;
+  }
+  .pull-quote p {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-style: italic;
+    color: #fff;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .pull-quote cite {
+    display: block;
+    font-family: var(--font-cond);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.75rem;
+    font-style: normal;
+  }
+
+  /* ── Info boxes ───────────────────────────────────── */
+  .info-box {
+    border: 1px solid var(--accent2);
+    border-left: 4px solid var(--accent2);
+    background: rgba(91,138,240,0.06);
+    border-radius: 0 4px 4px 0;
+    padding: 1.25rem 1.5rem;
+    margin: 2rem 0;
+  }
+  .info-box.warn {
+    border-color: var(--highlight);
+    border-left-color: var(--highlight);
+    background: rgba(245,200,66,0.05);
+  }
+  .info-box.success {
+    border-color: var(--accent3);
+    border-left-color: var(--accent3);
+    background: rgba(61,191,138,0.05);
+  }
+  .info-box .box-label {
+    font-family: var(--font-cond);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    color: var(--accent2);
+  }
+  .info-box.warn .box-label { color: var(--highlight); }
+  .info-box.success .box-label { color: var(--accent3); }
+  .info-box p { margin: 0; font-size: 0.95rem; }
+
+  /* ── Table ────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; margin: 2rem 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th {
+    background: var(--surface2);
+    color: var(--text);
+    font-family: var(--font-cond);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface); }
+  td code { font-size: 0.8em; }
+
+  /* ── SVG diagrams ─────────────────────────────────── */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+    text-align: center;
+    overflow-x: auto;
+  }
+  .diagram svg { max-width: 100%; height: auto; }
+  .diagram-caption {
+    font-family: var(--font-cond);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  /* ── Section labels ───────────────────────────────── */
+  .section-label {
+    display: inline-block;
+    font-family: var(--font-cond);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--accent2);
+    padding: 0.2rem 0.6rem;
+    border-radius: 2px;
+    margin-bottom: 0.6rem;
+  }
+
+  /* ── List styles ──────────────────────────────────── */
+  ul, ol {
+    margin: 1rem 0 1.4rem 1.5rem;
+  }
+  li { margin-bottom: 0.5rem; line-height: 1.7; }
+  li::marker { color: var(--accent); }
+
+  /* ── Divider ──────────────────────────────────────── */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0;
+  }
+
+  /* ── References ───────────────────────────────────── */
+  .references {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 2px solid var(--border);
+  }
+  .references h2 {
+    font-size: 1.1rem;
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+    font-family: var(--font-cond);
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .ref-list { list-style: none; margin: 0; padding: 0; }
+  .ref-list li {
+    font-size: 0.82rem;
+    color: var(--muted);
+    padding: 0.5rem 0 0.5rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    line-height: 1.55;
+  }
+  .ref-list li:last-child { border-bottom: none; }
+  .ref-list .ref-num {
+    position: absolute;
+    left: 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  sup { font-size: 0.7em; vertical-align: super; }
+  sup a { color: var(--accent); text-decoration: none; font-family: var(--font-mono); }
+  sup a:hover { color: var(--highlight); }
+
+  /* ── Responsive ───────────────────────────────────── */
+  @media (max-width: 700px) {
+    :root { --gutter: 1.25rem; }
+    .masthead { padding: 2.5rem var(--gutter) 2rem; }
+    h2 { margin-top: 3rem; }
+  }
+</style>
+</head>
+<body class="blog-article-page">
+<div id="site-header"></div>
+
+<!-- ═══════════════ MASTHEAD ═══════════════ -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="kicker">Angular Performance Engineering</div>
+    <h1 class="headline">
+      Performance in Angular:<br/>
+      <em>Strategies for the Modern Web</em>
+    </h1>
+    <p class="deck">
+      A deep technical examination of Angular's five principal performance levers—
+      Deferrable Views, image optimisation with <code style="background:rgba(255,255,255,0.05);padding:0.15em 0.4em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em;">NgOptimizedImage</code>,
+      Zone pollution mitigation, slow-computation profiling, and full-stack
+      hydration—with production-grade code, architectural diagrams, and cited benchmarks.
+    </p>
+    <div class="meta">
+      <span class="meta-tag">Angular 17–19</span>
+      <span class="meta-tag">TypeScript</span>
+      <span class="meta-tag">Core Web Vitals</span>
+      <span>&#10003; ~30 min read</span>
+      <span>&#10003; Vancouver citations</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ MAIN LAYOUT ═══════════════ -->
+<div class="layout">
+
+  <!-- Sidebar ToC -->
+  <aside class="toc-wrap">
+    <nav class="toc">
+      <div class="toc-heading">Contents</div>
+      <a href="#intro">Introduction</a>
+      <a href="#defer">Deferrable Views</a>
+      <a class="sub" href="#defer-blocks">Block Anatomy</a>
+      <a class="sub" href="#defer-triggers">Triggers</a>
+      <a class="sub" href="#defer-prefetch">Prefetching</a>
+      <a href="#images">Image Optimisation</a>
+      <a class="sub" href="#img-setup">Setup</a>
+      <a class="sub" href="#img-lcp">LCP Priority</a>
+      <a class="sub" href="#img-loaders">Loaders &amp; CDNs</a>
+      <a href="#zone">Zone Pollution</a>
+      <a class="sub" href="#zone-what">What is Zone.js?</a>
+      <a class="sub" href="#zone-causes">Common Causes</a>
+      <a class="sub" href="#zone-fix">Mitigation</a>
+      <a class="sub" href="#zone-less">Zoneless Mode</a>
+      <a href="#slow">Slow Computations</a>
+      <a class="sub" href="#slow-profile">Profiling</a>
+      <a class="sub" href="#slow-pipes">Pure Pipes</a>
+      <a class="sub" href="#slow-memo">Memoisation</a>
+      <a href="#hydration">Hydration</a>
+      <a class="sub" href="#hydration-how">Enabling</a>
+      <a class="sub" href="#hydration-incr">Incremental</a>
+      <a href="#signals">Signals &amp; Zoneless</a>
+      <a href="#references">References</a>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <article class="content">
+
+    <!-- ══════════════ 0. INTRODUCTION ══════════════ -->
+    <section id="intro">
+      <div class="section-label">Introduction</div>
+      <h2>The Performance Imperative</h2>
+
+      <p class="drop-cap">
+        Angular's reputation across the front-end ecosystem has undergone a quiet but dramatic
+        rehabilitation. Once dismissed as the "heavyweight" option favoured only by enterprise
+        teams entrenched in opinionated architecture, the framework has, through versions 17 to
+        19, delivered a series of performance primitives that rival—and in several measurable
+        dimensions, surpass—any competing toolchain. <sup><a href="#ref1">[1]</a></sup>
+      </p>
+      <p>
+        Performance is not a single axis. A web application can be <em>fast to first byte</em>
+        (TTFB) yet slow to become interactive; it can render blazingly quickly on a desktop
+        while crawling on a mid-range Android handset; it can score green on Lighthouse while
+        delivering a janky scroll experience at 30 fps. Optimising Angular therefore demands
+        reasoning about multiple distinct problem spaces simultaneously: bundle size and
+        code-splitting strategy; image delivery and layout stability; change-detection frequency
+        and computational cost; and the architecture of server-to-client HTML transfer.
+      </p>
+      <p>
+        This article examines five of the most consequential mechanisms Angular exposes for
+        performance engineering. Each section combines conceptual foundations with production
+        code and, where available, empirical benchmarks from the official documentation and
+        third-party analysis. The reader is assumed to be fluent in TypeScript and comfortable
+        with Angular's component model, dependency injection, and reactive programming via RxJS
+        or Signals.
+      </p>
+
+      <div class="stat-row">
+        <div class="stat-card">
+          <span class="num">90%</span>
+          <div class="label">Developer satisfaction with Angular in 2024 survey <sup><a href="#ref1">[1]</a></sup></div>
+        </div>
+        <div class="stat-card">
+          <span class="num">2.5s</span>
+          <div class="label">Target LCP for good Core Web Vitals score</div>
+        </div>
+        <div class="stat-card">
+          <span class="num">0</span>
+          <div class="label">DOM nodes re-created during full hydration</div>
+        </div>
+        <div class="stat-card">
+          <span class="num">3</span>
+          <div class="label">Change-detection lifecycle hooks fired per cycle</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 1. DEFERRABLE VIEWS ══════════════ -->
+    <section id="defer">
+      <div class="section-label">Section 01</div>
+      <h2>Deferrable Views</h2>
+
+      <p>
+        Introduced as a stable feature in Angular 17 (and becoming the most-praised release
+        highlight in the 2024 developer survey <sup><a href="#ref1">[1]</a></sup>), deferrable views
+        allow a component template to declare that certain subtrees—and their full dependency
+        graphs, including directives, pipes, and CSS—should be loaded <em>lazily</em>, on
+        demand, rather than as part of the initial bundle. This is fundamentally different from
+        the older route-level lazy loading: it operates at the <em>template level</em>, giving
+        developers surgical control over exactly which rendering work happens at which moment.
+        <sup><a href="#ref2">[2]</a></sup>
+      </p>
+
+      <div class="pull-quote">
+        <p>
+          "Unlike traditional lazy loading that works at the route level, deferrable views let
+          you defer the loading of specific components, directives, or template sections until
+          certain conditions are met."
+        </p>
+        <cite>— TutsCoder Angular Guide, 2025 <sup><a href="#ref5">[5]</a></sup></cite>
+      </div>
+
+      <p>
+        The practical consequence is a measurable reduction in the initial JavaScript payload
+        delivered to the browser. Deferring heavy components—those that bundle large third-party
+        packages such as charting or rich-text-editing libraries—until they are needed can
+        dramatically improve Largest Contentful Paint (LCP) and Time to First Byte (TTFB).
+        <sup><a href="#ref3">[3]</a></sup> Deferring components that are below the fold also
+        eliminates Cumulative Layout Shift (CLS) contributions from off-screen content rendering
+        before the layout has settled. <sup><a href="#ref4">[4]</a></sup>
+      </p>
+
+      <h3 id="defer-blocks">Anatomy of the <code>@defer</code> Block</h3>
+      <p>
+        A deferrable view is declared using the <code>@defer</code> template block. Alongside it,
+        Angular provides three companion blocks that manage the states of the deferred content's
+        lifecycle: <code>@placeholder</code>, <code>@loading</code>, and <code>@error</code>.
+        <sup><a href="#ref6">[6]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">HTML (Angular Template)</span><code><span class="cmt">&lt;!-- dashboard.component.html --&gt;</span>
+
+<span class="kw">@defer</span> (on viewport) {
+  <span class="cmt">&lt;!-- Lazily loaded: heavy chart component and all its deps --&gt;</span>
+  &lt;<span class="typ">app-analytics-chart</span> [data]="analyticsData" /&gt;
+  &lt;<span class="typ">app-data-grid</span>       [rows]="gridRows"     /&gt;
+}
+<span class="kw">@placeholder</span> (minimum 200ms) {
+  <span class="cmt">&lt;!-- Lightweight placeholder shown before deferred content triggers --&gt;</span>
+  &lt;<span class="typ">div</span> class="chart-skeleton"&gt;&lt;/<span class="typ">div</span>&gt;
+}
+<span class="kw">@loading</span> (minimum 300ms; after 150ms) {
+  <span class="cmt">&lt;!-- Shown during the network fetch --&gt;</span>
+  &lt;<span class="typ">app-spinner</span> size="md" /&gt;
+}
+<span class="kw">@error</span> {
+  &lt;<span class="typ">p</span> class="error-msg"&gt;Failed to load analytics dashboard.&lt;/<span class="typ">p</span>&gt;
+}</code></pre>
+
+      <p>
+        A critical implementation detail: always provide a <code>@placeholder</code>. Without it,
+        there is no content in the DOM before the defer trigger fires, which means the browser
+        cannot reserve the requisite layout space. This results in a CLS contribution as the
+        component materialises. <sup><a href="#ref4">[4]</a></sup> The
+        <code>minimum</code> parameter on <code>@placeholder</code> prevents a flash when deferred
+        content loads faster than the human eye can resolve.
+      </p>
+
+      <div class="info-box warn">
+        <div class="box-label">⚠ Avoid Cascading Loads</div>
+        <p>
+          Nesting <code>@defer</code> blocks creates cascading asynchronous loads where each
+          resolved block triggers the next. This produces a "waterfall" of network requests,
+          compounding latency. Prefer shallow defer hierarchies and batch related heavy
+          components within a single block. <sup><a href="#ref4">[4]</a></sup>
+        </p>
+      </div>
+
+      <h3 id="defer-triggers">Trigger Catalogue</h3>
+      <p>
+        The <code>on</code> keyword accepts a set of built-in triggers that control exactly when
+        the deferred block begins fetching and rendering its content. A single
+        <code>@defer</code> block may combine a <code>when</code> condition (a boolean expression
+        evaluated reactively) with an <code>on</code> trigger. <sup><a href="#ref6">[6]</a></sup>
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Trigger</th>
+              <th>Description</th>
+              <th>Typical Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>on viewport</code></td>
+              <td>Fires when the placeholder enters the browser viewport via IntersectionObserver.</td>
+              <td>Below-the-fold widgets, infinite scroll items, off-screen panels.</td>
+            </tr>
+            <tr>
+              <td><code>on interaction</code></td>
+              <td>Fires on first user interaction with the placeholder (click or keydown).</td>
+              <td>Dialogs, dropdowns, context menus, rich-text editors.</td>
+            </tr>
+            <tr>
+              <td><code>on hover</code></td>
+              <td>Fires when the pointer moves over the placeholder element.</td>
+              <td>Tooltip-triggered heavy components, preview panes.</td>
+            </tr>
+            <tr>
+              <td><code>on idle</code></td>
+              <td>Uses <code>requestIdleCallback</code> to load when the browser is not busy.</td>
+              <td>Low-priority analytics panels, background data fetching.</td>
+            </tr>
+            <tr>
+              <td><code>on timer(n)</code></td>
+              <td>Fires after a fixed millisecond delay.</td>
+              <td>Staggered onboarding flows, delayed promotional content.</td>
+            </tr>
+            <tr>
+              <td><code>when &lt;expr&gt;</code></td>
+              <td>Fires when a reactive boolean expression turns <code>true</code>.</td>
+              <td>Feature-flag gating, permission-based feature panels.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <pre><span class="lang-label">HTML (Angular Template)</span><code><span class="cmt">&lt;!-- Using 'when' with a signal for permission-gated content --&gt;</span>
+<span class="kw">@defer</span> (<span class="kw">when</span> isAdmin(); prefetch <span class="kw">when</span> isNearAdminPanel()) {
+  &lt;<span class="typ">app-admin-console</span> /&gt;
+}
+<span class="kw">@placeholder</span> {
+  &lt;<span class="typ">div</span> class="admin-placeholder"&gt;Admin tools require elevated access.&lt;/<span class="typ">div</span>&gt;
+}
+
+<span class="cmt">&lt;!-- Combining triggers: load on idle but also on explicit interaction --&gt;</span>
+<span class="kw">@defer</span> (on idle; on interaction) {
+  &lt;<span class="typ">app-recommendation-engine</span> /&gt;
+}
+<span class="kw">@placeholder</span> {
+  &lt;<span class="typ">button</span> class="btn-secondary"&gt;Show Recommendations&lt;/<span class="typ">button</span>&gt;
+}</code></pre>
+
+      <div class="info-box">
+        <div class="box-label">ℹ Duplicate Triggers</div>
+        <p>
+          Angular prohibits duplicate triggers of the same type within a single
+          <code>@defer</code> block. Combining two <code>on viewport</code> triggers, for
+          example, will produce a compile-time error. Combine different trigger types
+          to achieve additive conditions. <sup><a href="#ref6">[6]</a></sup>
+        </p>
+      </div>
+
+      <h3 id="defer-prefetch">Prefetch Strategies</h3>
+      <p>
+        Beyond controlling <em>when</em> a block renders, Angular's defer API separates the
+        concern of <em>when</em> to prefetch (download the JS bundle) from when to render. This
+        allows teams to implement sophisticated strategies such as downloading the heavy bundle
+        during browser idle time while only rendering once the user actually scrolls into view:
+      </p>
+
+      <pre><span class="lang-label">TypeScript + HTML</span><code><span class="cmt">// statistics.component.ts</span>
+<span class="dec">@Component</span>({
+  selector: <span class="str">'app-statistics'</span>,
+  template: <span class="str">`
+    @defer (on viewport; prefetch on idle) {
+      &lt;app-complex-chart [dataset]="chartData" /&gt;
+    }
+    @placeholder {
+      &lt;div class="chart-area-placeholder"&gt;&lt;/div&gt;
+    }
+  `</span>,
+})
+<span class="kw">export class</span> <span class="typ">StatisticsComponent</span> {
+  <span class="kw">readonly</span> chartData = <span class="fn">input</span>&lt;<span class="typ">ChartDataset[]</span>&gt;();
+}</code></pre>
+
+      <p>
+        In this pattern, the JavaScript for <code>&lt;app-complex-chart&gt;</code> is fetched
+        as soon as the browser reports an idle period—meaning it is likely already in the cache
+        before the user has scrolled. Rendering is still deferred to the viewport intersection
+        event, preserving LCP hygiene. This is arguably the most powerful two-phrase cadence
+        in Angular's performance toolkit. <sup><a href="#ref7">[7]</a></sup>
+      </p>
+
+      <!-- Diagram: Defer lifecycle -->
+      <div class="diagram">
+        <svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Mono', monospace">
+          <!-- Background -->
+          <rect width="680" height="200" fill="#141720" rx="4"/>
+          <!-- Timeline rail -->
+          <line x1="40" y1="100" x2="640" y2="100" stroke="#252a3a" stroke-width="2"/>
+          <!-- Phases -->
+          <!-- Placeholder -->
+          <rect x="40" y="76" width="140" height="48" fill="#1b1f2c" rx="3" stroke="#252a3a"/>
+          <text x="110" y="97" fill="#7a82a0" font-size="9" text-anchor="middle" font-weight="600">@placeholder</text>
+          <text x="110" y="111" fill="#4a5270" font-size="8" text-anchor="middle">Lightweight UI</text>
+          <!-- Arrow 1 -->
+          <line x1="180" y1="100" x2="210" y2="100" stroke="#e05f3b" stroke-width="2"/>
+          <polygon points="210,95 220,100 210,105" fill="#e05f3b"/>
+          <!-- Trigger label -->
+          <text x="194" y="90" fill="#e05f3b" font-size="8" text-anchor="middle">Trigger</text>
+          <!-- Loading -->
+          <rect x="220" y="76" width="130" height="48" fill="#1b1f2c" rx="3" stroke="#252a3a"/>
+          <text x="285" y="97" fill="#5b8af0" font-size="9" text-anchor="middle" font-weight="600">@loading</text>
+          <text x="285" y="111" fill="#4a5270" font-size="8" text-anchor="middle">Network fetch</text>
+          <!-- Arrow 2 -->
+          <line x1="350" y1="100" x2="380" y2="100" stroke="#3dbf8a" stroke-width="2"/>
+          <polygon points="380,95 390,100 380,105" fill="#3dbf8a"/>
+          <text x="364" y="90" fill="#3dbf8a" font-size="8" text-anchor="middle">Resolved</text>
+          <!-- Main content -->
+          <rect x="390" y="76" width="130" height="48" fill="#1b1f2c" rx="3" stroke="#3dbf8a"/>
+          <text x="455" y="97" fill="#3dbf8a" font-size="9" text-anchor="middle" font-weight="600">@defer content</text>
+          <text x="455" y="111" fill="#4a5270" font-size="8" text-anchor="middle">Lazy component</text>
+          <!-- Error path -->
+          <line x1="285" y1="124" x2="285" y2="155" stroke="#e05f3b" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <rect x="210" y="155" width="150" height="32" fill="#1b1f2c" rx="3" stroke="#e05f3b" stroke-opacity="0.5"/>
+          <text x="285" y="176" fill="#e05f3b" font-size="9" text-anchor="middle" font-weight="600">@error</text>
+          <!-- Labels -->
+          <text x="540" y="170" fill="#4a5270" font-size="8">Prefetch: separate</text>
+          <text x="540" y="182" fill="#4a5270" font-size="8">from render trigger</text>
+          <!-- Prefetch bar -->
+          <rect x="530" y="70" width="100" height="16" fill="rgba(91,138,240,0.2)" rx="2" stroke="#5b8af0" stroke-opacity="0.4"/>
+          <text x="580" y="82" fill="#5b8af0" font-size="8" text-anchor="middle">prefetch on idle</text>
+        </svg>
+        <div class="diagram-caption">Figure 1. The @defer block lifecycle: from placeholder through loading to resolved content, with the separate prefetch channel</div>
+      </div>
+
+      <h3>The <code>@for</code> + <code>@defer</code> Interaction</h3>
+      <p>
+        A subtle architectural decision arises when deferring components within loops. Consider
+        the two placements:
+      </p>
+
+      <pre><span class="lang-label">HTML (Angular Template)</span><code><span class="cmt">&lt;!-- Option A: @defer wraps @for
+     Creates ONE deferrable view managing N component instances.
+     Lower overhead—preferred when components are homogeneous. --&gt;</span>
+<span class="kw">@defer</span> (on viewport) {
+  <span class="kw">@for</span> (item <span class="kw">of</span> items; track item.id) {
+    &lt;<span class="typ">app-feed-card</span> [data]="item" /&gt;
+  }
+}
+<span class="kw">@placeholder</span> { &lt;<span class="typ">app-feed-skeleton</span> /&gt; }
+
+<span class="cmt">&lt;!-- Option B: @defer inside @for
+     Creates N independent deferrable views, each with its own trigger.
+     Use when each iteration has a distinct heavy dependency. --&gt;</span>
+<span class="kw">@for</span> (item <span class="kw">of</span> items; track item.id) {
+  <span class="kw">@defer</span> (on interaction) {
+    &lt;<span class="typ">app-rich-preview</span> [id]="item.id" /&gt;
+  }
+  <span class="kw">@placeholder</span> { &lt;<span class="typ">app-card-summary</span> [item]="item" /&gt; }
+}</code></pre>
+
+      <p>
+        Angular must manage a separate embedded view context for every <code>@defer</code>
+        block in the template. Placing <code>@defer</code> inside <code>@for</code> for a list
+        of 500 items creates 500 deferrable view contexts with independent IntersectionObserver
+        instances. The approach is only warranted when each row genuinely needs a distinct
+        trigger or distinct error handling. <sup><a href="#ref6">[6]</a></sup>
+      </p>
+    </section>
+
+    <!-- ══════════════ 2. IMAGE OPTIMISATION ══════════════ -->
+    <section id="images">
+      <div class="section-label">Section 02</div>
+      <h2>Image Optimisation with <code>NgOptimizedImage</code></h2>
+
+      <p>
+        Images are, statistically, one of the largest contributors to poor Core Web Vitals
+        scores across the web. The LCP element—the largest visible content in the initial
+        viewport—is a hero image in the majority of pages. Misconfiguring a single hero
+        image can single-handedly push a page into the "Needs Improvement" or "Poor" LCP
+        band. <sup><a href="#ref8">[8]</a></sup>
+      </p>
+      <p>
+        Angular's answer is the <code>NgOptimizedImage</code> directive, developed in
+        partnership with Google's Chrome Aurora team. First released as stable in Angular 15
+        (backported to 13.4.0 and 14.3.0), it packages the most impactful image loading
+        best practices into a declarative API that is little more complex than writing a
+        standard <code>&lt;img&gt;</code> element. <sup><a href="#ref9">[9]</a></sup>
+      </p>
+
+      <h3 id="img-setup">Setup and Activation</h3>
+      <p>
+        <code>NgOptimizedImage</code> is exported from <code>@angular/common</code>. In a
+        standalone component, it is added directly to the <code>imports</code> array. In an
+        NgModule application, it is added to the module's <code>imports</code>. The directive
+        is activated by replacing the <code>src</code> attribute with <code>ngSrc</code>.
+        <sup><a href="#ref10">[10]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Standalone Component</span><code><span class="kw">import</span> { <span class="typ">Component</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+<span class="kw">import</span> { <span class="typ">NgOptimizedImage</span> } <span class="kw">from</span> <span class="str">'@angular/common'</span>;
+
+<span class="dec">@Component</span>({
+  selector: <span class="str">'app-product-card'</span>,
+  standalone: <span class="kw">true</span>,
+  imports: [<span class="typ">NgOptimizedImage</span>],
+  template: <span class="str">`
+    &lt;!-- LCP hero image: marked priority --&gt;
+    &lt;img
+      ngSrc="https://cdn.example.com/hero.jpg"
+      width="1200"
+      height="630"
+      priority
+      alt="Product hero image"
+    /&gt;
+
+    &lt;!-- Non-priority image: lazy-loaded by default --&gt;
+    &lt;img
+      ngSrc="https://cdn.example.com/thumbnail.jpg"
+      width="400"
+      height="300"
+      alt="Product thumbnail"
+    /&gt;
+  `</span>,
+})
+<span class="kw">export class</span> <span class="typ">ProductCardComponent</span> {}</code></pre>
+
+      <h3 id="img-lcp">LCP Prioritisation</h3>
+      <p>
+        Marking an image as <code>priority</code> triggers several automatic behaviours that
+        together minimise LCP: <sup><a href="#ref9">[9]</a></sup>
+      </p>
+      <ul>
+        <li>Sets <code>fetchpriority="high"</code> on the <code>&lt;img&gt;</code> element, instructing the browser's preload scanner to fetch the resource immediately.</li>
+        <li>Overrides the default lazy-loading behaviour by setting <code>loading="eager"</code>.</li>
+        <li>Generates a <code>&lt;link rel="preconnect"&gt;</code> hint to the image origin, reducing DNS and TCP handshake latency before the fetch begins.</li>
+        <li>In development mode, warns if the marked image is <em>not</em> actually the LCP element, preventing misclassification.</li>
+      </ul>
+      <p>
+        Non-priority images receive the opposite treatment by default:
+        <code>loading="lazy"</code> is applied automatically, deferring the download until the
+        image approaches the viewport. This eliminates the common mistake of eagerly loading
+        dozens of below-the-fold thumbnails. <sup><a href="#ref11">[11]</a></sup>
+      </p>
+
+      <div class="info-box warn">
+        <div class="box-label">⚠ Width &amp; Height Are Mandatory</div>
+        <p>
+          <code>NgOptimizedImage</code> enforces explicit <code>width</code> and
+          <code>height</code> attributes. Their absence causes a runtime error in development.
+          This is intentional: the browser requires the aspect ratio information to reserve
+          layout space before the image loads, which directly reduces CLS. Percentage-based
+          dimensions via CSS are not a substitute—they must be concrete pixel values.
+          <sup><a href="#ref12">[12]</a></sup>
+        </p>
+      </div>
+
+      <h3 id="img-loaders">Image Loaders and CDN Integration</h3>
+      <p>
+        The directive's most powerful capability is its integration with image CDN loader
+        functions. A loader transforms the value of <code>ngSrc</code> into a full CDN URL,
+        enabling automatic <code>srcset</code> generation. The browser can then select the
+        appropriately sized image for the current display density and viewport,
+        eliminating the most common image-size mistake of serving desktop-resolution
+        images to mobile clients. <sup><a href="#ref8">[8]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — app.config.ts (built-in Cloudinary loader)</span><code><span class="kw">import</span> { <span class="typ">ApplicationConfig</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+<span class="kw">import</span> { <span class="fn">provideCloudinaryLoader</span> } <span class="kw">from</span> <span class="str">'@angular/common'</span>;
+
+<span class="kw">export const</span> appConfig: <span class="typ">ApplicationConfig</span> = {
+  providers: [
+    <span class="fn">provideCloudinaryLoader</span>(<span class="str">'https://res.cloudinary.com/my-cloud'</span>),
+  ],
+};</code></pre>
+
+      <pre><span class="lang-label">TypeScript — Custom Image Loader</span><code><span class="kw">import</span> { <span class="typ">IMAGE_LOADER</span>, <span class="typ">ImageLoaderConfig</span> } <span class="kw">from</span> <span class="str">'@angular/common'</span>;
+
+<span class="cmt">// Provide in app.config.ts providers array</span>
+{
+  provide: <span class="typ">IMAGE_LOADER</span>,
+  useValue: (config: <span class="typ">ImageLoaderConfig</span>) =&gt; {
+    <span class="kw">const</span> { src, width, loaderParams } = config;
+    <span class="kw">const</span> quality = loaderParams?.['quality'] ?? <span class="num">75</span>;
+    <span class="kw">return</span> <span class="str">`https://img.example.com/${src}?w=${width}&amp;q=${quality}&amp;fmt=webp`</span>;
+  },
+}</code></pre>
+
+      <p>
+        Angular 17.2 extended <code>NgOptimizedImage</code> with support for base64-encoded
+        Low-Quality Image Placeholders (LQIPs). While the actual image loads, a blurred,
+        base64-encoded thumbnail is displayed as a CSS <code>background-image</code>, providing
+        a perceptually complete experience without layout shift. <sup><a href="#ref13">[13]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">HTML — LQIP Placeholder (Angular 17.2+)</span><code>&lt;<span class="typ">img</span>
+  ngSrc="products/hero.jpg"
+  width="1200"
+  height="630"
+  placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/..."
+  [placeholderConfig]="{ blur: true }"
+  priority
+  alt="Hero image"
+/&gt;</code></pre>
+
+      <div class="info-box success">
+        <div class="box-label">✔ Angular 17 Expanded Guidance</div>
+        <p>
+          From Angular 17 onwards, image performance warnings are emitted for <em>all</em>
+          Angular applications, not only those using <code>NgOptimizedImage</code>. If the
+          framework detects that the LCP image is being lazy-loaded, or that a downloaded image
+          file is significantly larger than its rendered size, it logs a development-mode warning.
+          <sup><a href="#ref8">[8]</a></sup>
+        </p>
+      </div>
+    </section>
+
+    <!-- ══════════════ 3. ZONE POLLUTION ══════════════ -->
+    <section id="zone">
+      <div class="section-label">Section 03</div>
+      <h2>Mitigating Zone Pollution</h2>
+
+      <h3 id="zone-what">What is Zone.js?</h3>
+      <p>
+        Zone.js is a library that monkey-patches browser APIs—<code>setTimeout</code>,
+        <code>setInterval</code>, <code>Promise</code>, <code>fetch</code>, DOM event
+        listeners, and others—to intercept asynchronous tasks and report their completion
+        to a central scheduler. Angular uses Zone.js as a <em>signalling mechanism</em>: when
+        Zone.js reports that a task has finished, Angular schedules a change detection cycle to
+        check whether any component state has changed and whether the DOM needs updating.
+        <sup><a href="#ref14">[14]</a></sup>
+      </p>
+      <p>
+        This is the foundation of Angular's original "magic"—developers can mutate component
+        properties in event handlers, HTTP callbacks, or timer callbacks, and Angular will
+        automatically refresh the view without any explicit notification call. The framework
+        achieves this because Zone.js notifies it every time any of these async contexts settle.
+      </p>
+
+      <h3 id="zone-causes">Zone Pollution: Causes and Cost</h3>
+      <p>
+        Zone pollution occurs when asynchronous operations that have <em>no effect on
+        application state</em> are run inside Angular's zone. Because Zone.js has no way to
+        know a priori whether a given callback will mutate component state, it treats every
+        intercepted operation as a potential state change and triggers a change detection cycle.
+        The most common sources are: <sup><a href="#ref14">[14]</a></sup>
+      </p>
+      <ul>
+        <li>Frequent timers: <code>requestAnimationFrame</code> loops, high-frequency <code>setInterval</code> polling (e.g., real-time dashboards refreshing at 60 fps).</li>
+        <li>Third-party libraries that set up internal async loops—charting libraries like Plotly, animation engines, analytics SDKs—typically without knowledge of Angular's zone. <sup><a href="#ref15">[15]</a></sup></li>
+        <li>DOM event listeners on broad targets such as <code>window</code> or <code>document</code> (scroll, mousemove, resize) that fire at high frequency.</li>
+        <li><code>WebSocket</code> message handlers receiving data continuously from a streaming server.</li>
+      </ul>
+
+      <div class="pull-quote">
+        <p>
+          "Zone pollution occurs when scheduled tasks or microtasks don't make changes in the
+          data model, making change detection unnecessary. This leads to performance
+          degradation, wasted CPU resources, and sluggish UI."
+        </p>
+        <cite>— Medium: Zone Pollution in Angular, 2026 <sup><a href="#ref15">[15]</a></sup></cite>
+      </div>
+
+      <h3 id="zone-fix">Mitigation with <code>NgZone.runOutsideAngular()</code></h3>
+      <p>
+        The primary remedy is the <code>NgZone</code> service, injected via Angular's DI
+        system. Its <code>runOutsideAngular()</code> method executes a callback in a context
+        that Zone.js does not intercept. Angular will not schedule change detection when that
+        callback's async operations complete.
+      </p>
+
+      <pre><span class="lang-label">TypeScript — runOutsideAngular</span><code><span class="kw">import</span> { <span class="typ">Component</span>, <span class="typ">NgZone</span>, <span class="typ">OnInit</span>, <span class="typ">OnDestroy</span>, <span class="fn">inject</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+<span class="kw">import</span> * <span class="kw">as</span> <span class="typ">Plotly</span> <span class="kw">from</span> <span class="str">'plotly.js-dist-min'</span>;
+
+<span class="dec">@Component</span>({
+  selector: <span class="str">'app-live-chart'</span>,
+  template: <span class="str">'&lt;div id="plotly-host"&gt;&lt;/div&gt;'</span>,
+})
+<span class="kw">export class</span> <span class="typ">LiveChartComponent</span> <span class="kw">implements</span> <span class="typ">OnInit</span>, <span class="typ">OnDestroy</span> {
+  <span class="kw">private readonly</span> ngZone = <span class="fn">inject</span>(<span class="typ">NgZone</span>);
+  <span class="kw">private</span> pollingId: <span class="typ">ReturnType</span>&lt;<span class="kw">typeof</span> setInterval&gt;;
+
+  <span class="fn">ngOnInit</span>(): <span class="typ">void</span> {
+    <span class="cmt">// Initialise Plotly outside Angular: its internal event listeners
+    // won't trigger change detection.</span>
+    <span class="kw">this</span>.ngZone.<span class="fn">runOutsideAngular</span>(() =&gt; {
+      <span class="typ">Plotly</span>.<span class="fn">newPlot</span>(<span class="str">'plotly-host'</span>, initialData, layout);
+
+      <span class="cmt">// High-frequency polling: 60× per second but state doesn't change</span>
+      <span class="kw">this</span>.pollingId = <span class="fn">setInterval</span>(() =&gt; {
+        <span class="kw">const</span> newData = <span class="kw">this</span>.<span class="fn">fetchLivePoint</span>();
+        <span class="typ">Plotly</span>.<span class="fn">extendTraces</span>(<span class="str">'plotly-host'</span>, { y: [[newData]] }, [<span class="num">0</span>]);
+      }, <span class="num">16</span>); <span class="cmt">// ~60 fps</span>
+    });
+  }
+
+  <span class="fn">ngOnDestroy</span>(): <span class="typ">void</span> {
+    <span class="fn">clearInterval</span>(<span class="kw">this</span>.pollingId);
+  }
+}</code></pre>
+
+      <p>
+        When a state mutation <em>does</em> occur outside the zone and the view must be
+        updated, two re-entry strategies are available: call
+        <code>NgZone.run()</code> to schedule full change detection, or inject
+        <code>ChangeDetectorRef</code> and call <code>detectChanges()</code> for a targeted,
+        local update. <sup><a href="#ref16">[16]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Selective zone re-entry</span><code><span class="kw">import</span> { <span class="typ">Component</span>, <span class="typ">NgZone</span>, <span class="typ">ChangeDetectorRef</span>, <span class="fn">inject</span>, <span class="fn">signal</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="dec">@Component</span>({
+  selector: <span class="str">'app-sensor-feed'</span>,
+  template: <span class="str">`&lt;p&gt;Latest reading: {{ latestReading() }} °C&lt;/p&gt;`</span>,
+})
+<span class="kw">export class</span> <span class="typ">SensorFeedComponent</span> {
+  <span class="kw">private readonly</span> ngZone = <span class="fn">inject</span>(<span class="typ">NgZone</span>);
+  <span class="kw">private readonly</span> cdr    = <span class="fn">inject</span>(<span class="typ">ChangeDetectorRef</span>);
+  <span class="kw">readonly</span> latestReading = <span class="fn">signal</span>(<span class="num">0</span>);
+
+  <span class="fn">startStream</span>(socket: <span class="typ">WebSocket</span>): <span class="typ">void</span> {
+    <span class="kw">this</span>.ngZone.<span class="fn">runOutsideAngular</span>(() =&gt; {
+      socket.addEventListener(<span class="str">'message'</span>, (event) =&gt; {
+        <span class="kw">const</span> reading = <span class="typ">JSON</span>.<span class="fn">parse</span>(event.data).temperature;
+
+        <span class="kw">if</span> (reading !== <span class="kw">this</span>.latestReading()) {
+          <span class="cmt">// Re-enter zone only when the value actually changed</span>
+          <span class="kw">this</span>.ngZone.<span class="fn">run</span>(() =&gt; {
+            <span class="kw">this</span>.latestReading.<span class="fn">set</span>(reading);
+          });
+        }
+      });
+    });
+  }
+}</code></pre>
+
+      <h4>Zone Coalescing</h4>
+      <p>
+        Angular 16+ exposes <code>provideZoneChangeDetection</code> with coalescing options
+        that batch multiple rapid Zone.js signals into a single change detection pass.
+        <code>eventCoalescing</code> collapses multiple events fired within the same microtask
+        queue flush; <code>runCoalescing</code> reduces redundant scheduler calls in the same
+        task. <sup><a href="#ref17">[17]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — app.config.ts</span><code><span class="kw">import</span> { <span class="typ">ApplicationConfig</span>, <span class="fn">provideZoneChangeDetection</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="kw">export const</span> appConfig: <span class="typ">ApplicationConfig</span> = {
+  providers: [
+    <span class="fn">provideZoneChangeDetection</span>({
+      eventCoalescing: <span class="kw">true</span>,   <span class="cmt">// Collapses rapid event bursts</span>
+      runCoalescing:   <span class="kw">true</span>,   <span class="cmt">// Dedups scheduler calls</span>
+    }),
+  ],
+};</code></pre>
+
+      <h3 id="zone-less">The Zoneless Horizon</h3>
+      <p>
+        Angular's long-term trajectory is toward <em>zoneless</em> change detection, where
+        Zone.js is removed entirely and the framework relies on Signals (and, for backwards
+        compatibility, <code>ChangeDetectorRef</code> and <code>async</code> pipe) to know
+        exactly which components need re-rendering. As of Angular 20 this mode is considered
+        mature enough for production use. <sup><a href="#ref17">[17]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Enabling Zoneless (Angular 18+)</span><code><span class="kw">import</span> { <span class="typ">ApplicationConfig</span>, <span class="fn">provideExperimentalZonelessChangeDetection</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="kw">export const</span> appConfig: <span class="typ">ApplicationConfig</span> = {
+  providers: [
+    <span class="fn">provideExperimentalZonelessChangeDetection</span>(),
+  ],
+};
+
+<span class="cmt">// Also remove Zone.js from polyfills in angular.json:
+// "polyfills": []  ← remove "zone.js"</span></code></pre>
+    </section>
+
+    <!-- ══════════════ 4. SLOW COMPUTATIONS ══════════════ -->
+    <section id="slow">
+      <div class="section-label">Section 04</div>
+      <h2>Slow Computations in Change Detection</h2>
+
+      <p>
+        Even after eliminating zone pollution, an application can remain sluggish if the
+        work Angular performs <em>during</em> each change detection cycle is itself expensive.
+        Every cycle, Angular synchronously evaluates all template expressions for every
+        component whose change detection strategy permits it, and executes four lifecycle
+        hooks: <code>ngDoCheck</code>, <code>ngAfterContentChecked</code>,
+        <code>ngAfterViewChecked</code>, and <code>ngOnChanges</code>.
+        <sup><a href="#ref18">[18]</a></sup>
+      </p>
+
+      <div class="info-box">
+        <div class="box-label">ℹ Change Detection Cycle Work</div>
+        <p>
+          In a Default-strategy component tree, Angular walks every component
+          from root to leaf on every cycle. A single expensive template expression or a
+          computationally heavy <code>ngDoCheck</code> body blocks the entire synchronous
+          traversal, delaying all subsequent component updates. Angular runs all computations
+          sequentially on the main thread. <sup><a href="#ref18">[18]</a></sup>
+        </p>
+      </div>
+
+      <h3 id="slow-profile">Profiling with Angular DevTools</h3>
+      <p>
+        Angular DevTools (a Chrome/Firefox extension from the Angular team) includes a
+        change detection profiler. In the <em>Profiler</em> tab, recording a session and
+        clicking on a cycle bar reveals a breakdown of how long Angular spent in each
+        component's template evaluation and lifecycle hooks. This is the definitive starting
+        point for diagnosing slow-computation bottlenecks. <sup><a href="#ref18">[18]</a></sup>
+      </p>
+      <p>
+        Common antipatterns revealed by the profiler include:
+      </p>
+      <ul>
+        <li><strong>Method calls in templates:</strong> <code>{{ formatData(item) }}</code> calls the function on every cycle. If <code>formatData</code> sorts, filters, or maps a large array, the cost compounds with every change detection pass.</li>
+        <li><strong>Heavy <code>ngDoCheck</code> bodies:</strong> <code>ngDoCheck</code> fires on every cycle—including cycles triggered by unrelated components. Even an O(n) array comparison in a large list becomes expensive at 60 cycles/second. <sup><a href="#ref19">[19]</a></sup></li>
+        <li><strong>Layout-triggering DOM reads in lifecycle hooks:</strong> Reading <code>offsetHeight</code>, <code>getBoundingClientRect()</code>, or <code>scrollTop</code> inside <code>ngAfterViewChecked</code> forces the browser to perform a synchronous reflow before the current paint can complete.</li>
+      </ul>
+
+      <h3 id="slow-pipes">Pure Pipes as Computed Cache</h3>
+      <p>
+        A pure pipe in Angular is guaranteed by the framework to be idempotent: given the
+        same inputs, it will always produce the same output. Angular exploits this contract by
+        memoising the last result: if a pure pipe is called again with identical arguments,
+        Angular returns the cached value rather than re-executing the transform function.
+        <sup><a href="#ref18">[18]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Pure Pipe (memoised by Angular)</span><code><span class="kw">import</span> { <span class="typ">Pipe</span>, <span class="typ">PipeTransform</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="dec">@Pipe</span>({ name: <span class="str">'expensiveSort'</span>, pure: <span class="kw">true</span> }) <span class="cmt">// pure: true is the default</span>
+<span class="kw">export class</span> <span class="typ">ExpensiveSortPipe</span> <span class="kw">implements</span> <span class="typ">PipeTransform</span> {
+  <span class="fn">transform</span>(items: <span class="typ">Item</span>[], sortKey: <span class="typ">string</span>): <span class="typ">Item</span>[] {
+    <span class="cmt">// Executed only when `items` reference or `sortKey` changes</span>
+    <span class="kw">return</span> [...items].<span class="fn">sort</span>((a, b) =&gt; a[sortKey] &lt; b[sortKey] ? -<span class="num">1</span> : <span class="num">1</span>);
+  }
+}
+</code></pre>
+
+      <pre><span class="lang-label">HTML — Template Usage</span><code><span class="cmt">&lt;!-- Angular evaluates the sort only when `products` or `sortKey` changes.
+     Without the pipe, sorting would happen on every change detection cycle. --&gt;</span>
+<span class="kw">@for</span> (product <span class="kw">of</span> (products | expensiveSort: sortKey); track product.id) {
+  &lt;<span class="typ">app-product-row</span> [product]="product" /&gt;
+}</code></pre>
+
+      <h3 id="slow-memo">Multi-Result Memoisation</h3>
+      <p>
+        Pure pipes cache only the <em>most recent</em> result. A multi-argument transform with
+        many distinct input combinations benefits from a richer memoisation strategy—for
+        example, a <code>Map</code>-backed cache keyed on the argument tuple:
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Manual Memoisation</span><code><span class="kw">import</span> { <span class="typ">Pipe</span>, <span class="typ">PipeTransform</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="dec">@Pipe</span>({ name: <span class="str">'localeDateFormat'</span>, pure: <span class="kw">true</span> })
+<span class="kw">export class</span> <span class="typ">LocaleDateFormatPipe</span> <span class="kw">implements</span> <span class="typ">PipeTransform</span> {
+  <span class="kw">private readonly</span> cache = <span class="kw">new</span> <span class="typ">Map</span>&lt;<span class="typ">string</span>, <span class="typ">string</span>&gt;();
+
+  <span class="fn">transform</span>(timestamp: <span class="typ">number</span>, locale: <span class="typ">string</span>, format: <span class="typ">string</span>): <span class="typ">string</span> {
+    <span class="kw">const</span> key = <span class="str">`${timestamp}::${locale}::${format}`</span>;
+    <span class="kw">if</span> (<span class="kw">this</span>.cache.<span class="fn">has</span>(key)) <span class="kw">return this</span>.cache.<span class="fn">get</span>(key)!;
+
+    <span class="kw">const</span> result = <span class="kw">new</span> <span class="typ">Intl</span>.<span class="typ">DateTimeFormat</span>(locale).<span class="fn">format</span>(<span class="kw">new</span> <span class="typ">Date</span>(timestamp));
+    <span class="kw">this</span>.cache.<span class="fn">set</span>(key, result);
+    <span class="kw">return</span> result;
+  }
+}</code></pre>
+
+      <h4>The <code>OnPush</code> Change Detection Strategy</h4>
+      <p>
+        The most impactful structural optimisation available is adopting the
+        <code>OnPush</code> change detection strategy on components. With <code>OnPush</code>,
+        Angular skips the subtree rooted at a component unless one of four conditions is met:
+        an <code>@Input()</code> reference changes, an event originates from the component,
+        the <code>async</code> pipe emits, or a Signal within the template changes.
+        <sup><a href="#ref17">[17]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — OnPush Strategy</span><code><span class="kw">import</span> { <span class="typ">Component</span>, <span class="typ">ChangeDetectionStrategy</span>, <span class="fn">input</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="dec">@Component</span>({
+  selector: <span class="str">'app-product-card'</span>,
+  changeDetection: <span class="typ">ChangeDetectionStrategy</span>.<span class="fn">OnPush</span>,
+  template: <span class="str">`
+    &lt;h3&gt;{{ product().name }}&lt;/h3&gt;
+    &lt;p&gt;{{ product().price | currency }}&lt;/p&gt;
+  `</span>,
+})
+<span class="kw">export class</span> <span class="typ">ProductCardComponent</span> {
+  <span class="cmt">// Signal-based input: change detection fires only when reference changes</span>
+  <span class="kw">readonly</span> product = <span class="fn">input</span>.<span class="fn">required</span>&lt;<span class="typ">Product</span>&gt;();
+}</code></pre>
+
+      <div class="diagram">
+        <svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Mono', monospace" font-size="9">
+          <rect width="700" height="260" fill="#141720" rx="4"/>
+          <!-- Title -->
+          <text x="350" y="24" fill="#7a82a0" font-size="10" text-anchor="middle" font-weight="600">Default vs OnPush: Change Detection Traversal</text>
+          <!-- Default side label -->
+          <text x="175" y="48" fill="#e05f3b" text-anchor="middle" font-size="9" font-weight="700">DEFAULT STRATEGY</text>
+          <!-- Default tree -->
+          <!-- Root -->
+          <rect x="145" y="58" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#e05f3b" stroke-opacity="0.7"/>
+          <text x="175" y="77" fill="#e05f3b" text-anchor="middle">App Root</text>
+          <!-- Lines -->
+          <line x1="155" y1="86" x2="110" y2="110" stroke="#252a3a" stroke-width="1.5"/>
+          <line x1="195" y1="86" x2="240" y2="110" stroke="#252a3a" stroke-width="1.5"/>
+          <!-- L1 children -->
+          <rect x="80"  y="110" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#e05f3b" stroke-opacity="0.7"/>
+          <text x="110" y="129" fill="#e05f3b" text-anchor="middle">Nav</text>
+          <rect x="210" y="110" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#e05f3b" stroke-opacity="0.7"/>
+          <text x="240" y="129" fill="#e05f3b" text-anchor="middle">Page</text>
+          <!-- L2 from Page -->
+          <line x1="220" y1="138" x2="190" y2="162" stroke="#252a3a" stroke-width="1.5"/>
+          <line x1="260" y1="138" x2="290" y2="162" stroke="#252a3a" stroke-width="1.5"/>
+          <rect x="160" y="162" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#e05f3b" stroke-opacity="0.7"/>
+          <text x="190" y="181" fill="#e05f3b" text-anchor="middle">List</text>
+          <rect x="260" y="162" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#e05f3b" stroke-opacity="0.7"/>
+          <text x="290" y="181" fill="#e05f3b" text-anchor="middle">Form</text>
+          <!-- L2 from Nav -->
+          <line x1="100" y1="138" x2="80" y2="162" stroke="#252a3a" stroke-width="1.5"/>
+          <rect x="50" y="162" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#e05f3b" stroke-opacity="0.7"/>
+          <text x="80" y="181" fill="#e05f3b" text-anchor="middle">Links</text>
+          <!-- Arrow label: "All nodes checked" -->
+          <text x="175" y="220" fill="#e05f3b" text-anchor="middle" font-size="8">All nodes checked</text>
+          <!-- Divider -->
+          <line x1="350" y1="40" x2="350" y2="240" stroke="#252a3a" stroke-width="1" stroke-dasharray="5,4"/>
+          <!-- OnPush side label -->
+          <text x="525" y="48" fill="#3dbf8a" text-anchor="middle" font-size="9" font-weight="700">ONPUSH STRATEGY</text>
+          <!-- Root -->
+          <rect x="495" y="58" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#3dbf8a" stroke-opacity="0.7"/>
+          <text x="525" y="77" fill="#3dbf8a" text-anchor="middle">App Root</text>
+          <!-- Lines -->
+          <line x1="505" y1="86" x2="460" y2="110" stroke="#252a3a" stroke-width="1.5"/>
+          <line x1="545" y1="86" x2="590" y2="110" stroke="#252a3a" stroke-width="1.5"/>
+          <!-- L1 children -->
+          <rect x="430" y="110" width="60" height="28" fill="#111420" rx="2" stroke="#252a3a"/>
+          <text x="460" y="129" fill="#4a5270" text-anchor="middle">Nav ✓</text>
+          <rect x="560" y="110" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#3dbf8a" stroke-opacity="0.7"/>
+          <text x="590" y="129" fill="#3dbf8a" text-anchor="middle">Page</text>
+          <!-- L2 from Page (dirty) -->
+          <line x1="570" y1="138" x2="540" y2="162" stroke="#252a3a" stroke-width="1.5"/>
+          <line x1="610" y1="138" x2="640" y2="162" stroke="#252a3a" stroke-width="1.5"/>
+          <rect x="510" y="162" width="60" height="28" fill="#1b1f2c" rx="2" stroke="#3dbf8a" stroke-opacity="0.7"/>
+          <text x="540" y="181" fill="#3dbf8a" text-anchor="middle">List</text>
+          <rect x="610" y="162" width="60" height="28" fill="#111420" rx="2" stroke="#252a3a"/>
+          <text x="640" y="181" fill="#4a5270" text-anchor="middle">Form ✓</text>
+          <!-- Nav subtree skipped -->
+          <line x1="447" y1="138" x2="435" y2="162" stroke="#252a3a" stroke-width="1.5" stroke-dasharray="3,3"/>
+          <rect x="405" y="162" width="60" height="28" fill="#111420" rx="2" stroke="#252a3a"/>
+          <text x="435" y="181" fill="#4a5270" text-anchor="middle">Links ✓</text>
+          <!-- Labels -->
+          <text x="460" y="220" fill="#4a5270" text-anchor="middle" font-size="8">✓ = skipped (clean)</text>
+          <text x="575" y="220" fill="#3dbf8a" text-anchor="middle" font-size="8">Only dirty subtree</text>
+        </svg>
+        <div class="diagram-caption">Figure 2. Default strategy checks the entire tree; OnPush skips subtrees marked clean, reducing evaluation cost proportionally to the number of unchanged components</div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 5. HYDRATION ══════════════ -->
+    <section id="hydration">
+      <div class="section-label">Section 05</div>
+      <h2>Hydration</h2>
+
+      <p>
+        Server-side rendering (SSR) solves the initial load problem by generating HTML on the
+        server and sending a fully rendered page to the browser. The user sees content
+        immediately—before a single byte of JavaScript has been parsed. However, the rendered
+        HTML is static: it has no event listeners, no Angular component instances, no reactive
+        state. The process of converting this static HTML into a live Angular application is
+        called <em>hydration</em>. <sup><a href="#ref20">[20]</a></sup>
+      </p>
+
+      <h3>The Pre-Hydration Problem</h3>
+      <p>
+        Before Angular 16 introduced non-destructive hydration, the SSR/client lifecycle
+        was destructive: Angular would receive the server-rendered HTML, immediately discard
+        it, and re-render the entire application from scratch on the client. This caused a
+        visible flicker—the entire DOM disappeared and reappeared—and negated most of the
+        perceived performance benefit of SSR for metrics like Cumulative Layout Shift.
+        <sup><a href="#ref21">[21]</a></sup>
+      </p>
+
+      <div class="pull-quote">
+        <p>
+          "Historically when you used SSR with Angular, Angular would just delete all of the
+          DOM and replace it with newly rendered elements, but in 2025 we have hydration. This
+          means that instead of deleting the elements, we wire up all of the behaviors and
+          functionality into the existing DOM."
+        </p>
+        <cite>— fluin.io: The State of SSR in Angular, 2025 <sup><a href="#ref21">[21]</a></sup></cite>
+      </div>
+
+      <p>
+        Non-destructive hydration, stable from Angular 17, preserves the server-rendered DOM.
+        Angular walks the existing DOM, reconciles it with its internal component tree, and
+        attaches event listeners and reactive state to the <em>already-present</em> nodes.
+        Zero nodes are destroyed and re-created during this process. The result is a seamless
+        transition from static to interactive with no layout shift and no visual flicker.
+        <sup><a href="#ref20">[20]</a></sup>
+      </p>
+
+      <h3 id="hydration-how">Enabling Hydration</h3>
+      <p>
+        If the application was created or migrated using the Angular CLI's SSR support
+        (<code>ng add @angular/ssr</code>), hydration is enabled automatically. For custom
+        server setups, <code>provideClientHydration</code> is imported from
+        <code>@angular/platform-browser</code> and added to the application's bootstrap
+        providers:
+      </p>
+
+      <pre><span class="lang-label">TypeScript — app.config.ts</span><code><span class="kw">import</span> { <span class="typ">ApplicationConfig</span> }          <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+<span class="kw">import</span> { <span class="fn">provideClientHydration</span>,
+         <span class="fn">withEventReplay</span> }             <span class="kw">from</span> <span class="str">'@angular/platform-browser'</span>;
+<span class="kw">import</span> { <span class="fn">provideServerRendering</span> }       <span class="kw">from</span> <span class="str">'@angular/platform-server'</span>;
+
+<span class="kw">export const</span> appConfig: <span class="typ">ApplicationConfig</span> = {
+  providers: [
+    <span class="fn">provideClientHydration</span>(
+      <span class="fn">withEventReplay</span>(), <span class="cmt">// Buffer events during hydration and replay</span>
+    ),
+  ],
+};</code></pre>
+
+      <p>
+        <code>withEventReplay()</code>, available from Angular 18, solves the "hydration gap":
+        the window of time between the server HTML being displayed and Angular finishing its
+        hydration pass. Without event replay, user interactions during this gap are silently
+        dropped. With it, they are buffered and replayed once the component tree is live.
+      </p>
+
+      <h4>Opting Out: <code>ngSkipHydration</code></h4>
+      <p>
+        Components that manipulate the DOM directly—using <code>Renderer2</code>,
+        <code>ElementRef.nativeElement</code>, or third-party libraries that bypass Angular's
+        view engine—cannot be hydrated safely. The server-rendered DOM and the client's
+        expected DOM will diverge, causing Angular's reconciliation to fail. Such components
+        must opt out of hydration using the <code>ngSkipHydration</code> host attribute:
+        <sup><a href="#ref21">[21]</a></sup>
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Opting Out of Hydration</span><code><span class="dec">@Component</span>({
+  selector: <span class="str">'app-legacy-chart-wrapper'</span>,
+  host: {
+    <span class="str">'ngSkipHydration'</span>: <span class="str">'true'</span>,
+  },
+  template: <span class="str">'&lt;div id="d3-host"&gt;&lt;/div&gt;'</span>,
+})
+<span class="kw">export class</span> <span class="typ">LegacyChartWrapperComponent</span> <span class="kw">implements</span> <span class="typ">AfterViewInit</span> {
+  <span class="fn">ngAfterViewInit</span>(): <span class="typ">void</span> {
+    <span class="cmt">// Direct DOM manipulation via D3 — incompatible with hydration</span>
+    <span class="kw">const</span> svg = d3.<span class="fn">select</span>(<span class="str">'#d3-host'</span>).<span class="fn">append</span>(<span class="str">'svg'</span>);
+    <span class="cmt">// ...</span>
+  }
+}</code></pre>
+
+      <h3 id="hydration-incr">Incremental Hydration (Angular 19+)</h3>
+      <p>
+        Angular 19 introduced Incremental Hydration—a feature announced at Google I/O 2024
+        and formerly called Partial Hydration. It builds directly on the <code>@defer</code>
+        API: deferred blocks rendered on the server are not hydrated eagerly; instead, they
+        are hydrated on-demand as their corresponding defer trigger fires. <sup><a href="#ref22">[22]</a></sup>
+      </p>
+      <p>
+        The consequence is a dramatic reduction in the JavaScript that must be parsed and
+        executed before the application is fully interactive. A page with ten heavy
+        <code>@defer</code> blocks hydrates only the blocks that are in the viewport, leaving
+        the rest as inert server-rendered HTML until the user scrolls or interacts.
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Enabling Incremental Hydration</span><code><span class="kw">import</span> { <span class="fn">provideClientHydration</span>,
+         <span class="fn">withIncrementalHydration</span> } <span class="kw">from</span> <span class="str">'@angular/platform-browser'</span>;
+
+<span class="kw">export const</span> appConfig: <span class="typ">ApplicationConfig</span> = {
+  providers: [
+    <span class="fn">provideClientHydration</span>(
+      <span class="fn">withIncrementalHydration</span>(),
+    ),
+  ],
+};</code></pre>
+
+      <pre><span class="lang-label">HTML — Template: Incrementally Hydrated Defer Block</span><code><span class="cmt">&lt;!-- This block is rendered on the server but NOT hydrated immediately.
+     Hydration occurs when the viewport intersection trigger fires. --&gt;</span>
+<span class="kw">@defer</span> (hydrate on viewport) {
+  &lt;<span class="typ">app-comment-thread</span> [postId]="post.id" /&gt;
+}
+<span class="kw">@placeholder</span> {
+  &lt;<span class="typ">div</span> class="comments-placeholder"&gt;Loading comments…&lt;/<span class="typ">div</span>&gt;
+}</code></pre>
+
+      <div class="diagram">
+        <svg viewBox="0 0 680 240" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Mono', monospace" font-size="9">
+          <rect width="680" height="240" fill="#141720" rx="4"/>
+          <!-- Title -->
+          <text x="340" y="22" fill="#7a82a0" font-size="10" text-anchor="middle" font-weight="600">SSR + Hydration Lifecycle</text>
+          <!-- Phase boxes -->
+          <!-- 1. Server render -->
+          <rect x="20" y="40" width="110" height="56" fill="#1b1f2c" rx="3" stroke="#5b8af0" stroke-opacity="0.6"/>
+          <text x="75" y="62" fill="#5b8af0" text-anchor="middle" font-weight="700">1. Server</text>
+          <text x="75" y="76" fill="#7a82a0" text-anchor="middle">Renders full</text>
+          <text x="75" y="88" fill="#7a82a0" text-anchor="middle">HTML + JSON</text>
+          <!-- Arrow -->
+          <line x1="130" y1="68" x2="155" y2="68" stroke="#252a3a" stroke-width="2"/>
+          <polygon points="155,63 165,68 155,73" fill="#252a3a"/>
+          <text x="145" y="58" fill="#4a5270" text-anchor="middle" font-size="8">Network</text>
+          <!-- 2. Browser receives HTML -->
+          <rect x="165" y="40" width="120" height="56" fill="#1b1f2c" rx="3" stroke="#3dbf8a" stroke-opacity="0.6"/>
+          <text x="225" y="62" fill="#3dbf8a" text-anchor="middle" font-weight="700">2. Browser</text>
+          <text x="225" y="76" fill="#7a82a0" text-anchor="middle">Displays HTML</text>
+          <text x="225" y="88" fill="#7a82a0" text-anchor="middle">instantly (FCP)</text>
+          <!-- Arrow -->
+          <line x1="285" y1="68" x2="310" y2="68" stroke="#252a3a" stroke-width="2"/>
+          <polygon points="310,63 320,68 310,73" fill="#252a3a"/>
+          <text x="297" y="58" fill="#4a5270" text-anchor="middle" font-size="8">JS parses</text>
+          <!-- 3. Hydration -->
+          <rect x="320" y="40" width="120" height="56" fill="#1b1f2c" rx="3" stroke="#c97cf0" stroke-opacity="0.6"/>
+          <text x="380" y="62" fill="#c97cf0" text-anchor="middle" font-weight="700">3. Hydration</text>
+          <text x="380" y="76" fill="#7a82a0" text-anchor="middle">Angular wires</text>
+          <text x="380" y="88" fill="#7a82a0" text-anchor="middle">existing DOM</text>
+          <!-- Arrow -->
+          <line x1="440" y1="68" x2="465" y2="68" stroke="#252a3a" stroke-width="2"/>
+          <polygon points="465,63 475,68 465,73" fill="#252a3a"/>
+          <!-- 4. Interactive -->
+          <rect x="475" y="40" width="110" height="56" fill="#1b1f2c" rx="3" stroke="#e05f3b" stroke-opacity="0.6"/>
+          <text x="530" y="62" fill="#e05f3b" text-anchor="middle" font-weight="700">4. TTI</text>
+          <text x="530" y="76" fill="#7a82a0" text-anchor="middle">Fully interactive</text>
+          <text x="530" y="88" fill="#7a82a0" text-anchor="middle">(Time to Interactive)</text>
+
+          <!-- Incremental hydration annotation -->
+          <text x="340" y="130" fill="#c97cf0" text-anchor="middle" font-size="10" font-weight="700">INCREMENTAL HYDRATION (@defer blocks)</text>
+          <!-- Block representations -->
+          <rect x="20"  y="148" width="90" height="36" fill="#1b1f2c" rx="2" stroke="#3dbf8a" stroke-opacity="0.7"/>
+          <text x="65"  y="167" fill="#3dbf8a" text-anchor="middle">Hero Block</text>
+          <text x="65"  y="179" fill="#4a5270" text-anchor="middle">Hydrated ✓</text>
+
+          <rect x="120" y="148" width="90" height="36" fill="#111420" rx="2" stroke="#252a3a"/>
+          <text x="165" y="167" fill="#4a5270" text-anchor="middle">Chart Block</text>
+          <text x="165" y="179" fill="#4a5270" text-anchor="middle">Inert — below fold</text>
+
+          <rect x="220" y="148" width="90" height="36" fill="#111420" rx="2" stroke="#252a3a"/>
+          <text x="265" y="167" fill="#4a5270" text-anchor="middle">Table Block</text>
+          <text x="265" y="179" fill="#4a5270" text-anchor="middle">Inert — below fold</text>
+
+          <rect x="320" y="148" width="90" height="36" fill="#111420" rx="2" stroke="#252a3a"/>
+          <text x="365" y="167" fill="#4a5270" text-anchor="middle">Comments</text>
+          <text x="365" y="179" fill="#4a5270" text-anchor="middle">Inert — below fold</text>
+
+          <line x1="200" y1="195" x2="200" y2="215" stroke="#5b8af0" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <text x="270" y="228" fill="#5b8af0" text-anchor="middle" font-size="9">User scrolls → trigger fires → block hydrates on demand</text>
+        </svg>
+        <div class="diagram-caption">Figure 3. With Incremental Hydration, only the above-fold block is hydrated at startup. Below-fold blocks remain as inert server HTML until their defer trigger activates</div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 6. SIGNALS ══════════════ -->
+    <section id="signals">
+      <div class="section-label">Section 06</div>
+      <h2>Angular Signals: The Reactive Substrate</h2>
+
+      <p>
+        Signals, introduced as stable in Angular 17, are Angular's native reactive primitive.
+        A Signal is a lightweight wrapper around a value that tracks its consumers. When the
+        signal's value changes, Angular knows <em>exactly</em> which template expressions and
+        computed values need re-evaluation—without walking the entire component tree.
+        <sup><a href="#ref17">[17]</a></sup>
+      </p>
+      <p>
+        Combined with the <code>OnPush</code> strategy and eventually with zoneless mode,
+        Signals eliminate the two primary sources of unnecessary change detection work:
+        over-broad zone notification and full-tree traversal. The performance contract becomes
+        explicit and local—a signal write schedules only its direct dependants.
+      </p>
+
+      <pre><span class="lang-label">TypeScript — Signal-Driven Component (no zone dependency)</span><code><span class="kw">import</span> { <span class="typ">Component</span>, <span class="fn">signal</span>, <span class="fn">computed</span>, <span class="fn">effect</span>,
+         <span class="typ">ChangeDetectionStrategy</span> } <span class="kw">from</span> <span class="str">'@angular/core'</span>;
+
+<span class="dec">@Component</span>({
+  selector: <span class="str">'app-cart'</span>,
+  changeDetection: <span class="typ">ChangeDetectionStrategy</span>.<span class="fn">OnPush</span>,
+  template: <span class="str">`
+    &lt;p&gt;Items: {{ itemCount() }}&lt;/p&gt;
+    &lt;p&gt;Total: {{ total() | currency }}&lt;/p&gt;
+    &lt;button (click)="addItem()">Add to Cart&lt;/button&gt;
+  `</span>,
+})
+<span class="kw">export class</span> <span class="typ">CartComponent</span> {
+  <span class="kw">private readonly</span> items = <span class="fn">signal</span>&lt;<span class="typ">CartItem</span>[]&gt;([]);
+
+  <span class="cmt">// Derived signals: recomputed only when `items` changes</span>
+  <span class="kw">readonly</span> itemCount = <span class="fn">computed</span>(() =&gt; <span class="kw">this</span>.items().length);
+  <span class="kw">readonly</span> total     = <span class="fn">computed</span>(() =&gt;
+    <span class="kw">this</span>.items().<span class="fn">reduce</span>((sum, i) =&gt; sum + i.price * i.qty, <span class="num">0</span>)
+  );
+
+  <span class="fn">addItem</span>(): <span class="typ">void</span> {
+    <span class="kw">this</span>.items.<span class="fn">update</span>(current =&gt; [...current, newItem]);
+    <span class="cmt">// Angular schedules only this component's template re-evaluation</span>
+  }
+}</code></pre>
+
+      <p>
+        The synergy between Signals and Incremental Hydration is particularly compelling.
+        Hydration knows precisely which components are driven by Signals and can defer
+        attaching Angular's reactive graph to each component until that component's
+        <code>@defer</code> block hydrates. The JavaScript for inactive components is never
+        parsed.
+      </p>
+
+      <div class="info-box success">
+        <div class="box-label">✔ The Convergent Architecture</div>
+        <p>
+          The emerging best practice converges on four concurrent choices: Signals for
+          reactive state, <code>OnPush</code> change detection, <code>@defer</code> blocks
+          for non-critical subtrees, and Incremental Hydration for SSR pages. Together,
+          these minimise Time to Interactive, eliminate redundant re-renders, and reduce
+          the JavaScript parse budget to the minimum necessary for the current viewport.
+          <sup><a href="#ref22">[22]</a></sup>
+        </p>
+      </div>
+    </section>
+
+    <!-- ══════════════ 7. SUMMARY TABLE ══════════════ -->
+    <hr />
+    <h2 style="border-top:none;margin-top:0;padding-top:0;">Strategy Decision Matrix</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Technique</th>
+            <th>Primary Metric Improved</th>
+            <th>When to Apply</th>
+            <th>Risk / Trade-off</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>@defer</code> views</td>
+            <td>LCP, bundle size, TTI</td>
+            <td>Non-critical or below-fold components with heavy dependencies</td>
+            <td>Placeholder required; nested @defer creates waterfall loads</td>
+          </tr>
+          <tr>
+            <td><code>NgOptimizedImage</code></td>
+            <td>LCP, CLS</td>
+            <td>Any application displaying images</td>
+            <td>Width/height mandatory; CDN loader required for srcset generation</td>
+          </tr>
+          <tr>
+            <td><code>runOutsideAngular</code></td>
+            <td>CPU, frame rate</td>
+            <td>Third-party libs, animations, high-frequency timers/events</td>
+            <td>Must manually re-enter zone or use CDR for UI updates</td>
+          </tr>
+          <tr>
+            <td>Zone coalescing</td>
+            <td>CPU, redundant cycles</td>
+            <td>Event-dense UIs, live data feeds</td>
+            <td>May delay UI updates by one event loop tick</td>
+          </tr>
+          <tr>
+            <td><code>OnPush</code> + Signals</td>
+            <td>CPU, frame rate</td>
+            <td>All presentational components</td>
+            <td>State must be immutable or communicated via Signals/inputs</td>
+          </tr>
+          <tr>
+            <td>Pure pipes / memoisation</td>
+            <td>CPU per cycle</td>
+            <td>Expensive template expressions run frequently</td>
+            <td>Cache invalidation complexity for multi-argument functions</td>
+          </tr>
+          <tr>
+            <td>SSR + Hydration</td>
+            <td>FCP, TTFB, SEO</td>
+            <td>Content-heavy or SEO-critical pages</td>
+            <td>Avoid direct DOM manipulation; server/browser environment divergence</td>
+          </tr>
+          <tr>
+            <td>Incremental Hydration</td>
+            <td>TTI, JS parse budget</td>
+            <td>SSR pages with @defer blocks</td>
+            <td>Angular 19+ developer preview; requires careful defer boundary design</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ══════════════ REFERENCES ══════════════ -->
+    <section class="references" id="references">
+      <h2>References</h2>
+      <ol class="ref-list">
+        <li id="ref1"><span class="ref-num">[1]</span> Gechev M. Angular 2025 Strategy. Angular Blog [Internet]. 2025 Jan 14 [cited 2026 May 31]. Available from: https://blog.angular.dev/angular-2025-strategy-9ca333dfc334</li>
+        <li id="ref2"><span class="ref-num">[2]</span> ByteBantz. How to Implement Deferrable Views in Angular 17 for Faster Load Times. DEV Community [Internet]. 2024 May 12 [cited 2026 May 31]. Available from: https://dev.to/bytebantz/how-to-implement-deferrable-views-in-angular-17-for-faster-load-times-520a</li>
+        <li id="ref3"><span class="ref-num">[3]</span> Gupta R. Boosting Angular Performance with Deferrable Views. Medium [Internet]. 2024 Sep 14 [cited 2026 May 31]. Available from: https://medium.com/@rajat29gupta/boosting-angular-performance-with-deferrable-views-53f850f26578</li>
+        <li id="ref4"><span class="ref-num">[4]</span> Gupta R (cont.). Deferrable Views: Tips and Best Practices. Medium [Internet]. 2024 Sep 14 [cited 2026 May 31]. Available from: https://medium.com/@rajat29gupta/boosting-angular-performance-with-deferrable-views-53f850f26578</li>
+        <li id="ref5"><span class="ref-num">[5]</span> TutsCoder. Angular Deferrable Views: Revolutionizing Performance with Smart Lazy Loading. TutsCoder Blog [Internet]. 2025 Nov 16 [cited 2026 May 31]. Available from: https://www.tutscoder.com/blog/angular/angular-deferrable-views</li>
+        <li id="ref6"><span class="ref-num">[6]</span> AngularSpace. Understanding Angular Deferrable Views. AngularSpace Blog [Internet]. 2025 Jun 27 [cited 2026 May 31]. Available from: https://www.angularspace.com/understanding-angular-deferrable-views/</li>
+        <li id="ref7"><span class="ref-num">[7]</span> Angular Love. How to Use Angular's Defer Block to Improve Performance? Angular Love [Internet]. 2024 Apr 8 [cited 2026 May 31]. Available from: https://angular.love/how-to-use-angulars-defer-block-to-improve-performance/</li>
+        <li id="ref8"><span class="ref-num">[8]</span> Chrome for Developers. What's New in the Angular NgOptimizedImage Directive. Chrome Developers Blog [Internet]. 2023 [cited 2026 May 31]. Available from: https://developer.chrome.com/blog/angular_ngoptimizedimage</li>
+        <li id="ref9"><span class="ref-num">[9]</span> Angular. Optimizing Images with NgOptimizedImage. Angular Documentation [Internet]. [cited 2026 May 31]. Available from: https://angular.dev/guide/image-optimization</li>
+        <li id="ref10"><span class="ref-num">[10]</span> Walls D. How to Optimize Images in Angular Using ngOptimizedImage Directive. DanyWalls Blog [Internet]. 2024 May 16 [cited 2026 May 31]. Available from: https://danywalls.com/how-to-optimize-images-in-angular-using-ngoptimizedimage-directive</li>
+        <li id="ref11"><span class="ref-num">[11]</span> HaloDoc Engineering. Revolutionize Image Loading: NgOptimizedImage Directive. HaloDoc Blog [Internet]. 2023 Nov 30 [cited 2026 May 31]. Available from: https://blogs.halodoc.io/revolutionize-image-loading-in-angular-unleash-peak-performance-with-ngoptimizedimage-directive-mastery/</li>
+        <li id="ref12"><span class="ref-num">[12]</span> Angular Love. Boost Your Angular Application Performance with NgOptimizedImage. Angular Love [Internet]. 2024 Jan 15 [cited 2026 May 31]. Available from: https://angular.love/en/2024/01/15/boost-your-applications-performance-with-ngoptimizedimage/</li>
+        <li id="ref13"><span class="ref-num">[13]</span> Basal N. How to Use Base64 Placeholders with Angular's NgOptimizedImage Directive. Medium [Internet]. 2024 Jun 1 [cited 2026 May 31]. Available from: https://medium.com/netanelbasal/how-to-use-base64-placeholders-with-angulars-ngoptimizedimage-directive-cee9ebfe649f</li>
+        <li id="ref14"><span class="ref-num">[14]</span> Angular. Zone Pollution. Angular Best Practices Documentation [Internet]. [cited 2026 May 31]. Available from: https://angular.dev/best-practices/zone-pollution</li>
+        <li id="ref15"><span class="ref-num">[15]</span> Gupta S. Zone Pollution in Angular: Complete Explanation with Examples. Medium [Internet]. 2026 Jan 26 [cited 2026 May 31]. Available from: https://medium.com/@shubhamgupta.bkn/zone-pollution-in-angular-complete-explanation-with-examples-e52759c558e7</li>
+        <li id="ref16"><span class="ref-num">[16]</span> Bitsrc. Mitigating Zone Pollution in Angular. Bits and Pieces [Internet]. 2023 Oct 8 [cited 2026 May 31]. Available from: https://blog.bitsrc.io/angular-mitigating-zone-pollution-in-angular-22734b19576e</li>
+        <li id="ref17"><span class="ref-num">[17]</span> Lunatech. Change Detection Strategies in Angular: Zones and Signals. Lunatech Blog [Internet]. 2025 Nov 5 [cited 2026 May 31]. Available from: https://blog.lunatech.com/posts/2025-11-05-change-detection-strategies-in-angular-zones-and-signals</li>
+        <li id="ref18"><span class="ref-num">[18]</span> Angular. Slow Computations. Angular Best Practices Documentation [Internet]. [cited 2026 May 31]. Available from: https://angular.dev/best-practices/slow-computations</li>
+        <li id="ref19"><span class="ref-num">[19]</span> NitorInfotech. The Ultimate Guide to Performance Optimization Techniques in Angular: Part 2. Nitor Blog [Internet]. [cited 2026 May 31]. Available from: https://www.nitorinfotech.com/blog/the-ultimate-guide-to-performance-optimization-techniques-in-angular-part-2/</li>
+        <li id="ref20"><span class="ref-num">[20]</span> Angular. Hydration. Angular Documentation [Internet]. [cited 2026 May 31]. Available from: https://angular.dev/guide/hydration</li>
+        <li id="ref21"><span class="ref-num">[21]</span> fluin.io. The State of SSR in Angular. fluin.io Blog [Internet]. 2025 Oct 18 [cited 2026 May 31]. Available from: https://fluin.io/blog/state-of-angular-ssr-2025</li>
+        <li id="ref22"><span class="ref-num">[22]</span> AngularArchitects. Updated: Guide for Server-Side Rendering (SSR) in Angular. AngularArchitects Blog [Internet]. 2025 Mar 23 [cited 2026 May 31]. Available from: https://www.angulararchitects.io/blog/guide-for-ssr/</li>
+      </ol>
+    </section>
+
+  </article>
+</div>
+
+<script src="../dist/js/header.js"></script>
+</body>
+</html>

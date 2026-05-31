@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beyond the SYN Scan — Nmap as a Reconnaissance Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b0f14; --ink-2:#11171f; --ink-3:#1a222c;
+    --paper:#f3efe6; --paper-2:#faf7f0; --paper-edge:#e6dfd1;
+    --text:#161a1f; --text-2:#43494f; --muted:#6b7178;
+    --rule:#dcd5c7;
+    --accent:#0a7f5f; --accent-2:#0c9b73; --phosphor:#34d399;
+    --amber:#a8501c; --amber-soft:#f4e8dc; --amber-edge:#e6c9ad;
+    --code-bg:#0c1116; --code-edge:#1c2630;
+    --t-kw:#5bd6ac; --t-flag:#82aaff; --t-str:#e3a566; --t-com:#56697a; --t-txt:#c9d4de;
+    --o-open:#43d39e; --o-filt:#dc9358; --o-dim:#7c8794;
+    --maxw:720px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--paper); color:var(--text);
+    font-family:"Source Serif 4",Georgia,serif;
+    font-size:19px; line-height:1.72; font-weight:400;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+
+  /* ---------- reading progress ---------- */
+  #progress{position:fixed;top:0;left:0;height:3px;width:0%;
+    background:linear-gradient(90deg,var(--accent-2),var(--phosphor));
+    z-index:120;transition:width .12s linear;box-shadow:0 0 12px rgba(52,211,153,.5)}
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    position:relative; background:var(--ink); color:#e8eef3;
+    overflow:hidden; padding:clamp(3.4rem,8vw,6.5rem) 1.5rem clamp(3rem,6vw,5rem);
+    border-bottom:1px solid #000;
+  }
+  .masthead::before{ /* scanlines */
+    content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(to bottom,rgba(255,255,255,.025) 0 1px,transparent 1px 4px);
+    pointer-events:none;opacity:.6;
+  }
+  .masthead::after{ /* phosphor glow */
+    content:"";position:absolute;left:50%;top:-30%;width:120%;height:140%;transform:translateX(-50%);
+    background:radial-gradient(60% 55% at 50% 30%,rgba(16,155,115,.28),transparent 70%);
+    pointer-events:none;
+  }
+  .mast-inner{position:relative;max-width:var(--maxw);margin:0 auto;z-index:2}
+  .kicker{
+    font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.34em;
+    text-transform:uppercase;color:var(--phosphor);margin:0 0 1.6rem;
+    display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;
+  }
+  .kicker .dot{width:7px;height:7px;border-radius:50%;background:var(--phosphor);
+    box-shadow:0 0 10px var(--phosphor);animation:blink 2.4s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  h1.title{
+    font-family:"Fraunces",serif;font-weight:600;font-optical-sizing:auto;
+    font-size:clamp(2.7rem,7.5vw,5rem);line-height:1.02;letter-spacing:-.02em;
+    margin:0 0 1.4rem;color:#fbfcfd;
+  }
+  h1.title em{font-style:italic;font-weight:500;color:var(--phosphor)}
+  .deck{
+    font-size:clamp(1.12rem,2.4vw,1.4rem);line-height:1.5;color:#b9c4cf;
+    max-width:38ch;margin:0 0 2.2rem;font-weight:400;
+  }
+  .meta-row{
+    display:flex;flex-wrap:wrap;gap:.55rem;font-family:"IBM Plex Mono",monospace;
+    font-size:.74rem;letter-spacing:.04em;
+  }
+  .chip{
+    border:1px solid rgba(255,255,255,.18);border-radius:2px;padding:.4rem .7rem;
+    color:#cfd8e0;background:rgba(255,255,255,.03);
+  }
+  .chip b{color:var(--phosphor);font-weight:500}
+
+  /* ---------- layout ---------- */
+  .wrap{max-width:1160px;margin:0 auto;padding:0 1.5rem;
+    display:grid;grid-template-columns:240px 1fr;gap:3.2rem;align-items:start}
+  nav.toc{position:sticky;top:2rem;align-self:start;padding-top:3.2rem;
+    font-family:"IBM Plex Mono",monospace;font-size:.78rem;line-height:1.5}
+  nav.toc .toc-label{letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+    font-size:.66rem;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--rule)}
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:toc}
+  nav.toc li{counter-increment:toc;margin:.15rem 0}
+  nav.toc a{display:block;color:var(--text-2);text-decoration:none;padding:.32rem .5rem .32rem 0;
+    border-left:2px solid transparent;padding-left:.85rem;transition:all .18s;border-radius:0 2px 2px 0}
+  nav.toc a::before{content:counter(toc,decimal-leading-zero);color:var(--muted);margin-right:.6rem;font-size:.72rem}
+  nav.toc a:hover{color:var(--accent);background:var(--paper-2)}
+  nav.toc a.active{color:var(--accent);border-left-color:var(--accent);background:var(--paper-2);font-weight:500}
+  nav.toc a.active::before{color:var(--accent)}
+
+  article{min-width:0;padding-top:3.2rem;padding-bottom:5rem}
+
+  /* ---------- typographic flow ---------- */
+  .lede{max-width:var(--maxw)}
+  article > section, article > .lede{max-width:var(--maxw)}
+  p{margin:0 0 1.3rem}
+  .lede > p:first-of-type{font-size:1.05rem}
+  .dropcap::first-letter{
+    font-family:"Fraunces",serif;font-weight:900;float:left;font-size:5.1rem;line-height:.78;
+    padding:.32rem .55rem 0 0;color:var(--accent);
+  }
+  h2{
+    font-family:"Fraunces",serif;font-weight:600;font-size:clamp(1.85rem,4vw,2.5rem);
+    line-height:1.08;letter-spacing:-.015em;margin:3.6rem 0 .4rem;scroll-margin-top:1.5rem;
+  }
+  .h2-num{font-family:"IBM Plex Mono",monospace;font-size:.78rem;letter-spacing:.22em;
+    color:var(--accent);text-transform:uppercase;display:block;margin:0 0 .55rem;font-weight:500}
+  h2 + .sub{color:var(--muted);font-style:italic;font-size:1.04rem;margin:-.1rem 0 1.6rem}
+  h3{font-family:"Fraunces",serif;font-weight:600;font-size:1.32rem;letter-spacing:-.01em;
+    margin:2.4rem 0 .7rem;color:#0d1318}
+  h4{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:.92rem;letter-spacing:.02em;
+    margin:1.8rem 0 .6rem;color:var(--accent)}
+  a.link{color:var(--accent);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+  strong{font-weight:700;color:#0a0e12}
+  em{font-style:italic}
+  hr.div{border:0;height:1px;background:var(--rule);margin:3rem 0;max-width:var(--maxw)}
+
+  /* ---------- citations ---------- */
+  sup.cite{font-family:"IBM Plex Mono",monospace;font-size:.62em;font-weight:500;line-height:0;
+    vertical-align:super;white-space:nowrap}
+  sup.cite a{color:var(--accent);text-decoration:none;padding:0 .05em}
+  sup.cite a:hover{text-decoration:underline}
+  sup.cite::before{content:"[";color:var(--muted)}
+  sup.cite::after{content:"]";color:var(--muted)}
+
+  /* ---------- code ---------- */
+  .code{
+    background:var(--code-bg);border:1px solid var(--code-edge);border-radius:8px;
+    margin:1.6rem 0;overflow:hidden;box-shadow:0 14px 34px -22px rgba(0,0,0,.6);
+  }
+  .code .bar{display:flex;align-items:center;gap:.55rem;padding:.55rem .95rem;
+    background:#0a0e12;border-bottom:1px solid var(--code-edge)}
+  .code .bar .b{width:11px;height:11px;border-radius:50%;background:#2a3540}
+  .code .bar .b:nth-child(1){background:#3a2730}
+  .code .bar .b:nth-child(2){background:#3a3327}
+  .code .bar .b:nth-child(3){background:#27392f}
+  .code .bar .label{margin-left:.6rem;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
+    letter-spacing:.12em;text-transform:uppercase;color:#5f6e7c}
+  pre{margin:0;padding:1.05rem 1.2rem;overflow-x:auto;
+    font-family:"IBM Plex Mono",monospace;font-size:.83rem;line-height:1.68;color:var(--t-txt)}
+  pre code{font-family:inherit}
+  .pr{color:var(--t-kw);user-select:none}      /* prompt */
+  .kw{color:var(--t-kw);font-weight:500}        /* command */
+  .fl{color:var(--t-flag)}                       /* flag */
+  .st{color:var(--t-str)}                        /* string/ip/path */
+  .c{color:var(--t-com);font-style:italic}      /* comment */
+  .open{color:var(--o-open)}
+  .filt{color:var(--o-filt)}
+  .dim{color:var(--o-dim)}
+  code.inl{font-family:"IBM Plex Mono",monospace;font-size:.84em;background:var(--paper-2);
+    border:1px solid var(--paper-edge);border-radius:4px;padding:.08em .38em;color:#0d1d18}
+
+  /* ---------- pull quote ---------- */
+  blockquote.pq{margin:2.6rem 0;padding:.3rem 0 .3rem 1.7rem;border-left:3px solid var(--accent);
+    max-width:var(--maxw)}
+  blockquote.pq p{font-family:"Fraunces",serif;font-weight:500;font-style:italic;
+    font-size:1.5rem;line-height:1.32;color:#11201b;margin:0}
+
+  /* ---------- stat cards ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;
+    background:var(--rule);border:1px solid var(--rule);border-radius:8px;overflow:hidden;
+    margin:2rem 0;max-width:var(--maxw)}
+  .stat{background:var(--paper-2);padding:1.2rem 1.1rem}
+  .stat .n{font-family:"Fraunces",serif;font-weight:700;font-size:2.05rem;line-height:1;color:var(--accent);
+    letter-spacing:-.02em}
+  .stat .l{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);margin-top:.45rem;line-height:1.4}
+
+  /* ---------- tables ---------- */
+  .tbl-wrap{margin:1.8rem 0;overflow-x:auto;max-width:var(--maxw);
+    border:1px solid var(--rule);border-radius:8px}
+  table{border-collapse:collapse;width:100%;font-size:.86rem;background:var(--paper-2)}
+  caption{caption-side:top;text-align:left;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.9rem 1rem .4rem}
+  th,td{padding:.7rem .9rem;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+  thead th{background:var(--ink);color:#dfe7ee;font-family:"IBM Plex Mono",monospace;
+    font-weight:500;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#fff}
+  td code,th code{font-family:"IBM Plex Mono",monospace;font-size:.9em;color:#0d1d18}
+  .s-open{color:#0a7f5f;font-weight:600}
+  .s-closed{color:#9a4a2c;font-weight:600}
+  .s-filt{color:#8a6d1e;font-weight:600}
+
+  /* ---------- callouts ---------- */
+  .callout{margin:2rem 0;border-radius:8px;padding:1.3rem 1.4rem;max-width:var(--maxw);
+    border:1px solid var(--paper-edge);background:var(--paper-2);position:relative}
+  .callout .tag{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 .5rem;font-weight:600}
+  .callout p{margin:0 0 .7rem;font-size:.97rem}
+  .callout p:last-child{margin-bottom:0}
+  .callout.warn{background:var(--amber-soft);border-color:var(--amber-edge)}
+  .callout.warn .tag{color:var(--amber)}
+  .callout.warn strong{color:#6e3411}
+
+  /* ---------- references ---------- */
+  .refs{background:var(--ink);color:#cdd6df;margin-top:4rem;padding:3.5rem 1.5rem 4.5rem}
+  .refs-inner{max-width:var(--maxw);margin:0 auto}
+  .refs h2{color:#fff;margin-top:0}
+  .refs .h2-num{color:var(--phosphor)}
+  .refs p.note{color:#8c98a4;font-size:.92rem;font-style:italic;margin-bottom:2rem}
+  ol.reflist{counter-reset:ref;list-style:none;margin:0;padding:0}
+  ol.reflist li{counter-increment:ref;position:relative;padding:.7rem 0 .7rem 3rem;
+    border-bottom:1px solid rgba(255,255,255,.08);font-size:.84rem;line-height:1.55;color:#c1ccd6;
+    font-family:"IBM Plex Mono",monospace;scroll-margin-top:1.5rem}
+  ol.reflist li::before{content:counter(ref);position:absolute;left:0;top:.7rem;
+    font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--phosphor);font-weight:600;
+    width:2.2rem;text-align:right}
+  ol.reflist li:target{background:rgba(52,211,153,.08)}
+  ol.reflist a{color:#7bb8e8;text-decoration:none;word-break:break-word}
+  ol.reflist a:hover{text-decoration:underline}
+  ol.reflist .src{color:#e8eef3;font-style:normal}
+
+  footer.colo{background:#06090d;color:#56636f;text-align:center;padding:2.5rem 1.5rem;
+    font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.05em;line-height:1.7}
+  footer.colo .ph{color:var(--phosphor)}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:920px){
+    .wrap{grid-template-columns:1fr;gap:0}
+    nav.toc{position:static;padding-top:2rem;margin-bottom:1rem;
+      border-bottom:1px solid var(--rule);padding-bottom:1.5rem}
+    nav.toc ol{columns:2;column-gap:1.5rem}
+    article{padding-top:2rem}
+  }
+  @media (max-width:560px){
+    body{font-size:18px}
+    nav.toc ol{columns:1}
+    .dropcap::first-letter{font-size:4rem}
+    pre{font-size:.76rem}
+  }
+</style>
+</head>
+<body class="blog-article-page">
+<div id="site-header"></div>
+<div id="progress"></div>
+
+<header class="masthead">
+  <div class="mast-inner">
+    <p class="kicker"><span class="dot"></span>Offensive Security &nbsp;·&nbsp; Network Reconnaissance &nbsp;·&nbsp; Field Notes</p>
+    <h1 class="title">Beyond the<br><em>SYN Scan</em></h1>
+    <p class="deck">How Nmap's advanced scan types, evasion primitives, and scripting engine turn a port scanner into a serious reconnaissance platform.</p>
+    <div class="meta-row">
+      <span class="chip"><b>≈ 32</b> min read</span>
+      <span class="chip">Level&nbsp;<b>Intermediate → Advanced</b></span>
+      <span class="chip">Updated&nbsp;<b>May 2026</b></span>
+      <span class="chip">Citations&nbsp;<b>Vancouver</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc" aria-label="Table of contents">
+    <div class="toc-label">Contents</div>
+    <ol>
+      <li><a href="#origins">A tool with a thesis</a></li>
+      <li><a href="#states">The state model</a></li>
+      <li><a href="#advanced">Advanced scan types</a></li>
+      <li><a href="#firewall">Firewall &amp; ACL analysis</a></li>
+      <li><a href="#evasion">Evasion &amp; spoofing</a></li>
+      <li><a href="#nse">The Scripting Engine</a></li>
+      <li><a href="#scale">Enumeration at scale</a></li>
+      <li><a href="#services">Service-specific recon</a></li>
+      <li><a href="#authz">Authorization</a></li>
+      <li><a href="#close">The discipline</a></li>
+      <li><a href="#references">References</a></li>
+    </ol>
+  </nav>
+
+  <article>
+
+    <div class="lede">
+      <p class="dropcap"><strong>Nmap is usually introduced as a port scanner,</strong> which is a little like introducing a stethoscope as a noise-detector. The description is technically true and entirely misses the point. A practitioner who has only ever run <code class="inl">nmap -sS 10.0.0.0/24</code> has seen the tool's first sentence; the rest of the book is about what you do once the network starts answering back — how you read filtered ports against unfiltered ones, how you tell a stateful firewall from a stateless ACL by the shape of a reset packet, how you turn three hundred Lua scripts loose on a discovered service, and how you keep all of that legible across a sixteen-thousand-host engagement without drowning in false positives.</p>
+
+      <p>This piece assumes you already know the basics: that a SYN scan is half-open, that <code class="inl">-Pn</code> skips host discovery, that <code class="inl">-sV</code> fingerprints services. The goal here is narrower and more useful — <strong>to treat Nmap as a reconnaissance platform during authorized assessments</strong> rather than as a one-shot scanner. That means understanding the protocol-level mechanics well enough to choose a scan deliberately, to interpret an ambiguous result instead of trusting the label, and to chain discovery into enumeration into vulnerability validation. Everything below is framed for work you are authorized to perform; the <a href="#authz" class="link">section on authorization</a> is not boilerplate.</p>
+    </div>
+
+    <!-- ===================== 1 ===================== -->
+    <section id="origins">
+      <h2><span class="h2-num">01 / Origins</span>A tool with a thesis</h2>
+      <p class="sub">Why a 1997 magazine article still shapes how the tool thinks.</p>
+
+      <p>Nmap was first released on 1 September 1997, not as a download but as source code printed inside issue 51 of <em>Phrack</em>, in an article by Gordon Lyon — writing as Fyodor — titled <em>The Art of Port Scanning</em>.<sup class="cite"><a href="#ref-1" id="cite-1">1</a></sup> The original was roughly two thousand lines of C with no version number, because no further releases were planned.<sup class="cite"><a href="#ref-2" id="cite-2">2</a></sup> The stated ambition, recalled later in the preface to the <em>Nmap Network Scanning</em> book, was to consolidate a fragmented field of single-purpose scanners into one flexible tool with a consistent interface and an efficient implementation.<sup class="cite"><a href="#ref-3" id="cite-3">3</a></sup> That consolidation thesis is why Nmap accumulated scan <em>types</em> — SYN, FIN, ACK, Window, Maimon — rather than settling on one. Each type exists because some class of target, or some class of firewall, responds differently, and a serious operator wants the whole instrument.</p>
+
+      <div class="stats">
+        <div class="stat"><div class="n">1997</div><div class="l">First release, Phrack #51</div></div>
+        <div class="stat"><div class="n">v4.50</div><div class="l">NSE ships, Dec 2007</div></div>
+        <div class="stat"><div class="n">7.98</div><div class="l">Current stable, Aug 2025</div></div>
+        <div class="stat"><div class="n">14</div><div class="l">NSE script categories</div></div>
+      </div>
+
+      <p>The next decade filled in the platform. OS detection arrived with version 2.00 in December 1998; service/version detection landed in 2003; the <code class="inl">ultra_scan</code> engine that still drives timing was rewritten for 3.70 in 2004.<sup class="cite"><a href="#ref-4" id="cite-4">4</a></sup> The decisive moment came on 13 December 2007, when Nmap 4.50 — the tenth-anniversary release — shipped the Nmap Scripting Engine alongside the Zenmap GUI and second-generation OS detection.<sup class="cite"><a href="#ref-5" id="cite-5">5</a></sup> NSE is what turned a scanner into a framework: an embedded Lua interpreter that runs purpose-built scripts in parallel against discovered services. By the current 7.x line — 7.98 was released in August 2025<sup class="cite"><a href="#ref-4" id="cite-6">4</a></sup> — the distribution ships several hundred of them. The point of the history is not nostalgia. It is that Nmap's design rewards an operator who knows <em>why</em> each capability exists, because the labels the tool prints are deductions, not ground truth.</p>
+    </section>
+
+    <!-- ===================== 2 ===================== -->
+    <section id="states">
+      <h2><span class="h2-num">02 / Foundations</span>The state model is the whole game</h2>
+      <p class="sub">Everything advanced follows from how Nmap collapses a probe response into a label.</p>
+
+      <p>Nmap reports six port states, and the advanced material only makes sense once you treat them as <em>inferences from probe behavior</em> rather than as facts about ports. <strong>Open</strong> means an application is accepting connections. <strong>Closed</strong> means the port is reachable but nothing is listening. <strong>Filtered</strong> means a packet filter prevented the probe from eliciting a usable response — Nmap could not determine whether anything listens, often because probes were silently dropped, which forces retransmissions and slows the scan.<sup class="cite"><a href="#ref-6" id="cite-7">6</a></sup> Two compound states matter enormously for the advanced scans: <strong>open|filtered</strong>, used when the absence of a response is itself ambiguous, and <strong>unfiltered</strong>, used when a port is reachable but the scan type cannot decide open versus closed.<sup class="cite"><a href="#ref-6" id="cite-8">6</a></sup></p>
+
+      <blockquote class="pq"><p>A port state is not solely a property of the port. The same port can be "filtered" to one scan type and "unfiltered" to another against the same host.</p></blockquote>
+
+      <p>That observation, drawn directly from the Nmap book's firewall chapter, is the hinge for the entire discipline.<sup class="cite"><a href="#ref-7" id="cite-9">7</a></sup> A SYN scan and an ACK scan ask the target two different questions and therefore get two different answers; combining them tells you something neither could alone. Hold that idea — that you are running differential experiments, not reading a register — and the rest of the scan zoo organizes itself.</p>
+    </section>
+
+    <!-- ===================== 3 ===================== -->
+    <section id="advanced">
+      <h2><span class="h2-num">03 / Probes</span>Advanced scan types</h2>
+      <p class="sub">Six TCP scans that exploit RFC ambiguity, stack quirks, and firewall logic.</p>
+
+      <h3>The RFC&nbsp;793 loophole: FIN, NULL, and Xmas</h3>
+      <p>The stealth trio — <code class="inl">-sF</code> (FIN), <code class="inl">-sN</code> (NULL), and <code class="inl">-sX</code> (Xmas) — all exploit a single subtle reading of the TCP specification. Page 65 of RFC 793 states that a segment arriving at a <em>closed</em> port that does not contain RST must provoke a RST in response, while the following page says that a segment arriving at an <em>open</em> port without the SYN, RST, or ACK bits set should simply be dropped.<sup class="cite"><a href="#ref-8" id="cite-10">8</a></sup> The consequence: against an RFC-compliant stack, any probe lacking SYN/RST/ACK draws a RST from a closed port and silence from an open one.<sup class="cite"><a href="#ref-9" id="cite-11">9</a></sup> As long as those three bits are absent, the other three (FIN, PSH, URG) may be set in any combination. The FIN scan sends a bare FIN; the NULL scan sends a header with no flags at all; the Xmas scan lights FIN, PSH, and URG so the packet appears "lit up like a Christmas tree."<sup class="cite"><a href="#ref-9" id="cite-12">9</a></sup></p>
+
+      <div class="code">
+        <div class="bar"><span class="b"></span><span class="b"></span><span class="b"></span><span class="label">stealth scans</span></div>
+        <pre><code><span class="c"># FIN / NULL / Xmas — silence == open|filtered, RST == closed</span>
+<span class="pr">$</span> <span class="kw">sudo nmap</span> <span class="fl">-sF</span> <span class="fl">-T4</span> <span class="fl">-p</span> <span class="st">1-1024</span> <span class="st">192.168.56.10</span>
+<span class="pr">$</span> <span class="kw">sudo nmap</span> <span class="fl">-sN</span> <span class="fl">--reason</span> <span class="st">192.168.56.10</span>
+<span class="pr">$</span> <span class="kw">sudo nmap</span> <span class="fl">-sX</span> <span class="fl">-p-</span> <span class="st">192.168.56.10</span></code></pre>
+      </div>
+
+      <p>The reward is stealth and a real chance of slipping past stateless, SYN-focused packet filters; the penalty is interpretive. Because an open port stays silent, Nmap cannot distinguish "open" from "dropped by a filter," so it reports <strong>open|filtered</strong>.<sup class="cite"><a href="#ref-9" id="cite-13">9</a></sup> Worse, the loophole only holds where the stack obeys the RFC. Microsoft Windows, many Cisco devices, and IBM OS/400 reply with RST regardless of port state, which makes every port look closed.<sup class="cite"><a href="#ref-9" id="cite-14">9</a></sup> That failure is itself a fingerprint: a host that returns "all closed" to a NULL scan but shows open ports under SYN is very likely a Windows or Cisco stack. Truly advanced users go further with <code class="inl">--scanflags</code>, specifying arbitrary TCP flag combinations — a SYN/FIN scan, for instance — to build probes whose signatures were never added to an IDS ruleset written by paging through the Nmap man page.<sup class="cite"><a href="#ref-10" id="cite-15">10</a></sup></p>
+
+      <h3>The Maimon scan: a BSD quirk in plain sight</h3>
+      <p>The Maimon scan (<code class="inl">-sM</code>) is mechanically identical to the FIN/NULL/Xmas family except that its probe carries FIN/ACK. By RFC 793, a FIN/ACK to either an open or a closed port should draw a RST. The technique is named for Uriel Maimon, who described in <em>Phrack</em> issue 49 (November 1996) that many BSD-derived stacks violate this by silently <em>dropping</em> the packet when the port is open — Nmap shipped the technique two issues later.<sup class="cite"><a href="#ref-11" id="cite-16">11</a></sup><sup class="cite"><a href="#ref-12" id="cite-17">12</a></sup> On a vulnerable BSD-lineage target it therefore behaves like a FIN scan; everywhere else it reports closed. It is a niche probe, but it is the canonical example of Nmap weaponizing a specific implementation deviation, and worth keeping in the kit for older network appliances and BSD-derived embedded systems.</p>
+
+      <h3>The ACK scan: a firewall mapper, not a port finder</h3>
+      <p>The ACK scan (<code class="inl">-sA</code>) is different in kind from everything above: it never reports a port open, or even open|filtered. Its probe carries only the ACK flag, and its purpose is to map firewall rulesets — to learn which ports are filtered and whether the firewall is stateful.<sup class="cite"><a href="#ref-13" id="cite-18">13</a></sup> Against an <em>unfiltered</em> system, both open and closed ports return RST, because an unsolicited ACK matches no connection and the stack resets it. Nmap labels these <strong>unfiltered</strong>: reachable by the ACK packet, open-versus-closed undetermined.<sup class="cite"><a href="#ref-6" id="cite-19">6</a></sup> Ports that return nothing, or that answer with ICMP unreachable errors of type 3 code 0, 1, 2, 3, 9, 10, or 13, are labeled <strong>filtered</strong>.<sup class="cite"><a href="#ref-6" id="cite-20">6</a></sup> The logical trick that follows is powerful: if a SYN scan calls a port open|filtered and an ACK scan calls it unfiltered, the port must be open — though, as we'll see, that deduction has limits.<sup class="cite"><a href="#ref-13" id="cite-21">13</a></sup></p>
+
+      <h3>The Window scan: reading the reset's window</h3>
+      <p>The Window scan (<code class="inl">-sW</code>) sends the same bare ACK probe as the ACK scan but, instead of always printing "unfiltered" on a returned RST, it inspects the TCP window field of that RST. On certain stacks, open ports advertise a positive window even in a reset while closed ports use zero, so the window value betrays the port state.<sup class="cite"><a href="#ref-14" id="cite-22">14</a></sup> When it works it is elegant; in practice it is fragile, since most modern stacks no longer exhibit the quirk and may even invert it, producing exactly wrong results. Treat <code class="inl">-sW</code> as a corroborating probe against unusual targets, never as a primary scan.</p>
+
+      <div class="tbl-wrap">
+        <table>
+          <caption>How each scan collapses a response into a state</caption>
+          <thead><tr><th>Scan</th><th>Flag</th><th>Probe</th><th>RST reply →</th><th>No reply →</th><th>Best used for</th></tr></thead>
+          <tbody>
+            <tr><td>FIN</td><td><code>-sF</code></td><td>FIN</td><td class="s-closed">closed</td><td class="s-filt">open|filtered</td><td>Unix targets, stateless filters</td></tr>
+            <tr><td>NULL</td><td><code>-sN</code></td><td>no flags</td><td class="s-closed">closed</td><td class="s-filt">open|filtered</td><td>Stack fingerprinting by failure</td></tr>
+            <tr><td>Xmas</td><td><code>-sX</code></td><td>FIN+PSH+URG</td><td class="s-closed">closed</td><td class="s-filt">open|filtered</td><td>Evading naïve flag rules</td></tr>
+            <tr><td>Maimon</td><td><code>-sM</code></td><td>FIN+ACK</td><td class="s-closed">closed</td><td class="s-filt">open|filtered*</td><td>BSD-derived stacks only</td></tr>
+            <tr><td>ACK</td><td><code>-sA</code></td><td>ACK</td><td class="s-open">unfiltered</td><td class="s-filt">filtered</td><td>Firewall ruleset mapping</td></tr>
+            <tr><td>Window</td><td><code>-sW</code></td><td>ACK</td><td>open / closed by window</td><td class="s-filt">filtered</td><td>Corroboration on quirky stacks</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:.82rem;color:var(--muted);margin-top:-.6rem">* On RFC-compliant stacks the Maimon probe is reset like any other; the open|filtered result only appears on the BSD-lineage stacks that drop it.</p>
+    </section>
+
+    <!-- ===================== 4 ===================== -->
+    <section id="firewall">
+      <h2><span class="h2-num">04 / Inference</span>Firewall and ACL analysis</h2>
+      <p class="sub">Turning differential scan results into a map of the perimeter.</p>
+
+      <p>The single most useful application of the ACK scan is distinguishing <strong>stateful</strong> from <strong>stateless</strong> filtering. The Nmap book's worked example uses the public host <code class="inl">scanme.nmap.org</code>, which is protected by a stateful iptables rule that accepts only packets belonging to or related to an established connection: <code class="inl">iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT</code>. Against that host, an ACK scan finds the same handful of explicitly permitted ports unfiltered and everything else filtered, because the unsolicited ACK packets match no connection and are dropped.<sup class="cite"><a href="#ref-7" id="cite-23">7</a></sup> A stateless filter, by contrast, has no notion of connection state and will pass the ACK to closed and open ports alike, returning RSTs and reporting them unfiltered. The difference in the result set is the diagnosis.</p>
+
+      <div class="code">
+        <div class="bar"><span class="b"></span><span class="b"></span><span class="b"></span><span class="label">stateful detection — ACK scan</span></div>
+        <pre><code><span class="pr">$</span> <span class="kw">sudo nmap</span> <span class="fl">-sA</span> <span class="fl">-T4</span> <span class="st">scanme.nmap.org</span>
+<span class="dim">PORT    STATE      SERVICE</span>
+<span class="dim">22/tcp  </span><span class="open">unfiltered</span><span class="dim"> ssh</span>
+<span class="dim">25/tcp  </span><span class="open">unfiltered</span><span class="dim"> smtp</span>
+<span class="dim">80/tcp  </span><span class="open">unfiltered</span><span class="dim"> http</span>
+<span class="dim">Not shown: 994 </span><span class="filt">filtered</span><span class="dim"> ports   </span><span class="c"># → stateful: only permitted ports answer</span></code></pre>
+      </div>
+
+      <h4>Packet-filter identification &amp; ACL discovery</h4>
+      <p>Filtered ports rarely announce themselves cleanly. Sometimes a firewall that blocks a probe answers with an ICMP destination-unreachable error — type 3 code 13 means "communication administratively prohibited," a near-confession that an ACL is dropping the traffic — but far more often filters simply drop probes silently, which is why Nmap retries before committing to a "filtered" verdict.<sup class="cite"><a href="#ref-6" id="cite-24">6</a></sup> ACL discovery, then, is a differential exercise: scan the same target with SYN and with ACK, scan it from inside and outside the perimeter if scope allows, vary the probed ports, and reconstruct the rule set from the pattern of which ports answer which probe. The <code class="inl">--reason</code> flag is indispensable here because it prints the actual stimulus behind each verdict — <code class="inl">reset</code>, <code class="inl">no-response</code>, <code class="inl">admin-prohibited</code> — rather than just the label.</p>
+
+      <p>Two cautions keep this honest. First, the logical-deduction trick (open|filtered ∩ unfiltered ⇒ open) assumes that different scan types return a consistent state for a given port, and that assumption is frequently wrong: TCP-stack idiosyncrasies and firewall behavior routinely make scans disagree, so deduction is a hypothesis to confirm, not a conclusion.<sup class="cite"><a href="#ref-13" id="cite-25">13</a></sup> Second, firewall forgery is always possible; an ACK scan showing packets reaching a host establishes only that they <em>probably</em> arrived. The Nmap book itself notes that such reachable-but-unconnectable hosts can be useful for OS detection, for IP-ID tricks, and as zombies in an idle scan — a reminder that perimeter mapping feeds the rest of the engagement.<sup class="cite"><a href="#ref-7" id="cite-26">7</a></sup> When you need to attribute filtering to a specific hop rather than the host, the NSE <code class="inl">firewalk</code> script reconstructs rules with a TTL-expiration technique layered on traceroute.</p>
+    </section>
+
+    <!-- ===================== 5 ===================== -->
+    <section id="evasion">
+      <h2><span class="h2-num">05 / Evasion</span>Evasion &amp; spoofing</h2>
+      <p class="sub">Primitives for testing whether a sensor actually sees what it claims to see.</p>
+
+      <div class="callout">
+        <p class="tag">Framing</p>
+        <p>Evasion techniques are how you <em>measure detection efficacy</em> on an authorized engagement — do the IDS rules fire, does the firewall reassemble fragments, does the SOC alert? They are diagnostic instruments for blue-team improvement, not a recipe for going unnoticed. Use them to produce findings and detection content, not to defeat monitoring you are meant to validate.</p>
+      </div>
+
+      <h4>Fragmentation — <code style="font-size:.9em">-f</code>, <code style="font-size:.9em">-f -f</code>, <code style="font-size:.9em">--mtu</code></h4>
+      <p>The <code class="inl">-f</code> option splits the requested scan into tiny fragmented IP packets, the idea being to spread the TCP header across several fragments so a naïve packet filter or IDS cannot see the whole thing at once.<sup class="cite"><a href="#ref-15" id="cite-27">15</a></sup> A single <code class="inl">-f</code> fragments into 8-byte data chunks; specifying it twice (<code class="inl">-f -f</code>) doubles that to 16. For explicit control, <code class="inl">--mtu</code> sets the fragment size directly and must be a multiple of eight (do not combine it with <code class="inl">-f</code>).<sup class="cite"><a href="#ref-15" id="cite-28">15</a></sup> The technique has real limits the book is candid about: filters that queue and reassemble all fragments — the Linux kernel's <code class="inl">CONFIG_IP_ALWAYS_DEFRAG</code>, or iptables connection tracking — defeat it outright, and some source hosts defragment on the way out. If the host OS interferes, <code class="inl">--send-eth</code> bypasses the IP layer with raw Ethernet frames, and fragmentation is only available for Nmap's raw-packet scans (so not connect or FTP-bounce).<sup class="cite"><a href="#ref-15" id="cite-29">15</a></sup> Always confirm with a sniffer that packets are actually leaving fragmented.</p>
+
+      <h4>Decoys — <code style="font-size:.9em">-D</code></h4>
+      <p>The decoy option (<code class="inl">-D</code>) cloaks a scan by forging probes that appear to originate from additional source addresses, so the target sees several systems scanning at once and cannot easily pick out the real one.<sup class="cite"><a href="#ref-16" id="cite-30">16</a></sup> You can list decoy IPs explicitly, generate them with <code class="inl">RND:5</code> for five random non-reserved addresses, and place the literal token <code class="inl">ME</code> to control where your real address sits in the sequence. Decoys raise the cost of attribution and can swamp simple alert logic, but they are not invisibility: decoys must be live or you risk SYN-flooding the target, and a sensor doing upstream path analysis or correlating which "source" actually completes connections can still surface the real origin.</p>
+
+      <h4>Source-port manipulation — <code style="font-size:.9em">-g</code> / <code style="font-size:.9em">--source-port</code></h4>
+      <p>A surprising number of firewall rule sets trust traffic by source port — leaving DNS (53), or the old FTP-DATA port (20), or Kerberos (88) effectively whitelisted on the assumption that such packets are benign replies. Nmap's <code class="inl">-g</code> (alias <code class="inl">--source-port</code>) sets a fixed source port so probes inherit that misplaced trust.<sup class="cite"><a href="#ref-16" id="cite-31">16</a></sup> A scan that comes back empty from the standard source can light up when sourced from port 53 — and that delta is itself a finding worth writing up, because it reveals a fragile ACL.</p>
+
+      <h4>Packet padding &amp; checksum tricks — <code style="font-size:.9em">--data-length</code>, <code style="font-size:.9em">--data</code>, <code style="font-size:.9em">--badsum</code></h4>
+      <p>Nmap's probes have characteristic, signature-able sizes. The <code class="inl">--data-length</code> option appends random bytes to change the packet length and slip past length-based signatures; <code class="inl">--data</code> and <code class="inl">--data-string</code> append a custom hex or ASCII payload when you want probes to resemble a specific protocol.<sup class="cite"><a href="#ref-16" id="cite-32">16</a></sup> Related spoofing controls in the same family include <code class="inl">-S</code> to forge a source address, <code class="inl">--spoof-mac</code> to set a MAC by address or vendor prefix, <code class="inl">--ttl</code> to set the IP time-to-live, <code class="inl">--ip-options</code> for crafted IP options, <code class="inl">--proxies</code> to relay through HTTP/SOCKS4 proxies, and <code class="inl">--badsum</code>, which sends a deliberately bad TCP/UDP checksum so that only a system <em>not</em> validating checksums (often an IDS or firewall, rather than a real host) will respond — a clean way to flush out inline inspection devices.<sup class="cite"><a href="#ref-16" id="cite-33">16</a></sup></p>
+
+      <h4>Timing as evasion</h4>
+      <p>The most effective evasion is often just patience. Slowing the probe rate below a sensor's correlation window keeps a scan under rate-based alert thresholds. The <code class="inl">-T0</code> (paranoid) template serializes the scan and waits five minutes between probes; <code class="inl">-T1</code> waits fifteen seconds; both are explicitly intended for IDS evasion.<sup class="cite"><a href="#ref-17" id="cite-34">17</a></sup> Finer control comes from <code class="inl">--scan-delay</code>, <code class="inl">--max-rate</code>, and <code class="inl">--max-retries</code>. A realistic detection-validation command stacks these primitives — and tests the SOC's ability to reconstruct a slow, fragmented, decoyed scan from telemetry:</p>
+
+      <div class="code">
+        <div class="bar"><span class="b"></span><span class="b"></span><span class="b"></span><span class="label">stacked evasion (detection test)</span></div>
+        <pre><code><span class="pr">$</span> <span class="kw">sudo nmap</span> <span class="fl">-sF</span> <span class="fl">-f</span> <span class="fl">-g</span> <span class="st">53</span> <span class="fl">-D</span> <span class="st">RND:3,ME</span> <span class="fl">-T1</span> <span class="fl">--data-length</span> <span class="st">28</span> \
+       <span class="fl">--reason</span> <span class="fl">-p</span> <span class="st">1-200</span> <span class="st">10.10.20.5</span>
+<span class="c"># FIN flags avoid SYN logging · fragments split the header</span>
+<span class="c"># source port 53 inherits DNS trust · 3 random decoys + you</span>
+<span class="c"># T1 stays under rate thresholds · padding breaks size signatures</span></code></pre>
+      </div>
+    </section>
+
+    <!-- ===================== 6 ===================== -->
+    <section id="nse">
+      <h2><span class="h2-num">06 / NSE</span>The Scripting Engine</h2>
+      <p class="sub">The feature that makes Nmap a platform rather than a scanner.</p>
+
+      <p>The Nmap Scripting Engine lets users write and share scripts in Lua to automate networking tasks, executed in parallel with the speed expected from Nmap.<sup class="cite"><a href="#ref-18" id="cite-35">18</a></sup> The design space the authors had in mind spans host and network discovery, more sophisticated version detection, vulnerability detection — and, explicitly, vulnerability <em>exploitation</em>.<sup class="cite"><a href="#ref-18" id="cite-36">18</a></sup> Scripts run in one of four phases: <em>prerule</em> scripts before any scanning, <em>host</em> scripts after host discovery, <em>service</em> scripts against specific open services, and <em>postrule</em> scripts after all targets are done. Each script declares one or more of fourteen categories, indexed in a <code class="inl">script.db</code> for fast selection: <code class="inl">auth</code>, <code class="inl">broadcast</code>, <code class="inl">brute</code>, <code class="inl">default</code>, <code class="inl">discovery</code>, <code class="inl">dos</code>, <code class="inl">exploit</code>, <code class="inl">external</code>, <code class="inl">fuzzer</code>, <code class="inl">intrusive</code>, <code class="inl">malware</code>, <code class="inl">safe</code>, <code class="inl">version</code>, and <code class="inl">vuln</code>.<sup class="cite"><a href="#ref-19" id="cite-37">19</a></sup></p>
+
+      <h4>Selecting scripts</h4>
+      <p>Selection accepts script names, categories, directories, and shell-style wildcards, and supports boolean expressions with <code class="inl">and</code>/<code class="inl">or</code>/<code class="inl">not</code> at Lua precedence. The convenience flag <code class="inl">-sC</code> is equivalent to <code class="inl">--script=default</code>.<sup class="cite"><a href="#ref-19" id="cite-38">19</a></sup> A few patterns cover most real work:</p>
+
+      <div class="code">
+        <div class="bar"><span class="b"></span><span class="b"></span><span class="b"></span><span class="label">nse selection idioms</span></div>
+        <pre><code><span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">-sV</span> <span class="fl">-sC</span> <span class="st">target</span>                       <span class="c"># default scripts + versions</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">--script</span> <span class="st">"http-*"</span> <span class="fl">-p</span> <span class="st">80,443</span> <span class="st">target</span>     <span class="c"># every http- script</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">--script</span> <span class="st">"default and safe"</span> <span class="st">target</span>      <span class="c"># boolean expression</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">--script</span> <span class="st">"vuln and not dos"</span> <span class="st">target</span>      <span class="c"># vuln checks, no DoS</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">--script</span> <span class="st">ssh-brute</span> \
+       <span class="fl">--script-args</span> <span class="st">userdb=users.txt,passdb=pass.txt</span> <span class="st">target</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">--script-help</span> <span class="st">smb-enum-shares</span>            <span class="c"># read before you run</span></code></pre>
+      </div>
+
+      <h4>The four families that matter on an assessment</h4>
+      <p><strong>Vulnerability scripts</strong> (<code class="inl">vuln</code>) check for known flaws without exploiting them — <code class="inl">smb-vuln-ms17-010</code> for EternalBlue, or the third-party <code class="inl">vulners</code> script that maps detected versions to CVEs and supports a <code class="inl">mincvss</code> argument to suppress low-severity noise. <strong>Authentication scripts</strong> (<code class="inl">auth</code>) deal with credentials or their bypass: examples in the category include <code class="inl">ftp-anon</code> (anonymous FTP), <code class="inl">x11-access</code>, and <code class="inl">ssh-auth-methods</code>; the book draws a deliberate line between these and brute force, placing credential-guessing scripts in their own bucket.<sup class="cite"><a href="#ref-19" id="cite-39">19</a></sup> <strong>Brute-force scripts</strong> (<code class="inl">brute</code>) attempt credential guessing against services — <code class="inl">ssh-brute</code>, <code class="inl">ftp-brute</code>, <code class="inl">ms-sql-brute</code> — and take <code class="inl">userdb</code>/<code class="inl">passdb</code> arguments. <strong>Exploit-related scripts</strong> live in the <code class="inl">exploit</code> category, reflecting that NSE can move beyond detection into proof-of-impact; because they are by nature intrusive, they belong only inside an authorized, scoped window.</p>
+
+      <div class="callout warn">
+        <p class="tag">Risk &amp; scope</p>
+        <p>The <code style="font-size:.9em">intrusive</code>, <code style="font-size:.9em">dos</code>, <code style="font-size:.9em">brute</code>, and <code style="font-size:.9em">exploit</code> categories can crash services, lock accounts, or trip lockout and alerting. <strong>Read the script source or <code style="font-size:.9em">--script-help</code> before running anything outside <code style="font-size:.9em">safe</code></strong>, and confirm each is permitted by your rules of engagement. A brute-force run that locks out a production directory is a self-inflicted incident, not a finding.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 7 ===================== -->
+    <section id="scale">
+      <h2><span class="h2-num">07 / Scale</span>Enumeration across enterprise networks</h2>
+      <p class="sub">Staging, timing, and discipline for sixteen-thousand-host engagements.</p>
+
+      <p>Scanning a large enterprise space the way you'd scan a single box — every port, every script, all at once — produces a scan that never finishes and a report nobody can act on. The professional approach is <strong>staged</strong>: a fast, lightweight discovery sweep to find live hosts and obvious open ports; a triage pass over the survivors to identify services worth attention; and only then targeted deep scans (version detection, NSE) against the hosts and ports that matter. Each stage narrows the next.</p>
+
+      <h4>Timing templates</h4>
+      <p>The <code class="inl">-T</code> templates trade stealth for speed across six levels. <code class="inl">-T0</code> through <code class="inl">-T2</code> serialize and slow the scan for evasion; <code class="inl">-T3</code> is the parallelized default; <code class="inl">-T4</code> caps RTT timeouts and scan delays for fast, reliable networks (its definition includes <code class="inl">--max-rtt-timeout 1250ms</code>, <code class="inl">--min-rtt-timeout 100ms</code>, <code class="inl">--initial-rtt-timeout 500ms</code>, <code class="inl">--max-retries 6</code>); <code class="inl">-T5</code> is more aggressive still and risks accuracy.<sup class="cite"><a href="#ref-17" id="cite-40">17</a></sup> The book's standing recommendation is <code class="inl">-T4</code> for reasonably modern, reliable networks, and fine-grained options override the template where you set them.<sup class="cite"><a href="#ref-20" id="cite-41">20</a></sup></p>
+
+      <h4>Host groups, parallelism, rate</h4>
+      <p>For parallel scanning, Nmap divides the target space into groups and scans one group at a time; larger groups are more efficient but delay per-host results, so by default Nmap starts as low as five hosts and ramps as high as 1024. <code class="inl">--min-hostgroup</code> and <code class="inl">--max-hostgroup</code> set those bounds explicitly — a large minimum speeds big subnet sweeps.<sup class="cite"><a href="#ref-17" id="cite-42">17</a></sup> Probe parallelism is tunable with <code class="inl">--min-parallelism</code>/<code class="inl">--max-parallelism</code> (rarely needed, since Nmap adjusts dynamically), and absolute pacing with <code class="inl">--min-rate</code>/<code class="inl">--max-rate</code> packets per second.<sup class="cite"><a href="#ref-16" id="cite-43">16</a></sup> On flaky or filtered networks, <code class="inl">--host-timeout</code> abandons hosts that hang and <code class="inl">--max-retries</code> trades thoroughness against speed.</p>
+
+      <div class="code">
+        <div class="bar"><span class="b"></span><span class="b"></span><span class="b"></span><span class="label">staged enterprise sweep</span></div>
+        <pre><code><span class="c"># Stage 1 — discovery: who's alive across a /16</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">-sn</span> <span class="fl">-T4</span> <span class="fl">--min-hostgroup</span> <span class="st">256</span> <span class="st">10.0.0.0/16</span> <span class="fl">-oA</span> <span class="st">disco</span>
+
+<span class="c"># Stage 2 — triage: top ports on live hosts only, open ports only</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">-sS</span> <span class="fl">-T4</span> <span class="fl">--top-ports</span> <span class="st">200</span> <span class="fl">--open</span> \
+       <span class="fl">-iL</span> <span class="st">live-hosts.txt</span> <span class="fl">-oA</span> <span class="st">triage</span>
+
+<span class="c"># Stage 3 — deep dive: versions + safe scripts on what matters</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">-sS</span> <span class="fl">-sV</span> <span class="fl">-O</span> <span class="fl">--script</span> <span class="st">"default and safe"</span> \
+       <span class="fl">-p</span> <span class="st">22,80,139,443,445,1433,3389</span> \
+       <span class="fl">-iL</span> <span class="st">interesting.txt</span> <span class="fl">--reason</span> <span class="fl">-oA</span> <span class="st">deep</span></code></pre>
+      </div>
+
+      <h4>Reducing false positives</h4>
+      <p>A SYN scan infers "open" from a SYN/ACK, but firewalls forge resets, intermediate devices answer for hosts, and congested networks drop probes that then read as filtered. Three habits cut the error rate. <strong>Verify with <code class="inl">-sV</code></strong>: version detection actually connects and confirms a service is really there, correcting ports that a raw scan mislabeled. <strong>Use <code class="inl">--reason</code></strong> so every state carries its evidence, letting you spot the implausible (a "closed" port whose RST has a TTL inconsistent with the host). <strong>Tune retries and timeouts</strong>: too few retries on a lossy link manufactures false "filtered" results, while overly aggressive timing produces both false negatives and noise. And keep the structural caveats in mind — that scans of the same port can legitimately disagree, and that a returned packet only <em>probably</em> reached the host.<sup class="cite"><a href="#ref-13" id="cite-44">13</a></sup></p>
+
+      <h4>Output formats &amp; prioritization</h4>
+      <p>At scale, machine-readable output is mandatory. <code class="inl">-oA</code> writes normal, greppable, and XML simultaneously; the XML (<code class="inl">-oX</code>) feeds reporting pipelines and tools, while greppable (<code class="inl">-oG</code>) is unbeatable for quick <code class="inl">grep</code>/<code class="inl">awk</code> triage on the command line. Prioritization is then an exposure-times-exploitability judgment: rank by what is reachable from where the attacker sits, weighted by what is actually exploitable. Pairing <code class="inl">-sV</code> with the <code class="inl">vuln</code> category and a CVSS floor (the <code class="inl">vulners</code> script's <code class="inl">mincvss</code>) turns a flat port list into a ranked queue — internet-facing hosts with high-severity, network-exploitable findings first, low-severity informational items last.</p>
+    </section>
+
+    <!-- ===================== 8 ===================== -->
+    <section id="services">
+      <h2><span class="h2-num">08 / Depth</span>Service-specific enumeration</h2>
+      <p class="sub">Once a service is found, NSE is how you read it.</p>
+
+      <p>The payoff of disciplined discovery is targeted enumeration. Each of the services below maps to a cluster of NSE scripts that extract configuration, identity, and version data — the raw material of an attack path. Run them only against in-scope hosts, and prefer the information-gathering scripts before anything intrusive.</p>
+
+      <h4>SMB (139/445)</h4>
+      <p>SMB is the richest enumeration surface on a Windows network. <code class="inl">smb-enum-shares</code> lists shares and their access, <code class="inl">smb-os-discovery</code> pulls OS and domain details, and <code class="inl">smb2-security-mode</code> reveals whether message signing is required.<sup class="cite"><a href="#ref-21" id="cite-45">21</a></sup> For vulnerabilities, <code class="inl">smb-vuln-ms17-010</code> detects whether an SMBv1 server is exposed to the EternalBlue remote-code-execution flaw (CVE-2017-0143, disclosed 14 March 2017) — the bug actively exploited by the WannaCry and Petya ransomware families. The script works by connecting to the IPC$ tree and inspecting the error code returned, classifying unpatched systems without exploiting them; it is categorized both <code class="inl">vuln</code> and <code class="inl">safe</code>.<sup class="cite"><a href="#ref-22" id="cite-46">22</a></sup></p>
+
+      <div class="code">
+        <div class="bar"><span class="b"></span><span class="b"></span><span class="b"></span><span class="label">smb enumeration</span></div>
+        <pre><code><span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">-p</span> <span class="st">445</span> <span class="fl">--script</span> <span class="st">smb-os-discovery,smb-enum-shares,smb2-security-mode</span> <span class="st">target</span>
+<span class="pr">$</span> <span class="kw">nmap</span> <span class="fl">-p</span> <span class="st">445</span> <span class="fl">--script</span> <span class="st">smb-vuln-ms17-010</span> <span class="st">target</span>
+<span class="dim">| smb-vuln-ms17-010:</span>
+<span class="dim">|   </span><span class="filt">VULNERABLE:</span><span class="dim"> Remote Code Execution (ms17-010) — CVE:CVE-2017-0143</span></code></pre>
+      </div>
+
+      <h4>The rest of the estate</h4>
+      <p><strong>LDAP (389/636)</strong> exposes directory structure through <code class="inl">ldap-rootdse</code> (naming contexts and capabilities) and <code class="inl">ldap-search</code> (querying objects, often Active Directory users and groups). <strong>Kerberos (88)</strong> yields valid usernames via <code class="inl">krb5-enum-users</code>, which probes principals and reads the KDC's differing responses to existing versus non-existent accounts — the foundation of AS-REP and pre-auth attacks downstream. <strong>MSSQL (1433, UDP 1434)</strong> is served by <code class="inl">ms-sql-info</code> and <code class="inl">ms-sql-ntlm-info</code> for instance and host details, <code class="inl">ms-sql-brute</code> for credential testing, and <code class="inl">ms-sql-xp-cmdshell</code> for command execution where <code class="inl">xp_cmdshell</code> is enabled and you hold credentials. <strong>Oracle (1521)</strong> requires a valid SID first: <code class="inl">oracle-sid-brute</code> guesses it against the TNS listener, <code class="inl">oracle-tns-version</code> fingerprints the listener, and <code class="inl">oracle-brute</code> tests accounts. <strong>PostgreSQL (5432)</strong> is handled by <code class="inl">pgsql-brute</code>. <strong>RDP (3389)</strong> reveals identity and crypto posture through <code class="inl">rdp-ntlm-info</code> (hostname, domain, build) and <code class="inl">rdp-enum-encryption</code> (supported security layers), with BlueKeep-class checks available for legacy hosts. <strong>NFS (111/2049)</strong> starts at the portmapper: <code class="inl">rpcinfo</code> lists RPC programs, <code class="inl">nfs-showmount</code> enumerates exports, and <code class="inl">nfs-ls</code>/<code class="inl">nfs-statfs</code> inspect exported filesystems for world-readable data.</p>
+
+      <div class="tbl-wrap">
+        <table>
+          <caption>Service → port → key NSE scripts</caption>
+          <thead><tr><th>Service</th><th>Port(s)</th><th>Enumeration scripts</th></tr></thead>
+          <tbody>
+            <tr><td><strong>SMB</strong></td><td>139, 445</td><td><code>smb-os-discovery</code>, <code>smb-enum-shares</code>, <code>smb2-security-mode</code>, <code>smb-vuln-ms17-010</code></td></tr>
+            <tr><td><strong>LDAP</strong></td><td>389, 636</td><td><code>ldap-rootdse</code>, <code>ldap-search</code></td></tr>
+            <tr><td><strong>Kerberos</strong></td><td>88</td><td><code>krb5-enum-users</code></td></tr>
+            <tr><td><strong>MSSQL</strong></td><td>1433 / 1434u</td><td><code>ms-sql-info</code>, <code>ms-sql-ntlm-info</code>, <code>ms-sql-brute</code>, <code>ms-sql-xp-cmdshell</code></td></tr>
+            <tr><td><strong>Oracle</strong></td><td>1521</td><td><code>oracle-tns-version</code>, <code>oracle-sid-brute</code>, <code>oracle-brute</code></td></tr>
+            <tr><td><strong>PostgreSQL</strong></td><td>5432</td><td><code>pgsql-brute</code></td></tr>
+            <tr><td><strong>RDP</strong></td><td>3389</td><td><code>rdp-ntlm-info</code>, <code>rdp-enum-encryption</code></td></tr>
+            <tr><td><strong>NFS</strong></td><td>111, 2049</td><td><code>rpcinfo</code>, <code>nfs-showmount</code>, <code>nfs-ls</code>, <code>nfs-statfs</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== 9 ===================== -->
+    <section id="authz">
+      <h2><span class="h2-num">09 / Authorization</span>The line that isn't optional</h2>
+      <p class="sub">Why "I was only scanning" is not a defense.</p>
+
+      <div class="callout warn">
+        <p class="tag">Before any packet leaves your host</p>
+        <p>Obtain <strong>written authorization</strong> that names the in-scope address ranges, the permitted techniques (especially intrusive, brute-force, and exploit scripts), the testing window, and a point of contact. Port scanning sits in a genuinely unsettled legal area, and the safest posture is explicit, recorded permission for every target you touch.</p>
+      </div>
+
+      <p>The Nmap project devotes an entire chapter of its book to legal issues precisely because the legality of scanning is jurisdiction-dependent and contested, and because civil or criminal exposure can attach to activity an operator considered harmless.<sup class="cite"><a href="#ref-23" id="cite-47">23</a></sup> The practical rules are simple. Scan only what your scope authorizes, in writing. Treat the rules of engagement as binding — if brute-force is not listed, you do not run <code class="inl">brute</code>. When you need a target to practice against, the project maintains <code class="inl">scanme.nmap.org</code> for exactly that purpose, within its posted terms. Authorization is not a compliance checkbox bolted onto the front of an engagement; it is the thing that distinguishes a professional assessment from an offense.</p>
+    </section>
+
+    <!-- ===================== 10 ===================== -->
+    <section id="close">
+      <h2><span class="h2-num">10 / Coda</span>Nmap is a discipline, not a button</h2>
+
+      <p>The thread running through every section is the same one Fyodor pulled in 1997: a scanner is only as good as the operator's understanding of what the network is actually saying. The advanced scan types are not party tricks; they are different questions, each surfacing a different truth about a stack or a firewall. NSE is not a vulnerability button; it is a programmable lens that rewards reading the script before you run it. Scale is not about turning the timing up; it is about staging the work so the results stay legible and the false positives stay low. And evasion is not about hiding; on an authorized engagement it is about measuring whether the defenders can see you at all.</p>
+
+      <p>The canonical references remain the best: the freely available <em>Nmap Network Scanning</em> book for the conceptual depth, the per-script documentation at <code class="inl">nmap.org/nsedoc</code> for the engine, and <code class="inl">scanme.nmap.org</code> for a lawful place to break things. Read the man page not once but periodically — it changes — and let every scan you run be one you could explain, packet by packet, to the person who authorized it.</p>
+
+      <hr class="div">
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);letter-spacing:.04em">
+        Reconnaissance is the cheapest phase of an assessment and the one that determines everything after it. Spend the time here.
+      </p>
+    </section>
+
+  </article>
+</div>
+
+<!-- ===================== REFERENCES ===================== -->
+<section class="refs" id="references">
+  <div class="refs-inner">
+    <h2><span class="h2-num">References</span>Sources</h2>
+    <p class="note">Vancouver style; numbered in order of first citation. Primary sources are the official Nmap documentation, the original Phrack release, and RFC 793.</p>
+    <ol class="reflist">
+      <li id="ref-1">Lyon G (Fyodor). The Art of Port Scanning. <span class="src">Phrack Magazine</span>. 1997 Sep 1;7(51):Phile 11. Available from: <a href="http://phrack.org/issues/51/11.html">http://phrack.org/issues/51/11.html</a></li>
+      <li id="ref-2">Lyon GF. The History and Future of Nmap. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/history-future.html">https://nmap.org/book/history-future.html</a></li>
+      <li id="ref-3">Lyon GF. Preface. In: <span class="src">Nmap Network Scanning: The Official Nmap Project Guide to Network Discovery and Security Scanning</span>. Sunnyvale (CA): Insecure.Com LLC. Available from: <a href="https://nmap.org/book/preface.html">https://nmap.org/book/preface.html</a></li>
+      <li id="ref-4">Nmap [Internet]. <span class="src">Wikipedia</span>. [cited 2026 May 31]. Available from: <a href="https://en.wikipedia.org/wiki/Nmap">https://en.wikipedia.org/wiki/Nmap</a></li>
+      <li id="ref-5">Insecure.Org. Nmap 4.50 Release [press release]. <span class="src">Insecure.Org</span>. 2007 Dec 13. Available from: <a href="https://insecure.org/stf/Nmap-4.50-Release.html">https://insecure.org/stf/Nmap-4.50-Release.html</a></li>
+      <li id="ref-6">nmap(1) — Linux manual page [Internet]. <span class="src">man7.org</span>. [cited 2026 May 31]. Available from: <a href="https://www.man7.org/linux/man-pages/man1/nmap.1.html">https://www.man7.org/linux/man-pages/man1/nmap.1.html</a></li>
+      <li id="ref-7">Lyon GF. Determining Firewall Rules. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/determining-firewall-rules.html">https://nmap.org/book/determining-firewall-rules.html</a></li>
+      <li id="ref-8">Postel J, editor. Transmission Control Protocol. <span class="src">RFC 793</span>. Internet Engineering Task Force; 1981 Sep. Available from: <a href="https://www.rfc-editor.org/rfc/rfc793">https://www.rfc-editor.org/rfc/rfc793</a></li>
+      <li id="ref-9">Lyon GF. TCP FIN, NULL, and Xmas Scans (-sF, -sN, -sX). In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/scan-methods-null-fin-xmas-scan.html">https://nmap.org/book/scan-methods-null-fin-xmas-scan.html</a></li>
+      <li id="ref-10">Lyon GF. Custom Scan Types with --scanflags. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/scan-methods-custom-scanflags.html">https://nmap.org/book/scan-methods-custom-scanflags.html</a></li>
+      <li id="ref-11">Lyon GF. Port Scanning Techniques. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/man-port-scanning-techniques.html">https://nmap.org/book/man-port-scanning-techniques.html</a></li>
+      <li id="ref-12">Maimon U. Port Scanning without the SYN flag. <span class="src">Phrack Magazine</span>. 1996 Nov 8;7(49):Phile 15. Available from: <a href="http://phrack.org/issues/49/15.html">http://phrack.org/issues/49/15.html</a></li>
+      <li id="ref-13">Lyon GF. TCP ACK Scan (-sA). In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/scan-methods-ack-scan.html">https://nmap.org/book/scan-methods-ack-scan.html</a></li>
+      <li id="ref-14">Lyon GF. TCP Window Scan (-sW). In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/scan-methods-window-scan.html">https://nmap.org/book/scan-methods-window-scan.html</a></li>
+      <li id="ref-15">Lyon GF. Firewall/IDS Evasion and Spoofing. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/man-bypass-firewalls-ids.html">https://nmap.org/book/man-bypass-firewalls-ids.html</a></li>
+      <li id="ref-16">Lyon GF. Options Summary. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/man-briefoptions.html">https://nmap.org/book/man-briefoptions.html</a></li>
+      <li id="ref-17">Lyon GF. Timing and Performance. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/man-performance.html">https://nmap.org/book/man-performance.html</a></li>
+      <li id="ref-18">Lyon GF. Nmap Scripting Engine (NSE). In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/man-nse.html">https://nmap.org/book/man-nse.html</a></li>
+      <li id="ref-19">Lyon GF. Script Selection (Usage and Examples). In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/nse-usage.html">https://nmap.org/book/nse-usage.html</a></li>
+      <li id="ref-20">Lyon GF. Timing Templates (-T). In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/performance-timing-templates.html">https://nmap.org/book/performance-timing-templates.html</a></li>
+      <li id="ref-21">Nmap Project. smb-enum-shares NSE script [Internet]. <span class="src">Nmap Scripting Engine Documentation</span>. [cited 2026 May 31]. Available from: <a href="https://nmap.org/nsedoc/scripts/smb-enum-shares.html">https://nmap.org/nsedoc/scripts/smb-enum-shares.html</a></li>
+      <li id="ref-22">Nmap Project. smb-vuln-ms17-010 NSE script [Internet]. <span class="src">Nmap Scripting Engine Documentation</span>. [cited 2026 May 31]. Available from: <a href="https://nmap.org/nsedoc/scripts/smb-vuln-ms17-010.html">https://nmap.org/nsedoc/scripts/smb-vuln-ms17-010.html</a></li>
+      <li id="ref-23">Lyon GF. Legal Issues. In: <span class="src">Nmap Network Scanning</span>. Insecure.Com LLC. Available from: <a href="https://nmap.org/book/legal-issues.html">https://nmap.org/book/legal-issues.html</a></li>
+    </ol>
+  </div>
+</section>
+
+<footer class="colo">
+  <span class="ph">$</span> nmap -sS -sV --script "default and safe" the-network<br>
+  Field Notes in Applied Security · Educational use for authorized assessment only
+</footer>
+
+<script>
+  // reading progress
+  const prog = document.getElementById('progress');
+  const onScroll = () => {
+    const h = document.documentElement;
+    const scrolled = (h.scrollTop) / (h.scrollHeight - h.clientHeight);
+    prog.style.width = (scrolled * 100) + '%';
+  };
+  document.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+
+  // active TOC via IntersectionObserver
+  const links = Array.from(document.querySelectorAll('nav.toc a'));
+  const map = new Map();
+  links.forEach(a => {
+    const id = a.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) map.set(el, a);
+  });
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const a = map.get(e.target);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, {rootMargin: '-15% 0px -70% 0px', threshold: 0});
+  map.forEach((a, el) => obs.observe(el));
+</script>
+<script src="../dist/js/header.js"></script>
+</body>
+</html>

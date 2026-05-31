@@ -10,7 +10,9 @@ const blogCategoryLabels = [
   "Math & Physics",
   "Mobile App Development",
   "Networks",
+  "Nmap",
   "Operating Systems",
+  "Pentesting",
   "Philosophy & Learning",
   "Privacy",
   "Programming & Software",
@@ -33,6 +35,60 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/1d-dynamic-programming.html",
+    publishedAt: "2026-05-31",
+    summary: "A competitive programmer's field guide to one-dimensional dynamic programming patterns, from climbing stairs and house robber to coin change, LIS, word break, and recurrence design.",
+    title: "Along a Single Axis — A Field Guide to 1-D Dynamic Programming"
+  },
+  {
+    path: "blog-articles/angular-performance.html",
+    publishedAt: "2026-05-31",
+    summary: "A technical Angular performance guide covering deferrable views, image optimization, zone pollution, slow-computation profiling, hydration, and Core Web Vitals tradeoffs.",
+    title: "Performance in Angular: Deferrable Views, Image Optimisation, Zone Pollution, Slow Computations & Hydration"
+  },
+  {
+    path: "blog-articles/animation-angular.html",
+    publishedAt: "2026-05-31",
+    summary: "A technical guide to animation in Angular, covering transitions, triggers, enter and leave behavior, reusable sequences, complex choreography, and route transitions.",
+    title: "Animation in Angular: Transitions, Triggers, Complex Sequences, Reuse, and Route Transitions"
+  },
+  {
+    path: "blog-articles/internationalization-angular.html",
+    publishedAt: "2026-05-31",
+    summary: "A practical guide to Angular internationalization with @angular/localize, covering locale identifiers, translation extraction, multi-locale builds, and localized application bundles.",
+    title: "Comprehensive Internationalization in Angular with @angular/localize"
+  },
+  {
+    path: "blog-articles/nmap-active-directory.html",
+    publishedAt: "2026-05-31",
+    summary: "A defensive guide to using Nmap for network-layer reconnaissance in Windows domain environments, focused on service discovery, domain exposure, and Active Directory attack surface mapping.",
+    title: "Nmap for Active Directory — Network-Layer Reconnaissance of the Windows Domain"
+  },
+  {
+    path: "blog-articles/nmap-advanced.html",
+    publishedAt: "2026-05-31",
+    summary: "An advanced Nmap deep dive covering scan anatomy, timing, scripting, evasion limits, service fingerprinting, and the engineering details behind reliable network reconnaissance.",
+    title: "The Anatomy of a Scan — Nmap at Depth"
+  },
+  {
+    path: "blog-articles/nmap-fundamentals.html",
+    publishedAt: "2026-05-31",
+    summary: "A foundational guide to ethical host discovery and port scanning with Nmap, covering scan types, service detection, output interpretation, lab setup, and safe operating boundaries.",
+    title: "Nmap Fundamentals: Ethical Host Discovery & Port Scanning"
+  },
+  {
+    path: "blog-articles/nmap-ics-ot-pentesting.html",
+    publishedAt: "2026-05-31",
+    summary: "An availability-first guide to Nmap in ICS and OT penetration testing, explaining fragile devices, passive-first workflows, careful probing, industrial protocols, and safety constraints.",
+    title: "Mapping Without Breaking — Nmap in ICS/OT Penetration Testing"
+  },
+  {
+    path: "blog-articles/nmap-reconnaissance-platform.html",
+    publishedAt: "2026-05-31",
+    summary: "A guide to Nmap as a reconnaissance platform beyond basic SYN scans, covering NSE, service and version detection, output pipelines, and repeatable assessment workflows.",
+    title: "Beyond the SYN Scan — Nmap as a Reconnaissance Platform"
+  },
   {
     path: "blog-articles/version_control.html",
     publishedAt: "2026-05-29",
@@ -744,6 +800,15 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/1d-dynamic-programming.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/angular-performance.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/animation-angular.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/internationalization-angular.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/nmap-active-directory.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/nmap-advanced.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/nmap-fundamentals.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/nmap-ics-ot-pentesting.html": ["Security", "Networks", "Cyber-Physical Systems", "Nmap", "Pentesting"],
+  "blog-articles/nmap-reconnaissance-platform.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/version_control.html": ["Programming & Software"],
   "blog-articles/soft-robotics.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
