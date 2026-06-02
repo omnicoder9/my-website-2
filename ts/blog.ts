@@ -2,6 +2,8 @@ const blogCategoryLabels = [
   "AI & Machine Learning",
   "ASP.NET",
   "Android",
+  "Angular",
+  "Competitive Programming",
   "Cyber-Physical Systems",
   "DevSecOps",
   "Docker",
@@ -35,6 +37,60 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/nmap-mainframe-pentesting.html",
+    publishedAt: "2026-06-01",
+    summary: "A specialized guide to using Nmap in authorized mainframe penetration testing, covering TN3270, service discovery, enumeration restraint, legacy protocols, and operational safety.",
+    title: "Green Screen Reconnaissance — Nmap Against the Mainframe"
+  },
+  {
+    path: "blog-articles/nmap-cloud-pentesting.html",
+    publishedAt: "2026-06-01",
+    summary: "A cloud-focused Nmap penetration testing guide for authorized assessment, covering asset discovery, exposed services, provider boundaries, timing discipline, and reconnaissance workflows.",
+    title: "The Mapmaker in the Mist — Nmap for Cloud Penetration Testing"
+  },
+  {
+    path: "blog-articles/css-methodologies.html",
+    publishedAt: "2026-06-01",
+    summary: "A technical guide to CSS at scale, covering Sass, PostCSS, BEM, CSS Modules, CSS-in-JS, cascade layers, scoping, and maintainable stylesheet architecture.",
+    title: "CSS at Scale: Methodologies for the Modern Web"
+  },
+  {
+    path: "blog-articles/code-review-best-practices.html",
+    publishedAt: "2026-06-01",
+    summary: "A practical software engineering guide to code review, covering review goals, reviewer behavior, author preparation, review depth, tooling, culture, and quality outcomes.",
+    title: "The Discipline of Peer Review: Code Review Best Practices"
+  },
+  {
+    path: "blog-articles/backend-performance.html",
+    publishedAt: "2026-06-01",
+    summary: "An expert-level backend performance guide covering caching, APIs, databases, asynchronous systems, scaling, code optimization, observability, networking, security, and performance testing.",
+    title: "Backend Performance Engineering: Caching, APIs, Databases, Asynchronism, Scaling, Code, Security, Observability, Networks, and Testing"
+  },
+  {
+    path: "blog-articles/arrays-and-hashing-cp.html",
+    publishedAt: "2026-06-01",
+    summary: "A competitive programming guide to arrays and hashing patterns, focused on one-pass maps, frequency counting, complements, grouping, prefix states, and replacing nested loops.",
+    title: "Arrays & Hashing — Competitive Programming Patterns"
+  },
+  {
+    path: "blog-articles/two-pointers.html",
+    publishedAt: "2026-06-01",
+    summary: "A competitive programming guide to the two-pointers pattern, covering convergence, sliding windows, sorted arrays, linked-list runners, partitioning, and implementation traps.",
+    title: "Two Pointers: The Art of Convergence"
+  },
+  {
+    path: "blog-articles/trusted-hardware.html",
+    publishedAt: "2026-06-01",
+    summary: "A technical reference on hardware-rooted trust, covering TPMs, Secure Boot, remote attestation, Intel SGX, AMD SEV, ARM TrustZone, HSMs, side channels, and confidential computing.",
+    title: "Foundations of Hardware Trust — TPM, SGX, SEV, TrustZone, HSMs & Confidential Computing"
+  },
+  {
+    path: "blog-articles/nmap-red-team.html",
+    publishedAt: "2026-06-01",
+    summary: "A red-team-oriented Nmap guide focused on precision scanning, OPSEC tradeoffs, detection-aware reconnaissance, NSE usage, timing controls, and authorized adversary emulation.",
+    title: "Nmap for Red Teams — Precision, OPSEC, and the Art of Staying Invisible"
+  },
   {
     path: "blog-articles/1d-dynamic-programming.html",
     publishedAt: "2026-05-31",
@@ -800,10 +856,19 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
-  "blog-articles/1d-dynamic-programming.html": ["Math & Physics", "Programming & Software"],
-  "blog-articles/angular-performance.html": ["Web & UI", "Programming & Software"],
-  "blog-articles/animation-angular.html": ["Web & UI", "Programming & Software"],
-  "blog-articles/internationalization-angular.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/nmap-cloud-pentesting.html": ["Security", "Networks", "DevSecOps", "Nmap", "Pentesting"],
+  "blog-articles/css-methodologies.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/code-review-best-practices.html": ["Programming & Software", "Engineering"],
+  "blog-articles/backend-performance.html": ["Programming & Software", "Engineering", "DevSecOps"],
+  "blog-articles/arrays-and-hashing-cp.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/two-pointers.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/trusted-hardware.html": ["Security", "Engineering", "Operating Systems"],
+  "blog-articles/nmap-red-team.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/1d-dynamic-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/angular-performance.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/animation-angular.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/internationalization-angular.html": ["Web & UI", "Programming & Software", "Angular"],
   "blog-articles/nmap-active-directory.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/nmap-advanced.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/nmap-fundamentals.html": ["Security", "Networks", "Nmap", "Pentesting"],
@@ -837,7 +902,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "Programming & Software", "Security", "DevSecOps"],
   "blog-articles/wireless-networking.html": ["Networks", "Security"],
   "blog-articles/api-authentication.html": ["Security", "Programming & Software", "DevSecOps"],
-  "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/error-prevention-high-stakes.html": ["Engineering"],
   "blog-articles/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
   "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
@@ -859,7 +924,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker"],
   "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],
-  "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/java-build-tools.html": ["Programming & Software"],
   "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
   "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering"],
