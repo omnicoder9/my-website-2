@@ -38,6 +38,42 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/the-map-is-not-the-territory.html",
+    publishedAt: "2026-06-03",
+    summary: "A philosophical and security-minded essay on abstraction failure, threat models, formal systems, machine learning, and why engineered models never perfectly capture reality.",
+    title: "The Map Is Not the Territory — Why Every Engineered System Can Be Hacked"
+  },
+  {
+    path: "blog-articles/stacks-in-competitive-programming.html",
+    publishedAt: "2026-06-03",
+    summary: "A competitive programming guide to stack-based reasoning, covering deferred resolution, monotonic stacks, delimiter matching, expression parsing, amortized analysis, and common implementation traps.",
+    title: "The Stack — Deferred Resolution & Monotonic Frontiers in Competitive Programming"
+  },
+  {
+    path: "blog-articles/privilege-separation.html",
+    publishedAt: "2026-06-03",
+    summary: "A systems-security deep dive into privilege separation, covering least privilege, Unix users, capabilities, MAC, seccomp, pledge, unveil, microkernels, containers, and sandbox design.",
+    title: "The Architecture of Trust: Privilege Separation in Modern Systems"
+  },
+  {
+    path: "blog-articles/models-of-reality.html",
+    publishedAt: "2026-06-03",
+    summary: "A wide-ranging taxonomy of reality models, from metaphysics and scientific laws to simulations, statistics, machine learning, causal models, and the limits of representation.",
+    title: "Models of Reality — From A Priori Metaphysics to Machine Learning"
+  },
+  {
+    path: "blog-articles/mobile-security-architecture.html",
+    publishedAt: "2026-06-03",
+    summary: "A technical mobile security architecture survey covering Android, iOS, app sandboxes, secure boot, hardware roots of trust, key storage, exploit chains, and enterprise controls.",
+    title: "Phantom Protocol — Mobile Platform Security: A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/dc-infrastructure-security.html",
+    publishedAt: "2026-06-03",
+    summary: "A data center infrastructure security deep dive spanning physical controls, firmware, BMCs, supply chains, management networks, virtualization, storage, side channels, and operational defense.",
+    title: "Data Center Infrastructure Security: A Technical Deep Dive"
+  },
+  {
     path: "blog-articles/nmap-mainframe-pentesting.html",
     publishedAt: "2026-06-01",
     summary: "A specialized guide to using Nmap in authorized mainframe penetration testing, covering TN3270, service discovery, enumeration restraint, legacy protocols, and operational safety.",
@@ -856,6 +892,12 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/the-map-is-not-the-territory.html": ["Philosophy & Learning", "Security", "Engineering"],
+  "blog-articles/stacks-in-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
+  "blog-articles/models-of-reality.html": ["Philosophy & Learning", "AI & Machine Learning", "Math & Physics"],
+  "blog-articles/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
+  "blog-articles/dc-infrastructure-security.html": ["Security", "Networks", "DevSecOps", "Engineering"],
   "blog-articles/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/nmap-cloud-pentesting.html": ["Security", "Networks", "DevSecOps", "Nmap", "Pentesting"],
   "blog-articles/css-methodologies.html": ["Web & UI", "Programming & Software"],

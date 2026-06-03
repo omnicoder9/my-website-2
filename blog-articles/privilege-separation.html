@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Architecture of Trust: Privilege Separation in Modern Systems</title>
+<link rel="stylesheet" href="../css/article-header.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #0c0f14;
+    --bg-surface:  #111620;
+    --bg-raised:   #161c28;
+    --bg-code:     #0a0d12;
+    --border:      #1e2535;
+    --border-hi:   #2a3550;
+    --text-primary:#e8eaf0;
+    --text-body:   #c2c8d8;
+    --text-muted:  #7a8499;
+    --text-dim:    #4e5868;
+    --accent:      #4fc3f7;
+    --accent-dim:  #1a3a4f;
+    --accent-glow: rgba(79,195,247,0.12);
+    --gold:        #e8c96d;
+    --gold-dim:    #3d3010;
+    --red:         #f07070;
+    --green:       #6dcf96;
+    --purple:      #b48df7;
+    --serif:       'Playfair Display', Georgia, serif;
+    --body:        'Crimson Pro', 'Georgia', serif;
+    --mono:        'JetBrains Mono', 'Fira Code', monospace;
+    --max-w:       760px;
+    --sidebar-w:   240px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-body);
+    font-family: var(--body);
+    font-size: 19px;
+    line-height: 1.75;
+    font-weight: 300;
+  }
+
+  /* ── MASTHEAD ──────────────────────────────────────────── */
+  .masthead {
+    background: linear-gradient(160deg, #07090e 0%, #0e1420 50%, #0c1320 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 72px 48px 64px;
+    position: relative;
+    overflow: hidden;
+  }
+  .masthead::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 80% at 70% 30%, rgba(79,195,247,0.07) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 60% at 20% 80%, rgba(180,141,247,0.05) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .masthead-inner {
+    max-width: calc(var(--max-w) + var(--sidebar-w) + 80px);
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+  .category-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(79,195,247,0.2);
+    padding: 4px 12px;
+    margin-bottom: 28px;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
+    font-weight: 900;
+    line-height: 1.08;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    max-width: 700px;
+    margin-bottom: 8px;
+  }
+  .masthead h1 em {
+    color: var(--accent);
+    font-style: italic;
+  }
+  .masthead .subtitle {
+    font-family: var(--body);
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    font-weight: 300;
+    font-style: italic;
+    margin-top: 20px;
+    max-width: 620px;
+    line-height: 1.6;
+  }
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    margin-top: 36px;
+    flex-wrap: wrap;
+  }
+  .meta-item {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .meta-item span {
+    color: var(--text-muted);
+  }
+  .meta-sep { color: var(--border-hi); }
+
+  /* ── LAYOUT ────────────────────────────────────────────── */
+  .layout {
+    max-width: calc(var(--max-w) + var(--sidebar-w) + 80px);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    gap: 0 48px;
+    padding: 48px 48px 80px;
+    align-items: start;
+  }
+
+  /* ── SIDEBAR / TOC ─────────────────────────────────────── */
+  .sidebar {
+    position: sticky;
+    top: 32px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+  }
+  .toc-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toc-list {
+    list-style: none;
+  }
+  .toc-list li {
+    margin-bottom: 2px;
+  }
+  .toc-list a {
+    color: var(--text-muted);
+    text-decoration: none;
+    display: block;
+    padding: 5px 10px 5px 0;
+    border-left: 2px solid transparent;
+    padding-left: 12px;
+    line-height: 1.4;
+    transition: all 0.15s ease;
+  }
+  .toc-list a:hover {
+    color: var(--accent);
+    border-left-color: var(--accent);
+  }
+  .toc-list .toc-h2 { }
+  .toc-list .toc-h3 {
+    padding-left: 24px;
+    color: var(--text-dim);
+    font-size: 10.5px;
+  }
+  .toc-list .toc-h3:hover { color: var(--accent); }
+
+  .toc-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 16px 0;
+  }
+  .read-time-box {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    margin-bottom: 20px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+  .read-time-box .rt-num {
+    display: block;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+    font-family: var(--mono);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  /* ── ARTICLE BODY ──────────────────────────────────────── */
+  .article {
+    min-width: 0;
+  }
+
+  .article h2 {
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+    margin-top: 72px;
+    margin-bottom: 24px;
+    letter-spacing: -0.01em;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .article h2:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+
+  .article h3 {
+    font-family: var(--serif);
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 44px;
+    margin-bottom: 16px;
+    font-style: italic;
+  }
+
+  .article h4 {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-top: 32px;
+    margin-bottom: 12px;
+  }
+
+  .article p {
+    margin-bottom: 20px;
+    color: var(--text-body);
+  }
+  .article p + p { }
+
+  .article strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .article em {
+    font-style: italic;
+    color: var(--text-primary);
+  }
+
+  /* superscript citations */
+  .article sup {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    vertical-align: super;
+    line-height: 0;
+  }
+  .article sup a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .article sup a:hover { text-decoration: underline; }
+
+  /* ── CODE BLOCKS ───────────────────────────────────────── */
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 24px;
+    margin: 28px 0;
+    overflow-x: auto;
+    position: relative;
+  }
+  pre .code-lang {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.82em;
+    color: var(--text-body);
+    line-height: 1.6;
+  }
+  p code, li code {
+    background: var(--bg-raised);
+    color: var(--accent);
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    font-size: 0.8em;
+  }
+
+  /* Syntax coloring */
+  .kw  { color: var(--purple); }
+  .fn  { color: var(--accent); }
+  .st  { color: var(--green); }
+  .cm  { color: var(--text-dim); font-style: italic; }
+  .nu  { color: var(--gold); }
+  .pp  { color: #f4a261; }
+  .ty  { color: #80cbc4; }
+  .op  { color: var(--red); }
+
+  /* ── TABLES ────────────────────────────────────────────── */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 28px 0;
+    border: 1px solid var(--border);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  thead {
+    background: var(--bg-raised);
+  }
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-hi);
+  }
+  td {
+    padding: 10px 16px;
+    color: var(--text-body);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--body);
+    font-size: 15px;
+  }
+  td:first-child {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg-surface); }
+
+  /* ── PULL QUOTES ───────────────────────────────────────── */
+  .pull-quote {
+    margin: 48px 0;
+    padding: 28px 36px;
+    border-left: 4px solid var(--gold);
+    background: linear-gradient(90deg, rgba(232,201,109,0.06) 0%, transparent 100%);
+    position: relative;
+  }
+  .pull-quote::before {
+    content: '\201C';
+    font-family: var(--serif);
+    font-size: 72px;
+    color: var(--gold);
+    opacity: 0.3;
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    line-height: 1;
+  }
+  .pull-quote p {
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    font-style: italic;
+    color: var(--text-primary);
+    line-height: 1.55;
+    margin-bottom: 0;
+    padding-left: 28px;
+  }
+  .pull-quote cite {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 12px;
+    padding-left: 28px;
+    font-style: normal;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── STAT CARDS ────────────────────────────────────────── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 16px;
+    margin: 36px 0;
+  }
+  .stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    padding: 20px 18px;
+    position: relative;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .stat-card.gold::before { background: var(--gold); }
+  .stat-card.purple::before { background: var(--purple); }
+  .stat-card.green::before { background: var(--green); }
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .stat-card.gold .stat-num { color: var(--gold); }
+  .stat-card.purple .stat-num { color: var(--purple); }
+  .stat-card.green .stat-num { color: var(--green); }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  /* ── CALLOUT / NOTE BOXES ──────────────────────────────── */
+  .callout {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--purple);
+    padding: 20px 24px;
+    margin: 28px 0;
+    font-size: 0.93em;
+  }
+  .callout-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--purple);
+    margin-bottom: 8px;
+    display: block;
+  }
+  .callout p { margin-bottom: 0; color: var(--text-body); }
+  .callout.warn { border-left-color: var(--red); }
+  .callout.warn .callout-label { color: var(--red); }
+  .callout.info { border-left-color: var(--accent); }
+  .callout.info .callout-label { color: var(--accent); }
+
+  /* ── STACK DIAGRAM ─────────────────────────────────────── */
+  .stack-diagram {
+    font-family: var(--mono);
+    font-size: 12px;
+    margin: 28px 0;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .stack-row {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-body);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background 0.1s;
+  }
+  .stack-row:last-child { border-bottom: none; }
+  .stack-row:hover { background: var(--bg-raised); }
+  .stack-row .sr-num {
+    color: var(--text-dim);
+    font-size: 10px;
+    min-width: 16px;
+  }
+  .stack-row .sr-label { color: var(--text-primary); flex: 1; }
+  .stack-row .sr-tag {
+    font-size: 10px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 2px 8px;
+    border: 1px solid rgba(79,195,247,0.2);
+  }
+
+  /* ── REFERENCES ────────────────────────────────────────── */
+  .references {
+    margin-top: 80px;
+    padding-top: 40px;
+    border-top: 2px solid var(--border-hi);
+  }
+  .references h2 {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+    border: none;
+    padding: 0;
+  }
+  .ref-list {
+    list-style: none;
+    counter-reset: refs;
+  }
+  .ref-list li {
+    counter-increment: refs;
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 0 12px;
+    margin-bottom: 14px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-list li:last-child { border-bottom: none; }
+  .ref-list li::before {
+    content: '[' counter(refs) ']';
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    padding-top: 2px;
+    white-space: nowrap;
+  }
+  .ref-list a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .ref-list a:hover { text-decoration: underline; }
+
+  /* ── SECTION INTRO DINGBAT ─────────────────────────────── */
+  .section-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  /* ── LISTS ─────────────────────────────────────────────── */
+  .article ul, .article ol {
+    margin: 16px 0 20px 0;
+    padding-left: 28px;
+  }
+  .article li {
+    margin-bottom: 8px;
+    color: var(--text-body);
+  }
+  .article li::marker { color: var(--accent); }
+
+  /* ── HORIZONTAL RULES ──────────────────────────────────── */
+  hr.section-break {
+    border: none;
+    height: 1px;
+    background: var(--border);
+    margin: 56px 0;
+  }
+
+  /* ── FOOTER ────────────────────────────────────────────── */
+  footer {
+    text-align: center;
+    padding: 40px 48px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; padding: 32px 24px 60px; }
+    .sidebar { display: none; }
+    .masthead { padding: 48px 24px 40px; }
+  }
+</style>
+</head>
+<body class="blog-article-page">
+<div id="site-header"></div>
+
+<!-- ═══════════════ MASTHEAD ═══════════════ -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <span class="category-tag">Systems Security &middot; Privilege Separation</span>
+    <h1>The <em>Architecture</em> of Trust</h1>
+    <p class="subtitle">Privilege separation across Unix, capability models, mandatory access control, syscall filtering, microkernels, and Linux namespaces</p>
+    <div class="meta-row">
+      <span class="meta-item">EST. READ <span>~35 min</span></span>
+      <span class="meta-sep">&middot;</span>
+      <span class="meta-item">AUDIENCE <span>Security Engineers / Systems Programmers</span></span>
+      <span class="meta-sep">&middot;</span>
+      <span class="meta-item">CITATIONS <span>40 references &mdash; Vancouver</span></span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════ LAYOUT ═══════════════ -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="read-time-box">
+      <span class="rt-num">35</span>
+      minutes estimated read
+    </div>
+    <p class="toc-label">Contents</p>
+    <ul class="toc-list">
+      <li class="toc-h2"><a href="#intro">I. The Principle of Least Privilege</a></li>
+      <li class="toc-h3"><a href="#intro-history">Origins &amp; Formal Roots</a></li>
+      <li class="toc-h3"><a href="#intro-threat">Threat Model Implications</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#unix">II. Unix Privilege Separation</a></li>
+      <li class="toc-h3"><a href="#setuid">The setuid Mechanism</a></li>
+      <li class="toc-h3"><a href="#sudo">sudo &amp; the sudoers Model</a></li>
+      <li class="toc-h3"><a href="#daemon">Daemon Privilege Separation</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#caps">III. Capability-Based Security</a></li>
+      <li class="toc-h3"><a href="#confused">The Confused Deputy</a></li>
+      <li class="toc-h3"><a href="#posix-caps">POSIX Capabilities in Linux</a></li>
+      <li class="toc-h3"><a href="#objcap">Object Capability Systems</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#mac">IV. Mandatory Access Control</a></li>
+      <li class="toc-h3"><a href="#selinux">SELinux &amp; Flask Architecture</a></li>
+      <li class="toc-h3"><a href="#apparmor">AppArmor: Path-Based MAC</a></li>
+      <li class="toc-h3"><a href="#landlock">TOMOYO, Smack &amp; Landlock</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#seccomp">V. seccomp and BPF</a></li>
+      <li class="toc-h3"><a href="#strict">seccomp Strict Mode</a></li>
+      <li class="toc-h3"><a href="#bpf">BPF Origins &amp; eBPF</a></li>
+      <li class="toc-h3"><a href="#deployment">Deployment: Chrome, Docker</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#capsicum">VI. Capsicum</a></li>
+      <li class="toc-h3"><a href="#capmode">Capability Mode</a></li>
+      <li class="toc-h3"><a href="#casper">The casper(8) Daemon</a></li>
+      <li class="toc-h3"><a href="#pledge">pledge(2) &amp; unveil(2)</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#micro">VII. Microkernel &amp; Minimal TCB</a></li>
+      <li class="toc-h3"><a href="#mach">Mach</a></li>
+      <li class="toc-h3"><a href="#l4">L4 &amp; Minimality</a></li>
+      <li class="toc-h3"><a href="#sel4">seL4: Formal Verification</a></li>
+      <li class="toc-h3"><a href="#minix">MINIX 3 &amp; Intel ME</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#ns">VIII. User Namespaces</a></li>
+      <li class="toc-h3"><a href="#ns-arch">Architecture &amp; UID Mapping</a></li>
+      <li class="toc-h3"><a href="#rootless">Rootless Containers</a></li>
+      <li class="toc-h3"><a href="#escalation">Escalation Vectors &amp; CVEs</a></li>
+      <div class="toc-divider"></div>
+      <li class="toc-h2"><a href="#conclusion">Conclusion</a></li>
+      <li class="toc-h2"><a href="#references">References</a></li>
+    </ul>
+  </aside>
+
+  <!-- ARTICLE -->
+  <article class="article">
+
+    <!-- ═══ SECTION I ═══ -->
+    <section id="intro">
+      <span class="section-num">§ 01</span>
+      <h2>The Principle of Least Privilege</h2>
+
+      <h3 id="intro-history">Origins and Formal Roots</h3>
+
+      <p>The principle of least privilege (PoLP) — the idea that every program, process, and user should operate with the minimum set of permissions necessary to perform its designated function and no more — is one of the most consequential concepts in the history of computer security. Its rigorous articulation came in 1975 when Jerome H. Saltzer and Michael D. Schroeder, working on the Multics system at MIT, published their landmark survey "The Protection of Information in Computer Systems."<sup><a href="#r1">[1]</a></sup> That paper enumerated eight design principles for protection systems that remain as applicable today as they were half a century ago.</p>
+
+      <p>The full set — economy of mechanism, fail-safe defaults, complete mediation, open design, separation of privilege, least privilege, least common mechanism, and psychological acceptability — constitutes a design philosophy, not a checklist.<sup><a href="#r1">[1]</a></sup> Saltzer and Schroeder observed that privilege separation is best achieved by granting authority in units no larger than the task requires, and revoked as soon as the task completes. The Multics experience had made the costs of ignoring this obvious: complex interaction patterns between subsystems with excessive authority led to subtle, exploitable failures.</p>
+
+      <div class="pull-quote">
+        <p>Every program and every privileged user of the system should operate using the least amount of privilege necessary to complete the job.</p>
+        <cite>&mdash; Jerome H. Saltzer &amp; Michael D. Schroeder, 1975<sup><a href="#r1">[1]</a></sup></cite>
+      </div>
+
+      <p>The companion intellectual framework came two years earlier, from David Bell and Leonard LaPadula, who constructed a mathematical model of mandatory access control for the US Department of Defense.<sup><a href="#r2">[2]</a></sup> The Bell-LaPadula model assigned security levels to both subjects (processes, users) and objects (files, memory, devices) and defined two core security properties: the <em>simple security property</em> (no read up — a subject at security level L cannot read an object at level L' &gt; L) and the <em>*-property</em> (no write down — a subject at level L cannot write to an object at level L' &lt; L). These properties together prevent Trojan horse attacks: a high-clearance process cannot leak data to a low-clearance object on an attacker's behalf.</p>
+
+      <p>The Bell-LaPadula model captured information flow constraints; Saltzer and Schroeder captured operational privilege constraints. Together, they established the two axes along which modern privilege separation mechanisms operate.</p>
+
+      <h3 id="intro-threat">Threat Model Implications</h3>
+
+      <p>The threat model implied by PoLP is both simple and perpetually relevant: any piece of software may contain defects. Buffer overflows, integer underflows, logic errors, race conditions, injection vulnerabilities, and use-after-free bugs are not theoretical concerns — they are empirical regularities of software development at scale. If a flawed component operates with elevated privileges, an attacker who exploits that flaw inherits those privileges. The blast radius of a single exploited vulnerability is exactly the privilege footprint of its host process.</p>
+
+      <div class="stat-row">
+        <div class="stat-card">
+          <span class="stat-num">~400</span>
+          <span class="stat-label">Linux syscalls exposed to every process by default</span>
+        </div>
+        <div class="stat-card gold">
+          <span class="stat-num">8,700</span>
+          <span class="stat-label">Lines of C in the formally verified seL4 kernel</span>
+        </div>
+        <div class="stat-card purple">
+          <span class="stat-num">50+</span>
+          <span class="stat-label">Years since Saltzer &amp; Schroeder's eight principles</span>
+        </div>
+        <div class="stat-card green">
+          <span class="stat-num">40</span>
+          <span class="stat-label">POSIX capability bits dividing root's monolithic power</span>
+        </div>
+      </div>
+
+      <p>This motivates the defense-in-depth posture that underlies modern security engineering. Rather than relying on a single barrier to privilege escalation, mature systems layer independent mechanisms: privilege dropping after initialization, file capability bits, mandatory access control profiles, syscall filters, capability descriptors, and namespace isolation. Each layer degrades independently; their combination requires an attacker to defeat multiple orthogonal controls.</p>
+
+      <p>The mechanisms surveyed in this article represent the principal implementations of the PoLP in practice, tracing from the raw Unix permission model to formally verified microkernels.</p>
+    </section>
+
+    <!-- ═══ SECTION II ═══ -->
+    <section id="unix">
+      <span class="section-num">§ 02</span>
+      <h2>Unix Privilege Separation: setuid, sudo, and Daemon Design</h2>
+
+      <p>Unix, designed by Ken Thompson and Dennis Ritchie at Bell Labs beginning in 1969,<sup><a href="#r3">[3]</a></sup> introduced a deceptively simple privilege model. Every process carries a real user ID (UID) and real group ID (GID); filesystem objects carry permission bits controlling read, write, and execute access for owner, group, and world. A single privileged account — root, UID 0 — can bypass virtually all permission checks. This superuser model was pragmatic for a research system; it became a security liability as Unix proliferated into production environments across industries and eventually into the global internet.</p>
+
+      <h3 id="setuid">The setuid Mechanism</h3>
+
+      <p>The setuid bit, set on an executable via <code>chmod u+s</code>, instructs the kernel to execute that binary with the file owner's effective UID rather than the invoking user's UID. When <code>/usr/bin/passwd</code>, owned by root, is executed by an ordinary user, the resulting process runs with effective UID 0, enabling it to write to <code>/etc/shadow</code> — a file inaccessible to unprivileged users. This solves a genuine delegation problem: users must be able to change their passwords without receiving direct write access to the credential store.</p>
+
+      <p>The Linux kernel maintains three distinct UID values per process:<sup><a href="#r4">[4]</a></sup></p>
+
+      <ul>
+        <li><strong>Real UID (RUID)</strong>: The identity of the user who invoked the process</li>
+        <li><strong>Effective UID (EUID)</strong>: The identity used for permission checks at each system call</li>
+        <li><strong>Saved set-user-ID (SUID)</strong>: A saved copy of the EUID prior to privilege reduction, enabling restoration</li>
+      </ul>
+
+      <p>The <code>setuid(2)</code> system call exhibits context-sensitive behavior. An unprivileged process (EUID ≠ 0) calling <code>setuid(x)</code> succeeds only if <code>x</code> equals the RUID or the saved SUID; if successful, all three IDs are set to <code>x</code> — the privilege drop is permanent. A privileged process (EUID 0) calling <code>setuid(x)</code> sets all three IDs unconditionally, irrevocably dropping root.<sup><a href="#r4">[4]</a></sup> The <code>seteuid(2)</code> call modifies only the EUID, permitting temporary privilege reduction with subsequent restoration via <code>seteuid(saved_suid)</code>.</p>
+
+      <p>This asymmetry enables the canonical privilege-drop pattern: a setuid-root program acquires root at exec time, performs whatever privileged operation is required (binding a low port, accessing a protected file), then calls <code>setuid(getuid())</code> to permanently relinquish root for the remainder of its execution. Any subsequent exploit of the process yields only the invoking user's privileges.</p>
+
+      <h4>Vulnerabilities of setuid Programs</h4>
+
+      <p>The setuid mechanism has accumulated a troubled history of exploited vulnerabilities.<sup><a href="#r5">[5]</a></sup> Three vulnerability classes are endemic to this design:</p>
+
+      <p><strong>Time-of-check-to-time-of-use (TOCTOU) races</strong> arise when a setuid program checks a condition (does this file exist? is it owned by the calling user?) and then acts on it. An attacker who controls the filesystem can substitute a different object — commonly via a symlink — between the check and the use. The classic <code>/tmp</code> race: a program creates <code>/tmp/workfile</code>, the attacker atomically replaces it with a symlink to <code>/etc/passwd</code>, and the subsequent write (privileged, as EUID 0) corrupts the target. Kernel mitigations <code>/proc/sys/fs/protected_symlinks</code> and <code>protected_hardlinks</code>, introduced in Linux 3.6, prevent following symlinks in sticky directories when the symlink owner differs from the follower's UID.</p>
+
+      <p><strong>Environment variable attacks</strong>: setuid programs inherit the invoking process's environment. The <code>LD_PRELOAD</code> attack — injecting a malicious shared library to override standard functions — was the archetypal example, now largely mitigated by glibc suppressing <code>LD_PRELOAD</code>, <code>LD_LIBRARY_PATH</code>, and related variables for setuid executables. <code>PATH</code> manipulation, <code>IFS</code> injection in shell scripts, <code>TERMINFO</code> exploitation, and <code>GCONV_PATH</code> attacks represent the same pattern applied to different environment variables.</p>
+
+      <p><strong>Shell execution from setuid programs</strong>: Any setuid program that invokes a shell — whether explicitly via <code>system(3)</code>, <code>popen(3)</code>, or implicitly by exec-ing a shell script — is vulnerable to argument injection, command injection, and environment attacks mediated through the shell. The <code>-p</code> flag to bash prevents effective UID from being reset to RUID, but the interaction between setuid and shell interpreters remains a perennial source of vulnerabilities.</p>
+
+      <h3 id="sudo">sudo and the sudoers Model</h3>
+
+      <p>The <code>sudo</code> utility, originally written by Bob Coggeshall and Cliff Spencer at the State University of New York at Buffalo around 1980 and substantially redesigned and maintained by Todd Miller,<sup><a href="#r6">[6]</a></sup> provides a flexible delegation mechanism superior to raw setuid-root binaries. Rather than granting a fixed binary omnipotent root access, sudo allows administrators to specify precisely what commands a given user may run, as which target user, on which hosts, subject to password authentication, and with comprehensive logging.</p>
+
+      <p>The <code>/etc/sudoers</code> file (and the <code>/etc/sudoers.d/</code> drop-in directory) encodes privilege grants as policy rules:</p>
+
+<pre><span class="cm"># Grant alice permission to restart nginx as root on any host</span>
+alice ALL=(root) /usr/bin/systemctl restart nginx
+
+<span class="cm"># Allow ops group to run all commands without re-authentication</span>
+%ops ALL=(ALL:ALL) NOPASSWD: ALL
+
+<span class="cm"># Bob may run specific read-only diagnostics on webserver01</span>
+bob webserver01=(root) /sbin/ifconfig, /usr/bin/netstat, \
+    /bin/ss
+
+<span class="cm"># Prevent privilege escalation through editors</span>
+Cmnd_Alias EDITORS = /usr/bin/vi, /usr/bin/vim, /usr/bin/nano
+alice ALL=(root) !EDITORS
+<span class="code-lang">sudoers</span></pre>
+
+      <p>The rule format is <code>&lt;user_spec&gt; &lt;host_spec&gt;=(&lt;runas_user&gt;:&lt;runas_group&gt;) &lt;command_list&gt;</code>. Sudoers wildcards (<code>*</code>) and argument-free allowances are common misconfigurations. A rule permitting <code>/usr/bin/find *</code> effectively grants arbitrary file read, since <code>find</code> accepts <code>-exec sh \;</code>. The GTFOBins project documents hundreds of such privilege escalation vectors through legitimate binaries.<sup><a href="#r6">[6]</a></sup></p>
+
+      <div class="callout warn">
+        <span class="callout-label">⚠ Security Note</span>
+        <p><code>sudo -s</code> and <code>sudo -i</code> grant shell access, effectively equivalent to <code>sudo su</code>. If any user in sudoers has these permissions, they have unrestricted root access. The <code>!authenticate</code> and <code>NOPASSWD</code> directives, applied carelessly, eliminate the authentication barrier that sudo's audit trail depends on.</p>
+      </div>
+
+      <p>Modern sudo hardening practices include using <code>sudoedit</code> (rather than <code>sudo $EDITOR</code>) for editing files — sudoedit copies the target to a temporary file, invokes the editor as the unprivileged user, then copies the result back, preventing editor escape sequences from granting a shell. Enabling the <code>requiretty</code> flag prevents invocation from non-interactive contexts (cron jobs, remote code execution). Logging to both syslog and a separate secure log, optionally in a centralized SIEM, provides the audit trail that justifies sudo's administrative overhead.</p>
+
+      <h3 id="daemon">Daemon Privilege Separation</h3>
+
+      <p>The most principled approach to Unix privilege management is the privilege-separated daemon architecture, exemplified by OpenSSH's <em>privsep</em> design, developed by Niels Provos and Markus Friedl around 2002 and formally described at USENIX Security 2003.<sup><a href="#r7">[7]</a></sup></p>
+
+      <p>The pre-privsep OpenSSH architecture ran a single process with effective UID 0, parsing arbitrary network input, performing host key cryptographic operations, and executing user authentication logic — all in the same privilege domain. A single exploitable bug anywhere in this code, in a program that was not merely reachable from the network but actively accepting connections from the entire internet, would yield immediate root compromise.</p>
+
+      <p>Provos and Friedl's redesign decomposed the daemon into a privilege hierarchy:<sup><a href="#r7">[7]</a></sup></p>
+
+      <ul>
+        <li>A <strong>monitor process</strong> running as root, responsible only for operations that genuinely require privilege — accessing host private keys, validating passwords against PAM or the shadow database, and invoking <code>login(1)</code> — implementing each operation as a narrow, audited handler</li>
+        <li>A <strong>pre-authentication slave</strong> running as the unprivileged <code>sshd</code> user, chrooted to <code>/var/empty</code> (a directory with no useful files), responsible for all network I/O and most protocol parsing</li>
+        <li>A <strong>post-authentication slave</strong>, which after a successful login gets <code>setuid()</code>'d to the target user and handles the session</li>
+      </ul>
+
+      <p>Communication between monitor and slave occurs over a Unix domain socket pair, using a simple, stateful request-response protocol. The monitor implements a strict state machine that rejects out-of-sequence requests — a compromised slave cannot, for example, request a session setup before completing authentication.<sup><a href="#r7">[7]</a></sup> Even total compromise of the slave process yields no path to root: the slave can only request operations the monitor is willing to perform, in the states the monitor is prepared to accept them.</p>
+
+      <p>Wietse Venema's Postfix mail transfer agent embodies the same philosophy, applied to a more complex service.<sup><a href="#r8">[8]</a></sup> Postfix consists of many specialized, short-lived daemons — <code>smtpd</code> (network reception), <code>cleanup</code> (message normalization), <code>qmgr</code> (queue management), <code>local</code> (local delivery), <code>smtp</code> (outbound delivery) — each running as the restricted <code>postfix</code> user, communicating via a carefully designed IPC substrate enforced by a master daemon. No single component has access to another's data or privilege. Venema designed Postfix explicitly as a security architecture first and an MTA second, in deliberate contrast to Sendmail, which by 2000 had accumulated decades of setuid vulnerabilities that made it one of the most exploited services on the early internet.</p>
+    </section>
+
+    <!-- ═══ SECTION III ═══ -->
+    <section id="caps">
+      <span class="section-num">§ 03</span>
+      <h2>Capability-Based Security Models</h2>
+
+      <p>The capability model represents a fundamentally different approach to access control from the identity-based discretionary access control (DAC) of standard Unix or even the label-based mandatory access control of Bell-LaPadula. In a capability system, access rights are <em>unforgeable, communicable tokens</em>: possession of a capability to an object grants the specified access, without consulting any central authority, access control list, or ambient identity. The security check is the capability check; if you hold the token, you may act.</p>
+
+      <p>The formal theory was first articulated by Jack Dennis and Earl Van Horn in 1966,<sup><a href="#r9">[9]</a></sup> in the context of systems design at MIT. A capability is comparable to a physical key: you may hand it to another agent, who then possesses the same access rights — except that unlike physical keys, capabilities can be attenuated (a read-write capability can be downgraded to read-only before transfer) and revoked (by invalidating the underlying object reference).</p>
+
+      <h3 id="confused">The Confused Deputy Problem</h3>
+
+      <p>The key motivation for capability systems over ACL-based systems is illustrated by the <em>confused deputy problem</em>, described by Norm Hardy in 1988.<sup><a href="#r10">[10]</a></sup> Consider a Fortran compiler service that is granted privileged access to a billing resource, allowing it to charge users for CPU time consumed. When a user submits a compilation job with input parameters crafted to name the billing file as the output path, the compiler — acting in its "deputy" capacity on behalf of the user, with its elevated billing authority — overwrites the billing database. The compiler cannot distinguish between "this output path was specified by the system's authority" and "this output path was provided by a potentially malicious user," because both are encoded the same way: as a pathname string in the ambient authority context.</p>
+
+      <p>In a capability system, the compiler would receive distinct <em>capabilities</em>: one for the billing resource (from the system), and one for the user-specified output location (from the user). These capabilities carry their authority in themselves and cannot be confused. The compiler's billing capability cannot be exercised on a user-supplied path, because the user's capability to their output file and the system's capability to the billing resource are separate, non-interchangeable tokens.</p>
+
+      <div class="pull-quote">
+        <p>The confused deputy problem arises because ambient authority — the identity-based privilege that permeates everything a process does — cannot be partitioned. Capabilities solve this by making authority explicit and per-object.</p>
+      </div>
+
+      <h3 id="posix-caps">POSIX Capabilities in Linux</h3>
+
+      <p>Linux implements a partial capability system through POSIX capabilities,<sup><a href="#r11">[11]</a></sup> which decompose root's monolithic privilege into approximately 40 distinct capability bits. Each process maintains five sets:</p>
+
+      <ul>
+        <li><strong>Effective (CapEff)</strong>: Currently active capabilities, checked by the kernel at each privileged operation</li>
+        <li><strong>Permitted (CapPrm)</strong>: The superset of capabilities the process is allowed to have effective</li>
+        <li><strong>Inheritable (CapInh)</strong>: Capabilities that can survive across <code>execve(2)</code> if the file also has them inheritable</li>
+        <li><strong>Bounding (CapBnd)</strong>: A ceiling — no capability can enter Permitted unless it is in the bounding set (available since Linux 2.6.25)</li>
+        <li><strong>Ambient (CapAmb)</strong>: Capabilities that are automatically inherited by exec'd programs even without file capability bits (available since Linux 4.3)</li>
+      </ul>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Capability</th><th>Function</th><th>Risk Level</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>CAP_NET_BIND_SERVICE</td><td>Bind to ports below 1024</td><td>Low</td></tr>
+            <tr><td>CAP_NET_RAW</td><td>Use raw and packet sockets</td><td>Medium</td></tr>
+            <tr><td>CAP_NET_ADMIN</td><td>Full network configuration</td><td>High</td></tr>
+            <tr><td>CAP_DAC_OVERRIDE</td><td>Bypass all file permission checks</td><td>Critical</td></tr>
+            <tr><td>CAP_DAC_READ_SEARCH</td><td>Bypass read/search permission checks</td><td>High</td></tr>
+            <tr><td>CAP_SETUID</td><td>Set arbitrary UIDs</td><td>Critical</td></tr>
+            <tr><td>CAP_CHOWN</td><td>Arbitrary file ownership changes</td><td>High</td></tr>
+            <tr><td>CAP_SYS_PTRACE</td><td>Trace arbitrary processes</td><td>Critical</td></tr>
+            <tr><td>CAP_SYS_MODULE</td><td>Load and unload kernel modules</td><td>Critical</td></tr>
+            <tr><td>CAP_SYS_ADMIN</td><td>Broad system administration (near-root)</td><td>Critical</td></tr>
+            <tr><td>CAP_SYS_RAWIO</td><td>Raw I/O port access</td><td>Critical</td></tr>
+            <tr><td>CAP_AUDIT_WRITE</td><td>Write to kernel audit log</td><td>Medium</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>File capabilities, stored as extended attributes (<code>security.capability</code>) on executable binaries, allow specific capabilities to be granted upon exec without the full setuid-root mechanism.<sup><a href="#r11">[11]</a></sup> A web server requiring only privileged port binding need not run as root:</p>
+
+<pre><span class="cm"># Grant capability to bind privileged ports (effective + permitted)</span>
+<span class="fn">setcap</span> <span class="st">'cap_net_bind_service=ep'</span> /usr/local/bin/caddy
+
+<span class="cm"># Inspect capabilities on a binary</span>
+<span class="fn">getcap</span> /usr/local/bin/caddy
+<span class="cm"># /usr/local/bin/caddy: cap_net_bind_service=ep</span>
+
+<span class="cm"># Programmatic capability manipulation with libcap</span>
+<span class="pp">#include</span> <span class="st">&lt;sys/capability.h&gt;</span>
+
+cap_t caps = cap_get_proc();
+cap_value_t cap_list[] = { CAP_NET_BIND_SERVICE };
+
+<span class="cm">/* Move cap to permitted only, not effective */</span>
+cap_set_flag(caps, CAP_EFFECTIVE, <span class="nu">1</span>, cap_list, CAP_CLEAR);
+cap_set_proc(caps);
+cap_free(caps);
+<span class="code-lang">C</span></pre>
+
+      <p>The <code>=ep</code> suffix grants the capability in both Effective and Permitted sets at exec time. An <code>=p</code> grant places it in Permitted only — the process must explicitly raise it to Effective with <code>cap_set_proc(3)</code>, useful for programs that want to minimize their window of elevated privilege.</p>
+
+      <h3 id="objcap">Object Capability Systems</h3>
+
+      <p>POSIX capabilities are not a complete capability model in the Dennis-Van Horn sense. They represent per-process privilege amplification flags, not per-object unforgeable tokens. <code>CAP_SYS_ADMIN</code> is particularly problematic: it encompasses mounting filesystems, configuring audit, creating namespaces, performing device I/O control, and dozens of other operations, making it effectively equivalent to root for most practical purposes. The granularity of the POSIX capability set is insufficient for fine-grained confinement.</p>
+
+      <p>True capability-based systems have been realized in research and production:</p>
+
+      <ul>
+        <li><strong>EROS</strong> (Extremely Reliable Operating System),<sup><a href="#r12">[12]</a></sup> designed by Jonathan Shapiro, implemented a persistent capability system emphasizing confinement and verifiability. Its successor, Coyotos, informed the design of seL4.</li>
+        <li><strong>seL4</strong><sup><a href="#r13">[13]</a></sup> implements capabilities as the sole mechanism for all kernel object access, with machine-checked proofs of the capability system's correctness — covered in depth in §07.</li>
+        <li><strong>Capsicum</strong><sup><a href="#r28">[28]</a></sup> realizes capability principles within the FreeBSD kernel and POSIX API — covered in §06.</li>
+        <li><strong>The E language</strong><sup><a href="#r14">[14]</a></sup> and its descendants (Pony, Wyvern, Crochet) embed capability safety into the type system, making it a compile-time property: if a module does not receive a capability as a parameter, it cannot exercise that authority, regardless of what other authority the runtime holds.</li>
+      </ul>
+    </section>
+
+    <!-- ═══ SECTION IV ═══ -->
+    <section id="mac">
+      <span class="section-num">§ 04</span>
+      <h2>Mandatory Access Control: SELinux and AppArmor</h2>
+
+      <p>Discretionary access control — the Unix permission model where file owners control who may access their resources — is insufficient against compromised processes. A setuid binary running as root, once exploited, can access any resource root can access, regardless of DAC settings on those resources. Mandatory access control (MAC) addresses this by enforcing a global security policy that neither individual users nor processes can override, regardless of their DAC permissions.</p>
+
+      <h3 id="selinux">SELinux: Flask Architecture and Type Enforcement</h3>
+
+      <p>Security-Enhanced Linux (SELinux) originated at the National Security Agency as the <em>Flask</em> security architecture,<sup><a href="#r15">[15]</a></sup> first implemented in the Mach microkernel and the Fluke research operating system at the University of Utah. Peter Loscocco and Stephen Smalley led the effort to port Flask to Linux, releasing the first public patch in December 2000.<sup><a href="#r16">[16]</a></sup> Following the upstream integration of the Linux Security Modules (LSM) framework — a hook-based system allowing multiple security modules to intercept and mediate kernel operations — in Linux 2.6 (late 2003), SELinux became the reference MAC implementation for the Linux kernel.</p>
+
+      <p>Flask introduces a policy engine that intercepts every security-relevant operation (file open, socket connect, IPC send, signal delivery, capability use) via LSM hooks and consults a policy database to determine whether the operation is permitted. The policy is evaluated against security contexts — structured labels attached to every process and every kernel object.</p>
+
+      <p>The SELinux security context is a four-part label visible on any object:</p>
+
+<pre><span class="cm"># Show SELinux context of files</span>
+$ ls -Z /var/www/html/index.html
+system_u:object_r:httpd_sys_content_t:s0  /var/www/html/index.html
+
+<span class="cm"># Show SELinux context of processes</span>
+$ ps -eZ | grep httpd
+system_u:system_r:httpd_t:s0  1234 ?  00:00:01 httpd
+
+<span class="cm"># Format: user:role:type:sensitivity[:categories]</span>
+<span class="cm">#         ↑       ↑      ↑    ↑</span>
+<span class="cm">#         RBAC    RBAC   TE   MLS</span>
+<span class="code-lang">bash</span></pre>
+
+      <p>SELinux's three core policy mechanisms work in concert:<sup><a href="#r16">[16]</a></sup></p>
+
+      <p><strong>Type Enforcement (TE)</strong>: Every process runs in a <em>domain</em> (a type applied to processes); every object has a <em>type</em>. The policy consists of <code>allow</code> rules specifying which domains may perform which operations on which object types. Absence of an allow rule means denial — SELinux is default-deny.</p>
+
+      <p><strong>Role-Based Access Control (RBAC)</strong>: Domains are associated with roles, and users are associated with sets of permitted roles. Roles provide organizational structure: the <code>sysadm_r</code> role grants system administration domains; <code>user_r</code> grants only ordinary user domains.</p>
+
+      <p><strong>Multi-Level Security (MLS)</strong>: Bell-LaPadula sensitivity labels for classified environments. MLS enables enforcement of strict information flow control — ensuring that a process handling data labeled <code>Secret</code> cannot write to objects labeled <code>Unclassified</code>.</p>
+
+<pre><span class="cm"># Type Enforcement policy fragment</span>
+<span class="cm"># httpd_t domain may read files of type httpd_sys_content_t</span>
+allow httpd_t httpd_sys_content_t:file { read getattr open };
+
+<span class="cm"># httpd_t may connect to TCP sockets on http_port_t</span>
+allow httpd_t http_port_t:tcp_socket { name_connect };
+
+<span class="cm"># httpd_t may NOT write to shadow_t (no allow rule = deny)</span>
+<span class="cm"># httpd_t may NOT bind ports other than http_port_t, https_port_t</span>
+
+<span class="cm"># Macro-driven policy in the reference policy framework</span>
+apache_content_template(httpd)
+
+<span class="cm"># Audit2allow: convert denial logs to candidate rules</span>
+$ ausearch -m avc -ts today | audit2allow -M mymodule
+$ semodule -i mymodule.pp
+<span class="code-lang">selinux te</span></pre>
+
+      <p>Red Hat Enterprise Linux and Fedora ship with the "targeted" policy, which enforces SELinux only on a curated set of high-risk daemons (httpd, named, sshd, dhcpd, postgresql, and others) while placing all other processes in the permissive <code>unconfined_t</code> domain. The "strict" and "MLS" policies confine all subjects, including the login shell and desktop environment, at the cost of substantially more complex policy development and maintenance.</p>
+
+      <div class="callout info">
+        <span class="callout-label">ℹ Operational Note</span>
+        <p>SELinux boolean flags (<code>getsebool -a</code>, <code>setsebool</code>) allow runtime policy adjustments without recompiling policy modules. Booleans represent common configuration choices — <code>httpd_can_network_connect</code>, <code>httpd_enable_cgi</code> — and are the preferred mechanism for adapting the reference policy to site-specific requirements.</p>
+      </div>
+
+      <h3 id="apparmor">AppArmor: Path-Based MAC</h3>
+
+      <p>AppArmor was developed by Immunix (founded by Crispin Cowan and colleagues), first described as "SubDomain" in 2000,<sup><a href="#r17">[17]</a></sup> and subsequently acquired by Novell and then Canonical. It takes a deliberately different design philosophy from SELinux: rather than labeling every filesystem object with a security type, AppArmor defines per-application profiles that specify which filesystem paths, network operations, and capability flags a program may use.</p>
+
+      <p>The path-based model trades expressiveness for operational simplicity. Writing an AppArmor profile for a new application requires understanding what files it accesses, which can often be determined empirically using AppArmor's <em>learning mode</em> (<code>complain</code> mode), which logs violations without enforcing them:</p>
+
+<pre><span class="cm"># /etc/apparmor.d/usr.sbin.nginx</span>
+#include &lt;tunables/global&gt;
+
+/usr/sbin/nginx {
+  #include &lt;abstractions/base&gt;
+  #include &lt;abstractions/nameservice&gt;
+
+  <span class="cm"># Capabilities required by nginx</span>
+  capability net_bind_service,
+  capability setuid,
+  capability setgid,
+  capability dac_override,
+
+  <span class="cm"># Configuration read access (single level)</span>
+  /etc/nginx/             r,
+  /etc/nginx/**           r,
+
+  <span class="cm"># Content (recursive read)</span>
+  /var/www/html/**        r,
+
+  <span class="cm"># Logging (write)</span>
+  /var/log/nginx/         rw,
+  /var/log/nginx/**       rw,
+
+  <span class="cm"># PID file</span>
+  /run/nginx.pid          rw,
+
+  <span class="cm"># Network: TCP on inet/inet6</span>
+  network inet  tcp,
+  network inet6 tcp,
+
+  <span class="cm"># Explicit denials (enforced over allow rules)</span>
+  deny /etc/shadow        r,
+  deny /proc/sysrq-trigger rw,
+  deny /sys/**            rw,
+}
+<span class="code-lang">apparmor</span></pre>
+
+      <p>AppArmor path matching uses glob patterns: <code>/*</code> matches one level, <code>/**</code> matches recursively. Profiles are compiled from text to binary format and loaded into the kernel via the AppArmor LSM, where they are enforced at every VFS operation, socket call, and capability check.</p>
+
+      <p>The path-based model has known limitations. Hard links allow reaching a file at a path other than its canonical location; bind mounts allow making a file appear at an entirely different path. SELinux's inode-label model is immune to these — the label follows the inode regardless of which path is used to access it. AppArmor's path model can be circumvented by an attacker who can arrange a bind mount or hard link, though these operations themselves typically require privilege.</p>
+
+      <h3 id="landlock">TOMOYO, Smack, and Landlock</h3>
+
+      <p>The Linux LSM framework accommodates multiple concurrent MAC systems. Beyond SELinux and AppArmor, several other frameworks are noteworthy:</p>
+
+      <p><strong>TOMOYO Linux</strong>,<sup><a href="#r18">[18]</a></sup> developed by NTT and mainlined in Linux 2.6.30, implements a path-based MAC system with a distinctive learning mode that automatically generates policy by observing program behavior during a training phase. TOMOYO treats policy construction as a systems administration task rather than a security engineering task — a pragmatic choice for deployment in environments without dedicated security staff.</p>
+
+      <p><strong>Smack</strong> (Simplified Mandatory Access Control Kernel),<sup><a href="#r19">[19]</a></sup> mainlined in Linux 2.6.25 and used in the Tizen embedded operating system, uses short string labels (smack labels) on files and processes. The rule set is intentionally simple: a subject label can read from objects with the same label or with an explicit access mode entry in the Smack rules table. Smack targets resource-constrained systems where SELinux's policy complexity would be prohibitive.</p>
+
+      <p><strong>Landlock</strong>,<sup><a href="#r20">[20]</a></sup> merged in Linux 5.13 (2021), is architecturally distinct from all the above: it is an unprivileged, self-restriction mechanism. An application can impose a Landlock ruleset on itself — restricting its own filesystem access — without requiring any system-wide policy deployment or administrator involvement. This makes it analogous to OpenBSD's <code>pledge(2)</code> and directly addresses the use case of sandboxing applications from within the application itself:</p>
+
+<pre><span class="pp">#include</span> <span class="st">&lt;linux/landlock.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;sys/syscall.h&gt;</span>
+
+<span class="cm">/* Define which access types this ruleset handles */</span>
+<span class="kw">struct</span> landlock_ruleset_attr rs_attr = {
+    .handled_access_fs =
+        LANDLOCK_ACCESS_FS_EXECUTE  |
+        LANDLOCK_ACCESS_FS_READ_FILE |
+        LANDLOCK_ACCESS_FS_WRITE_FILE |
+        LANDLOCK_ACCESS_FS_MAKE_REG,
+};
+<span class="kw">int</span> rs_fd = landlock_create_ruleset(&amp;rs_attr, <span class="kw">sizeof</span>(rs_attr), <span class="nu">0</span>);
+
+<span class="cm">/* Allow read-only access to /var/www */</span>
+<span class="kw">struct</span> landlock_path_beneath_attr path_attr = {
+    .allowed_access = LANDLOCK_ACCESS_FS_READ_FILE,
+    .parent_fd = open(<span class="st">"/var/www"</span>, O_PATH | O_DIRECTORY),
+};
+landlock_add_rule(rs_fd, LANDLOCK_RULE_PATH_BENEATH, &amp;path_attr, <span class="nu">0</span>);
+
+<span class="cm">/* Enforce: this is irreversible */</span>
+prctl(PR_SET_NO_NEW_PRIVS, <span class="nu">1</span>, <span class="nu">0</span>, <span class="nu">0</span>, <span class="nu">0</span>);
+landlock_restrict_self(rs_fd, <span class="nu">0</span>);
+<span class="code-lang">C</span></pre>
+
+      <p>Once <code>landlock_restrict_self()</code> is called, the restriction applies to the calling process and all its children, and cannot be lifted. Landlock version 3 (Linux 5.19) extended coverage to network operations (TCP connect and bind), and version 4 (Linux 6.7) added control over ioctl operations.</p>
+    </section>
+
+    <!-- ═══ SECTION V ═══ -->
+    <section id="seccomp">
+      <span class="section-num">§ 05</span>
+      <h2>seccomp and Berkeley Packet Filter (BPF) Syscall Filtering</h2>
+
+      <p>The Linux kernel exposes approximately 400 system calls, each representing both functionality and attack surface. A web server's legitimate operational requirements — socket I/O, file reads, memory allocation, process management — encompass perhaps 50 of those calls. The remaining 350-odd, including <code>ptrace(2)</code>, <code>pivot_root(2)</code>, <code>init_module(2)</code>, <code>kexec_load(2)</code>, and <code>perf_event_open(2)</code>, provide an attacker with powerful kernel exploitation primitives if they can reach the post-exploitation phase. Seccomp (secure computing) addresses this by allowing processes to restrict their own syscall surface.</p>
+
+      <h3 id="strict">seccomp Strict Mode</h3>
+
+      <p>Original seccomp, contributed by Andrea Arcangeli and merged in Linux 2.6.12 (2005),<sup><a href="#r21">[21]</a></sup> implements a maximally restrictive mode: upon calling <code>prctl(PR_SET_SECCOMP, SECCOMP_MODE_STRICT)</code>, a process is limited to exactly four system calls: <code>read(2)</code>, <code>write(2)</code>, <code>exit(2)</code>, and <code>sigreturn(2)</code>. Any other syscall causes an immediate SIGKILL. The rationale was to allow compute services to accept untrusted code and execute it with near-zero kernel attack surface — essentially a sandboxed computation model where all I/O setup occurs before the sandboxed computation begins. The restriction was too severe for most real applications, and strict mode saw minimal deployment outside of specialized compute sandboxes.</p>
+
+      <h3 id="bpf">BPF Origins and the eBPF Evolution</h3>
+
+      <p>Seccomp-BPF, merged in Linux 3.5 (2012),<sup><a href="#r22">[22]</a></sup> transformed seccomp into a practical tool by allowing user-defined filters expressed in Berkeley Packet Filter (BPF) bytecode. BPF was developed by Steven McCanne and Van Jacobson at Lawrence Berkeley National Laboratory and presented at the USENIX Winter Conference in 1993.<sup><a href="#r23">[23]</a></sup> Its original purpose was efficient packet filtering for tools like <code>tcpdump(1)</code>: rather than copying every network packet to user space for the application to evaluate filter expressions, BPF programs execute <em>in the kernel</em>, discarding unmatched packets before they incur the copy overhead.</p>
+
+      <p>The BPF virtual machine is a simple register machine with an accumulator, index register, a small scratch memory store, and an implicit pointer to the packet (or, in seccomp-BPF's case, to the <code>seccomp_data</code> structure containing the syscall number and arguments). BPF programs are validated before installation to guarantee termination (no loops, bounded instruction count) and memory safety (all loads are bounds-checked). These properties — in-kernel execution, formal verifiability, event-driven triggering — made BPF's model attractive far beyond packet filtering.</p>
+
+      <p>Alexei Starovoitov and Daniel Borkmann extended BPF substantially in Linux 3.18 (2014), creating extended BPF (eBPF).<sup><a href="#r24">[24]</a></sup> eBPF is a general-purpose JIT-compiled in-kernel virtual machine with 10 64-bit registers, a read-only frame pointer, a 512-byte stack, persistent map data structures shared between kernel and user space, and hook points spanning virtually every kernel subsystem: kprobes and uprobes for dynamic tracing, tracepoints for static instrumentation, XDP for network packet processing at the NIC driver level, tc (traffic control) for socket-level filtering, cgroup hooks for per-cgroup enforcement, LSM hooks for security policy, and socket operations for network policy.</p>
+
+      <p>The eBPF verifier performs abstract interpretation of all possible execution paths in the program before it is loaded, proving that the program cannot dereference invalid pointers, read uninitialized memory, or access kernel memory outside of defined regions.<sup><a href="#r24">[24]</a></sup> This in-kernel verification is a form of lightweight formal verification — not a full proof in the Isabelle/HOL sense, but sufficient to prevent memory safety violations and ensure program termination.</p>
+
+<pre><span class="cm">/* seccomp-BPF filter using libseccomp */</span>
+<span class="pp">#include</span> <span class="st">&lt;seccomp.h&gt;</span>
+
+<span class="kw">int</span> <span class="fn">install_sandbox_filter</span>(<span class="kw">void</span>) {
+    scmp_filter_ctx ctx;
+
+    <span class="cm">/* Default action: kill entire process group */</span>
+    ctx = seccomp_init(SCMP_ACT_KILL_PROCESS);
+    <span class="kw">if</span> (!ctx) <span class="kw">return</span> -<span class="nu">1</span>;
+
+    <span class="cm">/* Allowlist: basic I/O and memory management */</span>
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(read), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(close), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit_group), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(mmap), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(munmap), <span class="nu">0</span>);
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(fstat), <span class="nu">0</span>);
+
+    <span class="cm">/* openat: allow read-only flags only */</span>
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(openat), <span class="nu">1</span>,
+        SCMP_A2(SCMP_CMP_MASKED_EQ, O_WRONLY | O_RDWR, <span class="nu">0</span>));
+
+    <span class="cm">/* Futex for threading primitives */</span>
+    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), <span class="nu">0</span>);
+
+    <span class="cm">/* Commit the filter — this applies to all threads */</span>
+    <span class="kw">int</span> rc = seccomp_load(ctx);
+    seccomp_release(ctx);
+    <span class="kw">return</span> rc;
+}
+<span class="code-lang">C</span></pre>
+
+      <h4>Seccomp Filter Actions</h4>
+
+      <p>Seccomp-BPF filters inspect the <code>seccomp_data</code> structure — containing the syscall number, architecture identifier, instruction pointer, and up to six argument values — and return one of eight possible actions:<sup><a href="#r22">[22]</a></sup></p>
+
+      <ul>
+        <li><code>SECCOMP_RET_ALLOW</code>: Permit the syscall unconditionally</li>
+        <li><code>SECCOMP_RET_KILL_PROCESS</code>: Terminate the entire thread group with SIGSYS (Linux 4.14+)</li>
+        <li><code>SECCOMP_RET_KILL_THREAD</code>: Terminate only the calling thread</li>
+        <li><code>SECCOMP_RET_TRAP</code>: Deliver SIGSYS, allowing a signal handler to inspect the blocked call</li>
+        <li><code>SECCOMP_RET_ERRNO(e)</code>: Return the specified errno to the caller without entering the kernel</li>
+        <li><code>SECCOMP_RET_TRACE</code>: Notify a ptrace supervisor and await its decision</li>
+        <li><code>SECCOMP_RET_LOG</code>: Allow but write to the seccomp audit log</li>
+        <li><code>SECCOMP_RET_USER_NOTIF</code>: Block and notify a user-space supervisor via a file descriptor, which may then approve, reject, or spoof the call (Linux 5.0)<sup><a href="#r25">[25]</a></sup></li>
+      </ul>
+
+      <p><code>SECCOMP_RET_USER_NOTIF</code> is particularly significant: it enables a container manager or supervisor process to intercept and handle syscalls on behalf of a sandboxed process, implementing policies more complex than BPF bytecode allows. The syscall arguments are read from <code>/proc/PID/mem</code> by the supervisor, which can then respond with <code>SECCOMP_USER_NOTIF_FLAG_CONTINUE</code> (allow), an error code (deny), or a spoofed return value (intercept).</p>
+
+      <h4>Argument Filtering Caveats</h4>
+
+      <p>Filtering on syscall arguments presents subtle correctness issues. The filter sees raw register values at syscall entry — it cannot follow pointers into user space (doing so would introduce TOCTOU races between filter evaluation and kernel handling). For <code>openat(2)</code>, the filter can check flags and the dirfd value, but cannot inspect the pathname string. A filter wishing to allow <code>openat</code> to <code>/proc/self/status</code> but block all other paths must use <code>SECCOMP_RET_USER_NOTIF</code> with a supervisor that reads the path from the process's address space.</p>
+
+      <p>Architectural multiplicity is another correctness concern. On x86_64, 32-bit syscalls issued via <code>int 0x80</code> use different syscall numbers and a different kernel path than 64-bit syscalls issued via <code>syscall</code>. A filter checking only 64-bit syscall numbers could be bypassed by issuing the equivalent 32-bit syscall. Correct filters must check <code>BPF_ARCH</code> against <code>AUDIT_ARCH_X86_64</code> as a first step and reject any non-matching architecture unconditionally.</p>
+
+      <h3 id="deployment">Deployment: Chrome, Docker, and systemd</h3>
+
+      <p>Google Chrome was the first widely deployed application to use seccomp-BPF as a core sandbox layer.<sup><a href="#r26">[26]</a></sup> The Chrome renderer process — responsible for parsing HTML, executing JavaScript, and rendering graphics — operates under an aggressive seccomp filter that blocks the vast majority of syscalls. A fully exploited renderer process cannot call <code>execve(2)</code>, <code>fork(2)</code>, <code>clone(2)</code>, <code>socket(2)</code>, or <code>connect(2)</code>. Even code-execution capability within the renderer is largely contained: the attacker controls only the renderer's address space and the small set of allowed syscalls, severely limiting pivot capability. Chrome's sandbox layers seccomp-BPF with a separate broker process (analogous to Capsicum's casper daemon) for operations requiring cross-sandbox resource access.</p>
+
+      <p>Docker's default seccomp profile<sup><a href="#r27">[27]</a></sup> uses a denylist approach, blocking approximately 44 syscalls that have no legitimate use in typical containerized workloads but provide significant kernel attack surface:</p>
+
+<pre><span class="cm"># Syscalls blocked by Docker's default seccomp profile (selection)</span>
+<span class="cm"># Full profile: https://github.com/moby/moby/blob/master/profiles/seccomp/default.json</span>
+
+acct           <span class="cm"># process accounting</span>
+add_key        <span class="cm"># kernel keyring manipulation</span>
+bpf            <span class="cm"># eBPF program loading</span>
+clock_adjtime  <span class="cm"># system clock adjustment</span>
+create_module  <span class="cm"># legacy kernel module creation</span>
+init_module    <span class="cm"># kernel module loading</span>
+finit_module   <span class="cm"># kernel module loading (file descriptor)</span>
+kexec_file_load <span class="cm"># kernel exec from file</span>
+kexec_load     <span class="cm"># kernel exec</span>
+mount          <span class="cm"># filesystem mounting</span>
+open_by_handle_at <span class="cm"># NFS server-side lookup bypass</span>
+perf_event_open <span class="cm"># performance event monitoring</span>
+pivot_root     <span class="cm"># change filesystem root</span>
+ptrace         <span class="cm"># process tracing</span>
+setns          <span class="cm"># join namespaces</span>
+syslog         <span class="cm"># kernel log access</span>
+unshare        <span class="cm"># create namespaces</span>
+<span class="code-lang">text</span></pre>
+
+      <p>systemd's <code>SystemCallFilter=</code> directive in unit files applies seccomp filters to service processes, with predefined system call groups for common service types:<sup><a href="#r27">[27]</a></sup></p>
+
+<pre>[Service]
+<span class="cm"># Restrict to calls appropriate for a typical system service</span>
+SystemCallFilter=@system-service
+
+<span class="cm"># Return EPERM rather than SIGSYS for blocked calls</span>
+SystemCallErrorNumber=EPERM
+
+<span class="cm"># Additional restrictions</span>
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+<span class="code-lang">systemd unit</span></pre>
+
+      <p>The <code>@system-service</code> set is a curated allowlist maintained by the systemd project, encompassing calls needed by typical service daemons. More restrictive predefined sets include <code>@basic-io</code> (minimal I/O), <code>@network-io</code> (network operations), and <code>@file-system</code> (filesystem access). Individual syscalls can be added or removed from any set with <code>+syscall</code> or <code>~syscall</code> modifiers.</p>
+    </section>
+
+    <!-- ═══ SECTION VI ═══ -->
+    <section id="capsicum">
+      <span class="section-num">§ 06</span>
+      <h2>Capsicum: Fine-Grained Capabilities in FreeBSD</h2>
+
+      <p>Capsicum, developed by Robert Watson, Jonathan Anderson, Ben Laurie, and Kris Kennaway at the University of Cambridge and Google, and first presented at USENIX Security 2010,<sup><a href="#r28">[28]</a></sup> represents one of the most successful practical realizations of object capability principles in a mainstream POSIX operating system. Its core insight is that the Unix file descriptor is already an unforgeable kernel-managed reference to a kernel object — it requires only the addition of per-descriptor rights restrictions to become a genuine capability.</p>
+
+      <h3 id="capmode">Capability Mode and Descriptor Rights</h3>
+
+      <p>Capsicum introduces a process state called <em>capability mode</em>, entered by calling <code>cap_enter(2)</code>. Once in capability mode, the process loses access to all global namespaces: it cannot open files by pathname, resolve hostnames, manipulate arbitrary processes, or perform any operation that requires naming a resource by its global identifier. All resource access must occur through file descriptors obtained before entering capability mode or explicitly received from a trusted component over a socket.</p>
+
+      <p>Capability mode is a one-way transition — there is no <code>cap_exit()</code>. This unidirectionality is a security property: it means the confinement cannot be escaped by calling a single function. The process's future access to resources is entirely determined by the set of file descriptors it holds at the moment of <code>cap_enter()</code>, and whatever rights those descriptors carry.</p>
+
+      <p>File descriptor rights are refined using <code>cap_rights_limit(2)</code>, which applies a bitmask of permitted operations to a descriptor. Rights can only be <em>reduced</em>, never expanded — monotonic restriction ensures that a compromised subcomponent cannot escalate its own descriptor rights:</p>
+
+<pre><span class="pp">#include</span> <span class="st">&lt;sys/capsicum.h&gt;</span>
+
+<span class="cm">/* Step 1: Acquire resources before entering capability mode */</span>
+<span class="kw">int</span> config_fd = open(<span class="st">"/etc/app/config.toml"</span>, O_RDONLY);
+<span class="kw">int</span> sock_fd   = socket(AF_INET, SOCK_STREAM, <span class="nu">0</span>);
+<span class="kw">int</span> log_fd    = open(<span class="st">"/var/log/app.log"</span>, O_WRONLY | O_APPEND);
+
+<span class="cm">/* Step 2: Restrict each descriptor to minimum required rights */</span>
+cap_rights_t r_read, r_write, r_net;
+
+cap_rights_init(&amp;r_read, CAP_READ, CAP_SEEK, CAP_FSTAT);
+cap_rights_limit(config_fd, &amp;r_read);
+
+cap_rights_init(&amp;r_write, CAP_WRITE, CAP_FSTAT);
+cap_rights_limit(log_fd, &amp;r_write);
+
+cap_rights_init(&amp;r_net, CAP_CONNECT, CAP_RECV, CAP_SEND,
+                         CAP_SETSOCKOPT, CAP_GETSOCKOPT);
+cap_rights_limit(sock_fd, &amp;r_net);
+
+<span class="cm">/* Step 3: Enter capability mode — no return */</span>
+cap_enter();
+
+<span class="cm">/* From here: read config succeeds, open("/etc/passwd") fails ECAPMODE */</span>
+read(config_fd, buf, <span class="kw">sizeof</span>(buf));   <span class="cm">/* OK */</span>
+open(<span class="st">"/etc/passwd"</span>, O_RDONLY);      <span class="cm">/* ECAPMODE */</span>
+connect(sock_fd, &amp;addr, addrlen);   <span class="cm">/* OK — sock_fd has CAP_CONNECT */</span>
+write(sock_fd, data, len);          <span class="cm">/* ENOTCAPABLE — only CAP_SEND allowed */</span>
+<span class="code-lang">C</span></pre>
+
+      <p>The full rights taxonomy in Capsicum covers not just the obvious I/O operations but also fine-grained control over socket operations, ioctl commands (via <code>cap_ioctls_limit(2)</code>), and fcntl commands (via <code>cap_fcntls_limit(2)</code>). A descriptor for a socket can be restricted to allow <code>CAP_RECV</code> and <code>CAP_SEND</code> but deny <code>CAP_BIND</code>, <code>CAP_LISTEN</code>, and <code>CAP_CONNECT</code> — appropriate for a socket that has already been connected before capability mode was entered.</p>
+
+      <h4>Sandboxing Real Programs</h4>
+
+      <p>Watson et al. demonstrated that Capsicum could be integrated into real-world programs with modest modifications.<sup><a href="#r28">[28]</a></sup> Key examples from the FreeBSD base system:</p>
+
+      <ul>
+        <li><strong>tcpdump(8)</strong>: Opens its capture interface via <code>pcap_create()</code> and output save file before calling <code>cap_enter()</code>. The entire packet processing and decoding loop then runs in capability mode.</li>
+        <li><strong>dhclient(8)</strong>: Enters capability mode after binding its UDP socket on port 68, restricting the socket descriptor to network I/O only.</li>
+        <li><strong>ping(8)</strong>: Restricted to a capability for the raw ICMP socket and a descriptor for <code>/etc/hosts</code> name resolution.</li>
+        <li><strong>kdump(1)</strong>: Sandboxes the per-process output stage in a child process under capability mode.</li>
+      </ul>
+
+      <p>The key observation was that most programs naturally acquire all their resources at startup — during argument parsing, configuration file reading, and socket setup — and then enter a processing loop that operates on those resources without needing new ones. Capsicum's capability mode formalizes this pattern, making the pre-/post-initialization boundary an explicit security boundary.</p>
+
+      <h3 id="casper">The casper(8) Daemon</h3>
+
+      <p>Some operations inherently require ambient authority: resolving hostnames requires querying DNS or reading <code>/etc/hosts</code>; looking up users requires reading <code>/etc/passwd</code>; generating random numbers requires accessing <code>/dev/urandom</code>. Capsicum's solution is <code>casper(8)</code><sup><a href="#r28">[28]</a></sup> — a trusted supervisor daemon that provides ambient services through capability-safe channels.</p>
+
+      <p>A Capsicum-ized process opens a Casper channel before entering capability mode. The channel is a file descriptor representing a connection to the Casper daemon. After <code>cap_enter()</code>, the process can request services through this channel:</p>
+
+<pre><span class="pp">#include</span> <span class="st">&lt;libcasper.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;casper/cap_dns.h&gt;</span>
+<span class="pp">#include</span> <span class="st">&lt;casper/cap_pwd.h&gt;</span>
+
+<span class="cm">/* Open Casper channels before entering capability mode */</span>
+cap_channel_t *capcas  = cap_init();
+cap_channel_t *capnet  = cap_service_open(capcas, <span class="st">"system.dns"</span>);
+cap_channel_t *cappwd  = cap_service_open(capcas, <span class="st">"system.pwd"</span>);
+
+<span class="cm">/* Restrict DNS channel to specific domains only */</span>
+<span class="kw">const char</span> *domains[] = { <span class="st">"example.com"</span>, <span class="st">"api.example.com"</span>, NULL };
+cap_dns_type_limit(capnet, <span class="st">"NAME"</span>);   <span class="cm">/* forward lookups only */</span>
+
+<span class="cm">/* Enter capability mode */</span>
+cap_enter();
+
+<span class="cm">/* Resolve a hostname via Casper — works despite capability mode */</span>
+<span class="kw">struct</span> addrinfo *res;
+cap_getaddrinfo(capnet, <span class="st">"api.example.com"</span>, <span class="st">"https"</span>, NULL, &amp;res);
+
+<span class="cm">/* Look up a user by name via Casper */</span>
+<span class="kw">struct</span> passwd *pw = cap_getpwnam(cappwd, <span class="st">"nobody"</span>);
+<span class="code-lang">C</span></pre>
+
+      <p>The Casper daemon performs each operation in its own isolated process and can apply additional filtering on top of capability mode's restrictions. A DNS Casper service configured to resolve only <code>example.com</code> subdomains will reject lookups for arbitrary hostnames, even if the sandboxed process requests them. This allows construction of multi-level capability hierarchies where each capability is scoped as narrowly as the protocol permits.</p>
+
+      <h3 id="pledge">Comparison: pledge(2) and unveil(2) on OpenBSD</h3>
+
+      <p>OpenBSD's <code>pledge(2)</code> system call,<sup><a href="#r29">[29]</a></sup> introduced in OpenBSD 5.9 (2015) and designed by Theo de Raadt, takes a different approach to the same problem. Rather than capability descriptors, pledge defines named <em>promise categories</em> — strings representing groups of related syscalls:</p>
+
+<pre><span class="cm">/* Restrict this process to stdio, filesystem reads, and network */</span>
+pledge(<span class="st">"stdio rpath inet dns"</span>, NULL);
+
+<span class="cm">/* Common promise groups: */</span>
+<span class="cm">/* stdio  — read, write, basic I/O multiplexing */</span>
+<span class="cm">/* rpath  — open(O_RDONLY), stat, readdir */</span>
+<span class="cm">/* wpath  — open(O_WRONLY) */</span>
+<span class="cm">/* cpath  — creat, mkdir, rename, unlink */</span>
+<span class="cm">/* inet   — socket(AF_INET), connect, recv, send */</span>
+<span class="cm">/* dns    — getaddrinfo, getnameinfo (libc wrappers) */</span>
+<span class="cm">/* proc   — fork, exec (NOT available after first pledge) */</span>
+<span class="cm">/* exec   — execve */</span>
+<span class="cm">/* id     — setuid, setgid, getgroups */</span>
+<span class="cm">/* tty    — terminal operations */</span>
+<span class="code-lang">C</span></pre>
+
+      <p>After a <code>pledge()</code> call, a violation causes SIGABRT delivery (or SIGKILL in more recent OpenBSD versions) and a syslog entry identifying the violating process and the denied operation. The pledge set can be progressively narrowed but never expanded. A common pattern is to start with a broad pledge (including <code>proc exec</code> during initialization), then re-pledge to a more restrictive set after setup is complete.</p>
+
+      <p><code>unveil(2)</code>,<sup><a href="#r30">[30]</a></sup> introduced in OpenBSD 6.4 (2018), complements pledge by restricting filesystem visibility. A process that calls <code>unveil("/var/www", "r")</code> followed by <code>unveil(NULL, NULL)</code> can only access <code>/var/www</code> and its descendants with read permission — all other filesystem paths are invisible, as if they do not exist (returning <code>ENOENT</code> rather than <code>EPERM</code>):</p>
+
+<pre><span class="cm">/* Reveal only the paths this process needs */</span>
+unveil(<span class="st">"/var/www/html"</span>, <span class="st">"r"</span>);       <span class="cm">/* read content */</span>
+unveil(<span class="st">"/var/log/app"</span>, <span class="st">"rw"</span>);       <span class="cm">/* read/write logs */</span>
+unveil(<span class="st">"/etc/app/config.toml"</span>, <span class="st">"r"</span>);<span class="cm">/* read config */</span>
+unveil(NULL, NULL);                  <span class="cm">/* lock - no more unveil calls */</span>
+<span class="code-lang">C</span></pre>
+
+      <p>Pledge and unveil are intentionally coarser than Capsicum's per-descriptor model. The promise categories are broad, and the filesystem restrictions are path-based (sharing AppArmor's susceptibility to hardlink/bind-mount circumvention). The design philosophy prioritizes adoption simplicity over expressiveness — and the results validate this tradeoff. By OpenBSD 7.4, virtually the entire base system (including the web server, email stack, DNS resolver, and most utilities) operates under both pledge and unveil, demonstrating that a coarser model can achieve meaningful security improvements at acceptable engineering cost for real-world software.</p>
+    </section>
+
+    <!-- ═══ SECTION VII ═══ -->
+    <section id="micro">
+      <span class="section-num">§ 07</span>
+      <h2>Microkernel Architectures and Minimal Trusted Computing Base</h2>
+
+      <p>The <em>trusted computing base</em> (TCB) of a system is the set of hardware and software components whose correct, non-malicious behavior is <em>required</em> for the system's security properties to hold. It is distinct from the set of components the system <em>trusts</em> — the TCB is the set that <em>must</em> be trusted because the security policy cannot be enforced without it. An exploitable vulnerability anywhere in the TCB can undermine the system's entire security posture.</p>
+
+      <p>In a monolithic kernel — Linux, Windows, macOS XNU — the TCB encompasses the entire kernel: millions of lines of device drivers, filesystem implementations, network stacks, and subsystems, all executing in ring 0 with unrestricted access to physical memory, I/O ports, and all CPU registers. A single kernel memory corruption vulnerability anywhere in this code base can yield arbitrary kernel code execution. A 2023 study of Linux kernel CVEs showed that device drivers and filesystem code account for over 60% of kernel vulnerabilities, yet both run in ring 0 with full kernel privileges.</p>
+
+      <div class="pull-quote">
+        <p>A microkernel is wrong if anything is included in it which can be prevented from being there.</p>
+        <cite>&mdash; Jochen Liedtke, "On μ-kernel Construction," SOSP 1995<sup><a href="#r31">[31]</a></sup></cite>
+      </div>
+
+      <p>The microkernel architecture attempts to minimize the TCB by moving as much kernel functionality as possible into unprivileged user-space servers. The kernel itself retains only those mechanisms that genuinely require hardware privilege: address space management, inter-process communication, thread scheduling, and hardware interrupt dispatch.</p>
+
+      <h3 id="mach">Mach: The First Widely Adopted Microkernel</h3>
+
+      <p>The Mach microkernel, developed at Carnegie Mellon University beginning in 1985 by Richard Rashid, Avadis Tevanian, and colleagues,<sup><a href="#r32">[32]</a></sup> was the first microkernel to achieve broad adoption in production systems. Mach's key abstractions are:</p>
+
+      <ul>
+        <li><strong>Task</strong>: A protected address space together with a port namespace, roughly corresponding to a Unix process</li>
+        <li><strong>Thread</strong>: An execution context within a task</li>
+        <li><strong>Port</strong>: A protected, kernel-managed message queue, serving as the fundamental IPC primitive and as a capability-like reference</li>
+        <li><strong>Message</strong>: A typed data structure containing data and port rights, sent atomically between tasks</li>
+      </ul>
+
+      <p>Mach's port model has genuine capability properties: a <em>send right</em> to a port allows transmitting messages to it; a <em>receive right</em> allows reading messages from it; a <em>send-once right</em> allows a single message transmission. Rights are transferred via messages, with the kernel mediating transfers and maintaining type safety. Tasks that do not hold a send right to a port cannot contact the service behind it.</p>
+
+      <p>Mach became the basis for macOS (via NeXTSTEP), GNU Hurd, and several research operating systems. However, Mach's practical IPC performance was substantially worse than monolithic kernel system call overhead.<sup><a href="#r33">[33]</a></sup> A Unix system call implemented in a user-space BSD server layered atop Mach required at minimum two context switches and two IPC operations — enter kernel, IPC to BSD server, execute, IPC back, return. This overhead motivated either collapsing servers back into the kernel (creating a compromise architecture, as macOS does) or a fundamental rethinking of microkernel design.</p>
+
+      <h3 id="l4">L4: Minimality as Proof</h3>
+
+      <p>Jochen Liedtke at GMD (the German national research center for information technology) published a highly influential analysis in 1993<sup><a href="#r33">[33]</a></sup> arguing that Mach's poor IPC performance was not a fundamental property of microkernels but a consequence of specific implementation choices — Mach's IPC path was too long, traversed too many layers, and failed to exploit processor architecture efficiently.</p>
+
+      <p>Liedtke's original L4 microkernel demonstrated IPC performance one to two orders of magnitude faster than Mach, by implementing the IPC path entirely in hand-optimized assembly, fitting critical data structures in CPU registers, and minimizing the number of kernel boundary crossings per IPC operation. His 1995 SOSP paper<sup><a href="#r31">[31]</a></sup> articulated the minimality principle quoted above and demonstrated that a microkernel providing only address spaces, threads, and IPC could support the full POSIX API via user-space servers with acceptable performance overhead.</p>
+
+      <p>The L4 family diversified into multiple research and production implementations: L4Ka::Pistachio, NOVA, Fiasco.OC (used in automotive systems), OKL4 (used in cellular basebands), and ultimately seL4. Each iteration refined the tradeoffs among IPC performance, formal tractability, and real-world applicability.</p>
+
+      <h3 id="sel4">seL4: Formal Verification of a General-Purpose Kernel</h3>
+
+      <p>seL4, developed at NICTA (now CSIRO's Data61) by Gerwin Klein, Kevin Elphinstone, Gernot Heiser, and a team of formal methods researchers and systems programmers,<sup><a href="#r13">[13]</a></sup> represents the most significant advance in microkernel security: a fully functional, performance-competitive OS kernel with machine-checked proofs of correctness and security.</p>
+
+      <p>The seL4 verification establishes a chain of refinement between three levels of specification:</p>
+
+      <ol>
+        <li><strong>Abstract specification</strong>: A mathematical specification of seL4's intended behavior, written in Isabelle/HOL, defining what the kernel should do in response to each operation</li>
+        <li><strong>Executable specification</strong>: A Haskell implementation directly derived from the abstract specification, executable for testing</li>
+        <li><strong>C implementation</strong>: The approximately 8,700-line C implementation actually deployed, proved to be a refinement of the executable specification</li>
+      </ol>
+
+      <p>The refinement proof means that any property provable about the abstract specification holds for the C implementation. Two key security properties have been proved:<sup><a href="#r13">[13]</a></sup></p>
+
+      <ul>
+        <li><strong>Integrity</strong>: A subject cannot modify a kernel object unless it holds a write capability to that object — the capability system correctly enforces authority</li>
+        <li><strong>Confidentiality</strong> (proved subsequently): Information can flow from high-confidentiality domains to low-confidentiality domains only through explicitly authorized channels — the system enforces noninterference</li>
+      </ul>
+
+      <p>The proof effort was enormous — the initial verification consumed approximately 11 person-years and produced around 200,000 lines of Isabelle/HOL proof script. The companion proof of absence of unsafe C behaviors (no buffer overflows, no null pointer dereferences, no use-after-free, no undefined behavior) in the C implementation adds further assurance.</p>
+
+      <p>seL4 uses a capability-based access control model throughout. Every kernel object — thread control blocks (TCBs), address spaces (CNodes and VSpaces), endpoints (IPC channels), notification objects, and untyped memory — is accessed exclusively through capabilities held in CNodes. The <em>Untyped</em> capability represents physical memory; retyping an Untyped capability creates other kernel objects, making memory allocation itself a capability-controlled operation. No operation on any kernel object is possible without holding an appropriate capability.</p>
+
+      <p>seL4 has seen deployment in DARPA's HACMS (High-Assurance Cyber Military Systems) program, in Boeing autonomous helicopter platforms, in automotive systems (particularly trusted execution environments), and as the basis for the secure RISC-V platform developed by the CHERI project.</p>
+
+      <h3 id="minix">MINIX 3 and the Intel Management Engine Discovery</h3>
+
+      <p>Andrew Tanenbaum's MINIX 3,<sup><a href="#r34">[34]</a></sup> designed as a highly reliable, self-repairing operating system for embedded and reliability-critical contexts, gained unexpected notoriety in 2017 when security researchers Maxim Goryachy and Mark Ermolov revealed that Intel's Management Engine — a separate processor embedded in virtually all Intel chipsets since 2008 — runs a modified MINIX 3 kernel.<sup><a href="#r35">[35]</a></sup></p>
+
+      <p>The Intel ME operates at a privilege level below the main operating system kernel, in a domain often called "ring -3." The ME has access to system RAM (via DMA), to the network interface (including a dedicated network stack operating independently of the host OS), to cryptographic hardware, and to the EC (embedded controller). It cannot be disabled by the host operating system — attempts to do so typically result in system shutdown or reset.</p>
+
+      <p>This revelation illustrated a fundamental point about TCB analysis in modern systems: the trusted computing base of an x86 platform extends well below the operating system to include firmware, microcode, out-of-band management processors, and the baseboard management controller. The total TCB of a modern server runs to tens of millions of lines of firmware code, most of it unaudited, unverified, and running at privilege levels the host OS cannot observe. Microkernel principles applied at the OS level are necessary but not sufficient — a fully verified OS atop an unverified firmware TCB remains vulnerable to firmware-level attacks.</p>
+
+      <h3>Fuchsia and Zircon: Capability Principles at Scale</h3>
+
+      <p>Google's Fuchsia operating system<sup><a href="#r36">[36]</a></sup> uses the Zircon kernel — a microkernel-influenced design that represents perhaps the most ambitious contemporary attempt to realize capability principles in a production general-purpose OS. In Zircon, every kernel object is accessed through a <em>handle</em> — an unforgeable reference analogous to a Mach port right or a Capsicum capability descriptor. Processes, threads, virtual memory objects, channels, sockets, and event objects are all created and accessed through handles.</p>
+
+      <p>Handles can be transferred between processes via Zircon channels (bidirectional pipe-like IPC primitives), enabling capability delegation. A parent process creates a child with specific handles — the child can only access what it has been explicitly given. Fuchsia's component framework layers atop this: each software component declares its capability requirements in a component manifest, and the component manager mediates routing of capabilities between components based on a static topology. A component that does not declare a requirement for (say) the writable filesystem service cannot receive a capability to it, regardless of runtime attempts to obtain one.</p>
+    </section>
+
+    <!-- ═══ SECTION VIII ═══ -->
+    <section id="ns">
+      <span class="section-num">§ 08</span>
+      <h2>User Namespaces and Privilege Escalation Mitigation</h2>
+
+      <p>Linux namespaces partition global kernel resources, creating isolated instances that a group of processes perceives as their own private resource view.<sup><a href="#r37">[37]</a></sup> They are the kernel mechanism that makes container technologies like Docker, Podman, and Kubernetes possible. Each namespace type isolates a different category of global state, and multiple namespace types can be combined to create environments that are substantially isolated from the host system.</p>
+
+      <h3 id="ns-arch">Namespace Architecture and UID Mapping</h3>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Namespace</th><th>Kernel Version</th><th>Isolates</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>mount (mnt)</td><td>2.4.19 (2002)</td><td>Filesystem mount points and VFS tree</td></tr>
+            <tr><td>UTS</td><td>2.6.19 (2006)</td><td>Hostname and NIS domain name</td></tr>
+            <tr><td>IPC</td><td>2.6.19 (2006)</td><td>System V IPC objects, POSIX message queues</td></tr>
+            <tr><td>PID</td><td>2.6.24 (2008)</td><td>Process IDs (separate PID space)</td></tr>
+            <tr><td>network (net)</td><td>2.6.24 (2008)</td><td>Network interfaces, routing, netfilter tables</td></tr>
+            <tr><td>user</td><td>3.8 (2013)</td><td>UID/GID mappings, capabilities</td></tr>
+            <tr><td>cgroup</td><td>4.6 (2016)</td><td>cgroup hierarchy root</td></tr>
+            <tr><td>time</td><td>5.6 (2020)</td><td>Clock offsets (CLOCK_MONOTONIC, CLOCK_BOOTTIME)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>User namespaces,<sup><a href="#r38">[38]</a></sup> merged in Linux 3.8 (2013) after a multi-year development effort by Eric Biederman, are the most security-significant and architecturally complex namespace type. A user namespace defines a mapping between UIDs and GIDs inside the namespace and UIDs/GIDs in the parent namespace:</p>
+
+<pre><span class="cm"># UID mapping format: inside_start  parent_start  count</span>
+<span class="cm"># This maps UID 0 inside the namespace to UID 1000 in the parent</span>
+$ cat /proc/self/uid_map
+0     1000     1
+
+<span class="cm"># Creating a new user namespace with unshare(1)</span>
+$ unshare --user --map-root-user /bin/sh
+# whoami
+root  <span class="cm"># appears as root inside namespace</span>
+# id
+uid=0(root) gid=0(root) groups=0(root),65534(nogroup)
+# cat /proc/self/uid_map
+0          1000          1
+<span class="code-lang">bash</span></pre>
+
+      <p>A process with effective UID 0 <em>within</em> a user namespace has capabilities within that namespace's scope, but only with respect to resources owned by that namespace. It can create files that appear UID 0 within the namespace (but map to UID 1000 on the host), set up new namespaces nested within its user namespace, and perform operations allowed by its in-namespace capabilities. It cannot affect resources in the parent namespace or owned by other users.</p>
+
+      <p>This design enables a key property: an ordinary unprivileged user can create a user namespace in which they appear as root and have full capabilities, using only those capabilities to set up an isolated environment. No setuid binary, no sudo, no privileged helper is required.</p>
+
+      <h3 id="rootless">Rootless Containers</h3>
+
+      <p>Rootless containers leverage user namespaces to run container workloads without any privileged component in the host environment.<sup><a href="#r39">[39]</a></sup> The runtime (Podman, rootless Docker, or an OCI runtime like crun) executes entirely as an unprivileged user, creating user, mount, PID, UTS, and IPC namespaces using <code>clone(2)</code> or <code>unshare(2)</code> with no elevated privilege:</p>
+
+<pre><span class="cm"># Rootless container with Podman — no root, no setuid</span>
+$ id
+uid=1000(user) gid=1000(user) groups=1000(user)
+
+$ podman run --rm -it alpine:latest sh
+
+<span class="cm"># Inside the container</span>
+/ # whoami
+root
+/ # id
+uid=0(root) gid=0(root)
+
+<span class="cm"># From the host — the container "root" is actually UID 100000</span>
+$ ps -eo user,pid,cmd | grep sh
+100000   45678  sh
+<span class="code-lang">bash</span></pre>
+
+      <p>Several technical challenges arise in rootless operation that do not exist for root-privileged container runtimes:</p>
+
+      <ul>
+        <li><strong>Networking</strong>: Creating <code>veth</code> pairs and configuring iptables requires <code>CAP_NET_ADMIN</code> in the network namespace, which requires creating the network namespace inside a user namespace. User-space networking via <code>slirp4netns</code> provides TCP/IP connectivity without kernel-level network configuration.</li>
+        <li><strong>Overlay filesystems</strong>: <code>overlay2</code> storage requires kernel support for unprivileged overlay mounts (added in Linux 5.11 with <code>CONFIG_OVERLAY_FS_REDIRECT_ALWAYS_FOLLOW=y</code>). Prior to this, <code>fuse-overlayfs</code> — a FUSE implementation of overlayfs semantics — provides an alternative at some performance cost.</li>
+        <li><strong>Port binding</strong>: Binding to ports below 1024 inside a rootless container requires <code>CAP_NET_BIND_SERVICE</code> within the network namespace or the <code>net.ipv4.ip_unprivileged_port_start</code> sysctl to be set appropriately.</li>
+      </ul>
+
+      <h3 id="escalation">Privilege Escalation Vectors and CVE History</h3>
+
+      <p>Unprivileged user namespace creation introduced significant new kernel attack surface.<sup><a href="#r40">[40]</a></sup> Within a user namespace, an unprivileged process gains capabilities it did not have before, allowing it to exercise code paths — network namespace configuration, filesystem mounting, netfilter rule manipulation — that were previously accessible only to root. Kernel bugs in those newly reachable paths become locally exploitable privilege escalation vulnerabilities.</p>
+
+      <p>The pattern appears repeatedly in CVE history:</p>
+
+<pre><span class="cm">CVE-2013-1858</span>  clone(CLONE_NEWUSER) privilege escalation — early user ns implementation
+<span class="cm">CVE-2014-5206</span>  mount namespace + user namespace combination bypass
+<span class="cm">CVE-2016-8655</span>  AF_PACKET race condition exploitable via user + network namespaces
+<span class="cm">CVE-2017-1000112</span>  UDP fragmentation offload heap corruption via user namespaces
+<span class="cm">CVE-2022-0185</span>  fsconfig() heap overflow in filesystem context code (user ns exploit)
+<span class="cm">CVE-2022-2588</span>  Route4 classifier use-after-free via user + network namespaces
+<span class="cm">CVE-2022-25636</span>  netfilter nft_fwd_dup_netdev_offload OOB write via namespaces
+<span class="cm">CVE-2023-32233</span>  Netfilter nf_tables anonymous set use-after-free via user namespaces
+<span class="cm">CVE-2023-4004</span>  netfilter use-after-free via pipapo element removal (user ns)
+<span class="code-lang">CVE list</span></pre>
+
+      <p>The exploitability pattern is consistent: the vulnerability exists in kernel code that was previously reachable only by root; user namespaces make it reachable by unprivileged local users; local privilege escalation to root follows from heap corruption or type confusion in the newly exposed code path.</p>
+
+      <h4>Distribution Responses and Kernel Mitigations</h4>
+
+      <p>Linux distributions have responded to the user namespace attack surface with various restriction mechanisms:</p>
+
+<pre><span class="cm"># Debian/Ubuntu (historical): disable unprivileged user namespace creation</span>
+sysctl kernel.unprivileged_userns_clone=0
+
+<span class="cm"># Fedora (default): full user namespace access for unprivileged users</span>
+<span class="cm"># RHEL 9.x: unprivileged user namespaces enabled (changed from RHEL 8)</span>
+
+<span class="cm"># Ubuntu 24.04: AppArmor-mediated user namespace restriction</span>
+<span class="cm"># Programs must have AppArmor profile permitting userns creation</span>
+<span class="cm"># OR be in the allowlist at /proc/sys/kernel/apparmor_restrict_unprivileged_userns</span>
+
+<span class="cm"># Max user namespaces per user (0 = disabled)</span>
+sysctl user.max_user_namespaces=0
+<span class="code-lang">bash</span></pre>
+
+      <p>Ubuntu 24.04 LTS introduced a new AppArmor-based restriction mechanism: by default, unprivileged user namespace creation is blocked unless the calling process's AppArmor profile explicitly permits it (via the <code>userns</code> abstraction). This approach allows rootless container tools (Podman, Docker Desktop, Buildah) to be allowlisted while preventing arbitrary programs from creating user namespaces.</p>
+
+      <p>Linux 6.7 introduced infrastructure for LSM-mediated namespace creation control, allowing security modules to apply per-process restrictions. The KRSI (Kernel Runtime Security Instrumentation) framework, leveraging eBPF LSM hooks, allows user-space security daemons to implement custom namespace creation policies in eBPF programs without kernel modifications.</p>
+
+      <h4>Defense-in-Depth for Container Security</h4>
+
+      <p>Effective container security requires all isolation mechanisms in concert. The following stack represents current best practice for a hardened OCI container:</p>
+
+      <div class="stack-diagram">
+        <div class="stack-row"><span class="sr-num">7</span><span class="sr-label">Container Workload Process</span><span class="sr-tag">untrusted</span></div>
+        <div class="stack-row"><span class="sr-num">6</span><span class="sr-label">seccomp filter — syscall allowlist (~50 syscalls)</span><span class="sr-tag">kernel</span></div>
+        <div class="stack-row"><span class="sr-num">5</span><span class="sr-label">Linux capabilities — drop ALL, add only needed</span><span class="sr-tag">kernel</span></div>
+        <div class="stack-row"><span class="sr-num">4</span><span class="sr-label">User namespace — UID 0 → host UID 100000+</span><span class="sr-tag">kernel</span></div>
+        <div class="stack-row"><span class="sr-num">3</span><span class="sr-label">Network namespace — isolated netstack</span><span class="sr-tag">kernel</span></div>
+        <div class="stack-row"><span class="sr-num">2</span><span class="sr-label">Mount namespace — pivot_root to container image</span><span class="sr-tag">kernel</span></div>
+        <div class="stack-row"><span class="sr-num">1</span><span class="sr-label">SELinux / AppArmor profile — container_t domain</span><span class="sr-tag">LSM</span></div>
+      </div>
+
+      <p>Kubernetes security contexts encode this layering declaratively:</p>
+
+<pre>apiVersion: v1
+kind: Pod
+spec:
+  securityContext:
+    runAsNonRoot: <span class="kw">true</span>
+    runAsUser: <span class="nu">1000</span>
+    runAsGroup: <span class="nu">3000</span>
+    fsGroup: <span class="nu">2000</span>
+    seccompProfile:
+      type: RuntimeDefault   <span class="cm"># containerd/crio built-in seccomp</span>
+    sysctls: []
+  containers:
+  - name: app
+    image: registry.example.com/app:v1.4.2
+    securityContext:
+      allowPrivilegeEscalation: <span class="kw">false</span>
+      readOnlyRootFilesystem: <span class="kw">true</span>
+      capabilities:
+        drop: [ALL]
+        add: [NET_BIND_SERVICE]  <span class="cm"># only if binding &lt; 1024</span>
+<span class="code-lang">yaml</span></pre>
+
+      <p>The <code>allowPrivilegeEscalation: false</code> flag sets the <code>no_new_privs</code> bit on the container process, preventing it from gaining additional privileges via setuid binaries or file capabilities within the container. Combined with a read-only root filesystem and dropped capabilities, this configuration substantially degrades an attacker's ability to persist, pivot, or escalate even after gaining code execution within the container.</p>
+
+      <p>Namespace persistence enables more complex security architectures: namespaces can be pinned by bind-mounting <code>/proc/PID/ns/TYPE</code> to a filesystem path, then re-entered by processes that obtain the path. This mechanism underlies <code>ip netns exec</code>, <code>nsenter(1)</code>, and the rootless container runtime's mechanism for attaching to a running container's namespace without re-creating it.</p>
+    </section>
+
+    <hr class="section-break">
+
+    <!-- ═══ CONCLUSION ═══ -->
+    <section id="conclusion">
+      <span class="section-num">§ 09</span>
+      <h2>Conclusion: The Layered Trust Hierarchy</h2>
+
+      <p>The mechanisms surveyed across this article represent successive refinements of a single architectural principle: trust should be earned, scoped, and minimized — not assumed, ambient, and universal. From the raw Unix setuid bit's narrow delegation of specific elevated operations, through Capsicum's unforgeable per-descriptor capability tokens, through seL4's machine-checked proofs of noninterference, each mechanism is an attempt to enforce that software components do only what they are intended to do, even when they are compromised.</p>
+
+      <p>The historical arc is illuminating. The setuid mechanism (1970s) addressed a genuine problem — delegating specific privileged operations to user programs — with a mechanism that created new problems of its own: race conditions, environment variable attacks, the implicit privileged context persisting across the entirety of execution. Each subsequent mechanism can be read as a response to the residual attack surface of its predecessors.</p>
+
+      <p>sudo and privilege-separated daemons (1980s-2000s) refined the Unix model by separating the monitor (high-privilege, small, audited) from the worker (low-privilege, large, potentially vulnerable). POSIX capabilities (1990s-2000s) fragmented root's monolithic authority into distinct permission bits, enabling partial privilege without full root. MAC frameworks (2000s) introduced policy-enforced behavioral constraints that survive even root compromise. Seccomp-BPF (2012) extended these constraints to the kernel API surface, denying attackers the syscall primitives needed to escalate. Capsicum (2010) and OpenBSD pledge (2015) brought object capability discipline into mainstream POSIX, making the capability model a viable engineering choice rather than a research curiosity. Formally verified microkernels (seL4, 2009+) extended assurance from "we believe this is correct" to "we have proved this is correct." User namespaces (2013) enabled privilege isolation without the complexity of privilege — at the cost of new kernel attack surface that continues to produce exploitable CVEs.</p>
+
+      <p>No single mechanism is sufficient. The appropriate deployment for a security-sensitive workload combines all available layers:</p>
+
+      <ul>
+        <li>Privilege separation and prompt privilege dropping in daemon design</li>
+        <li>File capabilities in preference to setuid-root binaries</li>
+        <li>seccomp-BPF filters appropriate to each component's syscall requirements</li>
+        <li>MAC profiles (SELinux or AppArmor) for all confined services</li>
+        <li>Capsicum or pledge for applications where the pattern fits</li>
+        <li>User and mount namespaces for container workload isolation</li>
+        <li>Capability dropping (drop ALL, add only needed) in container security contexts</li>
+        <li>Microkernel-based trusted execution for the highest-assurance components</li>
+      </ul>
+
+      <p>The trend toward formal verification, visible in seL4's refinement proofs and the eBPF verifier's abstract interpretation, suggests that the next decade will move from the current engineering-focused approach — we believe this implementation is correct — toward mathematical guarantee — we have proved this implementation is correct. Landlock's ongoing formalization, the CHERI project's hardware-enforced capability architecture, and the extension of seL4 verification to new architectures and configurations all point in this direction.</p>
+
+      <p>Saltzer and Schroeder's eight principles, articulated in 1975 for MIT's Multics time-sharing system, remain the canonical design framework. The machinery implementing those principles has grown enormously more sophisticated — from permission bits to verified microkernels — but the underlying insight has not changed: minimize the surface of trust, separate the privileges that must exist, and fail safely when violations occur.</p>
+    </section>
+
+    <!-- ═══ REFERENCES ═══ -->
+    <section class="references" id="references">
+      <h2>References</h2>
+      <ol class="ref-list">
+        <li id="r1">Saltzer JH, Schroeder MD. The protection of information in computer systems. Proc IEEE. 1975;63(9):1278–308.</li>
+        <li id="r2">Bell DE, LaPadula LJ. Secure computer systems: mathematical foundations and model. Technical Report MTR-2547. Bedford (MA): MITRE Corporation; 1973.</li>
+        <li id="r3">Ritchie DM, Thompson K. The UNIX time-sharing system. Commun ACM. 1974;17(7):365–75.</li>
+        <li id="r4">Stevens WR, Rago SA. Advanced Programming in the UNIX Environment. 3rd ed. Boston (MA): Addison-Wesley Professional; 2013. Chapter 8: Process Control.</li>
+        <li id="r5">Bishop M, Bailey D. A critical analysis of vulnerability taxonomies. Technical Report CSE-96-11. Davis (CA): University of California, Davis; 1996.</li>
+        <li id="r6">Miller TC. Sudo — sudo and sudoers manual pages [Internet]. Todd C. Miller; 2024 [cited 2024]. Available from: <a href="https://www.sudo.ws/docs/man/" target="_blank">https://www.sudo.ws/docs/man/</a></li>
+        <li id="r7">Provos N, Friedl M, Honeyman P. Preventing privilege escalation. In: Proceedings of the 12th USENIX Security Symposium; 2003 Aug 4–8; Washington (DC). Berkeley (CA): USENIX; 2003. p. 231–42.</li>
+        <li id="r8">Venema W. Postfix: a reliable and secure alternative to Sendmail. In: Proceedings of the USENIX Annual Technical Conference, FREENIX Track; 2000 Jun 18–23; San Diego (CA). Berkeley (CA): USENIX; 2000.</li>
+        <li id="r9">Dennis JB, Van Horn EC. Programming semantics for multiprogrammed computations. Commun ACM. 1966;9(3):143–55.</li>
+        <li id="r10">Hardy N. The confused deputy (or why capabilities might have been invented). ACM SIGOPS Oper Syst Rev. 1988;22(4):36–8.</li>
+        <li id="r11">Hallyn S, Gruenbacher A. POSIX file capabilities: secure privilege without the superuser. Linux Journal. 2007;2007(158):1–8.</li>
+        <li id="r12">Shapiro JS, Smith JM, Farber DJ. EROS: a fast capability system. In: Proceedings of the 17th ACM Symposium on Operating Systems Principles; 1999 Dec 12–15; Kiawah Island (SC). New York (NY): ACM; 1999. p. 170–85.</li>
+        <li id="r13">Klein G, Elphinstone K, Heiser G, Andronick J, Cock D, Derrin P, et al. seL4: formal verification of an OS kernel. In: Proceedings of the 22nd ACM Symposium on Operating Systems Principles; 2009 Oct 11–14; Big Sky (MT). New York (NY): ACM; 2009. p. 207–20.</li>
+        <li id="r14">Miller MS, Yee KP, Shapiro J. Capability myths demolished. Technical Report SRL2003-02. Baltimore (MD): Systems Research Laboratory, Johns Hopkins University; 2003.</li>
+        <li id="r15">Spencer R, Smalley S, Loscocco P, Hibler M, Andersen D, Lepreau J. The Flask security architecture: system support for diverse security policies. In: Proceedings of the 8th USENIX Security Symposium; 1999 Aug 23–26; Washington (DC). Berkeley (CA): USENIX; 1999. p. 123–39.</li>
+        <li id="r16">Loscocco PA, Smalley SD. Integrating flexible support for security policies into the Linux operating system. In: Proceedings of the USENIX Annual Technical Conference, FREENIX Track; 2001 Jun 25–30; Boston (MA). Berkeley (CA): USENIX; 2001. p. 29–42.</li>
+        <li id="r17">Cowan C, Beattie S, Kroah-Hartman G, Lokier C, Purcell C, Sievert H. SubDomain: parsimonious server security. In: Proceedings of the 14th USENIX System Administration Conference; 2000 Dec 3–8; New Orleans (LA). Berkeley (CA): USENIX; 2000. p. 355–68.</li>
+        <li id="r18">Harada T, Horie T, Tanaka K. Task behavior analysis, specification and its use in security. In: Proceedings of the 2nd Asia-Pacific Trusted Infrastructure Technologies Conference; 2007 Oct. Washington (DC): IEEE; 2007.</li>
+        <li id="r19">Schaufler C. Smack in embedded computing. In: Proceedings of the Linux Symposium; 2008 Jul 23–26; Ottawa (ON). 2008. p. 283–94.</li>
+        <li id="r20">Salaün M. Landlock: unprivileged access control [Internet]. Linux Security Summit; 2021 [cited 2024]. Available from: <a href="https://landlock.io" target="_blank">https://landlock.io</a></li>
+        <li id="r21">Arcangeli A. seccomp: secure computing support for Linux. Linux kernel commit 1d9d02fe; 2005 Mar 31.</li>
+        <li id="r22">Drewry W. Seccomp filter. Linux kernel Documentation/userspace-api/seccomp_filter.rst; 2012. Available from: <a href="https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html" target="_blank">https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html</a></li>
+        <li id="r23">McCanne S, Jacobson V. The BSD packet filter: a new architecture for user-level packet capture. In: Proceedings of the USENIX Winter Conference; 1993 Jan 25–29; San Diego (CA). Berkeley (CA): USENIX; 1993. p. 259–69.</li>
+        <li id="r24">Starovoitov A, Borkmann D. eBPF: in-kernel virtual machine. In: Linux Plumbers Conference; 2014 Oct. Ottawa (ON); 2014.</li>
+        <li id="r25">Corbet J. User-space supervision of seccomp [Internet]. LWN.net; 2018 Mar 15 [cited 2024]. Available from: <a href="https://lwn.net/Articles/756233/" target="_blank">https://lwn.net/Articles/756233/</a></li>
+        <li id="r26">Biesinger J, Hance C. Chrome sandboxing on Linux using seccomp-BPF [Internet]. Chromium Blog; 2012 [cited 2024]. Available from: <a href="https://chromium.googlesource.com/chromium/src/+/main/docs/linux/sandboxing.md" target="_blank">https://chromium.googlesource.com/chromium/src/+/main/docs/linux/sandboxing.md</a></li>
+        <li id="r27">Docker Inc. Seccomp security profiles for Docker [Internet]. Docker Documentation; 2024 [cited 2024]. Available from: <a href="https://docs.docker.com/engine/security/seccomp/" target="_blank">https://docs.docker.com/engine/security/seccomp/</a></li>
+        <li id="r28">Watson RNM, Anderson J, Laurie B, Kennaway K. Capsicum: practical capabilities for UNIX. In: Proceedings of the 19th USENIX Security Symposium; 2010 Aug 11–13; Washington (DC). Berkeley (CA): USENIX; 2010. p. 29–46.</li>
+        <li id="r29">de Raadt T. Pledge: a new security technology in OpenBSD. In: Proceedings of BSDCan 2015; 2015 Jun 12–13; Ottawa (ON). 2015.</li>
+        <li id="r30">de Raadt T, Dillard K. Unveil — a new limit on filesystem access [Internet]. OpenBSD; 2018 [cited 2024]. Available from: <a href="https://man.openbsd.org/unveil.2" target="_blank">https://man.openbsd.org/unveil.2</a></li>
+        <li id="r31">Liedtke J. On μ-kernel construction. In: Proceedings of the 15th ACM Symposium on Operating Systems Principles; 1995 Dec 3–6; Copper Mountain (CO). New York (NY): ACM; 1995. p. 237–50.</li>
+        <li id="r32">Accetta M, Baron R, Bolosky W, Golub D, Rashid R, Tevanian A, et al. Mach: a new kernel foundation for UNIX development. In: Proceedings of the USENIX Summer Conference; 1986 Jun 9–13; Atlanta (GA). Berkeley (CA): USENIX; 1986. p. 93–112.</li>
+        <li id="r33">Liedtke J. Improving IPC by kernel design. In: Proceedings of the 14th ACM Symposium on Operating Systems Principles; 1993 Dec 5–8; Asheville (NC). New York (NY): ACM; 1993. p. 175–88.</li>
+        <li id="r34">Herder JN, Bos H, Gras B, Homburg P, Tanenbaum AS. MINIX 3: a highly reliable, self-repairing operating system. ACM SIGOPS Oper Syst Rev. 2006;40(3):80–9.</li>
+        <li id="r35">Goryachy M, Ermolov M. Intel ME: the way of the static analysis. In: Proceedings of Black Hat Europe; 2017 Dec 4–7; London. 2017.</li>
+        <li id="r36">Google. Zircon kernel concepts [Internet]. Fuchsia OS Documentation; 2024 [cited 2024]. Available from: <a href="https://fuchsia.dev/fuchsia-src/concepts/kernel" target="_blank">https://fuchsia.dev/fuchsia-src/concepts/kernel</a></li>
+        <li id="r37">Kerrisk M. namespaces(7) — overview of Linux namespaces. Linux man-pages 6.x; 2023.</li>
+        <li id="r38">Biederman EB. User namespaces and privilege escalation mitigation. In: Proceedings of the Linux Kernel Summit; 2012.</li>
+        <li id="r39">Naik M. Rootless containers with Podman [Internet]. Red Hat Developer Blog; 2019 Feb [cited 2024]. Available from: <a href="https://www.redhat.com/en/blog/rootless-containers-podman" target="_blank">https://www.redhat.com/en/blog/rootless-containers-podman</a></li>
+        <li id="r40">Andriesse D, Bos H. Exploitation with the help of Linux namespaces. Technical Report VU-2016. Amsterdam: Vrije Universiteit; 2016.</li>
+      </ol>
+    </section>
+
+  </article>
+</div>
+
+<footer>&copy; 2026 Nicholas Knapp. All rights reserved.</footer>
+
+<script src="../dist/js/header.js"></script>
+</body>
+</html>
