@@ -6,22 +6,26 @@ const blogCategoryLabels = [
   "Competitive Programming",
   "Cyber-Physical Systems",
   "DevSecOps",
+  "Differential Equations",
+  "Django",
   "Docker",
   "Engineering",
   "Kubernetes",
+  "Learning",
   "Math & Physics",
   "Mobile App Development",
   "Networks",
   "Nmap",
   "Operating Systems",
   "Pentesting",
-  "Philosophy & Learning",
+  "Philosophy",
   "Privacy",
   "Programming & Software",
   "Python",
   "Robotics",
   "Security",
   "Society & Civics",
+  "Spring",
   "Veganism",
   "Web & UI"
 ] as const;
@@ -37,6 +41,90 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/systems-engineering-methodologies.html",
+    publishedAt: "2026-06-05",
+    summary: "A systems engineering guide to disciplined practice, covering lifecycle models, MBSE, V-model reasoning, requirements, verification, validation, trade studies, and program governance.",
+    title: "Engineering the Whole — Systems Engineering: Methodologies, Frameworks & the Architecture of Disciplined Practice"
+  },
+  {
+    path: "blog-articles/system-reliability-patterns.html",
+    publishedAt: "2026-06-05",
+    summary: "A reliability engineering reference on timeouts, retries, circuit breakers, bulkheads, rate limits, graceful degradation, idempotency, observability, and recovery patterns.",
+    title: "System Reliability Patterns — A Practitioner's Reference"
+  },
+  {
+    path: "blog-articles/spring-cloud-devops.html",
+    publishedAt: "2026-06-05",
+    summary: "A cloud-native Spring operations guide covering microservice deployment, configuration, containers, Kubernetes, service discovery, CI/CD, observability, resilience, and delivery tradeoffs.",
+    title: "From Code to Cluster: Deploying Spring Microservices in the Cloud-Native Era"
+  },
+  {
+    path: "blog-articles/secure-architecture.html",
+    publishedAt: "2026-06-05",
+    summary: "A secure architecture field manual covering threat modeling, identity boundaries, segmentation, secrets, encryption, logging, hardening, resilience, and governance for defended enterprises.",
+    title: "Secure Architecture — A Field Manual for the Defended Enterprise"
+  },
+  {
+    path: "blog-articles/rust-programming-language.html",
+    publishedAt: "2026-06-05",
+    summary: "A technical portrait of Rust, explaining ownership, borrowing, lifetimes, traits, async, unsafe code, tooling, ecosystem growth, and its role in modern systems programming.",
+    title: "Rust: The Language That Rewrote Systems Programming"
+  },
+  {
+    path: "blog-articles/rlc-circuit-equation.html",
+    publishedAt: "2026-06-05",
+    summary: "A long-form technical treatment of the series RLC differential equation, covering derivation, damping regimes, resonance, physical intuition, applications, tools, and code.",
+    title: "The RLC Circuit Equation — The Grammar of Linear Dynamics"
+  },
+  {
+    path: "blog-articles/ot-ics-scada-pentesting.html",
+    publishedAt: "2026-06-05",
+    summary: "An availability-first review of authorized OT, ICS, and SCADA penetration testing, covering safety constraints, passive discovery, protocol risk, segmentation, reporting, and governance.",
+    title: "Penetration Testing OT, ICS & SCADA — A Field Review"
+  },
+  {
+    path: "blog-articles/interval-problems-playbook.html",
+    publishedAt: "2026-06-05",
+    summary: "A competitive programming playbook for interval problems, covering sorting, sweeping, merging, meeting rooms, stabbing queries, heap patterns, proofs, and multilingual implementations.",
+    title: "The Interval Playbook — Sorting, Sweeping & Stabbing"
+  },
+  {
+    path: "blog-articles/greedy-competitive-programming.html",
+    publishedAt: "2026-06-05",
+    summary: "A rigorous guide to greedy algorithms in competitive programming, covering local-choice proofs, exchange arguments, Jump Game, Gas Station, Partition Labels, and interval scheduling.",
+    title: "The Greedy Contract — A Field Guide to Greedy Algorithms for Competitive Programming"
+  },
+  {
+    path: "blog-articles/django-architecture-scaling.html",
+    publishedAt: "2026-06-05",
+    summary: "A Django scaling handbook covering project structure, data access, caching, async work, deployment topology, database pressure, observability, security, and operational growth.",
+    title: "Django Architecture & Scaling — Engineering Handbook"
+  },
+  {
+    path: "blog-articles/devsecops-engineer.html",
+    publishedAt: "2026-06-05",
+    summary: "A role-focused guide to DevSecOps engineering, covering secure pipelines, SAST, DAST, dependency scanning, IaC controls, policy as code, cloud security, and incident feedback.",
+    title: "The DevSecOps Engineer: Automating Security Into the Pipeline"
+  },
+  {
+    path: "blog-articles/angular-security-testing.html",
+    publishedAt: "2026-06-05",
+    summary: "A practical Angular security testing guide covering static analysis, dependency review, XSS prevention, auth flows, CSP, dynamic testing, penetration testing, and CI guardrails.",
+    title: "Security Testing for Angular — Static Analysis, Dynamic Testing & Penetration Testing"
+  },
+  {
+    path: "blog-articles/ai-cannot-compensate-for-natural-stupidity.html",
+    publishedAt: "2026-06-05",
+    summary: "An essay on the problems computation does not solve by itself: weak judgment, biological limits, deception, scarcity, incentives, social failure, and the continued need for agency.",
+    title: "Artificial Intelligence Cannot Compensate for Natural Stupidity"
+  },
+  {
+    path: "blog-articles/2d-dynamic-programming.html",
+    publishedAt: "2026-06-05",
+    summary: "A competitive programming field guide to two-dimensional dynamic programming, covering grids, subsequences, edit distance, paths, knapsack variants, state transitions, and table design.",
+    title: "The Matrix Fills Itself — A Field Guide to 2D Dynamic Programming"
+  },
   {
     path: "blog-articles/the-map-is-not-the-territory.html",
     publishedAt: "2026-06-03",
@@ -892,10 +980,24 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
-  "blog-articles/the-map-is-not-the-territory.html": ["Philosophy & Learning", "Security", "Engineering"],
+  "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems", "Learning"],
+  "blog-articles/system-reliability-patterns.html": ["Engineering", "DevSecOps", "Programming & Software"],
+  "blog-articles/spring-cloud-devops.html": ["Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
+  "blog-articles/secure-architecture.html": ["Security", "Engineering", "DevSecOps"],
+  "blog-articles/rust-programming-language.html": ["Programming & Software", "Operating Systems", "Security"],
+  "blog-articles/rlc-circuit-equation.html": ["Math & Physics", "Engineering", "Differential Equations"],
+  "blog-articles/ot-ics-scada-pentesting.html": ["Security", "Cyber-Physical Systems", "Networks", "Pentesting"],
+  "blog-articles/interval-problems-playbook.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/greedy-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/django-architecture-scaling.html": ["Programming & Software", "Engineering", "DevSecOps", "Django"],
+  "blog-articles/devsecops-engineer.html": ["DevSecOps", "Security", "Programming & Software"],
+  "blog-articles/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
+  "blog-articles/ai-cannot-compensate-for-natural-stupidity.html": ["AI & Machine Learning", "Philosophy", "Society & Civics"],
+  "blog-articles/2d-dynamic-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
   "blog-articles/stacks-in-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
-  "blog-articles/models-of-reality.html": ["Philosophy & Learning", "AI & Machine Learning", "Math & Physics"],
+  "blog-articles/models-of-reality.html": ["Philosophy", "AI & Machine Learning", "Math & Physics"],
   "blog-articles/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
   "blog-articles/dc-infrastructure-security.html": ["Security", "Networks", "DevSecOps", "Engineering"],
   "blog-articles/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
@@ -959,11 +1061,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
   "blog-articles/red-teamer-infosec.html": ["Security"],
   "blog-articles/mcp.html": ["AI & Machine Learning", "Programming & Software", "Security"],
-  "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy & Learning"],
+  "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy"],
   "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software"],
   "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
   "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
-  "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker"],
+  "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker", "Spring"],
   "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],
   "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
@@ -975,14 +1077,14 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/animal-research-science-education.html": ["Veganism", "Society & Civics"],
   "blog-articles/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
   "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software", "DevSecOps"],
-  "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering"],
+  "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering", "Differential Equations"],
   "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/causal_ai.html": ["AI & Machine Learning"],
   "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software"],
   "blog-articles/hidden-animal-ingredients.html": ["Veganism"],
   "blog-articles/action-model-learning.html": ["AI & Machine Learning", "Programming & Software"],
   "blog-articles/explainable-ai-lime-shap.html": ["AI & Machine Learning"],
-  "blog-articles/insects-and-small-animals.html": ["Veganism", "Philosophy & Learning"],
+  "blog-articles/insects-and-small-animals.html": ["Veganism", "Philosophy"],
   "blog-articles/automated-planning.html": ["AI & Machine Learning", "Programming & Software"],
   "blog-articles/digital-privacy-levels.html": ["Privacy", "Security"],
   "blog-articles/digital-privacy-l4-l5.html": ["Privacy", "Security"],
@@ -996,7 +1098,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/zero-trust-architecture.html": ["Security", "Networks", "DevSecOps"],
   "blog-articles/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems"],
   "blog-articles/vegan_business_models.html": ["Veganism", "Society & Civics"],
-  "blog-articles/learning-modalities.html": ["Philosophy & Learning", "Society & Civics"],
+  "blog-articles/learning-modalities.html": ["Learning", "Society & Civics"],
   "blog-articles/corporate-vegan-pressure.html": ["Veganism", "Society & Civics"],
   "blog-articles/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
   "blog-articles/vegan-activism-incentives.html": ["Veganism", "Society & Civics"],
@@ -1004,12 +1106,12 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
   "blog-articles/us-citizen-politics-guide.html": ["Society & Civics"],
   "blog-articles/vegan-legislative-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/suffering_humans_vs_animals.html": ["Veganism", "Philosophy & Learning"],
+  "blog-articles/suffering_humans_vs_animals.html": ["Veganism", "Philosophy"],
   "blog-articles/fraud-and-ai.html": ["AI & Machine Learning", "Security", "Society & Civics"],
-  "blog-articles/outages-are-inevitable.html": ["Engineering", "Philosophy & Learning"],
-  "blog-articles/limits-of-knowledge.html": ["Philosophy & Learning", "AI & Machine Learning"],
-  "blog-articles/biology-engineering-challenge.html": ["Engineering", "Philosophy & Learning"],
-  "blog-articles/engineering_as_philosophy.html": ["Engineering", "Philosophy & Learning"],
+  "blog-articles/outages-are-inevitable.html": ["Engineering", "Philosophy"],
+  "blog-articles/limits-of-knowledge.html": ["Philosophy", "AI & Machine Learning"],
+  "blog-articles/biology-engineering-challenge.html": ["Engineering", "Philosophy"],
+  "blog-articles/engineering_as_philosophy.html": ["Engineering", "Philosophy"],
   "blog-articles/know-your-rights.html": ["Society & Civics"],
   "blog-articles/mental_health_blog.html": ["Society & Civics"],
   "blog-articles/information-security-for-everyone.html": ["Security", "Privacy"],
@@ -1019,7 +1121,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/networks-performance-reliability.html": ["Networks", "Engineering"],
   "blog-articles/ui-structure-concepts.html": ["Web & UI", "Programming & Software"],
   "blog-articles/vegan-activism-frmwrk.html": ["Veganism", "Society & Civics"],
-  "blog-articles/vegan-education.html": ["Veganism", "Philosophy & Learning", "Society & Civics"],
+  "blog-articles/vegan-education.html": ["Veganism", "Learning", "Society & Civics"],
   "blog-articles/vegan-infrastructure.html": ["Veganism", "Programming & Software", "Society & Civics"],
   "blog-articles/making-animal-use-obsolete.html": ["Veganism", "Engineering"],
   "blog-articles/network_topologies.html": ["Networks"],
@@ -1031,7 +1133,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/ui-components-article.html": ["Web & UI", "Programming & Software"],
   "blog-articles/privacy.html": ["Privacy", "Security"],
   "blog-articles/distributed-systems-networks.html": ["Networks", "Programming & Software"],
-  "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy & Learning"],
+  "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy"],
   "blog-articles/graph-theory-networks.html": ["Networks", "Math & Physics"],
   "blog-articles/hierarchical-network-design.html": ["Networks"]
 };
