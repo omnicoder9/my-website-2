@@ -42,6 +42,84 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/supply-chain-vulnerabilities.html",
+    publishedAt: "2026-06-08",
+    summary: "A technical reference on software and hardware supply chain risk, covering malicious updates, dependency confusion, vendor access, CI/CD compromise, code signing, SBOMs, SLSA, and defensive governance.",
+    title: "Supply Chain Vulnerabilities: Attack Vectors, Threat Actors, and Defence Strategies"
+  },
+  {
+    path: "blog-articles/impossibility.html",
+    publishedAt: "2026-06-07",
+    summary: "A philosophical and technical essay on impossibility claims across logic, physics, computation, engineering, and the limits of what human systems can prove or achieve.",
+    title: "Impossibility: Logic, Physics, Computation, and the Limits of Human Claims"
+  },
+  {
+    path: "blog-articles/cloud-vulnerabilities.html",
+    publishedAt: "2026-06-07",
+    summary: "A technical deep dive into cloud-specific vulnerability patterns, including identity failures, metadata exposure, storage mistakes, network boundaries, supply chains, and shared-responsibility gaps.",
+    title: "Cloud-Specific Vulnerabilities: A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/app-vulns.html",
+    publishedAt: "2026-06-07",
+    summary: "A comprehensive application-security reference covering injection, XSS, broken access control, authentication flaws, deserialization, SSRF, dependency risk, and defensive testing.",
+    title: "Application Vulnerabilities: A Comprehensive Technical Reference"
+  },
+  {
+    path: "blog-articles/curl-reference.html",
+    publishedAt: "2026-06-07",
+    summary: "A practical curl reference covering options, request construction, authentication, uploads, debugging, redirects, TLS behavior, scripting patterns, and command-line examples.",
+    title: "curl Reference — Options, Internals & Examples"
+  },
+  {
+    path: "blog-articles/net_troubleshooting_tools.html",
+    publishedAt: "2026-06-07",
+    summary: "A networking troubleshooting guide covering diagnostic method, packet paths, DNS, routing, latency, throughput, packet capture, and common command-line tools.",
+    title: "Networking Troubleshooting Fundamentals: Tools, Methods, and Field Examples"
+  },
+  {
+    path: "blog-articles/hardware-installation-best-practices.html",
+    publishedAt: "2026-06-06",
+    summary: "A field guide to hardware installation practices, covering planning, ESD control, component handling, cabling, verification, diagnostics, documentation, and operational handoff.",
+    title: "Hardware Installation Best Practices — A Field Guide for Engineers & Technicians"
+  },
+  {
+    path: "blog-articles/storage-devices.html",
+    publishedAt: "2026-06-06",
+    summary: "A technical field guide to storage devices, covering HDDs, SSDs, flash memory, interfaces, performance characteristics, reliability, filesystems, and selection tradeoffs.",
+    title: "Inside the Machine: A Technical Field Guide to Storage Devices"
+  },
+  {
+    path: "blog-articles/cpu-fundamentals.html",
+    publishedAt: "2026-06-06",
+    summary: "A technical guide to modern CPUs, covering cores, threads, cache, sockets, thermals, integrated graphics, firmware, installation, performance tuning, and troubleshooting.",
+    title: "Inside the Machine: A Technical Guide to Modern CPUs"
+  },
+  {
+    path: "blog-articles/ram.html",
+    publishedAt: "2026-06-06",
+    summary: "A complete technical guide to RAM, covering DDR generations, timings, channels, capacity planning, ECC, installation, overclocking profiles, diagnostics, and compatibility.",
+    title: "RAM (Memory): A Complete Technical Guide"
+  },
+  {
+    path: "blog-articles/spring-cache.html",
+    publishedAt: "2026-06-06",
+    summary: "A Spring caching field guide covering Caffeine, Redis, cache annotations, invalidation strategies, latency tradeoffs, event-driven updates, and production cache design.",
+    title: "The Heat Map of Latency — A Field Guide to Spring Cache, Caffeine, Redis & Event-Driven Invalidation"
+  },
+  {
+    path: "blog-articles/complexity-classes.html",
+    publishedAt: "2026-06-05",
+    summary: "A guide to computational complexity classes, covering P, NP, NP-completeness, reductions, hardness, verification, open problems, and the frontier of tractability.",
+    title: "The Architecture of Hardness — P, NP, and the Frontier of Computation"
+  },
+  {
+    path: "blog-articles/memory-unsafe-c-cpp.html",
+    publishedAt: "2026-06-05",
+    summary: "A security-focused article on memory-unsafe C and C++ failure modes, including buffer overflows, use-after-free, null dereferences, data races, and mitigation strategies.",
+    title: "Memory Unsafe — Buffer Overflows, Use-After-Free, Null Dereferences & Data Races in C/C++"
+  },
+  {
     path: "blog-articles/systems-engineering-methodologies.html",
     publishedAt: "2026-06-05",
     summary: "A systems engineering guide to disciplined practice, covering lifecycle models, MBSE, V-model reasoning, requirements, verification, validation, trade studies, and program governance.",
@@ -980,6 +1058,19 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/supply-chain-vulnerabilities.html": ["Security", "DevSecOps", "Programming & Software", "Engineering"],
+  "blog-articles/impossibility.html": ["Philosophy", "Math & Physics", "Engineering"],
+  "blog-articles/cloud-vulnerabilities.html": ["Security", "Networks", "DevSecOps"],
+  "blog-articles/app-vulns.html": ["Security", "Programming & Software", "DevSecOps"],
+  "blog-articles/curl-reference.html": ["Programming & Software", "Networks"],
+  "blog-articles/net_troubleshooting_tools.html": ["Networks", "Security"],
+  "blog-articles/hardware-installation-best-practices.html": ["Engineering"],
+  "blog-articles/storage-devices.html": ["Engineering", "Operating Systems"],
+  "blog-articles/cpu-fundamentals.html": ["Engineering", "Operating Systems"],
+  "blog-articles/ram.html": ["Engineering", "Operating Systems"],
+  "blog-articles/spring-cache.html": ["Programming & Software", "DevSecOps", "Spring"],
+  "blog-articles/complexity-classes.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
   "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems", "Learning"],
   "blog-articles/system-reliability-patterns.html": ["Engineering", "DevSecOps", "Programming & Software"],
   "blog-articles/spring-cloud-devops.html": ["Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
