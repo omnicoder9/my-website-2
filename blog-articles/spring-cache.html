@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Heat Map of Latency — A Field Guide to Spring Cache, Caffeine, Redis &amp; Event-Driven Invalidation</title>
+<meta name="description" content="An expert-level field guide to caching with the Spring Framework: the cache abstraction, Caffeine and Redis, multi-level caches, distributed consistency, Kafka-driven invalidation, Micrometer metrics, and performance tuning.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15110b;
+    --bg-2:#1b1610;
+    --surface:#211b13;
+    --surface-2:#2a2218;
+    --surface-3:#332a1d;
+    --line:rgba(238,210,150,.14);
+    --line-strong:rgba(238,210,150,.26);
+    --ink:#ede4d4;
+    --ink-dim:#b6aa93;
+    --ink-faint:#82765f;
+    --ember:#f3a23c;
+    --ember-bright:#ffc266;
+    --ember-deep:#d97e22;
+    --frost:#58c9bd;
+    --frost-bright:#7fe0d4;
+    --danger:#e57256;
+    --violet:#b89be0;
+    --serif:'Newsreader',Georgia,'Times New Roman',serif;
+    --display:'Fraunces','Newsreader',Georgia,serif;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --measure:71ch;
+    --shadow:0 18px 50px -20px rgba(0,0,0,.7);
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--serif);
+    font-size:20px;
+    line-height:1.72;
+    font-weight:400;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(120% 80% at 85% -10%, rgba(243,162,60,.10), transparent 55%),
+      radial-gradient(90% 70% at 5% 5%, rgba(88,201,189,.06), transparent 50%);
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:50;
+    background:linear-gradient(90deg,var(--ember-deep),var(--ember),var(--frost));
+    box-shadow:0 0 14px rgba(243,162,60,.6);transition:width .08s linear}
+
+  ::selection{background:rgba(243,162,60,.28);color:#fff}
+  a{color:var(--ember);text-decoration:none}
+  a:hover{color:var(--ember-bright)}
+
+  /* ---------- MASTHEAD ---------- */
+  .masthead{position:relative;z-index:1;padding:84px 24px 54px;
+    border-bottom:1px solid var(--line-strong);
+    background:
+      linear-gradient(180deg,rgba(243,162,60,.05),transparent 60%),
+      linear-gradient(180deg,var(--bg-2),var(--bg));
+    overflow:hidden}
+  .masthead__inner{max-width:1160px;margin:0 auto;position:relative}
+  .spectrum{display:flex;gap:3px;height:10px;margin-bottom:36px;max-width:520px}
+  .spectrum i{flex:1;border-radius:2px;opacity:.85}
+  .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.32em;
+    text-transform:uppercase;color:var(--ember);font-weight:600;margin:0 0 22px}
+  .eyebrow .dot{color:var(--frost)}
+  h1.title{font-family:var(--display);font-weight:600;
+    font-size:clamp(2.5rem,6.2vw,5.1rem);line-height:1.01;letter-spacing:-.022em;
+    margin:0 0 26px;max-width:18ch;font-optical-sizing:auto}
+  h1.title em{font-style:italic;color:var(--ember);font-weight:500}
+  .deck{font-family:var(--serif);font-size:clamp(1.12rem,2.1vw,1.42rem);
+    line-height:1.55;color:var(--ink-dim);max-width:60ch;margin:0 0 34px;font-weight:400}
+  .deck b{color:var(--ink);font-weight:500}
+  .meta{display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center;
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.05em;color:var(--ink-faint);
+    padding-top:26px;border-top:1px solid var(--line)}
+  .meta b{color:var(--ink-dim);font-weight:500}
+  .meta .tag{padding:4px 11px;border:1px solid var(--line-strong);border-radius:999px;color:var(--ink-dim)}
+
+  /* ---------- LAYOUT ---------- */
+  .wrap{position:relative;z-index:1;max-width:1160px;margin:0 auto;padding:0 24px 120px}
+  .layout{display:grid;grid-template-columns:1fr;gap:0}
+  @media(min-width:1000px){
+    .layout{grid-template-columns:236px minmax(0,1fr);gap:62px;align-items:start}
+  }
+
+  /* ---------- TOC ---------- */
+  details.toc{margin:42px 0 0;border:1px solid var(--line);border-radius:14px;
+    background:linear-gradient(180deg,var(--surface),var(--bg-2));overflow:hidden}
+  @media(min-width:1000px){
+    details.toc{position:sticky;top:24px;margin:54px 0 0;max-height:calc(100vh - 48px);
+      overflow:auto;background:transparent;border:none;border-radius:0;border-right:1px solid var(--line);padding-right:20px}
+    details.toc::-webkit-scrollbar{width:6px}
+    details.toc::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:3px}
+  }
+  details.toc summary{font-family:var(--mono);font-size:11px;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--ink-faint);font-weight:600;padding:16px 18px;
+    cursor:pointer;list-style:none;user-select:none}
+  @media(min-width:1000px){details.toc summary{padding:0 0 18px;cursor:default;
+    border-bottom:1px solid var(--line);margin-bottom:14px}}
+  details.toc summary::-webkit-details-marker{display:none}
+  .toc ol{list-style:none;margin:0;padding:0 12px 14px;counter-reset:toc}
+  @media(min-width:1000px){.toc ol{padding:0}}
+  .toc li{counter-increment:toc;margin:1px 0}
+  .toc a{display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:baseline;
+    font-family:var(--serif);font-size:14.5px;line-height:1.32;color:var(--ink-faint);
+    padding:6px 8px;border-radius:7px;transition:color .15s,background .15s}
+  .toc a::before{content:counter(toc,decimal-leading-zero);font-family:var(--mono);
+    font-size:10.5px;color:var(--ink-faint);opacity:.7;letter-spacing:.02em}
+  .toc a:hover{color:var(--ink);background:rgba(243,162,60,.06)}
+  .toc a.active{color:var(--ember);background:rgba(243,162,60,.09)}
+  .toc a.active::before{color:var(--ember);opacity:1}
+
+  /* ---------- ARTICLE ---------- */
+  .doc{min-width:0;padding-top:24px}
+  @media(min-width:1000px){.doc{padding-top:54px}}
+  .doc>p,.doc>ul,.doc>ol,.doc>figure,.doc>.callout,.doc>.codecard,.doc>.statgrid,
+  .doc>.pullquote,.doc>.tablewrap,.doc>h2,.doc>h3,.doc>hr,.doc>.lead{max-width:var(--measure)}
+  .doc p{margin:0 0 1.32em}
+  .lead{font-size:1.18rem;color:var(--ink-dim);line-height:1.66}
+  .doc p>code,.doc li>code,.lead code,.doc td code,.callout code{
+    font-family:var(--mono);font-size:.82em;background:var(--surface-2);
+    border:1px solid var(--line);padding:.08em .42em;border-radius:5px;color:var(--ember-bright);
+    white-space:nowrap}
+
+  .drop::first-letter{font-family:var(--display);font-weight:600;float:left;
+    font-size:5.1rem;line-height:.78;padding:.06em .12em 0 0;color:var(--ember);
+    font-optical-sizing:auto}
+
+  /* Section headers */
+  .sec{scroll-margin-top:28px;margin:78px 0 0;padding-top:30px;border-top:1px solid var(--line)}
+  .sec:first-of-type{border-top:none;margin-top:8px;padding-top:0}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--ember);font-weight:600;margin:0 0 14px;display:flex;align-items:center;gap:10px}
+  .kicker .num{color:var(--ink-faint)}
+  .kicker .bar{flex:0 0 26px;height:1px;background:var(--ember);opacity:.6}
+  h2{font-family:var(--display);font-weight:600;font-size:clamp(1.8rem,3.6vw,2.7rem);
+    line-height:1.08;letter-spacing:-.018em;margin:0 0 .55em;font-optical-sizing:auto}
+  h3{font-family:var(--display);font-weight:600;font-size:clamp(1.24rem,2.4vw,1.6rem);
+    line-height:1.18;letter-spacing:-.01em;margin:2.1em 0 .5em;color:var(--ink)}
+  h4{font-family:var(--mono);font-weight:600;font-size:.84rem;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-dim);margin:1.8em 0 .7em}
+
+  .doc ul,.doc ol{margin:0 0 1.32em;padding-left:1.4em}
+  .doc li{margin:.42em 0;padding-left:.2em}
+  .doc li::marker{color:var(--ember)}
+  .doc ol li::marker{color:var(--ink-faint);font-family:var(--mono);font-size:.8em}
+  .doc strong{color:var(--ink);font-weight:600}
+  .doc em{font-style:italic}
+  hr{border:none;border-top:1px solid var(--line);margin:2.4em 0}
+
+  /* Citations */
+  sup.cite{font-family:var(--mono);font-size:.62em;font-weight:600;line-height:0;
+    vertical-align:super;white-space:nowrap}
+  sup.cite a{color:var(--frost);padding:0 .06em}
+  sup.cite a:hover{color:var(--frost-bright);text-decoration:underline}
+
+  /* Pull quote */
+  .pullquote{margin:2.2em 0;padding:6px 0 6px 30px;border-left:3px solid var(--ember);
+    position:relative}
+  .pullquote p{font-family:var(--display);font-style:italic;font-weight:400;
+    font-size:clamp(1.4rem,3vw,1.85rem);line-height:1.32;color:var(--ink);margin:0}
+  .pullquote cite{display:block;font-family:var(--mono);font-style:normal;font-size:12px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-top:16px}
+
+  /* Stat cards */
+  .statgrid{display:grid;gap:14px;margin:2.1em 0;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .stat{border:1px solid var(--line);border-radius:13px;padding:20px 18px;
+    background:linear-gradient(165deg,var(--surface),var(--bg-2));position:relative;overflow:hidden}
+  .stat::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,var(--ember),transparent)}
+  .stat .n{font-family:var(--display);font-weight:600;font-size:2.05rem;line-height:1;
+    color:var(--ember-bright);letter-spacing:-.02em}
+  .stat .n small{font-size:.9rem;color:var(--ink-dim);font-weight:500}
+  .stat .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-faint);margin-top:10px;line-height:1.4}
+  .stat.frost::before{background:linear-gradient(90deg,var(--frost),transparent)}
+  .stat.frost .n{color:var(--frost-bright)}
+
+  /* Callouts */
+  .callout{margin:2em 0;border:1px solid var(--line);border-left:3px solid var(--frost);
+    border-radius:0 12px 12px 0;background:linear-gradient(120deg,rgba(88,201,189,.05),transparent 70%);
+    padding:20px 24px}
+  .callout.warn{border-left-color:var(--danger);
+    background:linear-gradient(120deg,rgba(229,114,86,.06),transparent 70%)}
+  .callout.tip{border-left-color:var(--ember);
+    background:linear-gradient(120deg,rgba(243,162,60,.06),transparent 70%)}
+  .callout .ct{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--frost);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .callout.warn .ct{color:var(--danger)}
+  .callout.tip .ct{color:var(--ember)}
+  .callout p{margin:0 0 .7em;font-size:.96em}
+  .callout p:last-child{margin-bottom:0}
+  .callout strong{color:var(--ink)}
+
+  /* Code cards */
+  .codecard{margin:2em 0;border:1px solid var(--line-strong);border-radius:12px;
+    overflow:hidden;background:#100d08;box-shadow:var(--shadow)}
+  .codecard__bar{display:flex;align-items:center;gap:12px;padding:0 8px 0 16px;
+    background:linear-gradient(180deg,#1a150d,#140f09);border-bottom:1px solid var(--line);
+    min-height:42px;flex-wrap:wrap}
+  .codecard__dots{display:flex;gap:6px;flex:0 0 auto}
+  .codecard__dots i{width:10px;height:10px;border-radius:50%;background:var(--surface-3)}
+  .codecard__dots i:nth-child(1){background:#5a4326}
+  .codecard__name{font-family:var(--mono);font-size:12px;color:var(--ink-faint);
+    letter-spacing:.04em;flex:1 1 auto}
+  .codecard__tabs{display:flex;gap:2px;flex:0 0 auto}
+  .codetab{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--ink-faint);
+    background:transparent;border:1px solid transparent;border-radius:7px;padding:5px 11px;
+    cursor:pointer;transition:.15s;letter-spacing:.03em}
+  .codetab:hover{color:var(--ink-dim);background:rgba(255,255,255,.03)}
+  .codetab.is-active{color:var(--ember);background:rgba(243,162,60,.1);border-color:var(--line-strong)}
+  .copybtn{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-faint);background:transparent;border:1px solid var(--line);
+    border-radius:7px;padding:5px 10px;cursor:pointer;transition:.15s;flex:0 0 auto}
+  .copybtn:hover{color:var(--ember);border-color:var(--line-strong)}
+  .copybtn.done{color:var(--frost);border-color:var(--frost)}
+  .codepane{display:none;margin:0;overflow-x:auto;padding:18px 20px;
+    font-family:var(--mono);font-size:13.5px;line-height:1.62;color:#d6cdb8;
+    white-space:pre;tab-size:2}
+  .codepane.is-active{display:block}
+  .codecard pre{margin:0}
+  .codepane code{font-family:inherit;font-size:inherit;line-height:inherit;color:inherit;
+    background:none;border:none;padding:0;white-space:inherit;display:block}
+  .codepane::-webkit-scrollbar{height:8px}
+  .codepane::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:4px}
+  /* token colors (applied by highlighter) */
+  .tk-c{color:#6f6651;font-style:italic}
+  .tk-s{color:#9bcf7e}
+  .tk-a{color:var(--ember)}
+  .tk-k{color:#e0a3d8}
+  .tk-n{color:#e7b870}
+  .tk-t{color:var(--frost)}
+  .tk-f{color:#8fc7e8}
+
+  /* Tables */
+  .tablewrap{margin:2em 0;overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+  thead th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    text-align:left;color:var(--ember);font-weight:600;padding:14px 16px;
+    background:var(--bg-2);border-bottom:1px solid var(--line-strong);white-space:nowrap}
+  tbody td{padding:13px 16px;border-bottom:1px solid var(--line);color:var(--ink-dim);
+    vertical-align:top;line-height:1.5}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:rgba(243,162,60,.03)}
+  tbody td strong,tbody td b{color:var(--ink);font-weight:600}
+  tbody td code{font-family:var(--mono);font-size:.84em;color:var(--ember-bright);white-space:nowrap}
+
+  /* Figures / diagrams */
+  figure{margin:2.3em 0}
+  figure svg{display:block;width:100%;height:auto;border:1px solid var(--line);
+    border-radius:13px;background:linear-gradient(165deg,var(--surface),var(--bg-2))}
+  figcaption{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint);
+    letter-spacing:.04em;margin-top:12px;line-height:1.5;padding-left:2px}
+  figcaption b{color:var(--ink-dim);font-weight:600}
+  .svg-label{font-family:'JetBrains Mono',monospace;font-size:11px;fill:var(--ink-dim);letter-spacing:.02em}
+  .svg-label-sm{font-family:'JetBrains Mono',monospace;font-size:9.5px;fill:var(--ink-faint);letter-spacing:.04em}
+  .svg-title{font-family:'JetBrains Mono',monospace;font-size:11px;fill:var(--ember);font-weight:600;letter-spacing:.06em}
+  .svg-ink{fill:var(--ink)}
+
+  /* References */
+  .refs{margin-top:90px;padding-top:36px;border-top:1px solid var(--line-strong)}
+  .refs h2{font-size:clamp(1.5rem,3vw,2rem)}
+  .refs ol{list-style:none;counter-reset:ref;padding:0;margin:1.4em 0 0;max-width:var(--measure)}
+  .refs li{counter-increment:ref;position:relative;padding:13px 0 13px 46px;
+    border-bottom:1px solid var(--line);font-size:14.5px;line-height:1.55;color:var(--ink-dim)}
+  .refs li::before{content:"["counter(ref)"]";position:absolute;left:0;top:13px;
+    font-family:var(--mono);font-size:12px;color:var(--ember);font-weight:600}
+  .refs li a{word-break:break-word}
+  .refs .back{font-family:var(--mono);font-size:12px;color:var(--frost);margin-left:6px}
+  .refs cite{font-style:italic;color:var(--ink)}
+
+  .endmark{text-align:center;margin:64px 0 0;font-family:var(--mono);color:var(--ink-faint);
+    font-size:12px;letter-spacing:.3em}
+  .endmark span{display:inline-block;width:8px;height:8px;background:var(--ember);
+    border-radius:50%;margin:0 6px;vertical-align:middle;box-shadow:0 0 12px var(--ember)}
+
+  @media(max-width:560px){
+    body{font-size:18px}
+    .masthead{padding:60px 20px 40px}
+    .wrap{padding:0 20px 80px}
+    .drop::first-letter{font-size:4rem}
+    .codecard code,pre code{font-size:12.5px}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<header class="masthead">
+  <div class="masthead__inner">
+    <div class="spectrum" aria-hidden="true">
+      <i style="background:#ffce6e"></i><i style="background:#f3a23c"></i>
+      <i style="background:#e07c2a"></i><i style="background:#b5663a"></i>
+      <i style="background:#7d6a55"></i><i style="background:#5f8e8f"></i>
+      <i style="background:#58c9bd"></i><i style="background:#7fe0d4"></i>
+    </div>
+    <p class="eyebrow">Distributed Systems <span class="dot">&middot;</span> Performance Engineering <span class="dot">&middot;</span> JVM</p>
+    <h1 class="title">The Heat Map of <em>Latency</em></h1>
+    <p class="deck">A working engineer's field guide to caching on the JVM &mdash; from the <b>Spring cache abstraction</b> and the algorithms inside <b>Caffeine</b>, through <b>Redis</b> architecture and eviction, to <b>multi-level caches</b>, distributed consistency, and <b>Kafka-driven invalidation</b>. Written for people who already know what a cache is and now have to keep one correct under load.</p>
+    <div class="meta">
+      <span><b>34 min</b> read</span>
+      <span><b>~9,700</b> words</span>
+      <span class="tag">Spring Framework 6/7</span>
+      <span class="tag">Caffeine</span>
+      <span class="tag">Redis</span>
+      <span class="tag">Kafka</span>
+      <span class="tag">Micrometer</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <nav aria-label="Table of contents">
+      <ol id="toc-list">
+        <li><a href="#why">Why cache at all</a></li>
+        <li><a href="#abstraction">The Spring cache abstraction</a></li>
+        <li><a href="#enable">Enabling caching &amp; the proxy</a></li>
+        <li><a href="#annotations">Cacheable, CachePut, CacheEvict</a></li>
+        <li><a href="#keys">Cache keys &amp; custom keys</a></li>
+        <li><a href="#conditional">Conditional caching &amp; sync</a></li>
+        <li><a href="#managers">Cache managers &amp; providers</a></li>
+        <li><a href="#caffeine">In-memory caching with Caffeine</a></li>
+        <li><a href="#redis-cache">Redis as a Spring cache</a></li>
+        <li><a href="#redis-arch">Redis architecture</a></li>
+        <li><a href="#eviction">Eviction strategies</a></li>
+        <li><a href="#patterns">Cache design patterns</a></li>
+        <li><a href="#distributed">Distributed caching &amp; consistency</a></li>
+        <li><a href="#multilevel">Multi-level caching</a></li>
+        <li><a href="#microservices">Caching in microservices</a></li>
+        <li><a href="#kafka">Event-driven invalidation with Kafka</a></li>
+        <li><a href="#session">Spring Session with Redis</a></li>
+        <li><a href="#metrics">Monitoring &amp; Micrometer metrics</a></li>
+        <li><a href="#tuning">Performance testing &amp; tuning</a></li>
+        <li><a href="#pitfalls">Common pitfalls</a></li>
+        <li><a href="#references">References</a></li>
+      </ol>
+    </nav>
+  </details>
+
+  <article class="doc">
+
+    <p class="lead drop">A cache is the most seductive optimisation in our toolbox because it is the only one that promises something for nothing: the same answer, returned faster, with no change to the underlying computation. The promise is real, but it is never free. The price is paid in a second currency &mdash; <em>correctness over time</em> &mdash; and that bill arrives later, in production, usually during an incident. This guide is about earning the speed while keeping the bill small.</p>
+
+    <p>The scope is deliberately wide: the Spring cache abstraction and its annotations, the algorithms that make <a href="#caffeine">Caffeine</a> fast, the operational anatomy of <a href="#redis-arch">Redis</a>, and the harder systems problems that emerge once a cache is shared across processes &mdash; <a href="#distributed">consistency</a>, <a href="#multilevel">layering</a>, <a href="#kafka">event-driven invalidation</a>, and <a href="#tuning">tuning under measurement</a>. Every non-obvious claim is cited; the reference list at the end is the load-bearing part.</p>
+
+    <!-- ===================== 1. WHY ===================== -->
+    <section class="sec" id="why">
+      <p class="kicker"><span class="num">01</span><span class="bar"></span> First principles</p>
+      <h2>Why cache at all</h2>
+
+      <p>Caching exists because the memory hierarchy is brutally non-uniform. The canonical "latency numbers every programmer should know," popularised by Jeff Dean and Peter Norvig, make the gradient concrete: a main-memory reference is on the order of <strong>100 nanoseconds</strong>, a round trip inside a single datacentre is roughly <strong>500 microseconds</strong> &mdash; about five thousand times slower &mdash; and a packet from California to the Netherlands and back is around <strong>150 milliseconds</strong>, six orders of magnitude beyond local memory.<sup class="cite"><a href="#ref-1" id="cite-1">1</a></sup> A cache is simply the act of moving data leftward along that gradient: from disk to memory, from a remote service to a local process, from a database round trip to a hash lookup.</p>
+
+      <div class="statgrid">
+        <div class="stat"><div class="n">~100<small>&nbsp;ns</small></div><div class="l">Main memory reference</div></div>
+        <div class="stat frost"><div class="n">~500<small>&nbsp;&micro;s</small></div><div class="l">Datacentre round trip &mdash; 5,000&times; slower</div></div>
+        <div class="stat"><div class="n">~10<small>&nbsp;ms</small></div><div class="l">Single disk seek &mdash; 100,000&times; slower</div></div>
+        <div class="stat frost"><div class="n">~150<small>&nbsp;ms</small></div><div class="l">CA &harr; Netherlands round trip</div></div>
+      </div>
+
+      <p>The economics follow directly. If a cache serves a fraction <em>h</em> of requests (the <strong>hit ratio</strong>) at cost <em>T<sub>hit</sub></em>, and misses fall through to the origin at cost <em>T<sub>miss</sub></em>, the effective average latency is <code>h&middot;T_hit + (1&minus;h)&middot;T_miss</code>. The shape of that curve is the single most important intuition in caching: because <em>T<sub>miss</sub></em> typically dwarfs <em>T<sub>hit</sub></em>, the function is dominated by the miss term until <em>h</em> climbs into the high nineties. Moving from a 90% to a 99% hit ratio is not a 10% improvement &mdash; it can be a tenfold reduction in the work reaching your database, because you have cut the miss rate from one-in-ten to one-in-a-hundred. This is why hit ratio, not raw cache throughput, is the metric that matters, and why the difference between a good eviction policy and a mediocre one is worth real engineering effort.</p>
+
+      <h3>When caching is the right tool</h3>
+      <p>Caching pays off when three conditions hold together. First, reads must substantially outnumber writes; a cache amortises the cost of producing a value over many retrievals, so a write-heavy workload simply pays the invalidation tax without collecting the read dividend. Second, the access distribution should be skewed &mdash; the familiar Zipfian "hot key" pattern in which a small set of entries absorbs most traffic &mdash; because that is what lets a bounded cache capture a disproportionate share of requests. Third, and most often underweighted, the application must <em>tolerate some staleness</em>. A cache is, by definition, a copy that may lag its source; if your domain cannot accept any window of inconsistency, you do not have a caching problem, you have a coordination problem, and the answer is usually a different architecture.</p>
+
+      <div class="callout tip">
+        <p class="ct">&#9670; The quiet cost</p>
+        <p>Every cached value is a bet that the source will not change before the entry expires. Caching trades a guarantee of freshness for a probability of speed. The engineering discipline is making that probability explicit &mdash; through TTLs, invalidation, and monitoring &mdash; rather than leaving it implicit and discovering the distribution empirically during an outage.</p>
+      </div>
+
+      <div class="pullquote">
+        <p>There are only two hard things in Computer Science: cache invalidation and naming things.</p>
+        <cite>&mdash; attributed to Phil Karlton</cite>
+      </div>
+
+      <p>The aphorism is funny because it is true, and it frames the rest of this guide. The Spring annotations that follow make it trivial to <em>populate</em> a cache; the hard, interesting, career-defining work is everything that keeps the cache honest afterwards. We will spend most of our time there.</p>
+    </section>
+
+    <!-- ===================== 2. ABSTRACTION ===================== -->
+    <section class="sec" id="abstraction">
+      <p class="kicker"><span class="num">02</span><span class="bar"></span> Architecture</p>
+      <h2>The Spring cache abstraction</h2>
+
+      <p>Spring introduced transparent, declarative caching in version 3.1, modelled deliberately on its transaction support: a thin abstraction that lets you apply caching to methods with minimal intrusion into business logic, and that can be reconfigured or disabled centrally without touching the annotated code.<sup class="cite"><a href="#ref-2" id="cite-2">2</a></sup> The defining property &mdash; and the source of both its elegance and its sharpest pitfalls &mdash; is that it is <em>just an abstraction</em>. Spring does not ship a cache store. It frees you from writing caching logic but expects you to supply the actual storage.<sup class="cite"><a href="#ref-2b" id="cite-2b">2</a></sup></p>
+
+      <p>The abstraction rests on two small interfaces in <code>org.springframework.cache</code>. <code>CacheManager</code> is the entry point: given a logical cache name it returns a <code>Cache</code>. <code>Cache</code> is a uniform SPI over a key-value region &mdash; <code>get</code>, <code>put</code>, <code>evict</code>, <code>clear</code> &mdash; that adapters implement on top of a ConcurrentHashMap, Caffeine, Redis, JCache, Couchbase, Hazelcast, or anything else.<sup class="cite"><a href="#ref-2c" id="cite-2c">2</a></sup> Your service code depends only on these two types (in practice, only on the annotations), so swapping an in-process Caffeine cache for a distributed Redis one is a configuration change, not a code change. That decoupling is the entire value proposition.</p>
+
+      <figure>
+        <svg viewBox="0 0 760 300" role="img" aria-label="Diagram of Spring cache proxy interception">
+          <text x="24" y="34" class="svg-title">CACHE INTERCEPTION VIA AOP PROXY</text>
+          <rect x="24" y="70" width="120" height="70" rx="10" fill="#211b13" stroke="rgba(238,210,150,.26)"/>
+          <text x="84" y="100" text-anchor="middle" class="svg-label svg-ink">Caller</text>
+          <text x="84" y="120" text-anchor="middle" class="svg-label-sm">findBook(isbn)</text>
+          <rect x="210" y="58" width="170" height="180" rx="12" fill="#1c1812" stroke="#f3a23c" stroke-dasharray="4 3"/>
+          <text x="295" y="84" text-anchor="middle" class="svg-title">PROXY</text>
+          <rect x="232" y="100" width="126" height="50" rx="8" fill="#2a2218" stroke="rgba(238,210,150,.2)"/>
+          <text x="295" y="122" text-anchor="middle" class="svg-label-sm" style="fill:#58c9bd">1. compute key</text>
+          <text x="295" y="138" text-anchor="middle" class="svg-label-sm" style="fill:#58c9bd">2. cache.get(key)</text>
+          <rect x="232" y="160" width="126" height="48" rx="8" fill="#2a2218" stroke="rgba(238,210,150,.2)"/>
+          <text x="295" y="180" text-anchor="middle" class="svg-label-sm">hit? return</text>
+          <text x="295" y="196" text-anchor="middle" class="svg-label-sm">miss? invoke &rarr; put</text>
+          <rect x="430" y="70" width="140" height="70" rx="10" fill="#211b13" stroke="rgba(238,210,150,.26)"/>
+          <text x="500" y="100" text-anchor="middle" class="svg-label svg-ink">Target bean</text>
+          <text x="500" y="120" text-anchor="middle" class="svg-label-sm">DB / service call</text>
+          <rect x="430" y="168" width="140" height="62" rx="10" fill="#1f1a25" stroke="#b89be0"/>
+          <text x="500" y="195" text-anchor="middle" class="svg-label" style="fill:#b89be0">Cache store</text>
+          <text x="500" y="213" text-anchor="middle" class="svg-label-sm">Caffeine / Redis</text>
+          <line x1="144" y1="105" x2="206" y2="105" stroke="#58c9bd" stroke-width="2" marker-end="url(#ar)"/>
+          <line x1="358" y1="118" x2="500" y2="168" stroke="#b89be0" stroke-width="1.5" marker-end="url(#ap)"/>
+          <line x1="380" y1="105" x2="426" y2="105" stroke="#e57256" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#am)"/>
+          <text x="402" y="98" text-anchor="middle" class="svg-label-sm" style="fill:#e57256">on miss</text>
+          <defs>
+            <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58c9bd"/></marker>
+            <marker id="ap" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#b89be0"/></marker>
+            <marker id="am" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e57256"/></marker>
+          </defs>
+        </svg>
+        <figcaption><b>Fig. 1</b> &mdash; Spring caching is proxy-based. A generated proxy intercepts the call, computes a key, and consults the store; the target method runs only on a miss. The proxy boundary is also the origin of the self-invocation pitfall in &sect;20.</figcaption>
+      </figure>
+
+      <p>Because interception is implemented with Spring AOP proxies, the mental model to hold is the one in Figure 1: annotations describe <em>intent</em>, and a proxy enforces it at the method boundary. Two consequences fall out of that single fact and recur throughout this guide. Calls that do not cross the proxy &mdash; a method invoking another cached method on <code>this</code> &mdash; are not intercepted at all. And because the annotations are inert until the machinery is switched on, you can neutralise caching across an entire application by removing one line of configuration rather than hunting down annotations,<sup class="cite"><a href="#ref-2d" id="cite-2d">2</a></sup> which is exactly the debugging lever the designers intended.</p>
+    </section>
+
+
+    <!-- ===================== 3. ENABLE ===================== -->
+    <section class="sec" id="enable">
+      <p class="kicker"><span class="num">03</span><span class="bar"></span> Bootstrapping</p>
+      <h2>Enabling caching &amp; the proxy</h2>
+
+      <p>Declaring the annotations does not, by itself, do anything. The caching behaviour must be switched on explicitly, which you do with <code>@EnableCaching</code> on a configuration class. In a Spring Boot application that single annotation, paired with a cache library on the classpath, is enough &mdash; Boot auto-configures a matching <code>CacheManager</code>.<sup class="cite"><a href="#ref-5" id="cite-5">5</a></sup> Mechanically, <code>@EnableCaching</code> registers a bean post-processor that scans beans for the caching annotations and wraps the matching ones in the interceptor proxy described in &sect;2.<sup class="cite"><a href="#ref-3" id="cite-3">3</a></sup></p>
+
+      <div class="codecard" data-tabs>
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">CacheConfig.java</span>
+          <div class="codecard__tabs">
+            <button class="codetab is-active" data-lang="java">Java</button>
+            <button class="codetab" data-lang="kotlin">Kotlin</button>
+          </div>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active" data-lang="java"><code class="language-java">@Configuration
+@EnableCaching                       // turns the abstraction on; without it, annotations are inert
+public class CacheConfig implements CachingConfigurer {
+
+    // Override the default key generator application-wide (optional)
+    @Override
+    public KeyGenerator keyGenerator() {
+        return new SimpleKeyGenerator();
+    }
+
+    // Centralise error handling: by default, cache failures propagate to the caller
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new SimpleCacheErrorHandler();   // or a custom one that logs &amp; degrades gracefully
+    }
+}</code></pre>
+        <pre class="codepane" data-lang="kotlin"><code class="language-kotlin">@Configuration
+@EnableCaching
+class CacheConfig : CachingConfigurer {
+
+    override fun keyGenerator(): KeyGenerator = SimpleKeyGenerator()
+
+    override fun errorHandler(): CacheErrorHandler = SimpleCacheErrorHandler()
+}</code></pre>
+      </div>
+
+      <p>Implementing <code>CachingConfigurer</code> (or extending its convenience base) is the supported way to customise the global pieces: the default <code>KeyGenerator</code>, the <code>CacheResolver</code>, the <code>CacheManager</code>, and &mdash; frequently overlooked &mdash; the <code>CacheErrorHandler</code>. That last hook matters in production: by default an exception thrown by the cache store (a Redis timeout, say) propagates to the caller, which means a flaky cache can take down a perfectly healthy code path. A custom error handler can log and swallow read failures so a cache outage degrades to slowness rather than errors.</p>
+
+      <p>One configuration knob deserves early attention. <code>@EnableCaching</code> accepts a <code>mode</code> that defaults to <code>PROXY</code>, in which interception happens only at the proxy boundary. Setting <code>mode = AdviceMode.ASPECTJ</code> switches to compile- or load-time weaving, which intercepts <em>self-invocations</em> too, at the cost of an AspectJ build step.<sup class="cite"><a href="#ref-3b" id="cite-3b">3</a></sup> Most teams live with the proxy default and simply structure their code to call cached methods across bean boundaries; we return to this in &sect;20.</p>
+    </section>
+
+    <!-- ===================== 4. ANNOTATIONS ===================== -->
+    <section class="sec" id="annotations">
+      <p class="kicker"><span class="num">04</span><span class="bar"></span> The vocabulary</p>
+      <h2>@Cacheable, @CachePut, @CacheEvict, @Caching</h2>
+
+      <p>The abstraction exposes a small, orthogonal vocabulary. Each annotation maps to one verb against the store, and understanding the precise semantics &mdash; particularly <em>when</em> the method runs relative to the cache operation &mdash; is what separates correct usage from subtle bugs.</p>
+
+      <h3>@Cacheable &mdash; read-through population</h3>
+      <p>On each invocation the proxy computes a key and checks the cache; if a value is present it is returned and <em>the method body is skipped entirely</em>. On a miss, the method runs and its return value is stored under the computed key.<sup class="cite"><a href="#ref-4" id="cite-4">4</a></sup> A subtlety with real consequences: <code>Optional</code> return types are unwrapped automatically &mdash; a present <code>Optional</code> stores the contained value, an empty one stores <code>null</code>.<sup class="cite"><a href="#ref-4b" id="cite-4b">4</a></sup></p>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">BookService.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">@Service
+public class BookService {
+
+    // Look up "books" cache by isbn; run the method only on a miss
+    @Cacheable(cacheNames = "books", key = "#isbn")
+    public Book findBook(String isbn) {
+        return repository.slowLookup(isbn);     // expensive: skipped on a hit
+    }
+
+    // Always run the method and refresh the cache with the result
+    @CachePut(cacheNames = "books", key = "#book.isbn")
+    public Book updateBook(Book book) {
+        return repository.save(book);
+    }
+
+    // Run the method (a trigger); evict the single entry afterwards
+    @CacheEvict(cacheNames = "books", key = "#isbn")
+    public void deleteBook(String isbn) {
+        repository.delete(isbn);
+    }
+
+    // Wipe the whole region, e.g. after a bulk import
+    @CacheEvict(cacheNames = "books", allEntries = true)
+    public void reimportCatalogue(InputStream batch) { /* ... */ }
+}</code></pre>
+      </div>
+
+      <h3>@CachePut &mdash; unconditional write</h3>
+      <p>Where <code>@Cacheable</code> may skip execution, <code>@CachePut</code> <em>always</em> executes the method and then stores the result, making it the right tool for update paths that should refresh rather than consult the cache. The classic mistake is annotating the same method with both <code>@Cacheable</code> and <code>@CachePut</code>; their semantics conflict, and the result is undefined behaviour you do not want to debug.</p>
+
+      <h3>@CacheEvict &mdash; removal</h3>
+      <p>Eviction methods act as <em>triggers</em>: their return values are ignored, and unlike <code>@Cacheable</code> a <code>void</code> method is perfectly valid.<sup class="cite"><a href="#ref-3c" id="cite-3c">3</a></sup> Two attributes carry the weight. <code>allEntries = true</code> clears the entire named region rather than a single key &mdash; cheap and appropriate after bulk mutations. <code>beforeInvocation</code> controls timing: it defaults to <code>false</code>, so eviction happens only after the method returns successfully; setting it <code>true</code> evicts before the method runs, which is what you want if the method might throw but you still need the stale entry gone.<sup class="cite"><a href="#ref-3d" id="cite-3d">3</a></sup></p>
+
+      <h3>@Caching and @CacheConfig</h3>
+      <p>Java forbids repeating an annotation of the same type on one method, so when a single method must, for example, evict from two caches with different keys, you nest the operations inside <code>@Caching</code>.<sup class="cite"><a href="#ref-3e" id="cite-3e">3</a></sup> Separately, <code>@CacheConfig</code> at class level factors out shared attributes &mdash; most usefully a common <code>cacheNames</code> &mdash; so individual methods stay terse. Finally, all four operation annotations can serve as <em>meta-annotations</em>, letting you mint a domain-specific <code>@BookCache</code> that bundles the cache name, key strategy, and condition once and reuses it across the codebase.<sup class="cite"><a href="#ref-3f" id="cite-3f">3</a></sup></p>
+
+      <div class="callout">
+        <p class="ct">&#9654; In practice</p>
+        <p>Treat the four annotations as a CRUD-shaped contract: <strong>read</strong> with <code>@Cacheable</code>, <strong>create/update</strong> with <code>@CachePut</code> when you can return the fresh value or <code>@CacheEvict</code> when you cannot, and reach for <code>@Caching</code> only when a single operation genuinely spans multiple regions. If you find yourself nesting heavily, that is usually a signal the method is doing too much.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 5. KEYS ===================== -->
+    <section class="sec" id="keys">
+      <p class="kicker"><span class="num">05</span><span class="bar"></span> Identity</p>
+      <h2>Cache keys &amp; custom keys</h2>
+
+      <p>A cache is a map, and the correctness of a map is only as good as its keys. Spring offers two mechanisms for deriving them, and choosing badly here is the most common source of silent cache corruption.</p>
+
+      <p>By default &mdash; when you specify neither <code>key</code> nor <code>keyGenerator</code> &mdash; the framework uses <code>SimpleKeyGenerator</code>, whose algorithm is exactly as small as it sounds: no parameters yields <code>SimpleKey.EMPTY</code>; a single parameter becomes the key itself; multiple parameters are wrapped in a composite <code>SimpleKey</code> built from all of them.<sup class="cite"><a href="#ref-4c" id="cite-4c">4</a></sup> This default replaced a pre-4.0 strategy that hashed parameters in a way that could collide, and the composite key was introduced specifically to avoid those collisions.<sup class="cite"><a href="#ref-4d" id="cite-4d">4</a></sup></p>
+
+      <div class="callout warn">
+        <p class="ct">&#9888; The collision you will not see</p>
+        <p>The default generator keys only on the <em>parameters</em>, not on the method or cache name. Two methods that share a cache name and have the same parameter types &mdash; <code>get(Long id)</code> and <code>getArchived(Long id)</code> &mdash; will produce identical keys and silently overwrite each other's entries.<sup class="cite"><a href="#ref-4e" id="cite-4e">4</a></sup> The fix is to give each method its own cache name or an explicit, disambiguating key. This bug returns no errors; it returns the wrong data.</p>
+      </div>
+
+      <p>For anything beyond a trivial signature, prefer an explicit SpEL <code>key</code>. The expression evaluates against a dedicated context exposing the method arguments &mdash; by index (<code>#p0</code>, <code>#a1</code>, or <code>#root.args[1]</code>) and, when compiled with parameter names, by name &mdash; plus <code>#root.method</code>, <code>#root.target</code>, <code>#root.caches</code>, and the shortcuts <code>#root.methodName</code> and <code>#root.targetClass</code>.<sup class="cite"><a href="#ref-4f" id="cite-4f">4</a></sup> The Spring team explicitly recommends SpEL keys over the default generator, on the grounds that method signatures diverge as a codebase grows and a strategy that works for some methods rarely works for all.<sup class="cite"><a href="#ref-3g" id="cite-3g">3</a></sup></p>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">KeyStrategies.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">// Compose a key from a nested property
+@Cacheable(cacheNames = "orders", key = "#customer.id")
+public List&lt;Order&gt; ordersFor(Customer customer) { /* ... */ }
+
+// Combine several arguments deterministically
+@Cacheable(cacheNames = "rates", key = "#from + '_' + #to")
+public BigDecimal exchangeRate(String from, String to) { /* ... */ }
+
+// Disambiguate methods sharing a cache via the target type
+@Cacheable(cacheNames = "lookup", key = "#root.targetClass.simpleName + ':' + #id")
+public Region region(Long id) { /* ... */ }</code></pre>
+      </div>
+
+      <h3>Custom KeyGenerator</h3>
+      <p>When key derivation involves real logic &mdash; tenant scoping, locale, a hash of a large argument &mdash; encapsulate it in a <code>KeyGenerator</code> bean rather than scattering ever-longer SpEL strings. The interface has a single method, <code>generate(Object target, Method method, Object... params)</code>, and you reference the bean by name from the annotation.<sup class="cite"><a href="#ref-4g" id="cite-4g">4</a></sup> A reusable generator that folds in the method name is the cleanest defence against the collision pitfall above.</p>
+
+      <div class="codecard" data-tabs>
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">TenantKeyGenerator.java</span>
+          <div class="codecard__tabs">
+            <button class="codetab is-active" data-lang="java">Java</button>
+            <button class="codetab" data-lang="kotlin">Kotlin</button>
+          </div>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active" data-lang="java"><code class="language-java">@Component("tenantKeyGenerator")
+public class TenantKeyGenerator implements KeyGenerator {
+    @Override
+    public Object generate(Object target, Method method, Object... params) {
+        String tenant = TenantContext.current();           // e.g. from a request-scoped holder
+        return tenant + ':' + method.getName() + ':' + Arrays.deepHashCode(params);
+    }
+}
+
+// usage
+@Cacheable(cacheNames = "profile", keyGenerator = "tenantKeyGenerator")
+public Profile profile(Long userId) { /* ... */ }</code></pre>
+        <pre class="codepane" data-lang="kotlin"><code class="language-kotlin">@Component("tenantKeyGenerator")
+class TenantKeyGenerator : KeyGenerator {
+    override fun generate(target: Any, method: Method, vararg params: Any?): Any {
+        val tenant = TenantContext.current()
+        return "$tenant:${method.name}:${params.contentDeepHashCode()}"
+    }
+}</code></pre>
+      </div>
+
+      <p>Two operational warnings about keys. First, they must implement <code>equals</code>/<code>hashCode</code> correctly &mdash; entities with generated, mutable identity are dangerous keys. Second, <strong>key cardinality is a capacity decision</strong>. Keying on something high-cardinality (a full request URL with query parameters, a timestamp) can blow your cache up to one entry per request, which is no cache at all &mdash; you pay the storage and miss the reuse. We quantify that failure mode in &sect;20.</p>
+    </section>
+
+    <!-- ===================== 6. CONDITIONAL ===================== -->
+    <section class="sec" id="conditional">
+      <p class="kicker"><span class="num">06</span><span class="bar"></span> Selectivity</p>
+      <h2>Conditional caching &amp; <code>sync</code></h2>
+
+      <p>Not every result is worth caching, and not every invocation should consult the cache. Spring gives you two SpEL predicates whose distinction is precise and frequently confused: <code>condition</code> and <code>unless</code>.</p>
+
+      <p><code>condition</code> is evaluated <em>before</em> the method runs and gates the entire caching behaviour &mdash; if it is false, the call proceeds as though the method were not cached at all.<sup class="cite"><a href="#ref-3h" id="cite-3h">3</a></sup> Because it runs first, it can only see the arguments. <code>unless</code> is evaluated <em>after</em> the method returns and vetoes <em>storing</em> the result; crucially, because it runs last, its expression can reference the return value through <code>#result</code>.<sup class="cite"><a href="#ref-4h" id="cite-4h">4</a></sup> The mnemonic: <em>condition gates the lookup on the inputs; unless gates the store on the output.</em></p>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">ConditionalCaching.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">// Only bother caching for "small" lookups (decided from the input)
+@Cacheable(cacheNames = "book", condition = "#name.length() &lt; 32")
+public Book findBook(String name) { /* ... */ }
+
+// Cache everything except empty results (decided from the output)
+@Cacheable(cacheNames = "search", unless = "#result == null || #result.isEmpty()")
+public List&lt;Hit&gt; search(Query q) { /* ... */ }
+
+// The two compose: gate on input AND veto on output
+@Cacheable(cacheNames = "quote",
+           condition = "#symbol.startsWith('NYSE:')",
+           unless = "#result.stale")
+public Quote quote(String symbol) { /* ... */ }</code></pre>
+      </div>
+
+      <h3>Synchronised loading with <code>sync</code></h3>
+      <p>On a popular key the naive read-through has a race: many threads miss simultaneously and all execute the expensive method at once &mdash; a local <a href="#pitfalls">cache stampede</a>. Setting <code>@Cacheable(sync = true)</code> tells Spring to synchronise concurrent loads for the same key so that only one thread computes the value while the others wait for it.<sup class="cite"><a href="#ref-4i" id="cite-4i">4</a></sup> This is genuinely useful, but its limits must be understood: synchronisation is <em>per JVM</em>, so it tames the stampede on one node but does nothing across a fleet; support is provider-dependent; and <code>sync</code> cannot be combined with <code>unless</code> or with multiple cache names. For cross-process stampede control you need the techniques in &sect;13 and &sect;20, not this flag.</p>
+
+      <div class="callout tip">
+        <p class="ct">&#9670; Design note</p>
+        <p>Conditional caching is where domain knowledge enters the cache layer. Use <code>unless</code> to keep <em>negative</em> results (nulls, empty lists) out of the cache when they are cheap to recompute and likely to change &mdash; but be deliberate, because the opposite choice, <em>caching</em> negative results, is the standard defence against the cache-penetration attack in &sect;20. The right answer depends on whether your misses are benign or adversarial.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 7. MANAGERS ===================== -->
+    <section class="sec" id="managers">
+      <p class="kicker"><span class="num">07</span><span class="bar"></span> The store layer</p>
+      <h2>Cache managers &amp; providers</h2>
+
+      <p>The <code>CacheManager</code> is where the abstraction meets reality. Spring Boot's job is to pick one for you, and it does so by probing the classpath in a fixed order, stopping at the first provider it finds: the generic JSR-107 (JCache) bridge, then Hazelcast, Infinispan, Couchbase, Redis, Caffeine, and &mdash; if nothing else is present &mdash; a <code>ConcurrentHashMap</code>-backed <code>SimpleCacheManager</code> as a last resort.<sup class="cite"><a href="#ref-5b" id="cite-5b">5</a></sup> If Redis is on the classpath and configured, its <code>RedisCacheManager</code> is auto-configured; if Caffeine is present, its <code>CaffeineCacheManager</code> wins.<sup class="cite"><a href="#ref-5c" id="cite-5c">5</a></sup></p>
+
+      <p>The simple manager is fine for a single-instance dev environment but is explicitly a fallback: it is unbounded by default and never the right production choice.<sup class="cite"><a href="#ref-5d" id="cite-5d">5</a></sup> For real workloads you choose deliberately, and the choice reduces to a single axis &mdash; <em>locality</em>.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Concern</th><th>In-process (Caffeine)</th><th>Out-of-process (Redis)</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Latency</strong></td><td>Nanoseconds &mdash; a heap lookup</td><td>Sub-millisecond, but a network round trip</td></tr>
+            <tr><td><strong>Capacity</strong></td><td>Bounded by JVM heap</td><td>Bounded by a dedicated server's RAM</td></tr>
+            <tr><td><strong>Sharing</strong></td><td>Private per instance &mdash; <em>N</em> copies, <em>N</em> warm-ups</td><td>Shared across all instances</td></tr>
+            <tr><td><strong>Consistency</strong></td><td>Each node can hold a different value</td><td>Single source of cached truth</td></tr>
+            <tr><td><strong>Survives restart</strong></td><td>No &mdash; cold on every deploy</td><td>Yes (with persistence)</td></tr>
+            <tr><td><strong>Failure blast radius</strong></td><td>Contained to one process</td><td>Shared dependency; needs HA</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The two are not mutually exclusive. Spring lets you register several managers and pick between them per operation via <code>cacheManager</code> on the annotation, and the <code>CompositeCacheManager</code> chains them so that lookups fall through from one to the next. That composition is the foundation of the <a href="#multilevel">multi-level cache</a> we build in &sect;14. For now, the key point is architectural: <strong>local caches optimise latency; shared caches optimise consistency and capacity</strong>, and most non-trivial systems eventually want both.</p>
+
+      <p>Whichever manager Boot auto-configures, you can tune it before it is fully initialised by exposing a <code>CacheManagerCustomizer</code> (or the provider-specific <code>RedisCacheManagerBuilderCustomizer</code>) without giving up auto-configuration entirely.<sup class="cite"><a href="#ref-5e" id="cite-5e">5</a></sup> Reach for a hand-rolled <code>@Bean CacheManager</code> only when you need full control &mdash; for example, distinct TTLs and serializers per cache region.</p>
+    </section>
+
+    <!-- ===================== 8. CAFFEINE ===================== -->
+    <section class="sec" id="caffeine">
+      <p class="kicker"><span class="num">08</span><span class="bar"></span> The L1 layer</p>
+      <h2>In-memory caching with Caffeine</h2>
+
+      <p>Caffeine is the default high-performance in-process cache for the JVM &mdash; a rewrite of Guava's cache by Ben Manes that Spring Boot adopted as Guava's successor.<sup class="cite"><a href="#ref-5f" id="cite-5f">5</a></sup> Wiring it into Spring is a dependency plus, optionally, a one-line spec; but the reason to choose Caffeine is not its API, it is its eviction policy, and that is worth understanding because it is the difference between a cache that captures your hot set and one that thrashes.</p>
+
+      <div class="codecard" data-tabs>
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">caffeine config</span>
+          <div class="codecard__tabs">
+            <button class="codetab is-active" data-lang="yaml">application.yml</button>
+            <button class="codetab" data-lang="java">Java</button>
+          </div>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active" data-lang="yaml">spring:
+  cache:
+    cache-names: books, authors
+    caffeine:
+      # recordStats is required for Micrometer to expose hit/miss metrics (see &sect;18)
+      spec: maximumSize=10000,expireAfterWrite=10m,recordStats</pre>
+        <pre class="codepane" data-lang="java">@Bean
+public Caffeine&lt;Object, Object&gt; caffeine() {
+    return Caffeine.newBuilder()
+        .maximumSize(10_000)               // size-based eviction (W-TinyLFU decides victims)
+        .expireAfterWrite(Duration.ofMinutes(10))
+        .refreshAfterWrite(Duration.ofMinutes(5))   // async refresh keeps hot keys fresh
+        .recordStats();                    // expose statistics to Micrometer
+}</pre>
+      </div>
+
+      <h3>Window TinyLFU: recency and frequency together</h3>
+      <p>Classic LRU evicts the least-recently-used entry. It is simple and fast, but its only signal is recency, so a single large scan can flush a genuinely hot working set out of the cache. Caffeine instead uses <strong>Window TinyLFU (W-TinyLFU)</strong>, which combines recency and frequency to deliver a near-optimal hit rate.<sup class="cite"><a href="#ref-6" id="cite-6">6</a></sup><sup class="cite"><a href="#ref-8" id="cite-8">8</a></sup> The mechanism, shown in Figure 2, splits the cache into three cooperating parts.<sup class="cite"><a href="#ref-6b" id="cite-6b">6</a></sup></p>
+
+      <figure>
+        <svg viewBox="0 0 760 320" role="img" aria-label="Window TinyLFU architecture">
+          <text x="24" y="32" class="svg-title">W-TINYLFU &mdash; ADMISSION + SEGMENTED LRU MAIN</text>
+          <!-- new arrival -->
+          <rect x="22" y="120" width="92" height="50" rx="9" fill="#211b13" stroke="rgba(238,210,150,.26)"/>
+          <text x="68" y="142" text-anchor="middle" class="svg-label-sm svg-ink">new</text>
+          <text x="68" y="158" text-anchor="middle" class="svg-label-sm svg-ink">arrival</text>
+          <!-- window -->
+          <rect x="150" y="108" width="120" height="74" rx="10" fill="#2a2218" stroke="#f3a23c"/>
+          <text x="210" y="100" text-anchor="middle" class="svg-label" style="fill:#f3a23c">Admission window</text>
+          <text x="210" y="140" text-anchor="middle" class="svg-label-sm">~1% (LRU)</text>
+          <text x="210" y="158" text-anchor="middle" class="svg-label-sm">absorbs bursts</text>
+          <!-- TinyLFU filter -->
+          <polygon points="300,108 360,145 300,182" fill="#1f1a25" stroke="#b89be0"/>
+          <text x="318" y="142" text-anchor="middle" class="svg-label-sm" style="fill:#b89be0">TinyLFU</text>
+          <text x="330" y="205" text-anchor="middle" class="svg-label-sm" style="fill:#b89be0">4-bit CountMinSketch</text>
+          <text x="330" y="220" text-anchor="middle" class="svg-label-sm" style="fill:#b89be0">~8 bytes / entry</text>
+          <!-- main: probation + protected -->
+          <rect x="400" y="78" width="170" height="60" rx="9" fill="#22302c" stroke="#58c9bd"/>
+          <text x="485" y="103" text-anchor="middle" class="svg-label" style="fill:#58c9bd">Protected</text>
+          <text x="485" y="122" text-anchor="middle" class="svg-label-sm">~80% &mdash; proven hot</text>
+          <rect x="400" y="150" width="170" height="58" rx="9" fill="#2a2218" stroke="rgba(238,210,150,.26)"/>
+          <text x="485" y="174" text-anchor="middle" class="svg-label svg-ink">Probation</text>
+          <text x="485" y="193" text-anchor="middle" class="svg-label-sm">~20% &mdash; on trial</text>
+          <text x="485" y="58" text-anchor="middle" class="svg-title">MAIN (Segmented LRU)</text>
+          <!-- evict -->
+          <text x="640" y="142" text-anchor="middle" class="svg-label-sm" style="fill:#e57256">evict</text>
+          <!-- hill climber note -->
+          <rect x="150" y="248" width="420" height="44" rx="9" fill="#1c1812" stroke="rgba(238,210,150,.14)"/>
+          <text x="360" y="268" text-anchor="middle" class="svg-label-sm">Hill-climbing tunes window vs. main by sampling the live hit rate</text>
+          <text x="360" y="283" text-anchor="middle" class="svg-label-sm" style="fill:#82765f">recency-biased &rarr; larger window &nbsp;|&nbsp; frequency-biased &rarr; larger main</text>
+          <!-- arrows -->
+          <line x1="114" y1="145" x2="146" y2="145" stroke="#58c9bd" stroke-width="2" marker-end="url(#b1)"/>
+          <line x1="270" y1="145" x2="298" y2="145" stroke="#f3a23c" stroke-width="2" marker-end="url(#b2)"/>
+          <line x1="360" y1="135" x2="398" y2="115" stroke="#58c9bd" stroke-width="2" marker-end="url(#b3)"/>
+          <line x1="570" y1="120" x2="630" y2="135" stroke="#e57256" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#b4)"/>
+          <defs>
+            <marker id="b1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58c9bd"/></marker>
+            <marker id="b2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f3a23c"/></marker>
+            <marker id="b3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58c9bd"/></marker>
+            <marker id="b4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e57256"/></marker>
+          </defs>
+        </svg>
+        <figcaption><b>Fig. 2</b> &mdash; New entries enter a small LRU <b>admission window</b>; candidates evicted from it must beat the main region's victim on estimated frequency, judged by a compact <b>CountMinSketch</b>, before entering a <b>segmented-LRU</b> main region split into probation and protected. After Manes, Caffeine design wiki.<sup class="cite"><a href="#ref-6c" id="cite-6c">6</a></sup></figcaption>
+      </figure>
+
+      <p>The frequency estimate is the clever part. Caffeine keeps approximate access counts in a 4-bit <strong>CountMinSketch</strong> &mdash; a probabilistic counter requiring roughly eight bytes per cache entry &mdash; so it can compare the historic popularity of an incoming candidate against the about-to-be-evicted victim and keep whichever has been used more, all in O(1) time and a tiny footprint.<sup class="cite"><a href="#ref-6d" id="cite-6d">6</a></sup><sup class="cite"><a href="#ref-7" id="cite-7">7</a></sup> The split between window and main is not fixed: Caffeine runs a hill-climbing optimiser that samples the live hit rate and shifts capacity toward the window for recency-biased workloads and toward the main region for frequency-biased ones.<sup class="cite"><a href="#ref-6e" id="cite-6e">6</a></sup> The payoff is concrete &mdash; in trace-driven simulations W-TinyLFU lands within a hair of the theoretically optimal (Bélády) hit rate, reaching, in one published example, 39.6% against an optimal 40.3% where ARC and LIRS sat well below.<sup class="cite"><a href="#ref-9" id="cite-9">9</a></sup> The policy is also hardened against an adversary who tries to inflate a victim's frequency through hash collisions, via a small amount of randomised jitter in the admission decision.<sup class="cite"><a href="#ref-6f" id="cite-6f">6</a></sup></p>
+
+      <h3>Eviction modes you actually configure</h3>
+      <p>Caffeine exposes three families of bounds, and production caches usually combine them: <strong>size-based</strong> (<code>maximumSize</code>, or <code>maximumWeight</code> with a weigher for heterogeneous entries), <strong>time-based</strong> (<code>expireAfterWrite</code> for absolute freshness, <code>expireAfterAccess</code> for idle eviction, or a fully custom <code>expireAfter</code>), and <strong>reference-based</strong> (weak keys/values or soft values that defer to the garbage collector). Layered on top, <code>refreshAfterWrite</code> performs an <em>asynchronous</em> reload of a hot entry after a threshold, so reads keep hitting the slightly stale value while a background load refreshes it &mdash; a clean way to avoid latency spikes on expiry. One operational note for &sect;18: Caffeine only records statistics when you ask it to, via <code>recordStats()</code> (or <code>recordStats</code> in the spec); forget it and your hit-ratio dashboards stay empty.</p>
+    </section>
+
+    <!-- ===================== 9. REDIS CACHE ===================== -->
+    <section class="sec" id="redis-cache">
+      <p class="kicker"><span class="num">09</span><span class="bar"></span> The L2 layer</p>
+      <h2>Redis as a Spring cache</h2>
+
+      <p>Where Caffeine gives every process its own private cache, Redis gives the whole fleet one shared cache living in a separate process. Spring Data Redis supplies a <code>RedisCacheManager</code> that plugs straight into the abstraction, so the same <code>@Cacheable</code> annotations now read and write a network store instead of the heap.<sup class="cite"><a href="#ref-10" id="cite-10">10</a></sup> Spring Boot auto-configures this manager when Redis is on the classpath and reachable; the interesting work is in the configuration object that governs behaviour.</p>
+
+      <p>That object is <code>RedisCacheConfiguration</code>, and you almost always start from <code>defaultCacheConfig()</code> and customise with builder methods. Its defaults are worth committing to memory because two of them surprise people: <strong>key expiration is eternal</strong> (entries never expire unless you set a TTL), <strong>null values are cached</strong>, keys are <strong>prefixed</strong> with the cache name, keys are serialised with <code>StringRedisSerializer</code>, and &mdash; the one to change &mdash; values are serialised with <code>JdkSerializationRedisSerializer</code>.<sup class="cite"><a href="#ref-11" id="cite-11">11</a></sup></p>
+
+      <div class="callout warn">
+        <p class="ct">&#9888; Replace JDK serialization</p>
+        <p>The default JDK value serializer produces opaque binary that requires the exact class on the reading side, breaks across version changes, and is unreadable in <code>redis-cli</code>. For anything you intend to operate, switch to <code>GenericJackson2JsonRedisSerializer</code>, which stores JSON with an embedded <code>@class</code> hint &mdash; portable, debuggable, and resilient to the kinds of refactors that make JDK serialization throw at 3 a.m.</p>
+      </div>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">RedisCacheConfig.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">@Bean
+public RedisCacheConfiguration cacheConfiguration() {
+    return RedisCacheConfiguration.defaultCacheConfig()
+        .entryTtl(Duration.ofMinutes(30))          // override the "eternal" default
+        .disableCachingNullValues()                // opt out of caching nulls here
+        .serializeValuesWith(SerializationPair.fromSerializer(
+            new GenericJackson2JsonRedisSerializer()));   // JSON, not JDK binary
+}
+
+// Per-cache overrides via the builder customizer (keeps Boot auto-config)
+@Bean
+public RedisCacheManagerBuilderCustomizer perCacheTtl() {
+    return builder -&gt; builder
+        .withCacheConfiguration("rates",
+            RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofSeconds(30)))
+        .withCacheConfiguration("catalogue",
+            RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofHours(6)));
+}</code></pre>
+      </div>
+
+      <p>TTL is the most important lever, and it is more flexible than a single duration. Beyond a fixed <code>entryTtl</code>, Spring Data Redis lets you compute a per-entry TTL by supplying a <code>TtlFunction</code>, which receives the key and value and returns a <code>Duration</code> &mdash; useful when different entities deserve different lifetimes within one logical cache.<sup class="cite"><a href="#ref-10b" id="cite-10b">10</a></sup> Under the hood, <code>RedisCacheManager</code> defaults to a <em>lock-free</em> <code>RedisCacheWriter</code>, which maximises throughput; the trade-off is that operations needing multiple Redis commands (such as <code>putIfAbsent</code> and region clears) are not atomic. A locking writer is available when you need that atomicity, but it adds round trips and locks at the cache &mdash; not the entry &mdash; level.<sup class="cite"><a href="#ref-10c" id="cite-10c">10</a></sup></p>
+    </section>
+
+    <!-- ===================== 10. REDIS ARCH ===================== -->
+    <section class="sec" id="redis-arch">
+      <p class="kicker"><span class="num">10</span><span class="bar"></span> Operational anatomy</p>
+      <h2>Redis architecture</h2>
+
+      <p>To run Redis as a cache responsibly you need a working model of what it is: an in-memory data-structure server that executes commands on a single main thread. That single-threaded command loop is a feature, not a limitation &mdash; it makes each command effectively atomic and sidesteps a whole category of locking bugs &mdash; but it also means one slow command (an unbounded <code>KEYS</code> scan, a giant <code>MGET</code>) blocks every other client. The first rule of operating Redis is to keep individual commands cheap.</p>
+
+      <h3>Durability: RDB, AOF, or neither</h3>
+      <p>Although Redis lives in memory, it offers two persistence mechanisms you should choose between explicitly. <strong>RDB</strong> takes point-in-time snapshots by forking the process and writing a compact dump &mdash; fast to load, but a crash loses everything since the last snapshot. The <strong>append-only file (AOF)</strong> logs every write and replays it on restart; with the recommended <code>appendfsync everysec</code> it bounds data loss to roughly one second while keeping throughput high. The two can be combined, using the AOF for durability and the RDB for fast restarts.<sup class="cite"><a href="#ref-13" id="cite-13">13</a></sup> For a <em>pure cache</em> where the source of truth is the database, the defensible choice is often to disable persistence entirely &mdash; a cold cache after a restart is a performance event, not a data-loss event.</p>
+
+      <h3>Scaling: replication, Sentinel, Cluster</h3>
+      <p>A single Redis node scales up only so far, and high availability needs more than one. Redis replication is <em>asynchronous</em>: a replica syncs from its master and then receives a stream of writes, so reads can fan out across replicas while writes go to the master &mdash; with the caveat that a replica may briefly trail the master, and an acknowledged write can be lost if the master fails before it propagates.<sup class="cite"><a href="#ref-14" id="cite-14">14</a></sup> For automatic failover, Sentinel monitors masters and promotes a replica when one dies. For datasets larger than a single machine, <strong>Redis Cluster</strong> shards the keyspace across <strong>16,384 hash slots</strong>, assigning each key to a slot by <code>CRC16(key) mod 16384</code> and distributing the slots over the master nodes, each of which can have replicas.<sup class="cite"><a href="#ref-15" id="cite-15">15</a></sup></p>
+
+      <figure>
+        <svg viewBox="0 0 760 290" role="img" aria-label="Redis Cluster hash-slot sharding">
+          <text x="24" y="32" class="svg-title">REDIS CLUSTER &mdash; 16,384 HASH SLOTS, CRC16(key) mod 16384</text>
+          <!-- key -->
+          <rect x="22" y="120" width="120" height="48" rx="9" fill="#211b13" stroke="rgba(238,210,150,.26)"/>
+          <text x="82" y="142" text-anchor="middle" class="svg-label-sm svg-ink">key "book:42"</text>
+          <text x="82" y="158" text-anchor="middle" class="svg-label-sm" style="fill:#f3a23c">&rarr; slot 9710</text>
+          <!-- nodes -->
+          <g>
+            <rect x="200" y="70" width="160" height="64" rx="10" fill="#2a2218" stroke="#f3a23c"/>
+            <text x="280" y="94" text-anchor="middle" class="svg-label" style="fill:#f3a23c">Master A</text>
+            <text x="280" y="113" text-anchor="middle" class="svg-label-sm">slots 0 &ndash; 5460</text>
+            <rect x="380" y="70" width="160" height="64" rx="10" fill="#22302c" stroke="#58c9bd"/>
+            <text x="460" y="94" text-anchor="middle" class="svg-label" style="fill:#58c9bd">Master B</text>
+            <text x="460" y="113" text-anchor="middle" class="svg-label-sm">slots 5461 &ndash; 10922</text>
+            <rect x="560" y="70" width="160" height="64" rx="10" fill="#1f1a25" stroke="#b89be0"/>
+            <text x="640" y="94" text-anchor="middle" class="svg-label" style="fill:#b89be0">Master C</text>
+            <text x="640" y="113" text-anchor="middle" class="svg-label-sm">slots 10923 &ndash; 16383</text>
+          </g>
+          <!-- replicas -->
+          <g opacity="0.8">
+            <rect x="200" y="170" width="160" height="46" rx="9" fill="#1c1812" stroke="rgba(238,210,150,.2)"/>
+            <text x="280" y="198" text-anchor="middle" class="svg-label-sm">replica A&prime; (async)</text>
+            <rect x="380" y="170" width="160" height="46" rx="9" fill="#1c1812" stroke="rgba(238,210,150,.2)"/>
+            <text x="460" y="198" text-anchor="middle" class="svg-label-sm">replica B&prime; (async)</text>
+            <rect x="560" y="170" width="160" height="46" rx="9" fill="#1c1812" stroke="rgba(238,210,150,.2)"/>
+            <text x="640" y="198" text-anchor="middle" class="svg-label-sm">replica C&prime; (async)</text>
+          </g>
+          <text x="460" y="250" text-anchor="middle" class="svg-label-sm" style="fill:#82765f">Sentinel / cluster gossip promotes a replica on master failure</text>
+          <line x1="142" y1="140" x2="455" y2="134" stroke="#58c9bd" stroke-width="2" marker-end="url(#c1)"/>
+          <line x1="280" y1="134" x2="280" y2="168" stroke="#82765f" stroke-width="1.5" marker-end="url(#c2)"/>
+          <line x1="460" y1="134" x2="460" y2="168" stroke="#82765f" stroke-width="1.5" marker-end="url(#c2)"/>
+          <line x1="640" y1="134" x2="640" y2="168" stroke="#82765f" stroke-width="1.5" marker-end="url(#c2)"/>
+          <defs>
+            <marker id="c1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58c9bd"/></marker>
+            <marker id="c2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="#82765f"/></marker>
+          </defs>
+        </svg>
+        <figcaption><b>Fig. 3</b> &mdash; Redis Cluster maps every key to one of 16,384 slots and spreads the slots across masters, each backed by asynchronous replicas. Multi-key operations must land in the same slot, which is what hash tags <code>{...}</code> are for.</figcaption>
+      </figure>
+
+      <p>Two cluster consequences bite cache designers specifically. Multi-key commands only work when all keys live in the same slot, so if you rely on them you must co-locate keys with a <em>hash tag</em> &mdash; the substring inside <code>{braces}</code> is what CRC16 actually hashes. And because the slot map can move during resharding, clients must follow <code>MOVED</code>/<code>ASK</code> redirects; the mature Spring client (Lettuce) handles this, but it is why a cluster-aware connection is not optional.</p>
+    </section>
+
+    <!-- ===================== 11. EVICTION ===================== -->
+    <section class="sec" id="eviction">
+      <p class="kicker"><span class="num">11</span><span class="bar"></span> Making room</p>
+      <h2>Eviction strategies</h2>
+
+      <p>A cache is a bounded space, so eviction &mdash; deciding what to discard when full &mdash; is not an edge case but the core policy that determines the hit ratio. We have seen Caffeine's answer; Redis takes a different, operator-configured approach. You cap memory with the <code>maxmemory</code> directive, and once that ceiling is reached Redis applies the <code>maxmemory-policy</code> you have selected from eight options.<sup class="cite"><a href="#ref-12" id="cite-12">12</a></sup></p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Policy</th><th>Scope</th><th>Victim selection</th></tr></thead>
+          <tbody>
+            <tr><td><code>noeviction</code></td><td>&mdash;</td><td>Reject writes with an error once full (default)</td></tr>
+            <tr><td><code>allkeys-lru</code></td><td>All keys</td><td>Approximated least-recently-used</td></tr>
+            <tr><td><code>allkeys-lfu</code></td><td>All keys</td><td>Approximated least-frequently-used</td></tr>
+            <tr><td><code>allkeys-random</code></td><td>All keys</td><td>A random key</td></tr>
+            <tr><td><code>volatile-lru</code></td><td>Keys with a TTL</td><td>Approximated LRU among expiring keys</td></tr>
+            <tr><td><code>volatile-lfu</code></td><td>Keys with a TTL</td><td>Approximated LFU among expiring keys</td></tr>
+            <tr><td><code>volatile-random</code></td><td>Keys with a TTL</td><td>A random expiring key</td></tr>
+            <tr><td><code>volatile-ttl</code></td><td>Keys with a TTL</td><td>Shortest remaining time-to-live first</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The word <em>approximated</em> is doing real work. Redis does not maintain a globally ordered LRU list &mdash; that would be expensive &mdash; so it samples a handful of keys and evicts the best victim among them, with the sample size controlled by <code>maxmemory-samples</code>; larger samples approximate true LRU/LFU more closely at a small CPU cost.<sup class="cite"><a href="#ref-12b" id="cite-12b">12</a></sup> The LFU variants additionally apply a decay so that once-popular keys do not stay resident forever on the strength of an old burst.<sup class="cite"><a href="#ref-27" id="cite-27">27</a></sup></p>
+
+      <p>Two operational subtleties decide whether your policy behaves as intended. The <code>volatile-*</code> policies only consider keys that carry a TTL; if no eligible key exists, they behave like <code>noeviction</code> and start rejecting writes &mdash; a trap if you assumed Redis would always make room.<sup class="cite"><a href="#ref-12c" id="cite-12c">12</a></sup> For a cache where every entry is discardable, <code>allkeys-lru</code> (or <code>allkeys-lfu</code>) is the conventional default, and it matches the typical power-law access pattern well.<sup class="cite"><a href="#ref-12d" id="cite-12d">12</a></sup> Managed services follow this logic: AWS ElastiCache, for instance, defaults to <code>volatile-lru</code>, which is only sensible if you reliably set TTLs.<sup class="cite"><a href="#ref-27b" id="cite-27b">27</a></sup></p>
+
+      <div class="callout">
+        <p class="ct">&#9654; Contrast</p>
+        <p>It is worth appreciating the design gap here. Redis's sampled LRU/LFU is a pragmatic O(1)-per-eviction approximation tuned for an operator to pick by hand. Caffeine's <a href="#caffeine">W-TinyLFU</a> is an adaptive, self-tuning policy that admits on estimated frequency. Both are good engineering for their context &mdash; a shared server that must stay simple and predictable, versus an embedded library that can afford a smarter sketch &mdash; and a multi-level cache inherits both behaviours at once.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 12. PATTERNS ===================== -->
+    <section class="sec" id="patterns">
+      <p class="kicker"><span class="num">12</span><span class="bar"></span> Read &amp; write paths</p>
+      <h2>Cache design patterns</h2>
+
+      <p>How data moves between the cache and the system of record is a design decision independent of which store you use. A handful of named patterns capture the options; picking the right one is mostly about who owns the responsibility for reads and writes.</p>
+
+      <h3>Cache-aside (lazy loading)</h3>
+      <p>The default and most common pattern: the application talks to both the cache and the database. On a read it checks the cache, and on a miss it loads from the database, populates the cache, and returns &mdash; this is exactly what <code>@Cacheable</code> automates.<sup class="cite"><a href="#ref-16" id="cite-16">16</a></sup> Its virtues are that only requested data is ever cached and that a cache outage degrades to direct database reads. Its hazard is that the cache and database are updated by separate steps, so a poorly ordered write path leaves them inconsistent &mdash; the problem &sect;13 is devoted to.</p>
+
+      <h3>Read-through, write-through, write-behind, refresh-ahead</h3>
+      <p>The alternative is to let the cache itself own the interaction with the backing store through a provider plug-in, so the application sees only the cache. Oracle Coherence's taxonomy is the canonical reference for these four.<sup class="cite"><a href="#ref-17" id="cite-17">17</a></sup> In <strong>read-through</strong>, a miss causes the cache to load from the store synchronously. In <strong>write-through</strong>, a write updates the cache and the store synchronously, keeping them consistent at the cost of write latency. <strong>Write-behind</strong> (write-back) acknowledges the write to the cache immediately and persists to the store asynchronously, often batching for throughput &mdash; fast, but with a durability window if the cache fails before the flush. <strong>Refresh-ahead</strong> proactively reloads popular entries before they expire so reads rarely pay a miss. A fifth pattern, <strong>write-around</strong>, writes only to the store and lets the cache populate lazily on later reads, which avoids polluting the cache with write-only data.<sup class="cite"><a href="#ref-18" id="cite-18">18</a></sup></p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Pattern</th><th>Read path</th><th>Write path</th><th>Best when</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Cache-aside</strong></td><td>App checks cache, loads on miss</td><td>App writes DB, invalidates cache</td><td>General purpose; read-heavy</td></tr>
+            <tr><td><strong>Read-through</strong></td><td>Cache loads on miss</td><td>(via write policy)</td><td>You want the cache to own reads</td></tr>
+            <tr><td><strong>Write-through</strong></td><td>From cache</td><td>Cache + DB, synchronously</td><td>Consistency matters more than write latency</td></tr>
+            <tr><td><strong>Write-behind</strong></td><td>From cache</td><td>Cache now, DB async/batched</td><td>Write-heavy, can tolerate a durability window</td></tr>
+            <tr><td><strong>Refresh-ahead</strong></td><td>From cache; pre-reloaded</td><td>(via write policy)</td><td>Predictable hot keys, latency-sensitive</td></tr>
+            <tr><td><strong>Write-around</strong></td><td>App checks cache, loads on miss</td><td>App writes DB only</td><td>Write-once / rarely-read data</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>In Spring, cache-aside is what the annotations give you out of the box, and it is the right default for most services. Read-through and the write policies are typically the domain of a dedicated caching/grid product (Coherence, Hazelcast, Infinispan) or are approximated with <code>@CachePut</code> on the write path. The decision is rarely about performance in isolation &mdash; it is about how much inconsistency, and how much durability risk, the domain can absorb.</p>
+    </section>
+
+    <!-- ===================== 13. DISTRIBUTED ===================== -->
+    <section class="sec" id="distributed">
+      <p class="kicker"><span class="num">13</span><span class="bar"></span> The hard part</p>
+      <h2>Distributed caching &amp; consistency</h2>
+
+      <p>Everything so far has been mechanics. This is where caching becomes a distributed-systems problem, and where the Karlton quote earns its keep. The moment a cached value exists in more than one place &mdash; whether that is a shared Redis and a database, or a private Caffeine cache on each of a dozen application nodes &mdash; you have multiple copies of a fact that can disagree, and you must decide how much disagreement you can tolerate and for how long.</p>
+
+      <p>The honest framing is that perfect consistency between a cache and its source is unachievable without giving up the performance that justified the cache. So we choose a <em>strategy</em> that bounds staleness, and the realistic menu is short:</p>
+
+      <ul>
+        <li><strong>Expiration (TTL).</strong> The simplest and most robust: every entry carries a lifetime, after which it is reloaded. Staleness is bounded by the TTL, full stop. It requires no coordination and self-heals, which is why it should be your baseline even when you add something cleverer on top.</li>
+        <li><strong>Write-invalidate.</strong> On every write to the source, actively evict (or update) the corresponding cache entry. This tightens the staleness window dramatically but introduces the ordering and delivery problems below &mdash; a missed or reordered invalidation reintroduces stale data.</li>
+        <li><strong>Eventual consistency by propagation.</strong> Accept that updates take time to reach every copy, and make the propagation reliable &mdash; typically by broadcasting change events, which is precisely what &sect;16 builds with Kafka.</li>
+      </ul>
+
+      <h3>Why invalidation is genuinely hard</h3>
+      <p>Consider the textbook race in cache-aside: thread A reads, misses, and loads value <em>v1</em> from the database; before A writes <em>v1</em> into the cache, thread B updates the database to <em>v2</em> and evicts the (still empty) cache entry; then A's delayed write lands, populating the cache with the now-stale <em>v1</em>, where it can live until the TTL saves you. No single step is wrong; the interleaving is. This is why a bounded TTL belongs under even a carefully invalidated cache, and why write-paths that update the cache need care about ordering.</p>
+
+      <p>The problem compounds with <em>local</em> caches. If each node holds its own Caffeine cache, a write that invalidates the cache on the node that handled it leaves every <em>other</em> node serving the stale value &mdash; there is no shared entry to evict. This near-cache invalidation gap is the single most important reason distributed systems reach for a broadcast mechanism, and it is the thread that ties &sect;14 (multi-level) to &sect;16 (Kafka). A shared Redis cache sidesteps it by having exactly one copy, which is a large part of Redis's appeal as a cache despite the network hop.</p>
+
+      <div class="callout warn">
+        <p class="ct">&#9888; Three failure modes to design against</p>
+        <p>Production caches fail in three named ways, all covered in &sect;20: a <strong>stampede</strong> (many concurrent misses on one hot key hammer the origin), an <strong>avalanche</strong> (a large set of entries expires simultaneously and the origin is buried), and <strong>penetration</strong> (requests for keys that do not exist bypass the cache entirely and pound the database).<sup class="cite"><a href="#ref-28" id="cite-28">28</a></sup> Each has a standard mitigation, and each is far cheaper to design in now than to diagnose during an incident.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 14. MULTILEVEL ===================== -->
+    <section class="sec" id="multilevel">
+      <p class="kicker"><span class="num">14</span><span class="bar"></span> Layering</p>
+      <h2>Multi-level caching</h2>
+
+      <p>The cleanest way to get both nanosecond local reads and fleet-wide consistency is to stop choosing and stack them: a small, fast Caffeine cache as <strong>L1</strong> in each process, backed by a shared Redis cache as <strong>L2</strong>. A read checks L1 first; on a miss it checks L2; on a second miss it loads from the source, then populates both layers on the way back. Most requests never leave the heap, the expensive origin is consulted rarely, and Redis absorbs the cold-start traffic that would otherwise hit the database after every deploy.</p>
+
+      <figure>
+        <svg viewBox="0 0 760 250" role="img" aria-label="Two-level cache read path">
+          <text x="24" y="32" class="svg-title">L1 (CAFFEINE, PER NODE) &rarr; L2 (REDIS, SHARED) &rarr; ORIGIN</text>
+          <rect x="22" y="96" width="96" height="58" rx="9" fill="#211b13" stroke="rgba(238,210,150,.26)"/>
+          <text x="70" y="130" text-anchor="middle" class="svg-label-sm svg-ink">request</text>
+          <rect x="158" y="88" width="150" height="74" rx="11" fill="#2a2218" stroke="#f3a23c"/>
+          <text x="233" y="118" text-anchor="middle" class="svg-label" style="fill:#f3a23c">L1 &mdash; Caffeine</text>
+          <text x="233" y="138" text-anchor="middle" class="svg-label-sm">heap, ~ns, private</text>
+          <rect x="348" y="88" width="150" height="74" rx="11" fill="#22302c" stroke="#58c9bd"/>
+          <text x="423" y="118" text-anchor="middle" class="svg-label" style="fill:#58c9bd">L2 &mdash; Redis</text>
+          <text x="423" y="138" text-anchor="middle" class="svg-label-sm">network, ~sub-ms, shared</text>
+          <rect x="538" y="88" width="180" height="74" rx="11" fill="#1f1a25" stroke="#b89be0"/>
+          <text x="628" y="118" text-anchor="middle" class="svg-label" style="fill:#b89be0">Origin (DB / service)</text>
+          <text x="628" y="138" text-anchor="middle" class="svg-label-sm">authoritative, slow</text>
+          <line x1="118" y1="125" x2="154" y2="125" stroke="#ede4d4" stroke-width="2" marker-end="url(#d0)"/>
+          <line x1="308" y1="125" x2="344" y2="125" stroke="#e57256" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#d1)"/>
+          <line x1="498" y1="125" x2="534" y2="125" stroke="#e57256" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#d1)"/>
+          <text x="326" y="118" text-anchor="middle" class="svg-label-sm" style="fill:#e57256">miss</text>
+          <text x="516" y="118" text-anchor="middle" class="svg-label-sm" style="fill:#e57256">miss</text>
+          <path d="M628,162 C628,205 233,205 233,164" fill="none" stroke="#58c9bd" stroke-width="1.5" marker-end="url(#d2)"/>
+          <text x="430" y="222" text-anchor="middle" class="svg-label-sm" style="fill:#58c9bd">populate L2 then L1 on the way back</text>
+          <defs>
+            <marker id="d0" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#ede4d4"/></marker>
+            <marker id="d1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e57256"/></marker>
+            <marker id="d2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#58c9bd"/></marker>
+          </defs>
+        </svg>
+        <figcaption><b>Fig. 4</b> &mdash; A two-level cache. The dashed red path is the miss cascade; the teal curve is the write-back that populates both layers. The catch is invalidation: evicting L2 does not evict the L1 copies on other nodes.</figcaption>
+      </figure>
+
+      <p>Spring expresses this with a <code>CompositeCacheManager</code> that consults an ordered list of managers, falling through from the Caffeine manager to the Redis manager. You can assemble it directly, or use a community library such as the multi-level cache managers that wrap exactly this L1/L2 fall-through and write-back logic.</p>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">TwoLevelCacheConfig.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">@Bean
+public CacheManager cacheManager(RedisConnectionFactory redis) {
+    CaffeineCacheManager l1 = new CaffeineCacheManager();
+    l1.setCaffeine(Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterWrite(Duration.ofMinutes(2))   // short L1 TTL bounds cross-node staleness
+            .recordStats());
+
+    RedisCacheManager l2 = RedisCacheManager.builder(redis)
+            .cacheDefaults(RedisCacheConfiguration.defaultCacheConfig()
+                    .entryTtl(Duration.ofMinutes(30)))
+            .build();
+
+    CompositeCacheManager composite = new CompositeCacheManager(l1, l2);
+    composite.setFallbackToNoOpCache(false);
+    return composite;
+}</code></pre>
+      </div>
+
+      <p>The architecture has one unavoidable cost, and naming it is the whole point of this section: <strong>L1 invalidation does not propagate</strong>. When a value changes, evicting it from the shared L2 is easy, but each node's L1 still holds its own stale copy with no shared entry to remove. There are two defences, usually combined. The cheap one is to keep the L1 TTL deliberately short &mdash; a minute or two &mdash; so staleness is self-correcting and bounded, as in the snippet above. The thorough one is to broadcast an invalidation event to every node so each evicts its own L1, which is exactly the job we hand to Kafka in &sect;16.</p>
+    </section>
+
+    <!-- ===================== 15. MICROSERVICES ===================== -->
+    <section class="sec" id="microservices">
+      <p class="kicker"><span class="num">15</span><span class="bar"></span> Boundaries</p>
+      <h2>Caching in microservices</h2>
+
+      <p>In a microservice architecture, caching stops being a local optimisation and becomes a question of ownership and boundaries. The first principle borrows directly from the data-ownership rule of microservices: <strong>a service caches only data it owns.</strong> Caching another service's data inside yours quietly couples you to that service's correctness &mdash; you now hold a copy you cannot authoritatively invalidate, because you are not told when the source changes. If you must cache a peer's data, treat it as a read model with an explicit, short freshness contract, not as a private mirror.</p>
+
+      <p>The second decision is the locality axis from &sect;7, now applied per service. A stateless service with many replicas and read-mostly reference data is the ideal case for a local Caffeine cache: each replica warms its own copy, latency is minimal, and a short TTL bounds divergence. A service whose cached data must be consistent across replicas &mdash; sessions, rate-limit counters, anything where two replicas disagreeing is a bug &mdash; wants a shared Redis instance instead. Many services run both, exactly as in &sect;14.</p>
+
+      <h3>Caching at the edges</h3>
+      <p>Not all caching lives inside the service. Two edges are worth using deliberately. At the <strong>API gateway</strong>, idempotent <code>GET</code> responses can be cached centrally, shielding a whole cluster of services from repeated identical requests. And the <strong>HTTP caching</strong> machinery built into the web &mdash; <code>Cache-Control</code>, <code>ETag</code>, and conditional <code>If-None-Match</code> requests answered with <code>304 Not Modified</code> &mdash; lets clients and CDNs avoid re-fetching unchanged representations entirely. Spring supports these first-class through <code>CacheControl</code> builders and <code>ShallowEtagHeaderFilter</code>. The cheapest cache hit is the request your service never receives.</p>
+
+      <div class="callout">
+        <p class="ct">&#9654; A boundary heuristic</p>
+        <p>Before adding a cache to a service, ask: <em>who is the source of truth for this data, and how will this service learn that the truth changed?</em> If the answer to the second question is "it won't," you are choosing a staleness window whether you admit it or not &mdash; so choose it explicitly with a TTL, or subscribe to change events (&sect;16). A cache without an invalidation story is a bug with a latency benefit.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 16. KAFKA ===================== -->
+    <section class="sec" id="kafka">
+      <p class="kicker"><span class="num">16</span><span class="bar"></span> Propagation</p>
+      <h2>Event-driven invalidation with Kafka</h2>
+
+      <p>We have arrived at the mechanism that closes the loop opened in &sect;13 and &sect;14: how does every node in a fleet learn, promptly and reliably, that a cached value is now stale? The answer is to stop treating invalidation as a side effect of a write and start treating it as an <em>event</em> that is published once and consumed by everyone who holds a copy. Apache Kafka is the natural backbone for this because it is a durable, replayable, partitioned log that fans one message out to many independent consumers.</p>
+
+      <h3>Broadcast eviction</h3>
+      <p>The simplest design publishes a small "entity X changed" event whenever the system of record is mutated. Every application instance runs a consumer &mdash; each in its own consumer group, so all of them receive every message rather than load-balancing &mdash; and on each event the instance evicts the corresponding key from its <em>local</em> L1 cache. The shared L2 can be evicted once by the producer. This is the broadcast that a near-cache fundamentally needs, and Kafka's fan-out delivers it with durability and ordering per key.</p>
+
+      <figure>
+        <svg viewBox="0 0 760 280" role="img" aria-label="Kafka-based cache invalidation pipeline">
+          <text x="24" y="32" class="svg-title">CHANGE EVENT &rarr; KAFKA &rarr; PER-NODE L1 EVICTION</text>
+          <rect x="22" y="112" width="120" height="56" rx="10" fill="#1f1a25" stroke="#b89be0"/>
+          <text x="82" y="136" text-anchor="middle" class="svg-label" style="fill:#b89be0">Writer service</text>
+          <text x="82" y="154" text-anchor="middle" class="svg-label-sm">updates DB</text>
+          <rect x="190" y="96" width="170" height="88" rx="11" fill="#2a2218" stroke="#f3a23c"/>
+          <text x="275" y="124" text-anchor="middle" class="svg-label" style="fill:#f3a23c">Kafka topic</text>
+          <text x="275" y="144" text-anchor="middle" class="svg-label-sm">cache.invalidations</text>
+          <text x="275" y="162" text-anchor="middle" class="svg-label-sm" style="fill:#82765f">compacted, key = entity id</text>
+          <g>
+            <rect x="430" y="60" width="150" height="46" rx="9" fill="#22302c" stroke="#58c9bd"/>
+            <text x="505" y="82" text-anchor="middle" class="svg-label-sm" style="fill:#58c9bd">node 1 &mdash; evict L1</text>
+            <rect x="430" y="116" width="150" height="46" rx="9" fill="#22302c" stroke="#58c9bd"/>
+            <text x="505" y="138" text-anchor="middle" class="svg-label-sm" style="fill:#58c9bd">node 2 &mdash; evict L1</text>
+            <rect x="430" y="172" width="150" height="46" rx="9" fill="#22302c" stroke="#58c9bd"/>
+            <text x="505" y="194" text-anchor="middle" class="svg-label-sm" style="fill:#58c9bd">node 3 &mdash; evict L1</text>
+          </g>
+          <rect x="612" y="116" width="126" height="46" rx="9" fill="#211b13" stroke="rgba(238,210,150,.26)"/>
+          <text x="675" y="138" text-anchor="middle" class="svg-label-sm svg-ink">shared L2 evict</text>
+          <line x1="142" y1="140" x2="186" y2="140" stroke="#b89be0" stroke-width="2" marker-end="url(#e1)"/>
+          <line x1="360" y1="130" x2="426" y2="83" stroke="#58c9bd" stroke-width="1.5" marker-end="url(#e2)"/>
+          <line x1="360" y1="140" x2="426" y2="139" stroke="#58c9bd" stroke-width="1.5" marker-end="url(#e2)"/>
+          <line x1="360" y1="150" x2="426" y2="195" stroke="#58c9bd" stroke-width="1.5" marker-end="url(#e2)"/>
+          <line x1="580" y1="139" x2="608" y2="139" stroke="#ede4d4" stroke-width="1.5" marker-end="url(#e3)"/>
+          <defs>
+            <marker id="e1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#b89be0"/></marker>
+            <marker id="e2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="#58c9bd"/></marker>
+            <marker id="e3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L5,3 L0,6 Z" fill="#ede4d4"/></marker>
+          </defs>
+        </svg>
+        <figcaption><b>Fig. 5</b> &mdash; One change event fans out to every node's consumer, each evicting its private L1; the shared L2 is evicted once. A <b>log-compacted</b> topic keyed by entity id keeps the latest state per key for replay.</figcaption>
+      </figure>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">CacheInvalidationListener.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">// Each instance uses a UNIQUE group id so every node receives every event (broadcast,
+// not load-balanced). ${random.uuid} gives each replica its own group at startup.
+@KafkaListener(topics = "cache.invalidations", groupId = "inventory-${random.uuid}")
+public void onChange(CacheInvalidationEvent event) {
+    Cache cache = cacheManager.getCache(event.cacheName());
+    if (cache != null) {
+        cache.evict(event.key());        // drop this node's local L1 copy
+    }
+}</code></pre>
+      </div>
+
+      <h3>Log compaction and tombstones</h3>
+      <p>If you go further and use the topic as a durable, replayable record of the latest state per entity &mdash; not just a fleeting signal &mdash; Kafka's <strong>log compaction</strong> is the right retention policy. With <code>cleanup.policy=compact</code>, Kafka retains at least the most recent value for each key and garbage-collects superseded ones, so a consumer that replays from the beginning reconstructs current state without reading the entire history.<sup class="cite"><a href="#ref-24" id="cite-24">24</a></sup> Deletion is expressed with a <strong>tombstone</strong>: a record with a key and a <em>null</em> value marks that key as removed, and the tombstone itself is purged after <code>delete.retention.ms</code> (24 hours by default), giving lagging consumers a window to observe the delete before it disappears.<sup class="cite"><a href="#ref-25" id="cite-25">25</a></sup></p>
+
+      <h3>Change data capture</h3>
+      <p>The most robust variant removes the application from the critical path of emitting events at all. <strong>Change data capture</strong> tools such as Debezium read the database's transaction log directly and stream every committed change as an event, so the cache is invalidated as a guaranteed consequence of the data actually changing &mdash; not as a step the application code must remember to perform. Debezium can run as an embedded engine that evicts caches on each change, or in Kafka Connect mode that publishes change events to topics for any number of consumers.<sup class="cite"><a href="#ref-26" id="cite-26">26</a></sup> CDC closes the most insidious correctness gap in caching: the write path that updates the database but forgets to tell the cache.</p>
+    </section>
+
+    <!-- ===================== 17. SESSION ===================== -->
+    <section class="sec" id="session">
+      <p class="kicker"><span class="num">17</span><span class="bar"></span> A close cousin</p>
+      <h2>Spring Session with Redis</h2>
+
+      <p>Session state is not a cache in the read-through sense, but it raises the same locality problem and Redis solves it the same way, so it belongs here. The classic obstacle to scaling a stateful web application horizontally is the <code>HttpSession</code>: if it lives in one server's memory, a user's requests must keep landing on that server (sticky sessions), and losing that node loses the session. Spring Session breaks this coupling by externalising session storage &mdash; to Redis &mdash; behind a transparent replacement for the container's session.<sup class="cite"><a href="#ref-23" id="cite-23">23</a></sup></p>
+
+      <p>The mechanism is a servlet filter (<code>springSessionRepositoryFilter</code>) that swaps the container's <code>HttpSession</code> for one backed by a <code>SessionRepository</code>, so application code keeps calling <code>request.getSession()</code> unchanged while the data actually lives in Redis.<sup class="cite"><a href="#ref-23b" id="cite-23b">23</a></sup> Any instance can now serve any request, sticky routing disappears, and a deploy no longer logs everyone out. In Spring Boot the filter is auto-configured when Spring Session and Redis are present, equivalent to annotating a configuration class with <code>@EnableRedisHttpSession</code>.<sup class="cite"><a href="#ref-23c" id="cite-23c">23</a></sup></p>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">application.yml + HttpSessionConfig.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-yaml">spring:
+  session:
+    store-type: redis
+    timeout: 30m                 # maps to the session's max inactive interval
+    redis:
+      namespace: "myapp:session"  # default is spring:session
+      flush-mode: on-save         # on-save (default) writes at request end; immediate writes eagerly</code></pre>
+      </div>
+
+      <p>A few configuration points carry real behaviour. The default key namespace is <code>spring:session</code>, overridable per application so multiple apps can share a Redis instance without collision.<sup class="cite"><a href="#ref-22" id="cite-22">22</a></sup> The <code>flushMode</code> defaults to <code>ON_SAVE</code> &mdash; changes are written when the request completes &mdash; with an <code>IMMEDIATE</code> option that persists eagerly at the cost of more writes.<sup class="cite"><a href="#ref-22b" id="cite-22b">22</a></sup> Session expiration leans on Redis key expiry, which is why a reasonably modern Redis is required for it to behave correctly.<sup class="cite"><a href="#ref-23d" id="cite-23d">23</a></sup> The result is the same architectural win as a shared cache: state that any node can read, with a single source of truth.</p>
+    </section>
+
+    <!-- ===================== 18. METRICS ===================== -->
+    <section class="sec" id="metrics">
+      <p class="kicker"><span class="num">18</span><span class="bar"></span> Observability</p>
+      <h2>Monitoring &amp; Micrometer metrics</h2>
+
+      <p>An unmeasured cache is a liability, because the failure modes are silent: a cache with a 5% hit ratio still returns correct answers, just slowly and expensively, and you will not notice until the database does. The single most important number to expose is the <strong>hit ratio</strong>, and on the JVM the standard way to get it is Micrometer, which ships instrumentation for the common cache libraries.</p>
+
+      <p>Micrometer binds a cache to a meter registry and emits a consistent set of metrics regardless of the underlying store: <code>cache.gets</code> tagged by <code>result</code> (hit or miss), <code>cache.puts</code>, <code>cache.evictions</code>, and <code>cache.size</code>, among others.<sup class="cite"><a href="#ref-21" id="cite-21">21</a></sup> The hit ratio is then derived from the tagged <code>cache.gets</code> counters. There is one prerequisite that trips everyone up at least once: <strong>Caffeine only reports statistics if it was built with <code>recordStats()</code></strong> &mdash; without it the meters register but stay flat.<sup class="cite"><a href="#ref-21b" id="cite-21b">21</a></sup></p>
+
+      <div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">CacheMetricsConfig.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active"><code class="language-java">@Bean
+public MeterBinder cacheMetrics(CacheManager caffeineManager, MeterRegistry registry) {
+    return r -&gt; caffeineManager.getCacheNames().forEach(name -&gt; {
+        var native = (com.github.benmanes.caffeine.cache.Cache&lt;?, ?&gt;)
+                ((CaffeineCache) caffeineManager.getCache(name)).getNativeCache();
+        // built with recordStats(), this now feeds cache.gets{result=hit|miss}, etc.
+        CaffeineCacheMetrics.monitor(registry, native, name);
+    });
+}</code></pre>
+      </div>
+
+      <p>With Spring Boot Actuator on the classpath, much of this is wired automatically: caches discovered at startup are registered with the meter registry, and a Prometheus endpoint exposes them for scraping. From there the operational loop is conventional &mdash; Prometheus stores the series, Grafana charts the hit ratio, eviction rate, and cache size, and alerts fire when the hit ratio drops below a threshold or evictions spike (a sign the cache is undersized for its working set). The metrics also feed the tuning decisions in &sect;19: you cannot choose a <code>maximumSize</code> or a TTL rationally without watching what the cache actually does under production traffic.</p>
+
+      <div class="callout tip">
+        <p class="ct">&#9670; What to alert on</p>
+        <p>Three signals catch most cache pathologies. A <strong>falling hit ratio</strong> means the working set has outgrown the cache or TTLs are too short. A <strong>rising eviction rate</strong> at steady traffic means capacity pressure &mdash; entries are being pushed out before reuse. And a <strong>climbing miss latency</strong> hints the origin is degrading, which is exactly when the cache matters most. Watch ratios and rates, not absolute counters.</p>
+      </div>
+    </section>
+
+    <!-- ===================== 19. TUNING ===================== -->
+    <section class="sec" id="tuning">
+      <p class="kicker"><span class="num">19</span><span class="bar"></span> Under measurement</p>
+      <h2>Performance testing &amp; tuning</h2>
+
+      <p>Caching decisions made by intuition are usually wrong, because the variables &mdash; hit ratio, key cardinality, value size, access skew &mdash; interact in ways that defeat armchair reasoning. The discipline is to measure at two scales: the micro-benchmark that tells you how fast the cache itself is, and the load test that tells you how the cached system behaves under realistic traffic.</p>
+
+      <p>For the micro scale on the JVM, the only credible tool is <strong>JMH</strong> (the Java Microbenchmark Harness), because it handles the things naive timing loops get wrong &mdash; JIT warm-up, dead-code elimination, and on-stack replacement &mdash; that otherwise produce numbers off by an order of magnitude. JMH is the right way to compare, say, two key-generation strategies or two serializers in isolation. But a fast cache is not the goal; a fast <em>system</em> is, and that requires load testing the whole path.</p>
+
+      <h3>Load testing the cached path</h3>
+      <p>Tools such as Gatling, k6, or JMeter drive concurrent traffic against the running service while you watch the metrics from &sect;18. The single most important rule here is to <strong>model a realistic key distribution</strong>. A load test that requests one key in a tight loop reports a 100% hit ratio and a fantasy latency; a test that requests random keys uniformly reports a near-zero hit ratio and a different fantasy. Real traffic is skewed (Zipfian), and only a test that reproduces that skew &mdash; and includes a cold-start phase &mdash; tells you the truth about your hit ratio and your tail latency.</p>
+
+      <p>Tail latency is the metric to optimise, not the mean. A cache improves the average almost by definition, but users experience the <strong>p99</strong> &mdash; and the p99 is dominated by misses, by lock contention on hot keys, and by the latency spikes that occur when popular entries expire together. This is the quantitative argument for <code>refreshAfterWrite</code> (which serves a stale value while refreshing, smoothing the expiry spike) and for the stampede controls in &sect;20.</p>
+
+      <h3>What you are actually tuning</h3>
+      <p>Three dials, turned against the data rather than guessed:</p>
+      <ul>
+        <li><strong>Size.</strong> Watch the eviction rate and hit ratio as you vary <code>maximumSize</code>/<code>maxmemory</code>. The goal is to comfortably contain the working set; the signal that you have not is evictions climbing while the hit ratio sags.</li>
+        <li><strong>TTL.</strong> The lever that trades freshness against load. Shorter TTLs bound staleness but raise the miss rate and origin traffic; longer TTLs do the reverse. Choose per cache, informed by how fast the underlying data actually changes.</li>
+        <li><strong>Concurrency behaviour.</strong> Whether hot keys serialise (the <code>sync</code> flag, locking writers) and whether expiry is staggered. These shape the tail far more than the mean.</li>
+      </ul>
+
+      <p>Treat these as a feedback loop, not a one-time configuration: ship, measure under real traffic, adjust, repeat. The cache that was perfectly sized at launch is undersized after the product grows, and only the metrics will tell you when.</p>
+    </section>
+
+    <!-- ===================== 20. PITFALLS ===================== -->
+    <section class="sec" id="pitfalls">
+      <p class="kicker"><span class="num">20</span><span class="bar"></span> Failure catalogue</p>
+      <h2>Common pitfalls</h2>
+
+      <p>Most caching incidents are variations on a small number of well-understood failures. Knowing the catalogue is the difference between a five-minute fix and a five-hour outage.</p>
+
+      <h3>Self-invocation defeats the proxy</h3>
+      <p>Because caching is proxy-based (&sect;2&ndash;3), a call from one method to a <code>@Cacheable</code> method <em>on the same bean</em> does not pass through the proxy and is therefore not cached &mdash; the annotation is silently ignored.<sup class="cite"><a href="#ref-2e" id="cite-2e">2</a></sup> The fixes are to call the cached method through an injected reference to the bean (so the call crosses the proxy), to move the cached method to a separate bean, or to switch <code>@EnableCaching</code> to AspectJ weaving as in &sect;3. This is the single most common "my cache isn't working" bug.</p>
+
+      <h3>Key explosion</h3>
+      <p>Keying on something high-cardinality &mdash; a full URL with query parameters, a timestamp, a user-specific token &mdash; produces a near-unique key per request. The hit ratio collapses toward zero, memory balloons, and you pay all the cost of a cache for none of the benefit. Cache on the stable, low-cardinality dimension of the request, and normalise keys (sort query parameters, round timestamps) before they reach the cache.</p>
+
+      <h3>Caching nulls, exceptions, and JDK-serialized blobs</h3>
+      <p>Three storage mistakes recur. Caching <code>null</code> indiscriminately can be either a bug or a feature &mdash; a feature when it is your defence against penetration (below), a bug when a transient failure gets memoised as "this does not exist." Caching <em>exceptions</em> or partially-built objects is almost always a bug; make sure failures are not stored. And, as flagged in &sect;9, leaving Redis on the default JDK value serializer produces brittle, opaque blobs &mdash; prefer JSON.</p>
+
+      <h3>The three traffic failures: stampede, avalanche, penetration</h3>
+      <p>These are the failures that turn a cache from a shield into an amplifier, and each has a standard defence.<sup class="cite"><a href="#ref-28b" id="cite-28b">28</a></sup></p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Failure</th><th>What happens</th><th>Standard mitigation</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Stampede</strong> (dogpile)</td><td>Many threads miss the same hot key at once and all hit the origin</td><td>Single-flight locking; <code>sync=true</code> per node; probabilistic early recomputation</td></tr>
+            <tr><td><strong>Avalanche</strong></td><td>A large set of entries expires simultaneously, burying the origin</td><td>Jittered / staggered TTLs so expiries spread out</td></tr>
+            <tr><td><strong>Penetration</strong></td><td>Requests for non-existent keys bypass the cache and pound the database</td><td>Cache negative results (briefly); a Bloom filter to reject absent keys</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The stampede is the most studied. Beyond per-node locking, the elegant solution is <strong>probabilistic early expiration</strong>: each reader, as an entry nears expiry, recomputes it with a small and rising probability, so exactly one request tends to refresh the value <em>before</em> it expires while the rest keep hitting the still-valid cache &mdash; an approach given an optimal formulation in the XFetch algorithm of Vattani, Chierichetti, and Lowenstein.<sup class="cite"><a href="#ref-19" id="cite-19">19</a></sup><sup class="cite"><a href="#ref-20" id="cite-20">20</a></sup> The broader literature on these phenomena is worth reading once; the patterns repeat across every caching system you will ever operate.<sup class="cite"><a href="#ref-18b" id="cite-18b">18</a></sup></p>
+
+      <h3>Unbounded caches and stale data</h3>
+      <p>Two slow-burning failures round out the list. An <strong>unbounded cache</strong> &mdash; the <code>ConcurrentHashMap</code> fallback, or any cache configured without a size or TTL limit &mdash; is a memory leak that eventually causes an <code>OutOfMemoryError</code>; always bound by size, time, or both. And <strong>stale data from a missing invalidation</strong> is the correctness failure this entire guide has been circling: a write path that updates the source but never tells the cache. The defence is the layered one we have built &mdash; a TTL as the self-healing floor (&sect;13), active invalidation for tighter freshness (&sect;13), and event-driven propagation when local caches must be told (&sect;16).</p>
+
+      <h3>Over-caching</h3>
+      <p>The final pitfall is using the tool at all when you should not. Caching adds a moving part, a consistency liability, and an operational surface to everything it touches. Data that is cheap to compute, changes constantly, or is read rarely does not deserve a cache &mdash; the invalidation tax exceeds the read dividend. The most senior instinct in this whole topic is knowing when <em>not</em> to cache.</p>
+    </section>
+
+    <!-- ===================== CONCLUSION ===================== -->
+    <section class="sec" id="conclusion">
+      <p class="kicker"><span class="num">&#9633;</span><span class="bar"></span> Closing</p>
+      <h2>The discipline, not the trick</h2>
+
+      <p>The arc of this guide is the arc of caching maturity. It begins as a trick &mdash; annotate a method, watch it get faster &mdash; and it ends as a discipline: choosing a store for its locality, an eviction policy for your access pattern, a serialization format you can operate, a consistency strategy that bounds staleness, and a propagation mechanism for the copies you cannot reach. The Spring abstraction is deliberately thin precisely so that it stays out of the way of those decisions, which are the ones that actually matter.</p>
+
+      <p>If you take away one principle, let it be this: a cache is a second copy of the truth, and every second copy is a promise to keep it consistent. The annotations make the copy; the TTLs, invalidations, metrics, and events keep the promise. Speed is the easy half. The other half &mdash; the half Phil Karlton was joking about &mdash; is the work, and it is the part worth doing well.</p>
+
+      <div class="endmark"><span></span>END<span></span></div>
+    </section>
+
+    <!-- ===================== REFERENCES ===================== -->
+    <section class="refs" id="references">
+      <p class="kicker"><span class="num">&#8743;</span><span class="bar"></span> Sourcing</p>
+      <h2>References</h2>
+      <p style="color:var(--ink-faint);font-size:.92rem;max-width:var(--measure)">Primary documentation and peer-reviewed sources, in order of first citation. Each entry links back (&#8617;) to its first appearance in the text.</p>
+      <ol>
+        <li id="ref-1">Dean J, Norvig P. Latency numbers every programmer should know [Internet]. GitHub gist (jboner). [cited 2026 Jun 6]. Available from: <a href="https://gist.github.com/jboner/2841832">https://gist.github.com/jboner/2841832</a> <a class="back" href="#cite-1" title="back to text">&#8617;</a></li>
+        <li id="ref-2">Spring Framework. <cite>Cache Abstraction</cite> [Internet]. Broadcom/VMware. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-framework/reference/integration/cache.html">https://docs.spring.io/spring-framework/reference/integration/cache.html</a> <a class="back" href="#cite-2" title="back to text">&#8617;</a></li>
+        <li id="ref-3">Spring Framework. <cite>Declarative Annotation-based Caching</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-framework/reference/integration/cache/annotations.html">https://docs.spring.io/spring-framework/reference/integration/cache/annotations.html</a> <a class="back" href="#cite-3" title="back to text">&#8617;</a></li>
+        <li id="ref-4">Spring Framework. <cite>@Cacheable (API Javadoc)</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/cache/annotation/Cacheable.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/cache/annotation/Cacheable.html</a> <a class="back" href="#cite-4" title="back to text">&#8617;</a></li>
+        <li id="ref-5">Spring Boot. <cite>Caching</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-boot/reference/io/caching.html">https://docs.spring.io/spring-boot/reference/io/caching.html</a> <a class="back" href="#cite-5" title="back to text">&#8617;</a></li>
+        <li id="ref-6">Manes B. <cite>Design</cite> (Caffeine Wiki) [Internet]. GitHub. [cited 2026 Jun 6]. Available from: <a href="https://github.com/ben-manes/caffeine/wiki/Design">https://github.com/ben-manes/caffeine/wiki/Design</a> <a class="back" href="#cite-6" title="back to text">&#8617;</a></li>
+        <li id="ref-7">Einziger G, Friedman R, Manes B. TinyLFU: A Highly Efficient Cache Admission Policy [Internet]. arXiv:1512.00727. 2015 [cited 2026 Jun 6]. Available from: <a href="https://arxiv.org/abs/1512.00727">https://arxiv.org/abs/1512.00727</a> <a class="back" href="#cite-7" title="back to text">&#8617;</a></li>
+        <li id="ref-8">Manes B. Design of a Modern Cache [Internet]. High Scalability. [cited 2026 Jun 6]. Available from: <a href="https://highscalability.com/design-of-a-modern-cache/">https://highscalability.com/design-of-a-modern-cache/</a> <a class="back" href="#cite-8" title="back to text">&#8617;</a></li>
+        <li id="ref-9">Manes B. Design of a Modern Cache&mdash;Part Deux [Internet]. High Scalability. [cited 2026 Jun 6]. Available from: <a href="https://highscalability.com/design-of-a-modern-cachepart-deux/">https://highscalability.com/design-of-a-modern-cachepart-deux/</a> <a class="back" href="#cite-9" title="back to text">&#8617;</a></li>
+        <li id="ref-10">Spring Data Redis. <cite>Redis Cache</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-data/redis/reference/redis/redis-cache.html">https://docs.spring.io/spring-data/redis/reference/redis/redis-cache.html</a> <a class="back" href="#cite-10" title="back to text">&#8617;</a></li>
+        <li id="ref-11">Spring Data Redis. <cite>RedisCacheConfiguration (API)</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-data/data-redis/docs/current/api/org/springframework/data/redis/cache/RedisCacheConfiguration.html">https://docs.spring.io/spring-data/data-redis/docs/current/api/org/springframework/data/redis/cache/RedisCacheConfiguration.html</a> <a class="back" href="#cite-11" title="back to text">&#8617;</a></li>
+        <li id="ref-12">Redis. <cite>Key eviction</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://redis.io/docs/latest/develop/reference/eviction/">https://redis.io/docs/latest/develop/reference/eviction/</a> <a class="back" href="#cite-12" title="back to text">&#8617;</a></li>
+        <li id="ref-13">Redis. <cite>Redis persistence</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/">https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/</a> <a class="back" href="#cite-13" title="back to text">&#8617;</a></li>
+        <li id="ref-14">Redis. <cite>Redis replication</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://redis.io/docs/latest/operate/oss_and_stack/management/replication/">https://redis.io/docs/latest/operate/oss_and_stack/management/replication/</a> <a class="back" href="#cite-14" title="back to text">&#8617;</a></li>
+        <li id="ref-15">Redis. <cite>Scale with Redis Cluster</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://redis.io/docs/latest/operate/oss_and_stack/management/scaling/">https://redis.io/docs/latest/operate/oss_and_stack/management/scaling/</a> <a class="back" href="#cite-15" title="back to text">&#8617;</a></li>
+        <li id="ref-16">Microsoft. <cite>Cache-Aside pattern</cite> [Internet]. Azure Architecture Center. [cited 2026 Jun 6]. Available from: <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside">https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside</a> <a class="back" href="#cite-16" title="back to text">&#8617;</a></li>
+        <li id="ref-17">Oracle. <cite>Read-Through, Write-Through, Refresh-Ahead and Write-Behind Caching</cite> [Internet]. Oracle Coherence Documentation. [cited 2026 Jun 6]. Available from: <a href="https://docs.oracle.com/cd/E14008_01/coh.310/coh31ug/read_through.htm">https://docs.oracle.com/cd/E14008_01/coh.310/coh31ug/read_through.htm</a> <a class="back" href="#cite-17" title="back to text">&#8617;</a></li>
+        <li id="ref-18">Microsoft. <cite>What is caching?</cite> [Internet]. Azure Cloud Computing Dictionary. [cited 2026 Jun 6]. Available from: <a href="https://azure.microsoft.com/en-us/resources/cloud-computing-dictionary/what-is-caching">https://azure.microsoft.com/en-us/resources/cloud-computing-dictionary/what-is-caching</a> <a class="back" href="#cite-18" title="back to text">&#8617;</a></li>
+        <li id="ref-19">Wikipedia. <cite>Cache stampede</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://en.wikipedia.org/wiki/Cache_stampede">https://en.wikipedia.org/wiki/Cache_stampede</a> <a class="back" href="#cite-19" title="back to text">&#8617;</a></li>
+        <li id="ref-20">Vattani A, Chierichetti F, Lowenstein K. Optimal Probabilistic Cache Stampede Prevention [Internet]. PVLDB 8(8):886&ndash;897. 2015 [cited 2026 Jun 6]. Available from: <a href="https://www.vldb.org/pvldb/vol8/p886-vattani.pdf">https://www.vldb.org/pvldb/vol8/p886-vattani.pdf</a> <a class="back" href="#cite-20" title="back to text">&#8617;</a></li>
+        <li id="ref-21">Micrometer. <cite>Cache Instrumentations</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.micrometer.io/micrometer/reference/reference/cache.html">https://docs.micrometer.io/micrometer/reference/reference/cache.html</a> <a class="back" href="#cite-21" title="back to text">&#8617;</a></li>
+        <li id="ref-22">Spring Session. <cite>Redis Configurations</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-session/reference/configuration/redis.html">https://docs.spring.io/spring-session/reference/configuration/redis.html</a> <a class="back" href="#cite-22" title="back to text">&#8617;</a></li>
+        <li id="ref-23">Spring Session. <cite>Spring Session &mdash; Spring Boot (Redis) Guide</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.spring.io/spring-session/reference/3.2/guides/boot-redis.html">https://docs.spring.io/spring-session/reference/3.2/guides/boot-redis.html</a> <a class="back" href="#cite-23" title="back to text">&#8617;</a></li>
+        <li id="ref-24">Apache Kafka. <cite>Documentation &mdash; Log Compaction</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://kafka.apache.org/documentation/#compaction">https://kafka.apache.org/documentation/#compaction</a> <a class="back" href="#cite-24" title="back to text">&#8617;</a></li>
+        <li id="ref-25">Confluent. <cite>Kafka Log Compaction</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.confluent.io/kafka/design/log_compaction.html">https://docs.confluent.io/kafka/design/log_compaction.html</a> <a class="back" href="#cite-25" title="back to text">&#8617;</a></li>
+        <li id="ref-26">Debezium. <cite>Automating Cache Invalidation With Change Data Capture</cite> [Internet]. 2018 [cited 2026 Jun 6]. Available from: <a href="https://debezium.io/blog/2018/12/05/automating-cache-invalidation-with-change-data-capture/">https://debezium.io/blog/2018/12/05/automating-cache-invalidation-with-change-data-capture/</a> <a class="back" href="#cite-26" title="back to text">&#8617;</a></li>
+        <li id="ref-27">Amazon Web Services. <cite>Evictions &mdash; Database Caching Strategies Using Redis</cite> [Internet]. [cited 2026 Jun 6]. Available from: <a href="https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/evictions.html">https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/evictions.html</a> <a class="back" href="#cite-27" title="back to text">&#8617;</a></li>
+        <li id="ref-28">Xu A. <cite>A Crash Course in Caching</cite> [Internet]. ByteByteGo. [cited 2026 Jun 6]. Available from: <a href="https://blog.bytebytego.com/p/a-crash-course-in-caching-final-part">https://blog.bytebytego.com/p/a-crash-course-in-caching-final-part</a> <a class="back" href="#cite-28" title="back to text">&#8617;</a></li>
+      </ol>
+    </section>
+
+  </article>
+</div>
+</div>
+
+<script>
+(function () {
+  // ---------- scroll progress ----------
+  var bar = document.getElementById('progress');
+  function onScroll() {
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    var pct = max > 0 ? (h.scrollTop / max) * 100 : 0;
+    bar.style.width = pct + '%';
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // ---------- TOC scrollspy ----------
+  var links = {};
+  document.querySelectorAll('#toc-list a').forEach(function (a) {
+    links[a.getAttribute('href').slice(1)] = a;
+  });
+  if ('IntersectionObserver' in window) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && links[e.target.id]) {
+          Object.keys(links).forEach(function (k) { links[k].classList.remove('active'); });
+          links[e.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-12% 0px -80% 0px', threshold: 0 });
+    document.querySelectorAll('section[id]').forEach(function (s) { obs.observe(s); });
+  }
+
+  // ---------- code language tabs ----------
+  document.querySelectorAll('.codecard[data-tabs]').forEach(function (card) {
+    var tabs = card.querySelectorAll('.codetab');
+    var panes = card.querySelectorAll('.codepane');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var lang = tab.getAttribute('data-lang');
+        tabs.forEach(function (t) { t.classList.toggle('is-active', t.getAttribute('data-lang') === lang); });
+        panes.forEach(function (p) { p.classList.toggle('is-active', p.getAttribute('data-lang') === lang); });
+      });
+    });
+  });
+
+  // ---------- copy buttons ----------
+  document.querySelectorAll('.copybtn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var card = btn.closest('.codecard');
+      var pane = card.querySelector('.codepane.is-active') || card.querySelector('.codepane');
+      var text = pane ? pane.innerText : '';
+      var done = function () {
+        btn.textContent = 'Copied'; btn.classList.add('done');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+
+  // ---------- lightweight syntax highlighter ----------
+  var KW = new Set(['public','private','protected','class','interface','enum','void','return',
+    'new','import','package','extends','implements','static','final','abstract','this','super',
+    'if','else','for','while','do','switch','case','default','break','continue','try','catch',
+    'finally','throw','throws','fun','val','var','override','object','open','data','when','in',
+    'is','as','null','true','false','boolean','int','long','double','float','byte','char','short',
+    'assert','synchronized','volatile','transient','instanceof']);
+  function esc(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var RE = /(\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(@[A-Za-z_]\w*)|(\b\d[\d_]*(?:\.\d+)?[fFlLdD]?\b)|([A-Za-z_]\w*)/g;
+  function highlight(code) {
+    var out = '', last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(code)) !== null) {
+      out += esc(code.slice(last, m.index));
+      var tok = m[0], cls = '';
+      if (m[1]) cls = 'tk-c';
+      else if (m[2]) cls = 'tk-s';
+      else if (m[3]) cls = 'tk-a';
+      else if (m[4]) cls = 'tk-n';
+      else if (m[5]) {
+        var w = m[5];
+        if (KW.has(w)) cls = 'tk-k';
+        else if (/^[A-Z]/.test(w)) cls = 'tk-t';
+        else {
+          var j = RE.lastIndex;
+          while (j < code.length && (code[j] === ' ' || code[j] === '\t')) j++;
+          if (code[j] === '(') cls = 'tk-f';
+        }
+      }
+      out += cls ? '<span class="' + cls + '">' + esc(tok) + '</span>' : esc(tok);
+      last = m.index + tok.length;
+    }
+    out += esc(code.slice(last));
+    return out;
+  }
+  document.querySelectorAll('pre.codepane').forEach(function (pane) {
+    if (!pane.querySelector('code')) {
+      pane.innerHTML = highlight(pane.textContent);
+    }
+  });
+  document.querySelectorAll('pre code').forEach(function (c) {
+    c.innerHTML = highlight(c.textContent);
+  });
+})();
+</script>
+</body>
+</html>

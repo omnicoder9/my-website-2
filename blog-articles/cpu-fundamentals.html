@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inside the Machine: A Technical Guide to Modern CPUs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── DESIGN SYSTEM ─────────────────────────────────── */
+  :root {
+    --navy:      #0D1B2A;
+    --navy-mid:  #162236;
+    --navy-light:#1E3050;
+    --cyan:      #00B4D8;
+    --cyan-dim:  #0096B7;
+    --orange:    #F4845F;
+    --orange-dim:#D96B48;
+    --cream:     #FAFAF7;
+    --sand:      #F0EDE6;
+    --ink:       #1A1A24;
+    --ink-mid:   #3A3A4A;
+    --ink-light: #6A6A7A;
+    --rule:      #D8D4CC;
+    --toc-bg:    #F4F1EC;
+    --code-bg:   #0F1923;
+    --pull-bg:   #EEF7FA;
+    --pull-border:#00B4D8;
+    --font-display: 'Barlow Condensed', sans-serif;
+    --font-body:    'Crimson Pro', Georgia, serif;
+    --font-mono:    'Fira Code', 'Courier New', monospace;
+  }
+
+  /* ── RESETS ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; font-size: 18px; }
+  body {
+    background: var(--sand);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-weight: 400;
+    line-height: 1.72;
+  }
+  a { color: var(--cyan-dim); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── MASTHEAD ───────────────────────────────────────── */
+  .masthead {
+    background: var(--navy);
+    position: relative;
+    overflow: hidden;
+    padding: 64px 40px 56px;
+    text-align: center;
+  }
+  .masthead::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,180,216,.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,180,216,.08) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .masthead::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,180,216,.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .masthead-inner { position: relative; z-index: 1; max-width: 820px; margin: 0 auto; }
+  .masthead-kicker {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: .7rem;
+    letter-spacing: .28em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 20px;
+  }
+  .masthead-kicker span {
+    display: inline-block;
+    width: 32px;
+    height: 1px;
+    background: var(--cyan);
+    vertical-align: middle;
+    margin: 0 10px;
+    opacity: .7;
+  }
+  .masthead h1 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(2.8rem, 6vw, 4.6rem);
+    line-height: .95;
+    letter-spacing: -.01em;
+    color: #fff;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .masthead h1 em {
+    color: var(--cyan);
+    font-style: normal;
+    display: block;
+  }
+  .masthead-sub {
+    font-family: var(--font-body);
+    font-size: 1.08rem;
+    font-weight: 300;
+    color: rgba(255,255,255,.65);
+    max-width: 560px;
+    margin: 0 auto 32px;
+    line-height: 1.6;
+  }
+  .masthead-meta {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+  .meta-pill {
+    font-family: var(--font-display);
+    font-size: .68rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.45);
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 5px 14px;
+    border-radius: 2px;
+  }
+
+  /* ── LAYOUT GRID ────────────────────────────────────── */
+  .page-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 0;
+    align-items: start;
+    padding: 0;
+  }
+  @media (max-width: 900px) {
+    .page-wrap { grid-template-columns: 1fr; }
+    .toc-panel { display: none; }
+  }
+
+  /* ── TABLE OF CONTENTS ──────────────────────────────── */
+  .toc-panel {
+    position: sticky;
+    top: 24px;
+    padding: 36px 0 36px 32px;
+    align-self: start;
+  }
+  .toc-inner {
+    background: var(--toc-bg);
+    border-left: 3px solid var(--cyan);
+    padding: 20px 20px 20px 18px;
+  }
+  .toc-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: .7rem;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    margin-bottom: 14px;
+  }
+  .toc-list { list-style: none; }
+  .toc-list li { margin-bottom: 2px; }
+  .toc-list a {
+    font-family: var(--font-display);
+    font-size: .82rem;
+    font-weight: 500;
+    color: var(--ink-mid);
+    letter-spacing: .02em;
+    display: block;
+    padding: 4px 6px;
+    border-radius: 2px;
+    transition: background .15s, color .15s;
+  }
+  .toc-list a:hover {
+    background: rgba(0,180,216,.1);
+    color: var(--cyan-dim);
+    text-decoration: none;
+  }
+  .toc-list .toc-sub a {
+    font-size: .76rem;
+    font-weight: 400;
+    color: var(--ink-light);
+    padding-left: 14px;
+  }
+  .toc-list .toc-sub a:hover { color: var(--cyan-dim); }
+
+  /* ── ARTICLE BODY ───────────────────────────────────── */
+  .article-body {
+    background: var(--cream);
+    padding: 52px 56px 72px 52px;
+    border-left: 1px solid var(--rule);
+    min-width: 0;
+  }
+  @media (max-width: 700px) { .article-body { padding: 32px 22px 48px; } }
+
+  /* ── SECTION STRUCTURE ──────────────────────────────── */
+  .section { margin-bottom: 56px; }
+  .section + .section { border-top: 1px solid var(--rule); padding-top: 48px; }
+  .section-label {
+    font-family: var(--font-display);
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .28em;
+    text-transform: uppercase;
+    color: var(--cyan-dim);
+    margin-bottom: 10px;
+    display: block;
+  }
+  .section h2 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 2rem;
+    letter-spacing: -.01em;
+    text-transform: uppercase;
+    color: var(--navy);
+    line-height: 1.05;
+    margin-bottom: 22px;
+  }
+  .section h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--navy-mid);
+    margin: 32px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--orange);
+    display: inline-block;
+  }
+  .section h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+    margin: 24px 0 8px;
+  }
+
+  /* ── PROSE ──────────────────────────────────────────── */
+  p { margin-bottom: 1.3em; }
+  .drop-cap::first-letter {
+    float: left;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 4.2rem;
+    line-height: .82;
+    color: var(--cyan-dim);
+    margin: 6px 10px 0 0;
+    text-transform: uppercase;
+  }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  sup { font-size: .65rem; vertical-align: super; }
+  sup a { color: var(--orange-dim); font-family: var(--font-mono); font-weight: 500; }
+  sup a:hover { color: var(--orange); }
+
+  /* ── PULL QUOTES ────────────────────────────────────── */
+  .pull-quote {
+    background: var(--pull-bg);
+    border-left: 4px solid var(--pull-border);
+    margin: 32px 0;
+    padding: 22px 28px;
+    border-radius: 0 4px 4px 0;
+  }
+  .pull-quote p {
+    font-family: var(--font-body);
+    font-size: 1.2rem;
+    font-weight: 500;
+    font-style: italic;
+    color: var(--navy-mid);
+    line-height: 1.55;
+    margin: 0;
+  }
+  .pull-quote cite {
+    display: block;
+    font-size: .75rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-style: normal;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--cyan-dim);
+    margin-top: 10px;
+  }
+
+  /* ── STAT CARDS ─────────────────────────────────────── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin: 28px 0;
+  }
+  .stat-card {
+    background: var(--navy);
+    padding: 20px 18px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  .stat-card .stat-val {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 2rem;
+    color: var(--cyan);
+    line-height: 1;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .stat-card .stat-label {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: .7rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.55);
+  }
+
+  /* ── CODE BLOCKS ────────────────────────────────────── */
+  pre {
+    background: var(--code-bg);
+    color: #A8D8EA;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    line-height: 1.65;
+    padding: 22px 24px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 22px 0;
+    border-left: 3px solid var(--cyan);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: .82em;
+    background: rgba(0,180,216,.1);
+    color: var(--cyan-dim);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .code-comment { color: #4A6572; }
+  .code-kw      { color: #F4845F; }
+  .code-val     { color: #7BC67E; }
+
+  /* ── INFO BOX ───────────────────────────────────────── */
+  .info-box {
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--orange);
+    background: #FFF8F5;
+    padding: 18px 22px;
+    margin: 24px 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .info-box-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: .72rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--orange-dim);
+    margin-bottom: 8px;
+  }
+  .info-box p { margin: 0; font-size: .95rem; }
+
+  /* ── COMPARISON TABLE ───────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: .9rem;
+  }
+  .data-table th {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: .7rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    background: var(--navy);
+    color: var(--cyan);
+    padding: 10px 14px;
+    text-align: left;
+  }
+  .data-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-mid);
+  }
+  .data-table tr:nth-child(even) td { background: #F4F1EB; }
+  .data-table tr:hover td { background: #EEF7FA; }
+
+  /* ── STEP LIST ──────────────────────────────────────── */
+  .step-list { list-style: none; counter-reset: steps; margin: 18px 0; }
+  .step-list li {
+    counter-increment: steps;
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+  }
+  .step-list li::before {
+    content: counter(steps);
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    background: var(--cyan);
+    color: var(--navy);
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: .82rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px;
+    margin-top: 2px;
+  }
+  .step-list li p { margin: 0; font-size: .97rem; }
+
+  /* ── REFERENCES ─────────────────────────────────────── */
+  .references {
+    background: var(--navy);
+    padding: 48px 56px 56px 52px;
+  }
+  @media (max-width: 700px) { .references { padding: 32px 22px 40px; } }
+  .references h2 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--cyan);
+    margin-bottom: 28px;
+    border-bottom: 1px solid rgba(0,180,216,.25);
+    padding-bottom: 14px;
+  }
+  .ref-list { list-style: none; }
+  .ref-list li {
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    color: rgba(255,255,255,.55);
+    padding: 6px 0 6px 36px;
+    text-indent: -36px;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+    line-height: 1.55;
+  }
+  .ref-list li a { color: rgba(0,180,216,.75); }
+  .ref-list li a:hover { color: var(--cyan); }
+  .ref-num {
+    color: var(--orange);
+    font-weight: 500;
+    margin-right: 8px;
+  }
+
+  /* ── DIAGNOSTIC TABLE ───────────────────────────────── */
+  .diag-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 20px 0;
+  }
+  @media (max-width: 600px) { .diag-grid { grid-template-columns: 1fr; } }
+  .diag-card {
+    border: 1px solid var(--rule);
+    padding: 14px 16px;
+    border-radius: 3px;
+    background: #fff;
+  }
+  .diag-card-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: .75rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--orange-dim);
+    margin-bottom: 6px;
+  }
+  .diag-card p { font-size: .88rem; margin: 0; color: var(--ink-mid); }
+
+  /* ── FOOTER ─────────────────────────────────────────── */
+  footer {
+    background: #080F18;
+    text-align: center;
+    padding: 24px;
+    font-family: var(--font-display);
+    font-size: .65rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.2);
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-kicker"><span></span>Hardware Engineering<span></span></div>
+    <h1>Inside the Machine<em>A Technical Guide to Modern CPUs</em></h1>
+    <p class="masthead-sub">Architecture, installation, thermal management, and troubleshooting — everything engineers and enthusiasts need to understand the processor.</p>
+    <div class="masthead-meta">
+      <span class="meta-pill">Systems Architecture</span>
+      <span class="meta-pill">Reference Article</span>
+      <span class="meta-pill">28 Citations</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════ PAGE WRAP -->
+<div class="page-wrap">
+
+  <!-- ── TOC ─────────────────────────────────────────── -->
+  <nav class="toc-panel" aria-label="Table of contents">
+    <div class="toc-inner">
+      <div class="toc-title">Contents</div>
+      <ul class="toc-list">
+        <li><a href="#s-fundamentals">CPU Fundamentals</a></li>
+        <li class="toc-sub"><a href="#s-role">Role of the CPU</a></li>
+        <li class="toc-sub"><a href="#s-clock">Clock Speed</a></li>
+        <li class="toc-sub"><a href="#s-cores">Cores</a></li>
+        <li class="toc-sub"><a href="#s-threads">Threads</a></li>
+        <li class="toc-sub"><a href="#s-cache">Cache (L1, L2, L3)</a></li>
+        <li><a href="#s-technologies">CPU Technologies</a></li>
+        <li class="toc-sub"><a href="#s-smt">Hyper-Threading / SMT</a></li>
+        <li class="toc-sub"><a href="#s-turbo">Turbo Boost</a></li>
+        <li class="toc-sub"><a href="#s-virt">Virtualization</a></li>
+        <li class="toc-sub"><a href="#s-igpu">Integrated Graphics</a></li>
+        <li><a href="#s-sockets">Socket Types</a></li>
+        <li class="toc-sub"><a href="#s-intel-sock">Intel Sockets</a></li>
+        <li class="toc-sub"><a href="#s-amd-sock">AMD Sockets</a></li>
+        <li class="toc-sub"><a href="#s-compat">Compatibility</a></li>
+        <li><a href="#s-specs">Specifications</a></li>
+        <li><a href="#s-install">Installation</a></li>
+        <li><a href="#s-thermal">Thermal Management</a></li>
+        <li><a href="#s-bios">BIOS / UEFI Settings</a></li>
+        <li><a href="#s-troubleshoot">Troubleshooting</a></li>
+        <li><a href="#references">References</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ── ARTICLE BODY ─────────────────────────────────── -->
+  <main class="article-body">
+
+    <!-- ═══════ SECTION 1: FUNDAMENTALS ══════════════════ -->
+    <section class="section" id="s-fundamentals">
+      <span class="section-label">Section 01</span>
+      <h2>CPU Fundamentals</h2>
+
+      <h3 id="s-role">The Role of the CPU</h3>
+      <p class="drop-cap">The Central Processing Unit is the primary component responsible for executing instructions in a computer system. Every action a system performs — rendering a web page, compiling code, running a virtual machine — ultimately resolves to a sequence of instructions fetched, decoded, and executed by the CPU. The processor communicates directly with system memory, storage controllers, input/output devices, and, on modern platforms, dedicated co-processors such as the GPU and neural processing unit (NPU).</p>
+      <p>Modern CPUs are extraordinarily complex integrated circuits. A contemporary consumer processor may contain tens of billions of transistors fabricated at process nodes measured in nanometers, integrating not just execution cores but memory controllers, PCIe root complexes, integrated graphics, security enclaves, and power management hardware on a single die or multi-chiplet package. The processor's architecture — the logical design governing how instructions are fetched, how data flows through execution pipelines, and how multiple cores cooperate — determines much of the system's character in terms of performance, power efficiency, and capability.<sup><a href="#ref-1">[1]</a></sup></p>
+
+      <h3 id="s-clock">Clock Speed</h3>
+      <p>Clock speed, measured in hertz (Hz) and today expressed in gigahertz (GHz), defines the rate at which the CPU's internal clock oscillator ticks — and, conceptually, how many instruction cycles the processor can begin per second. A processor running at 4.0 GHz completes four billion clock ticks every second. Early desktop CPUs operated in the megahertz range; the milestone of 1 GHz was crossed in March 2000 when AMD launched the Athlon K7 at that frequency.<sup><a href="#ref-1">[1]</a></sup></p>
+      <p>Clock speed alone does not determine performance. Two processors running at identical clock speeds may deliver dramatically different throughput if their microarchitectures differ. The key measure is <strong>Instructions Per Clock (IPC)</strong> — how much work each core accomplishes during a single cycle. Architectural improvements between CPU generations frequently deliver 10–20% IPC gains even at identical clock speeds, which explains why a newer processor at 4.0 GHz can outperform an older model at 4.5 GHz.<sup><a href="#ref-2">[2]</a></sup></p>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-val">4–6 GHz</span>
+          <span class="stat-label">Typical modern boost clocks</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val">1 GHz</span>
+          <span class="stat-label">First consumer CPU, 2000</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val">10–20%</span>
+          <span class="stat-label">Typical IPC gain per generation</span>
+        </div>
+      </div>
+
+      <h3 id="s-cores">Cores</h3>
+      <p>A core is a discrete physical computing unit within the processor die, capable of fetching, decoding, and executing its own instruction stream independently. Early processors were single-core; the addition of a second core to desktop silicon in 2005 (Intel Pentium D; AMD Athlon 64 X2) was a pivotal shift in the industry.<sup><a href="#ref-1">[1]</a></sup> As semiconductor lithography improved, core counts scaled dramatically.</p>
+      <p>Consumer desktop CPUs today ship with 4 to 24 cores depending on product tier, with workstation and server platforms offering far higher counts. More cores provide genuine benefits only for workloads that can exploit parallel execution. Video rendering, 3D modelling, and software compilation scale nearly linearly with additional cores — a 12-core processor can reduce render times by 40–60% versus a 6-core alternative when encoding video.<sup><a href="#ref-2">[2]</a></sup> Gaming workloads, however, are primarily single-threaded sensitive; most titles leverage 6–8 cores effectively, with diminishing returns beyond that point.<sup><a href="#ref-2">[2]</a></sup></p>
+
+      <div class="pull-quote">
+        <p>"A 6-core processor like the AMD Ryzen 5 5600X delivers frame rates within 5–10% of processors with twice as many cores in most gaming scenarios."</p>
+        <cite>Newegg Insider, CPU Performance Myths, 2026<sup><a href="#ref-2">[2]</a></sup></cite>
+      </div>
+
+      <h3 id="s-threads">Threads</h3>
+      <p>A thread is a logical stream of instructions that the operating system can schedule for execution. Threads are the OS-visible granularity of CPU work: the OS scheduler assigns threads to physical cores for execution. Without any special hardware support, each physical core handles exactly one thread at a time.<sup><a href="#ref-3">[3]</a></sup></p>
+      <p>Technologies such as Intel Hyper-Threading and AMD Simultaneous Multi-Threading (SMT) allow a single physical core to present itself to the OS as two logical cores, each maintaining its own architectural state — register file, program counter, control registers. This enables the processor to execute instructions from a second thread during pipeline stalls or cache misses caused by the first, keeping execution units better utilized.<sup><a href="#ref-4">[4]</a></sup> A quad-core SMT-capable CPU therefore appears to the OS as an eight-thread processor.</p>
+
+      <h3 id="s-cache">Cache: L1, L2, and L3</h3>
+      <p>CPU cache is a hierarchy of high-speed memory integrated directly on the processor die. Its purpose is to bridge the performance gap between the processor's execution units — which can process data in sub-nanosecond timeframes — and the relatively slow main memory (DRAM), where accesses carry latencies measured in tens of nanoseconds. Cache stores frequently accessed data and instructions close to where they are consumed, dramatically reducing the time cores spend waiting for data.<sup><a href="#ref-3">[3]</a></sup></p>
+
+      <h4>L1 Cache</h4>
+      <p>Level 1 cache is the fastest and smallest cache tier, physically located closest to the core's execution units and accessible within a single clock cycle. Capacity typically ranges from 32 KB to 64 KB per core, divided into separate instruction (L1i) and data (L1d) banks. Access latency is approximately 0.5–1.0 nanoseconds, compared to 60–100 ns for main memory — a roughly 100× advantage.<sup><a href="#ref-3">[3]</a></sup></p>
+
+      <h4>L2 Cache</h4>
+      <p>Level 2 cache is larger and slightly slower than L1, typically ranging from 256 KB to several megabytes per core. It acts as a staging area between L1 and the shared L3, absorbing requests that miss L1 before they escalate to the slower shared tier. L2 is accessible in a small number of clock cycles, offering a substantial speed advantage over main memory even when L1 misses occur.<sup><a href="#ref-3">[3]</a></sup></p>
+
+      <h4>L3 Cache</h4>
+      <p>Level 3 cache is shared across all cores on a die and is considerably larger than L1 or L2 — modern consumer processors ship with 16 MB to 96 MB or more of L3. While slower than L1 or L2, it is still approximately twice as fast as main memory access. Each core may have private L1 and L2 caches, but all cores share the L3 pool, meaning that frequently used data accessed by one core can be served from L3 to another without a main memory round-trip.<sup><a href="#ref-3">[3]</a></sup></p>
+
+      <table class="data-table" aria-label="Cache level comparison">
+        <thead>
+          <tr>
+            <th>Level</th><th>Typical Size</th><th>Latency</th><th>Shared?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>L1</td><td>32–64 KB/core</td><td>~0.5–1 ns (1–4 cycles)</td><td>No (per-core)</td></tr>
+          <tr><td>L2</td><td>256 KB–4 MB/core</td><td>~3–10 ns (5–12 cycles)</td><td>No (per-core)</td></tr>
+          <tr><td>L3</td><td>8–96 MB (package)</td><td>~15–40 ns (30–50 cycles)</td><td>Yes (all cores)</td></tr>
+          <tr><td>DRAM</td><td>GB range</td><td>~60–100 ns</td><td>System-wide</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════ SECTION 2: TECHNOLOGIES ══════════════════ -->
+    <section class="section" id="s-technologies">
+      <span class="section-label">Section 02</span>
+      <h2>CPU Technologies</h2>
+
+      <h3 id="s-smt">Hyper-Threading and Simultaneous Multi-Threading</h3>
+      <p class="drop-cap">Simultaneous Multi-Threading (SMT) is a microarchitectural technique that allows a single physical core to appear as multiple logical processors by maintaining duplicate copies of each thread's architectural state — registers, program counter, control registers — while sharing all execution resources such as ALUs, floating-point units, caches, and the translation lookaside buffer.<sup><a href="#ref-5">[5]</a></sup> Intel's implementation, branded as Hyper-Threading Technology (HT), was first introduced on Xeon server processors in February 2002 and on the desktop Pentium 4 in November 2002.<sup><a href="#ref-5">[5]</a></sup></p>
+      <p>With SMT active, when one thread stalls on a cache miss or branch misprediction, the processor can immediately begin issuing instructions from the second thread, keeping execution units fed and productive.<sup><a href="#ref-6">[6]</a></sup> The performance benefit is meaningful but bounded: SMT does not double physical computational capacity. Measured gains across workloads are:</p>
+      <ul style="margin: 10px 0 18px 22px; font-size: .97rem; line-height: 1.9;">
+        <li>Best case: 30–40% throughput improvement over single-threaded operation</li>
+        <li>Gaming: typically 10–20% improvement in thread-optimized titles</li>
+        <li>Video encoding and rendering: 25–35% faster<sup><a href="#ref-7">[7]</a></sup></li>
+      </ul>
+      <p>An important security consideration: because SMT cores share execution resources and caches, side-channel vulnerabilities — such as those exploited by Spectre and MDS-class attacks — can leak data between threads. Security-sensitive environments sometimes disable SMT at the BIOS level to eliminate this attack surface.<sup><a href="#ref-6">[6]</a></sup></p>
+
+      <div class="info-box">
+        <div class="info-box-title">Hyper-Threading vs. SMT</div>
+        <p>Both terms describe identical technology. "Hyper-Threading" is Intel's proprietary brand name; "Simultaneous Multi-Threading" is the generic engineering term. AMD uses SMT on all modern Ryzen desktop and server processors. The underlying mechanism — duplicating architectural state to enable two in-flight thread contexts per core — is the same in both implementations.<sup><a href="#ref-4">[4]</a></sup></p>
+      </div>
+
+      <h3 id="s-turbo">Turbo Boost and Precision Boost</h3>
+      <p>Modern processors do not run at a single fixed clock frequency. They implement dynamic frequency scaling that opportunistically increases clock speeds — sometimes by hundreds of megahertz — when thermal and power headroom allow. Intel brands this as <strong>Intel Turbo Boost Technology</strong>; AMD calls its implementation <strong>Precision Boost</strong>.</p>
+      <p>Both systems monitor real-time temperature (junction temperature, T<sub>J</sub>), power consumption, and active core count. When lightly-threaded tasks demand maximum single-core performance and the chip operates below its thermal and electrical ceilings, the boost algorithm elevates frequency far above the rated base clock. For example, a processor with a 3.6 GHz base clock might boost to 5.4 GHz on its most thermally favoured core.<sup><a href="#ref-8">[8]</a></sup> Under sustained all-core loads, the system negotiates a lower all-core boost frequency that keeps aggregate power within limits.</p>
+      <p>AMD's Precision Boost Overdrive (PBO) allows the boost algorithm to operate more aggressively given adequate cooling, extending the frequency ceiling at the cost of higher instantaneous power draw.<sup><a href="#ref-9">[9]</a></sup> Intel's Turbo Boost Max 3.0 further identifies the single best-performing core on each chip (accounting for silicon lottery variation) and preferentially boosts that core for single-threaded work.</p>
+
+      <h3 id="s-virt">Virtualization Technology</h3>
+      <p>Hardware-assisted CPU virtualization enables a hypervisor — software such as VMware ESXi, Microsoft Hyper-V, or KVM — to run multiple isolated virtual machines (VMs) on a single physical host with near-native performance. Without hardware support, the hypervisor must software-translate every privileged instruction issued by guest operating systems, incurring substantial overhead.</p>
+      <p>Intel's implementation is called <strong>VT-x</strong> (Virtualization Technology for IA-32/EM64T), first supported in the Pentium 4 family in 2005.<sup><a href="#ref-10">[10]</a></sup> AMD's equivalent is <strong>AMD-V</strong>, exposed in BIOS settings as <strong>SVM Mode</strong> (Secure Virtual Machine). Both technologies add a new, elevated privilege level — VMX root operation for Intel — in which the hypervisor executes. Guest OS instructions run at reduced privilege and are intercepted and handled by the hypervisor when they attempt privileged operations, but far more instructions execute directly on hardware than in pure software emulation.<sup><a href="#ref-11">[11]</a></sup></p>
+      <p>Supplementary extensions include Intel <strong>VT-d</strong> (I/O virtualization for device pass-through) and AMD's equivalent <strong>AMD-Vi</strong>. These allow specific physical hardware — PCI Express devices, network adapters, GPUs — to be passed directly to a guest VM without performance loss from hypervisor mediation.</p>
+      <pre><code><span class="code-comment"># Verify hardware virtualization in Linux</span>
+grep -E 'vmx|svm' /proc/cpuinfo | head -1
+<span class="code-comment"># vmx = Intel VT-x; svm = AMD-V</span>
+
+<span class="code-comment"># Windows: check via PowerShell</span>
+Get-ComputerInfo | Select-Object HyperVisorPresent,
+  HyperVRequirementVMMonitorModeExtensions</code></pre>
+
+      <h3 id="s-igpu">Integrated Graphics</h3>
+      <p>Integrated graphics processors (iGPUs) are GPU cores fabricated on the same die — or package — as the CPU, sharing system DRAM rather than dedicated GDDR/HBM video memory. They provide display output, hardware video decode and encode acceleration, and, on capable implementations, general-purpose GPU compute without requiring a discrete graphics card.</p>
+      <p>AMD terms its iGPU-inclusive CPUs <strong>APUs</strong> (Accelerated Processing Units). The Ryzen 7000 desktop series includes an RDNA 2-based iGPU with 2 compute units (128 shader processors) running up to 2,200 MHz — minimal for 3D gaming but sufficient for display output and media tasks.<sup><a href="#ref-12">[12]</a></sup> AMD's mobile Ryzen 7000–8000 series and dedicated APUs (e.g., the Ryzen 9 7945HX3D, Radeon 780M) use RDNA 3 with up to 12 compute units, delivering performance comparable to a discrete entry-level GPU from a prior generation.<sup><a href="#ref-13">[13]</a></sup></p>
+      <p>Intel integrates its <strong>Intel UHD Graphics</strong> and, on higher-tier mobile SKUs, <strong>Intel Arc / Xe</strong> cores into its processors. Desktop Intel Core processors ship with iGPU configurations labelled UHD 730 or UHD 770 depending on tier and core configuration. A critical limitation of all iGPU designs is memory bandwidth: because the GPU shares the same DRAM channels as the CPU, system RAM speed directly affects iGPU performance; faster DDR5 memory yields measurably higher frame rates in graphics workloads.<sup><a href="#ref-14">[14]</a></sup></p>
+    </section>
+
+    <!-- ═══════ SECTION 3: SOCKET TYPES ══════════════════ -->
+    <section class="section" id="s-sockets">
+      <span class="section-label">Section 03</span>
+      <h2>CPU Socket Types</h2>
+
+      <p class="drop-cap">A CPU socket is the physical interface on the motherboard that mechanically seats and electrically connects the processor to the platform. The socket defines which CPUs can physically be installed on a given motherboard, how power is delivered to the processor, and which platform features — PCIe generation, memory standards, I/O lanes — are available. Choosing an incompatible CPU for a given socket will at minimum result in a non-functional system and at worst can damage the pins or pads of both the processor and the board.<sup><a href="#ref-15">[15]</a></sup></p>
+
+      <h3 id="s-intel-sock">Intel Socket Families</h3>
+      <p>Intel has historically changed its desktop socket with each major microarchitecture generation or every two to three generations. Intel sockets use the <strong>LGA</strong> (Land Grid Array) format, in which the contact pins are on the motherboard socket itself — the CPU's underside carries flat contact pads. This design eliminates exposed CPU-side pins, protecting the processor from mechanical damage during handling but placing fragile socket pins on the typically more expensive motherboard.</p>
+
+      <table class="data-table" aria-label="Intel socket overview">
+        <thead>
+          <tr><th>Socket</th><th>Pins</th><th>Generations Supported</th><th>Memory</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>LGA 1151 (300-series)</td><td>1151</td><td>8th/9th Gen (Coffee/Comet Lake)</td><td>DDR4</td></tr>
+          <tr><td>LGA 1200</td><td>1200</td><td>10th/11th Gen (Comet/Rocket Lake)</td><td>DDR4</td></tr>
+          <tr><td>LGA 1700</td><td>1700</td><td>12th/13th/14th Gen (Alder/Raptor Lake)</td><td>DDR4/DDR5</td></tr>
+          <tr><td>LGA 1851</td><td>1851</td><td>Core Ultra 200S (Arrow Lake)</td><td>DDR5</td></tr>
+        </tbody>
+      </table>
+      <p>Intel's current desktop platform as of 2026 uses <strong>LGA 1851</strong>, introduced with the Core Ultra 200S series (Arrow Lake). This follows Intel's historical pattern of new sockets with new generations — LGA 1851 directly succeeds LGA 1700, which itself succeeded LGA 1200.<sup><a href="#ref-16">[16]</a></sup></p>
+
+      <h3 id="s-amd-sock">AMD Socket Families</h3>
+      <p>AMD has historically maintained longer socket support windows than Intel. The AM4 socket launched in 2016 and served five generations of Ryzen CPUs through 2022 — an unusually long compatibility lifespan that gave buyers confidence in long-term upgrade paths. AMD uses a combination of socket types: older generations used <strong>PGA</strong> (Pin Grid Array), with fragile pins on the CPU; the current <strong>AM5</strong> platform transitions to LGA, placing pads on the CPU and pins in the socket, matching Intel's approach.</p>
+      <p><strong>Socket AM5</strong>, released in September 2022, features 1,718 contact pads in an LGA arrangement. It mandates DDR5 memory — unlike Intel's LGA 1700, which supported both DDR4 and DDR5 — and provides up to 28 PCIe 5.0 lanes with a maximum TDP support of 170 W.<sup><a href="#ref-17">[17]</a></sup> Compatible CPUs include all Ryzen 7000 and 9000 series desktop processors. AMD has publicly committed to AM5 platform support through at least 2027, meaning boards purchased today should remain compatible with future Zen 6 desktop CPUs.<sup><a href="#ref-16">[16]</a></sup></p>
+
+      <div class="info-box">
+        <div class="info-box-title">AM5 Cooler Compatibility</div>
+        <p>AM5 uses the same 54×90 mm mounting hole spacing as AM4, meaning most AM4-compatible coolers will physically mount on AM5 boards. However, coolers that rely on their own custom backplate hardware (rather than using the motherboard backplate) will not work and require an upgrade kit from the manufacturer.<sup><a href="#ref-17">[17]</a></sup></p>
+      </div>
+
+      <h3 id="s-compat">Socket Compatibility</h3>
+      <p>Socket compatibility depends on three interlocking factors: <strong>physical fit</strong> (pin count and layout), <strong>electrical compatibility</strong> (voltage and power delivery requirements), and <strong>BIOS/firmware support</strong>. A CPU that physically seats in a socket may still be incompatible if the motherboard's VRM cannot deliver adequate power, or if the board's firmware was not updated to support that CPU revision.<sup><a href="#ref-15">[15]</a></sup></p>
+      <p>Sockets with identical pin counts are not necessarily interchangeable. Different signal assignments, voltage rails, and interface protocols can make physically similar connectors electrically incompatible. Cross-brand compatibility is never possible: Intel LGA and AMD AM5 sockets are entirely different form factors. Even within a vendor, CPU generations are frequently incompatible: a 10th Gen Intel CPU (LGA 1200) will not fit in a 12th Gen board (LGA 1700).<sup><a href="#ref-15">[15]</a></sup></p>
+    </section>
+
+    <!-- ═══════ SECTION 4: SPECIFICATIONS ════════════════ -->
+    <section class="section" id="s-specs">
+      <span class="section-label">Section 04</span>
+      <h2>CPU Specifications Explained</h2>
+
+      <p class="drop-cap">Reading a CPU specification sheet requires understanding a vocabulary of technical metrics that, taken together, characterise a processor's capabilities and constraints. The following are the most consequential.</p>
+
+      <h3>Core Count and Thread Count</h3>
+      <p>Core count refers to the number of independent physical processing units integrated in the silicon. Thread count refers to the total number of logical processor contexts the OS can schedule, which equals core count × threads per core (1 without SMT, 2 with SMT enabled). A processor advertised as "16 cores / 24 threads" — as seen in Intel's hybrid P+E core designs — combines 8 Performance cores (2 threads each = 16 threads) with 8 Efficiency cores (1 thread each = 8 threads), yielding 24 total schedulable threads.</p>
+
+      <h3>Thermal Design Power (TDP)</h3>
+      <p><strong>Thermal Design Power</strong> represents the rate at which a CPU cooler must be capable of dissipating heat to allow the processor to sustain its specified performance. It is not a hard upper bound on instantaneous power consumption, nor a precise measure of real-world average power. TDP is the manufacturer's benchmark of heat output under a defined test workload, and actual power draw under real workloads may differ substantially.<sup><a href="#ref-18">[18]</a></sup></p>
+      <p>Intel's TDP methodology (rebranded as <strong>Processor Base Power</strong> from the 12th generation onward) reflects sustained operation at base clock frequency without Turbo — a state that rarely occurs in practice. During Turbo Boost, power can temporarily exceed TDP by a significant margin.<sup><a href="#ref-19">[19]</a></sup> AMD's figures are generally closer to real-world sustained power. As a practical illustration: an Intel Core i9-14900K carries a 125 W TDP but measured power draw under all-core sustained load exceeds 250 W; the AMD Ryzen 9 9900X at a comparable 120 W rating rarely exceeds 140 W under equivalent workloads.<sup><a href="#ref-20">[20]</a></sup></p>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-val">65–125W</span>
+          <span class="stat-label">Typical consumer desktop TDP</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val">250W+</span>
+          <span class="stat-label">i9-14900K real-world peak</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val">170W</span>
+          <span class="stat-label">AM5 max platform TDP</span>
+        </div>
+      </div>
+
+      <h3>Base vs. Boost Frequency</h3>
+      <p>The <strong>base frequency</strong> is the guaranteed minimum sustained clock speed the processor will maintain under full load with an adequate cooler, operating within its TDP envelope. The <strong>boost frequency</strong> is the maximum attainable single-core or all-core clock under favourable thermal and power conditions — it represents what the chip can reach when head room is available, not what it sustains indefinitely. During typical usage — gaming, productivity applications, moderate multitasking — a modern CPU will operate at frequencies between these two values, dynamically negotiated each millisecond by the boost algorithm.<sup><a href="#ref-2">[2]</a></sup></p>
+
+      <h3>Cache Size</h3>
+      <p>Cache size specifications — particularly L3 — are meaningful differentiators between processor variants within a family. AMD's 3D V-Cache technology stacks additional L3 cache vertically on top of the CPU die using through-silicon vias, yielding dramatic increases in gaming performance for workloads that benefit from reduced cache miss rates. The Ryzen 9 7950X3D carries 128 MB of total L3 versus the 64 MB of the standard 7950X, with measurably lower latency in L3-bound workloads.</p>
+    </section>
+
+    <!-- ═══════ SECTION 5: INSTALLATION ══════════════════ -->
+    <section class="section" id="s-install">
+      <span class="section-label">Section 05</span>
+      <h2>CPU Installation</h2>
+
+      <h3>Anti-Static Procedures</h3>
+      <p class="drop-cap">Electrostatic discharge (ESD) can silently damage or destroy CMOS circuitry in a CPU. The human body can accumulate static charges on the order of thousands of volts simply by moving across a carpeted floor — charges sufficient to degrade or destroy transistor junctions too small to see with the naked eye. Effective ESD protection requires either a continuous grounding path via an anti-static wrist strap connected to an earthed surface or regular contact with an unpainted metal chassis component to equalize charge before touching sensitive parts.<sup><a href="#ref-21">[21]</a></sup></p>
+      <p>Additional precautions include working on a non-conductive surface (not carpet), avoiding plastic bags and synthetic fabrics nearby, and never sliding the CPU across any surface. Handle the processor by its edges, not by contact pads or pins, and place it only on anti-static mats or in its original packaging when not installed.<sup><a href="#ref-22">[22]</a></sup></p>
+
+      <h3>Socket Handling and Alignment Markers</h3>
+      <p>Every processor and socket pairing includes alignment indicators that ensure the CPU is oriented correctly before contact is made. On Intel LGA platforms, a small triangle is printed in one corner of the CPU package; a corresponding triangle or notch marks the same corner of the socket. The CPU must be oriented so that both triangles align before it is lowered into the socket — LGA CPUs drop in without lateral force when positioned correctly.</p>
+      <p>AMD AM5 uses a similar triangular marker system. The ZIF (Zero Insertion Force) socket lever must be fully raised to the vertical position before the CPU is placed; the lever presses down on a retention plate that then locks the processor into position. Never attempt to press an AM5 CPU into a closed or partially-open socket — the contact pads in the socket can be permanently damaged.</p>
+
+      <div class="info-box">
+        <div class="info-box-title">Intel LGA Socket Pins</div>
+        <p>On Intel LGA motherboards, the pins are in the socket, not on the CPU. The socket protective cover must be removed just before insertion — do not remove it until the CPU is ready to be placed. Inspect all pins with oblique lighting before first use; bent pins require specialist tools (a mechanical pencil with tip retracted, or fine tweezers) to carefully realign and may be difficult to repair on fine-pitch sockets.</p>
+      </div>
+
+      <h3>Locking Mechanisms</h3>
+      <p>Intel LGA sockets use a two-lever ILM (Independent Loading Mechanism) — or a single-lever system on desktop platforms — that, once closed, clamps the retention plate over the CPU. The required closure force is significant: it is normal for the lever to require firm downward pressure. After locking, the plastic socket cover (if included) will pop off; this is expected. AMD AM5 uses a single cam-actuated lever that rotates to lock the LGA ZIF retention mechanism; operating torque is lower than Intel's ILM.</p>
+
+      <ol class="step-list">
+        <li><p>Raise the socket lever(s) fully; on Intel ILM sockets, raise both levers in the correct sequence (typically the outer lever first).</p></li>
+        <li><p>Lift or remove the socket retention cover; inspect all pins for damage.</p></li>
+        <li><p>Orient the CPU by matching the alignment triangle(s) on CPU and socket. Lower the CPU vertically — do not slide it laterally.</p></li>
+        <li><p>Close the lever(s) firmly; for Intel ILM, engage the inner lever beneath the tab first, then the outer lever.</p></li>
+        <li><p>Inspect the installed CPU from the side to confirm it sits flush and level in the socket.</p></li>
+      </ol>
+    </section>
+
+    <!-- ═══════ SECTION 6: THERMAL MANAGEMENT ════════════ -->
+    <section class="section" id="s-thermal">
+      <span class="section-label">Section 06</span>
+      <h2>Thermal Management</h2>
+
+      <h3>Thermal Interface Material (Thermal Paste)</h3>
+      <p class="drop-cap">Even after precision lapping, the mating surfaces of a CPU's integrated heat spreader (IHS) and a cooler's contact plate are microscopically rough, leaving air-filled voids when pressed together. Air is a poor thermal conductor — its thermal conductivity is roughly 0.026 W/(m·K) versus approximately 1.5–12 W/(m·K) for quality thermal compounds — making these voids significant insulators. Thermal interface material (TIM), commonly called thermal paste or thermal compound, fills these microscopic gaps to allow efficient heat transfer from the IHS to the cooler's base plate.<sup><a href="#ref-23">[23]</a></sup></p>
+      <p>Proper application can reduce CPU temperatures by <strong>5–15°C</strong> compared to a dry contact surface, depending on paste quality and application method.<sup><a href="#ref-23">[23]</a></sup> The two most common application methods are:</p>
+      <ul style="margin: 10px 0 18px 22px; font-size: .97rem; line-height: 1.9;">
+        <li><strong>Pea/dot method:</strong> A small, pea-sized dot in the centre of the IHS. When the cooler is mounted, spreading pressure distributes the paste across the contact area. This is the most widely recommended method for mainstream desktop processors.</li>
+        <li><strong>Line method:</strong> A thin horizontal line along the centre. Preferred for some rectangular IHS designs and by builders concerned about coverage uniformity.</li>
+      </ul>
+      <p>Before applying fresh paste, clean both the IHS and cooler base thoroughly with 90%+ isopropyl alcohol and lint-free cloths or coffee filters to remove all traces of dried paste, oils, and particulate contamination.<sup><a href="#ref-24">[24]</a></sup> Avoid spreading paste with metal tools, which can introduce micro-scratches; allow the cooler's mounting pressure to spread it naturally. Many all-in-one liquid coolers ship with paste pre-applied to the pump head by machine — this factory application is generally reliable and need not be replaced prior to first use.<sup><a href="#ref-25">[25]</a></sup></p>
+
+      <h3>Heat Sinks and Air Coolers</h3>
+      <p>An air cooler consists of a metal base plate that contacts the CPU's IHS, a stack of aluminium or copper fins that maximise the surface area exposed to airflow, and one or more fans that drive air through the fin stack. Heat is conducted from the IHS through the base plate and up through heat pipes (sealed copper tubes containing a two-phase working fluid) to the fin array, where it is convected into the case air stream.</p>
+      <p>Cooler performance is characterised by its <strong>Thermal Resistance</strong> (°C/W) — how many degrees Celsius the cooler allows the CPU to rise above ambient per watt dissipated. A premium tower cooler such as the Noctua NH-D15 or be quiet! Dark Rock Pro 4 can manage 250+ W sustained with appropriate airflow, while budget box coolers are typically rated for 65–95 W.</p>
+
+      <h3>Liquid Cooling Basics</h3>
+      <p>All-in-one (AIO) liquid coolers replace the direct-contact fin stack with a closed-loop fluid circuit. A pump drives coolant — typically a water-glycol mixture — through a cold plate mounted on the CPU, transferring heat to the fluid. The heated coolant travels through flexible tubing to a radiator mounted to the chassis, where fans dissipate heat to the ambient air. AIO coolers offer quieter operation under light loads, more effective heat dissipation at high TDPs, and can be mounted at greater distances from the CPU — useful in compact cases where tower cooler height is constrained.</p>
+      <p>Custom open-loop water cooling extends this principle: users choose separate pumps, reservoirs, water blocks, radiators, and fittings for maximum thermal headroom and acoustic optimization, at the cost of significantly greater complexity and maintenance requirements.</p>
+
+      <h3>Airflow Considerations</h3>
+      <p>Effective case airflow is as important as the cooler itself. The goal is a sustained, unobstructed flow of cooler ambient air across the CPU cooler and through the radiator. Positive pressure configurations — more intake fan area than exhaust — reduce dust ingress; neutral-pressure configurations (equal intake and exhaust) are often optimal for thermal performance. Cable management should route cables below or behind the motherboard tray to avoid obstructing airflow across the CPU cooler's fin stack. A 10°C reduction in ambient air temperature reaching the cooler translates directly into a 10°C reduction in CPU temperature under steady-state operation.</p>
+    </section>
+
+    <!-- ═══════ SECTION 7: BIOS / UEFI ═══════════════════ -->
+    <section class="section" id="s-bios">
+      <span class="section-label">Section 07</span>
+      <h2>BIOS / UEFI CPU Settings</h2>
+
+      <p class="drop-cap">The BIOS (Basic Input/Output System) — now almost universally implemented as a UEFI (Unified Extensible Firmware Interface) — is the firmware that initialises hardware during power-on and presents a configuration interface for platform-level CPU settings. Key CPU-related parameters are typically found under an <em>Advanced</em>, <em>CPU Configuration</em>, or <em>Overclocking</em> section.</p>
+
+      <h3>Enabling Virtualization Support</h3>
+      <p>Hardware virtualization extensions are disabled by default on some platforms and must be enabled in the UEFI before hypervisors can use hardware acceleration. The setting appears under different labels depending on CPU brand and motherboard vendor:<sup><a href="#ref-26">[26]</a></sup></p>
+      <ul style="margin: 10px 0 18px 22px; font-size: .97rem; line-height: 1.9;">
+        <li><strong>Intel:</strong> "Intel Virtualization Technology", "Intel VT-x", or "VT-d" (for I/O virtualization)</li>
+        <li><strong>AMD:</strong> "SVM Mode" (Secure Virtual Machine) or "AMD-V"</li>
+      </ul>
+      <p>On ASUS boards, navigate to: Advanced → CPU Configuration → Intel Virtualization Technology [Enabled] (Intel) or SVM Mode [Enabled] (AMD). On MSI boards, find: OC → CPU Features → Intel VT-D (Intel) or SVM Mode (AMD).<sup><a href="#ref-26">[26]</a></sup> Save changes with F10 and reboot.</p>
+      <pre><code><span class="code-comment"># After enabling, verify in Linux:</span>
+systemd-detect-virt   <span class="code-comment"># returns 'none' if no hypervisor</span>
+lscpu | grep -i virtualization
+
+<span class="code-comment"># Windows PowerShell:</span>
+(Get-ComputerInfo).HyperVisorPresent</code></pre>
+
+      <h3>Performance Settings: XMP / EXPO and Overclocking</h3>
+      <p>By default, system memory runs at the JEDEC standard base frequency (typically DDR5-4800 or DDR4-2133) regardless of its rated specification. Enabling Intel's <strong>XMP</strong> (Extreme Memory Profile) or AMD's <strong>EXPO</strong> (Extended Profiles for Overclocking) loads manufacturer-validated timings and frequencies from SPD data on the DIMM — for example, engaging DDR5-6000 CL30 performance without manual configuration. For iGPU-equipped systems, this setting meaningfully improves graphics performance because the iGPU depends on system memory bandwidth.</p>
+      <p>CPU overclocking — raising the multiplier and/or base clock (BCLK) above specification — is available on Intel "K"-suffix and AMD "X"-suffix unlocked processors via their respective motherboard's OC menu. Stability requires careful voltage tuning and robust cooling; LLC (Load-Line Calibration) settings affect how much voltage is applied under load versus idle to prevent droop-induced instability.</p>
+
+      <h3>Power Management</h3>
+      <p>Modern CPUs implement aggressive power state management that reduces frequency and voltage during idle or lightly loaded periods:</p>
+      <ul style="margin: 10px 0 18px 22px; font-size: .97rem; line-height: 1.9;">
+        <li><strong>Intel SpeedStep (EIST):</strong> Dynamically scales P-states (frequency/voltage pairs) based on OS demand. Disabling it locks the CPU at maximum frequency, increasing idle power consumption and temperatures while marginally reducing latency for real-time workloads.<sup><a href="#ref-27">[27]</a></sup></li>
+        <li><strong>AMD Cool'n'Quiet / Power Saving Mode:</strong> AMD's equivalent; reduces clock and voltage when cores are underutilised.</li>
+        <li><strong>C-States:</strong> Deep sleep states that power down inactive core subsystems; C6 and C7 states can reduce idle power by >50% on modern platforms. Some workstation and server configurations disable deep C-states to minimise latency on wake.</li>
+      </ul>
+      <p>BIOS firmware updates frequently address power management and stability: manufacturers release microcode and BIOS revisions that refine boost behaviour, fix errata, and update CPU compatibility. Checking for and applying BIOS updates before troubleshooting persistent performance anomalies is always advisable.</p>
+    </section>
+
+    <!-- ═══════ SECTION 8: TROUBLESHOOTING ═══════════════ -->
+    <section class="section" id="s-troubleshoot">
+      <span class="section-label">Section 08</span>
+      <h2>CPU Troubleshooting</h2>
+
+      <p class="drop-cap">Diagnosing CPU-related failures requires a systematic approach that isolates the processor, cooling system, and power delivery from other potential fault sources. The vast majority of apparent CPU failures are in practice caused by inadequate cooling, failed thermal interface material, or a misconfigured BIOS rather than a defective processor die.</p>
+
+      <h3>Overheating</h3>
+      <p>CPU overheating while gaming or under sustained load is most commonly caused by dust accumulation in heatsinks or radiators, degraded or dried thermal paste, an undersized or improperly mounted cooler, a failed AIO pump, poor case airflow, or ambient room temperature.<sup><a href="#ref-28">[28]</a></sup> The symptom pattern is characteristic: CPU temperature rises steadily, case fans ramp to maximum speed, and performance degrades as the clock speed drops in response to thermal limits.</p>
+      <p>Use hardware monitoring software (HWiNFO64, Core Temp, Ryzen Master) to observe real-time junction temperatures. Safe operating ranges vary by CPU: Intel Tj Max is typically 100°C; AMD CPUs report T<sub>die</sub> or T<sub>jmax</sub> of 95°C for most Ryzen 7000/9000 processors. Sustained operation within 10°C of these limits warrants investigation.</p>
+
+      <div class="diag-grid">
+        <div class="diag-card">
+          <div class="diag-card-title">Symptom</div>
+          <p>Temperatures &gt;90°C under normal gaming load with no overclocking</p>
+        </div>
+        <div class="diag-card">
+          <div class="diag-card-title">First Checks</div>
+          <p>Inspect cooler for dust; verify cooler is firmly mounted; check case airflow direction</p>
+        </div>
+        <div class="diag-card">
+          <div class="diag-card-title">Symptom</div>
+          <p>Overheating began after removing and reinstalling cooler</p>
+        </div>
+        <div class="diag-card">
+          <div class="diag-card-title">First Checks</div>
+          <p>Clean and reapply thermal paste; confirm cooler is mounted evenly with correct pressure</p>
+        </div>
+      </div>
+
+      <h3>Thermal Throttling</h3>
+      <p>Thermal throttling is the CPU's self-protection mechanism: when the junction temperature reaches T<sub>J</sub>Max, the processor automatically reduces its clock speed to lower heat output, preventing permanent silicon damage.<sup><a href="#ref-28">[28]</a></sup> A CPU under severe thermal throttling can perform up to 50% below its maximum capability, causing dropped frames in games, stutter in interactive applications, and extended runtimes for rendering and compilation tasks.<sup><a href="#ref-29">[29]</a></sup></p>
+      <p>Throttling is a symptom, not a root cause. The underlying causes — insufficient cooling, degraded paste, excessive TDP limits set in BIOS — must be addressed. Setting the Windows power plan's maximum processor state to 99% disables Turbo Boost, reducing maximum achievable frequency but substantially lowering peak temperatures during short bursts, which may eliminate throttling for users with borderline cooling.<sup><a href="#ref-29">[29]</a></sup></p>
+
+      <h3>Failure to POST</h3>
+      <p>POST (Power-On Self-Test) is the diagnostic routine the BIOS executes every time the system powers on, checking the CPU, RAM, video output, and storage controllers in sequence.<sup><a href="#ref-30">[30]</a></sup> A failure to POST means the system cannot reach the operating system boot phase. The BIOS signals POST failures via audible beep codes — the pattern of which is defined by the BIOS firmware manufacturer (AMI, Award, Phoenix, or proprietary OEM firmware).<sup><a href="#ref-31">[31]</a></sup></p>
+      <p>Common POST failure patterns relevant to the CPU and platform include:</p>
+      <ul style="margin: 10px 0 18px 22px; font-size: .97rem; line-height: 1.9;">
+        <li><strong>No beep, no video:</strong> May indicate a dead PSU, missing 4/8-pin CPU power connector, or severely unseated CPU</li>
+        <li><strong>Continuous short beeps:</strong> Typically a RAM issue, but can be triggered by a completely unresponsive CPU</li>
+        <li><strong>POST succeeds without GPU:</strong> Confirms CPU and RAM are functional; isolates fault to video card or PCIe interface</li>
+      </ul>
+      <p>For suspected CPU POST failures: verify the 8-pin CPU power connector is fully seated; confirm the CPU is correctly oriented and locked in the socket; check for bent socket pins (Intel LGA motherboards); reseat the CPU with fresh thermal paste; test with minimum components (CPU, one RAM stick, no expansion cards).</p>
+
+      <h3>Unexpected Shutdowns</h3>
+      <p>Unexpected system shutdowns during load are most frequently caused by thermal protection (the system halts rather than throttling further at extreme temperatures), power delivery failures (inadequate or failing PSU unable to sustain CPU power draw during Turbo), or BIOS instability from aggressive XMP or OC settings exceeding silicon limits. If new hardware was recently installed, removing it to determine whether the issue predates the addition is a valuable diagnostic step.<sup><a href="#ref-32">[32]</a></sup></p>
+      <p>BIOS event logs, Windows Event Viewer (kernel-power event IDs 41 and 1001), and crash dump analysis can identify whether the shutdown was thermally triggered, power-related, or software-induced.</p>
+
+      <h3>Fan and Cooling Issues</h3>
+      <p>Many motherboards will halt the POST sequence if a CPU fan connected to the CPU_FAN header is not spinning — a safety mechanism to prevent thermal damage from an undetected fan failure. A CPU fan that has seized, is connected to the wrong header (e.g., CHA_FAN instead of CPU_FAN), or is below the RPM threshold the BIOS considers "safe" will trigger this protection. In the BIOS under PC Health or Hardware Monitor settings, the CPU fan RPM threshold can be adjusted or the warning suppressed if a high-static-pressure fan with a non-standard idle RPM is in use. For AIO coolers, ensure both the pump speed (connected to CPU_FAN or AIO_PUMP) and the radiator fans (connected to CHA_FAN headers or a fan hub) are monitored.</p>
+
+      <div class="pull-quote">
+        <p>"In most cases, CPU overheating is not caused by a failed processor. It is usually a problem in the heat path: dust, old thermal paste, an incorrectly mounted cooler, or poor case airflow."</p>
+        <cite>PrimeTechSupport — CPU Overheating Guide, 2026<sup><a href="#ref-28">[28]</a></sup></cite>
+      </div>
+
+      <pre><code><span class="code-comment"># Monitor CPU temps in Linux (install lm-sensors first)</span>
+sensors | grep -E 'Core|Package|Tdie|Tccd'
+
+<span class="code-comment"># Log CPU clock speed and power in real time</span>
+watch -n1 "grep MHz /proc/cpuinfo | awk '{print \$4}' | sort -n | tail -1"
+
+<span class="code-comment"># Windows (PowerShell): get CPU temperature via WMI</span>
+Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" |
+  Select-Object CurrentTemperature</code></pre>
+
+    </section>
+
+  </main><!-- /article-body -->
+</div><!-- /page-wrap -->
+
+<!-- ═══════════════════════════════════════════════════ REFERENCES -->
+<section class="references" id="references" aria-label="References">
+  <div style="max-width:1100px; margin:0 auto; padding: 0 56px;">
+    <h2>References</h2>
+    <ol class="ref-list">
+      <li id="ref-1"><span class="ref-num">[1]</span> Gaming News. Gaming CPU basics explained: cores, clock speed, cache and cooling [Internet]. 2025 Nov 28 [cited 2026 Jun]. Available from: <a href="https://gaming.news/codex/gaming-cpu-basics-explained-cores-clock-speed-cache-and-cooling/" target="_blank" rel="noopener">https://gaming.news/codex/gaming-cpu-basics-explained-cores-clock-speed-cache-and-cooling/</a></li>
+
+      <li id="ref-2"><span class="ref-num">[2]</span> Newegg Insider. CPU performance myths: cores vs cache vs clock speed — what actually boosts FPS and render time [Internet]. 2026 Jan 7 [cited 2026 Jun]. Available from: <a href="https://www.newegg.com/insider/cpu-performance-myths-cores-vs-cache-vs-clock-speed-what-actually-boosts-fps-and-render-time/" target="_blank" rel="noopener">https://www.newegg.com/insider/cpu-performance-myths-cores-vs-cache-vs-clock-speed-what-actually-boosts-fps-and-render-time/</a></li>
+
+      <li id="ref-3"><span class="ref-num">[3]</span> GoLinuxCloud. CPU, processors, core, threads explained [Internet]. 2024 Jan 7 [cited 2026 Jun]. Available from: <a href="https://www.golinuxcloud.com/processors-cpu-core-threads-explained/" target="_blank" rel="noopener">https://www.golinuxcloud.com/processors-cpu-core-threads-explained/</a></li>
+
+      <li id="ref-4"><span class="ref-num">[4]</span> Tom's Hardware. What is simultaneous multithreading? A basic definition [Internet]. 2018 Aug 23 [cited 2026 Jun]. Available from: <a href="https://www.tomshardware.com/reviews/simultaneous-multithreading-definition,5762.html" target="_blank" rel="noopener">https://www.tomshardware.com/reviews/simultaneous-multithreading-definition,5762.html</a></li>
+
+      <li id="ref-5"><span class="ref-num">[5]</span> Wikipedia contributors. Hyper-threading [Internet]. Wikipedia; 2024 [cited 2026 Jun]. Available from: <a href="https://en.wikipedia.org/wiki/Hyper-threading" target="_blank" rel="noopener">https://en.wikipedia.org/wiki/Hyper-threading</a></li>
+
+      <li id="ref-6"><span class="ref-num">[6]</span> Coding Confessions. How simultaneous multithreading works under the hood [Internet]. 2024 Jul 24 [cited 2026 Jun]. Available from: <a href="https://blog.codingconfessions.com/p/simultaneous-multithreading" target="_blank" rel="noopener">https://blog.codingconfessions.com/p/simultaneous-multithreading</a></li>
+
+      <li id="ref-7"><span class="ref-num">[7]</span> BattleforgePC. CPU performance deep dive: how cores, threads and cache actually impact real-world speed [Internet]. 2025 Sep 4 [cited 2026 Jun]. Available from: <a href="https://battleforgepc.com/article/cpu-performance-deep-dive-how-cores-threads-and-cache-actually-impact-real-world-speed/" target="_blank" rel="noopener">https://battleforgepc.com/article/cpu-performance-deep-dive-how-cores-threads-and-cache-actually-impact-real-world-speed/</a></li>
+
+      <li id="ref-8"><span class="ref-num">[8]</span> Gaming News. TDP explained: thermal design power, with CPU as the key example [Internet]. 2025 Jul 4 [cited 2026 Jun]. Available from: <a href="https://gaming.news/article/2025-04-08/tdp-explained-thermal-design-power-with-cpu-as-the-key-example/" target="_blank" rel="noopener">https://gaming.news/article/2025-04-08/tdp-explained-thermal-design-power-with-cpu-as-the-key-example/</a></li>
+
+      <li id="ref-9"><span class="ref-num">[9]</span> GamersNexus. AMD Ryzen TDP explained: deep-dive on TDP definitions and cooler manufacturer opinions [Internet]. 2019 Oct 20 [cited 2026 Jun]. Available from: <a href="https://gamersnexus.net/guides/3525-amd-ryzen-tdp-explained-deep-dive-cooler-manufacturer-opinions" target="_blank" rel="noopener">https://gamersnexus.net/guides/3525-amd-ryzen-tdp-explained-deep-dive-cooler-manufacturer-opinions</a></li>
+
+      <li id="ref-10"><span class="ref-num">[10]</span> TechTarget. What is AMD virtualization (AMD-V)? [Internet]. [cited 2026 Jun]. Available from: <a href="https://www.techtarget.com/searchitoperations/definition/AMD-V-AMD-virtualization" target="_blank" rel="noopener">https://www.techtarget.com/searchitoperations/definition/AMD-V-AMD-virtualization</a></li>
+
+      <li id="ref-11"><span class="ref-num">[11]</span> SuperOps. How to enable virtualization in BIOS: a step-by-step guide [Internet]. [cited 2026 Jun]. Available from: <a href="https://superops.com/blog/how-to-enable-virtualization-in-bios" target="_blank" rel="noopener">https://superops.com/blog/how-to-enable-virtualization-in-bios</a></li>
+
+      <li id="ref-12"><span class="ref-num">[12]</span> Notebookcheck. Intel UHD Graphics 64EUs vs AMD Radeon Graphics (Ryzen 7000) [Internet]. [cited 2026 Jun]. Available from: <a href="https://www.notebookcheck.net/UHD-Graphics-64EUs-vs-Radeon-Graphics-Ryzen-7000_11122_11422.247598.0.html" target="_blank" rel="noopener">https://www.notebookcheck.net</a></li>
+
+      <li id="ref-13"><span class="ref-num">[13]</span> PC Guide. Best CPU with integrated graphics in 2026 [Internet]. 2026 [cited 2026 Jun]. Available from: <a href="https://www.pcguide.com/cpu/guide/best-integrated-graphics/" target="_blank" rel="noopener">https://www.pcguide.com/cpu/guide/best-integrated-graphics/</a></li>
+
+      <li id="ref-14"><span class="ref-num">[14]</span> CGDirector. Best CPUs with integrated graphics (iGPU) [Internet]. 2023 Nov 29 [cited 2026 Jun]. Available from: <a href="https://www.cgdirector.com/best-cpus-with-integrated-graphics/" target="_blank" rel="noopener">https://www.cgdirector.com/best-cpus-with-integrated-graphics/</a></li>
+
+      <li id="ref-15"><span class="ref-num">[15]</span> TwitIQ. CPU socket types explained: find and check compatibility — 2025 guide [Internet]. 2025 Oct 24 [cited 2026 Jun]. Available from: <a href="https://twitiq.com/cpu-socket-types-guide/" target="_blank" rel="noopener">https://twitiq.com/cpu-socket-types-guide/</a></li>
+
+      <li id="ref-16"><span class="ref-num">[16]</span> Newegg Insider. AMD vs Intel motherboards in 2026: socket, chipset, and platform architecture compared [Internet]. 2026 Apr 15 [cited 2026 Jun]. Available from: <a href="https://www.newegg.com/insider/amd-vs-intel-motherboards-in-2026-platform-architecture-chipset-hierarchy-and-what-actually-differs/" target="_blank" rel="noopener">https://www.newegg.com/insider/amd-vs-intel-motherboards-in-2026-platform-architecture-chipset-hierarchy-and-what-actually-differs/</a></li>
+
+      <li id="ref-17"><span class="ref-num">[17]</span> OfZenAndComputing. AMD CPU sockets list 2026: complete guide to all socket types [Internet]. 2025 Sep 30 [cited 2026 Jun]. Available from: <a href="https://www.ofzenandcomputing.com/list-of-amd-cpu-sockets/" target="_blank" rel="noopener">https://www.ofzenandcomputing.com/list-of-amd-cpu-sockets/</a></li>
+
+      <li id="ref-18"><span class="ref-num">[18]</span> GamersNexus. AMD Ryzen TDP explained — cooler manufacturer opinions [Internet]. 2019 Oct 20 [cited 2026 Jun]. Available from: <a href="https://gamersnexus.net/guides/3525-amd-ryzen-tdp-explained-deep-dive-cooler-manufacturer-opinions" target="_blank" rel="noopener">https://gamersnexus.net/guides/3525-amd-ryzen-tdp-explained-deep-dive-cooler-manufacturer-opinions</a></li>
+
+      <li id="ref-19"><span class="ref-num">[19]</span> Intel Corporation. Thermal design power (TDP) in Intel processors [Internet]. [cited 2026 Jun]. Available from: <a href="https://www.intel.com/content/www/us/en/support/articles/000055611/processors.html" target="_blank" rel="noopener">https://www.intel.com/content/www/us/en/support/articles/000055611/processors.html</a></li>
+
+      <li id="ref-20"><span class="ref-num">[20]</span> GamerHardware. What is TDP? GPU and CPU power consumption explained [Internet]. 2026 Apr 18 [cited 2026 Jun]. Available from: <a href="https://gamerhardware.org/what-is-tdp-gpu-cpu/" target="_blank" rel="noopener">https://gamerhardware.org/what-is-tdp-gpu-cpu/</a></li>
+
+      <li id="ref-21"><span class="ref-num">[21]</span> UMA Technology. CPU thermal paste application method [Internet]. 2025 Jan 22 [cited 2026 Jun]. Available from: <a href="https://umatechnology.org/cpu-thermal-paste-application-method/" target="_blank" rel="noopener">https://umatechnology.org/cpu-thermal-paste-application-method/</a></li>
+
+      <li id="ref-22"><span class="ref-num">[22]</span> AndroidExperto. How to apply thermal paste to your CPU [Internet]. 2026 May [cited 2026 Jun]. Available from: <a href="https://androidexperto.com/how-to-apply-thermal-paste-to-your-cpu/" target="_blank" rel="noopener">https://androidexperto.com/how-to-apply-thermal-paste-to-your-cpu/</a></li>
+
+      <li id="ref-23"><span class="ref-num">[23]</span> Gamemax. How to apply thermal paste [Internet]. 2025 May 30 [cited 2026 Jun]. Available from: <a href="https://gamemaxpc.com/pc-case-news/5924.html" target="_blank" rel="noopener">https://gamemaxpc.com/pc-case-news/5924.html</a></li>
+
+      <li id="ref-24"><span class="ref-num">[24]</span> TechTimes. How to apply thermal paste for optimal CPU cooling: pro PC building tips [Internet]. 2025 Nov 28 [cited 2026 Jun]. Available from: <a href="https://www.techtimes.com/articles/313021/20251128/how-apply-thermal-paste-optimal-cpu-cooling-pro-pc-building-tips.htm" target="_blank" rel="noopener">https://www.techtimes.com/articles/313021/20251128/how-apply-thermal-paste-optimal-cpu-cooling-pro-pc-building-tips.htm</a></li>
+
+      <li id="ref-25"><span class="ref-num">[25]</span> Tom's Hardware. How to apply thermal paste to your CPU [Internet]. 2025 Feb 27 [cited 2026 Jun]. Available from: <a href="https://www.tomshardware.com/how-to/apply-thermal-paste-to-your-cpu" target="_blank" rel="noopener">https://www.tomshardware.com/how-to/apply-thermal-paste-to-your-cpu</a></li>
+
+      <li id="ref-26"><span class="ref-num">[26]</span> CodersEra. How to enable Intel VT-x or AMD-V in BIOS on Windows 10/11 [Internet]. 2026 [cited 2026 Jun]. Available from: <a href="https://codersera.com/blog/how-to-enable-intel-vt-x-amd-v-bios-windows-2026/" target="_blank" rel="noopener">https://codersera.com/blog/how-to-enable-intel-vt-x-amd-v-bios-windows-2026/</a></li>
+
+      <li id="ref-27"><span class="ref-num">[27]</span> NinjaOne. How to disable CPU throttling in Windows [Internet]. 2025 Nov 10 [cited 2026 Jun]. Available from: <a href="https://www.ninjaone.com/blog/how-to-disable-cpu-throttling/" target="_blank" rel="noopener">https://www.ninjaone.com/blog/how-to-disable-cpu-throttling/</a></li>
+
+      <li id="ref-28"><span class="ref-num">[28]</span> PrimeTechSupport. CPU overheating: causes, symptoms, and how to fix thermal throttling [Internet]. 2026 Jun [cited 2026 Jun]. Available from: <a href="https://primetechsupport.com/blogs/gaming-pc-repairs/gpc-cpu-overheating-causes-symptoms-thermal-throttling-fix" target="_blank" rel="noopener">https://primetechsupport.com/blogs/gaming-pc-repairs/gpc-cpu-overheating-causes-symptoms-thermal-throttling-fix</a></li>
+
+      <li id="ref-29"><span class="ref-num">[29]</span> Camomile App. CPU thermal throttling — complete guide [Internet]. 2025 Feb 13 [cited 2026 Jun]. Available from: <a href="https://camomileapp.com/blog/cpu-thermal-throttling/" target="_blank" rel="noopener">https://camomileapp.com/blog/cpu-thermal-throttling/</a></li>
+
+      <li id="ref-30"><span class="ref-num">[30]</span> Professor Messer. Troubleshooting common hardware problems — CompTIA A+ 220-901 [Internet]. [cited 2026 Jun]. Available from: <a href="https://www.professormesser.com/free-a-plus-training/220-901/troubleshooting-common-hardware-problems-2/" target="_blank" rel="noopener">https://www.professormesser.com/free-a-plus-training/220-901/troubleshooting-common-hardware-problems-2/</a></li>
+
+      <li id="ref-31"><span class="ref-num">[31]</span> Vision Computers. Computer beep codes: what they mean (AMI, Dell, HP, Lenovo) [Internet]. 2026 Mar 9 [cited 2026 Jun]. Available from: <a href="https://www.visioncomputers.com/beep-codes-meaning" target="_blank" rel="noopener">https://www.visioncomputers.com/beep-codes-meaning</a></li>
+
+      <li id="ref-32"><span class="ref-num">[32]</span> Professor Messer IT Training. Troubleshooting common hardware problems — unexpected shutdowns [Internet]. [cited 2026 Jun]. Available from: <a href="https://www.professormesser.com/free-a-plus-training/220-901/troubleshooting-common-hardware-problems-2/" target="_blank" rel="noopener">https://www.professormesser.com/free-a-plus-training/220-901/troubleshooting-common-hardware-problems-2/</a></li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  Inside the Machine: A Technical Guide to Modern CPUs &nbsp;·&nbsp; 32 Citations &nbsp;·&nbsp; Vancouver Reference System
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Unsafe — Buffer Overflows, Use-After-Free, Null Dereferences & Data Races in C/C++</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4f1ea; --paper-2:#ece7dc; --paper-3:#e4ddcd;
+    --ink:#1a1815; --ink-soft:#46423a; --muted:#827c6e;
+    --rule:#d6cfc0; --rule-strong:#c3baa6;
+    --red:#b81d24; --red-deep:#871318; --red-wash:#f6e4e2;
+    --blue:#2f5d7c; --blue-wash:#e4edf2;
+    --amber:#9c6f12; --amber-wash:#f4ead0;
+    --green:#3d6b39; --green-wash:#e6ecdf;
+    --mast:#15130e; --mast-ink:#f1ece0; --mast-dim:#9a9384;
+    --code-bg:#1b1914; --code-ink:#d8d2c3;
+    --c-kw:#e08a7f; --c-str:#b6c98c; --c-com:#6e695b;
+    --c-fn:#d9b86b; --c-num:#8fb6c7; --c-pp:#7fa89f; --c-op:#b3ac9c;
+    --maxw:760px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Newsreader",Georgia,serif; font-size:19px; line-height:1.66;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  ::selection{background:var(--red); color:#fff}
+
+  /* ---------- MASTHEAD ---------- */
+  .mast{
+    background:var(--mast); color:var(--mast-ink);
+    padding:46px 24px 40px; position:relative; overflow:hidden;
+    border-bottom:3px solid var(--red);
+  }
+  .mast::after{
+    content:""; position:absolute; inset:0;
+    background-image:radial-gradient(circle at 1px 1px, rgba(241,236,224,.05) 1px, transparent 0);
+    background-size:22px 22px; pointer-events:none;
+  }
+  .mast-inner{max-width:var(--maxw); margin:0 auto; position:relative; z-index:2}
+  .kicker{
+    font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.32em;
+    text-transform:uppercase; color:var(--red); margin:0 0 22px;
+    display:flex; align-items:center; gap:14px;
+  }
+  .kicker span{height:1px; background:var(--mast-dim); flex:1; opacity:.5}
+  .mast h1{
+    font-family:"Archivo",sans-serif; font-weight:900; line-height:.95;
+    font-size:clamp(46px,11vw,92px); letter-spacing:-.02em; margin:0;
+    text-transform:uppercase;
+  }
+  .mast h1 em{font-style:normal; color:var(--red); display:block}
+  .mast .dek{
+    font-family:"Newsreader",serif; font-weight:400; font-style:italic;
+    font-size:clamp(18px,2.6vw,23px); color:var(--mast-dim);
+    margin:26px 0 0; max-width:60ch; line-height:1.5;
+  }
+  .hexstrip{
+    font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--mast-dim);
+    margin-top:30px; padding-top:18px; border-top:1px solid #2c281f;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.7;
+    letter-spacing:.04em;
+  }
+  .hexstrip b{color:var(--red); font-weight:400}
+  .byline{
+    font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--mast-dim);
+    margin-top:20px; letter-spacing:.05em;
+  }
+
+  /* ---------- LAYOUT ---------- */
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+  main{padding:54px 0 90px}
+  section{margin:0 0 18px; scroll-margin-top:24px}
+
+  /* ---------- TYPOGRAPHY ---------- */
+  h2{
+    font-family:"Archivo",sans-serif; font-weight:800; letter-spacing:-.015em;
+    font-size:clamp(28px,5vw,40px); line-height:1.05; margin:64px 0 6px;
+    text-transform:uppercase;
+  }
+  h2 .num{
+    display:block; font-family:"JetBrains Mono",monospace; font-weight:500;
+    font-size:13px; letter-spacing:.3em; color:var(--red); margin-bottom:12px;
+    text-transform:none;
+  }
+  h3{
+    font-family:"Archivo",sans-serif; font-weight:700; font-size:23px;
+    letter-spacing:-.01em; margin:42px 0 4px;
+  }
+  h4{
+    font-family:"JetBrains Mono",monospace; font-weight:700; font-size:14px;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);
+    margin:30px 0 6px;
+  }
+  p{margin:0 0 20px}
+  a{color:var(--red-deep); text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px}
+  a:hover{color:var(--red)}
+  strong{font-weight:700}
+  em{font-style:italic}
+  code{
+    font-family:"JetBrains Mono",monospace; font-size:.84em;
+    background:var(--paper-3); padding:1px 6px; border-radius:3px;
+    color:var(--ink); border:1px solid var(--rule);
+  }
+
+  .lede{font-size:22px; line-height:1.6; color:var(--ink)}
+  .lede::first-letter{
+    font-family:"Archivo",sans-serif; font-weight:900; float:left;
+    font-size:84px; line-height:.74; padding:8px 14px 0 0; color:var(--red);
+  }
+
+  /* ---------- TOC ---------- */
+  .toc{
+    background:var(--paper-2); border:1px solid var(--rule);
+    border-left:4px solid var(--red); padding:24px 26px; margin:40px 0 8px;
+  }
+  .toc h4{margin:0 0 14px; color:var(--red-deep)}
+  .toc ol{margin:0; padding:0; list-style:none; counter-reset:toc}
+  .toc li{counter-increment:toc; margin:0; border-bottom:1px dotted var(--rule-strong)}
+  .toc li:last-child{border-bottom:none}
+  .toc a{
+    display:flex; gap:14px; align-items:baseline; padding:9px 0;
+    text-decoration:none; color:var(--ink-soft); font-size:17px;
+  }
+  .toc a::before{
+    content:counter(toc,decimal-leading-zero);
+    font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--red);
+    flex:none;
+  }
+  .toc a:hover{color:var(--red-deep)}
+  .toc a.active{color:var(--red-deep); font-weight:600}
+
+  /* ---------- CALLOUTS ---------- */
+  .pull{
+    font-family:"Archivo",sans-serif; font-weight:700;
+    font-size:clamp(23px,3.6vw,30px); line-height:1.2; letter-spacing:-.015em;
+    color:var(--ink); border-top:3px solid var(--red); border-bottom:3px solid var(--red);
+    padding:26px 0; margin:44px 0;
+  }
+  .pull span{color:var(--red)}
+
+  .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:38px 0}
+  .stat{background:var(--mast); color:var(--mast-ink); padding:22px 18px; position:relative}
+  .stat .big{
+    font-family:"Archivo",sans-serif; font-weight:900; font-size:clamp(32px,6vw,46px);
+    line-height:.9; color:#fff;
+  }
+  .stat .big sub{font-size:.4em; color:var(--red); font-weight:700; vertical-align:baseline}
+  .stat .lbl{
+    font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.04em;
+    color:var(--mast-dim); margin-top:12px; line-height:1.45; text-transform:uppercase;
+  }
+  @media(max-width:640px){.stats{grid-template-columns:1fr}}
+
+  .note{
+    border:1px solid var(--rule); border-left:4px solid var(--blue);
+    background:var(--blue-wash); padding:18px 22px; margin:30px 0; font-size:17px;
+  }
+  .note.warn{border-left-color:var(--red); background:var(--red-wash)}
+  .note.cwe{border-left-color:var(--amber); background:var(--amber-wash)}
+  .note h4{margin:0 0 6px; color:var(--ink)}
+  .note p{margin:0}
+  .note p+p{margin-top:10px}
+
+  /* ---------- CODE ---------- */
+  .code{
+    background:var(--code-bg); border-radius:8px; margin:28px 0; overflow:hidden;
+    border:1px solid #2a261d; box-shadow:0 18px 40px -28px rgba(0,0,0,.6);
+  }
+  .code-head{
+    display:flex; align-items:center; gap:10px; padding:11px 16px;
+    background:#13110d; border-bottom:1px solid #2a261d;
+    font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--mast-dim);
+    letter-spacing:.04em;
+  }
+  .dots{display:flex; gap:6px}
+  .dots i{width:11px; height:11px; border-radius:50%; display:block}
+  .dots i:nth-child(1){background:#d4504e}.dots i:nth-child(2){background:#d4a24e}.dots i:nth-child(3){background:#5fa15a}
+  .code-head .fname{margin-left:4px}
+  .tag{margin-left:auto; font-size:10px; padding:3px 8px; border-radius:3px; letter-spacing:.08em; text-transform:uppercase}
+  .tag.bad{background:rgba(184,29,36,.22); color:#f1a39d; border:1px solid #6e2120}
+  .tag.good{background:rgba(61,107,57,.25); color:#a7c79a; border:1px solid #335230}
+  pre{
+    margin:0; padding:20px 18px; overflow-x:auto;
+    font-family:"JetBrains Mono",monospace; font-size:13.5px; line-height:1.7;
+    color:var(--code-ink);
+  }
+  pre .ln{color:#46423a; user-select:none; display:inline-block; width:2.2em; text-align:right; margin-right:1.4em}
+  .kw{color:var(--c-kw)}.str{color:var(--c-str)}.com{color:var(--c-com); font-style:italic}
+  .fn{color:var(--c-fn)}.num{color:var(--c-num)}.pp{color:var(--c-pp)}.op{color:var(--c-op)}
+
+  .toggle{display:flex; border-bottom:1px solid #2a261d; background:#13110d}
+  .toggle button{
+    flex:1; background:none; border:none; cursor:pointer; padding:11px 8px;
+    font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--mast-dim); border-bottom:2px solid transparent;
+  }
+  .toggle button.on{color:#fff; border-bottom-color:var(--red); background:#1b1914}
+  .toggle button:first-child.on{border-bottom-color:var(--red)}
+  .panel{display:none}.panel.on{display:block}
+
+  .caption{font-size:14.5px; color:var(--muted); font-style:italic; margin:-14px 0 30px; padding-left:2px}
+
+  table.cwe-t{width:100%; border-collapse:collapse; margin:28px 0; font-size:15.5px}
+  table.cwe-t th,table.cwe-t td{text-align:left; padding:11px 12px; border-bottom:1px solid var(--rule)}
+  table.cwe-t th{font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--red-deep); border-bottom:2px solid var(--rule-strong)}
+  table.cwe-t td:first-child{font-family:"JetBrains Mono",monospace; font-size:13px; color:var(--red-deep); white-space:nowrap}
+
+  /* ---------- CITATIONS ---------- */
+  sup.cite{font-family:"JetBrains Mono",monospace; font-size:.62em; line-height:0; vertical-align:super}
+  sup.cite a{
+    text-decoration:none; color:#fff; background:var(--red); padding:1px 4px;
+    border-radius:3px; font-weight:500; margin:0 1px;
+  }
+  sup.cite a:hover{background:var(--red-deep)}
+  .refs{border-top:3px solid var(--ink); margin-top:70px; padding-top:8px}
+  .refs ol{padding-left:0; counter-reset:r; list-style:none}
+  .refs li{
+    counter-increment:r; position:relative; padding:14px 0 14px 46px;
+    border-bottom:1px solid var(--rule); font-size:15px; line-height:1.5; color:var(--ink-soft);
+  }
+  .refs li::before{
+    content:counter(r); position:absolute; left:0; top:14px;
+    font-family:"JetBrains Mono",monospace; font-size:13px; color:#fff;
+    background:var(--ink); width:30px; height:24px; border-radius:3px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .refs li:target{background:var(--amber-wash); border-radius:4px}
+  .refs li:target::before{background:var(--red)}
+  .refs .src{font-style:italic; color:var(--muted)}
+  .refs .back{font-family:"JetBrains Mono",monospace; font-size:12px; margin-left:6px}
+  .refs .back a{text-decoration:none; margin:0 2px}
+
+  .endmark{text-align:center; font-family:"JetBrains Mono",monospace; color:var(--red); margin:50px 0; letter-spacing:.5em}
+  footer{background:var(--mast); color:var(--mast-dim); padding:40px 24px; font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.04em}
+  footer .wrap{max-width:var(--maxw)}
+  footer b{color:var(--mast-ink); font-weight:500}
+
+  /* progress */
+  .prog{position:fixed; top:0; left:0; height:3px; background:var(--red); width:0; z-index:50}
+</style>
+</head>
+<body>
+<div class="prog" id="prog"></div>
+
+<header class="mast">
+  <div class="mast-inner">
+    <p class="kicker">Systems &middot; Security <span></span> Memory Safety</p>
+    <h1>Memory<br><em>Unsafe</em></h1>
+    <p class="dek">A field guide to the four bugs that have defined four decades of insecure software: buffer overflows, use-after-free, null-pointer dereferences, and data races in C and C++.</p>
+    <p class="hexstrip"><b>0x7fffe9b0</b> &nbsp; 41 41 41 41 41 41 41 41 &nbsp; 41 41 41 41 41 41 41 41 &nbsp; <b>// return address &larr; overwritten</b></p>
+    <p class="byline">A technical longread &middot; with bidirectional Vancouver citations</p>
+  </div>
+</header>
+
+<div class="wrap">
+<main>
+
+  <section id="intro">
+    <p class="lede">In 1988, a graduate student's worm crippled an estimated ten percent of the computers then connected to the internet by, among other tricks, feeding an oversized string into a 512-byte stack buffer that a Unix daemon read with the notoriously unsafe <code>gets()</code> function.<sup class="cite"><a href="#ref-1" id="c1a">1</a></sup> Nearly forty years later, the descendants of that same bug class still account for the majority of severe security vulnerabilities in the world's most important software.</p>
+
+    <p>The reason is structural. C and, by inheritance, C++ were designed to give the programmer direct, unmediated control over memory. There is no runtime that checks whether an array index is in bounds, no garbage collector that decides when an object dies, and no enforced rule that a pointer still points at something valid. That control is precisely what makes the languages fast and suitable for operating systems, embedded firmware, browsers, and cryptographic libraries. It is also what makes them dangerous: the compiler will happily emit code that writes past the end of a buffer, reads freed memory, or dereferences a null pointer, and the standard declares the result not an error but <em>undefined behavior</em> &mdash; a blank cheque that the implementation may cash however it likes.</p>
+
+    <p>This article walks through the four canonical memory-management defects of C and C++ &mdash; what they are, where they came from, how they are exploited, and how they are defended against &mdash; with runnable source code and the historical incidents that made each one infamous.</p>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="big">~70<sub>%</sub></div>
+        <div class="lbl">Of Microsoft CVEs attributed to memory-safety issues, 2006&ndash;2018</div>
+      </div>
+      <div class="stat">
+        <div class="big">~70<sub>%</sub></div>
+        <div class="lbl">Of serious security bugs in Google's Chromium that are memory-safety problems</div>
+      </div>
+      <div class="stat">
+        <div class="big">223&rarr;&lt;50</div>
+        <div class="lbl">Android memory-safety vulns per year, 2019&ndash;2024, as Rust was adopted</div>
+      </div>
+    </div>
+    <p class="caption">Sources: Microsoft Security Response Center;<sup class="cite"><a href="#ref-10" id="c10a">10</a></sup> Australian Cyber Security Centre / joint guidance;<sup class="cite"><a href="#ref-11" id="c11a">11</a></sup> Google Android Security.<sup class="cite"><a href="#ref-18" id="c18a">18</a></sup></p>
+
+    <div class="toc" id="toc">
+      <h4>Contents</h4>
+      <ol>
+        <li><a href="#model">The memory model that makes it possible</a></li>
+        <li><a href="#overflow">Buffer overflows</a></li>
+        <li><a href="#uaf">Use-after-free &amp; double-free</a></li>
+        <li><a href="#null">Null-pointer dereferences</a></li>
+        <li><a href="#race">Data races &amp; the memory model</a></li>
+        <li><a href="#defense">Detection &amp; defense</a></li>
+        <li><a href="#road">The road to memory safety</a></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 1. MODEL ===================== -->
+  <section id="model">
+    <h2><span class="num">01 / Foundations</span>The memory model that makes it possible</h2>
+
+    <p>A running C or C++ program divides its address space into regions. Code and read-only constants sit in their own segments. Global and <code>static</code> variables live in the data and BSS segments. Two regions matter most for the bugs that follow: the <strong>stack</strong>, which grows and shrinks automatically as functions are called and returned, holding local variables and bookkeeping such as saved return addresses; and the <strong>heap</strong>, a pool of memory the programmer allocates and frees explicitly with <code>malloc</code>/<code>free</code> in C or <code>new</code>/<code>delete</code> in C++.</p>
+
+    <p>The defining property of these languages is that the programmer, not the runtime, is responsible for the rules. An array does not know its own length. A pointer does not know whether the object it addresses is still alive. Freeing memory does not change the value of the pointers that referenced it. None of these operations is checked at runtime, because checking would cost cycles that the languages were specifically designed not to spend.</p>
+
+    <p>When a program violates a rule the standard cares about &mdash; indexing out of bounds, reading an uninitialized value, using a pointer after the object's lifetime has ended &mdash; the behavior is <em>undefined</em>. The compiler is entitled to assume such situations never happen, and it optimizes accordingly. In practice this means a memory bug rarely produces a tidy, immediate error. It may appear to work, corrupt unrelated data, crash much later, or hand control of the process to an attacker. This gap between "the program seems to run" and "the program is correct" is the soil in which every defect below grows.</p>
+
+    <div class="pull">Four bugs, one root cause: in C and C++, <span>nothing at runtime is obligated to stop you</span> from touching memory you have no right to touch.</div>
+
+    <p>The security community has given these defects stable identifiers in the Common Weakness Enumeration (CWE) maintained by MITRE. Throughout this article they serve as precise names for what would otherwise be loosely described "memory bugs."</p>
+
+    <table class="cwe-t">
+      <thead><tr><th>CWE</th><th>Weakness</th><th>Class covered here</th></tr></thead>
+      <tbody>
+        <tr><td>CWE-787</td><td>Out-of-bounds Write</td><td>Buffer overflow (write)</td></tr>
+        <tr><td>CWE-125</td><td>Out-of-bounds Read</td><td>Buffer over-read (e.g. Heartbleed)</td></tr>
+        <tr><td>CWE-416</td><td>Use After Free</td><td>Dangling-pointer use</td></tr>
+        <tr><td>CWE-476</td><td>NULL Pointer Dereference</td><td>Null dereference</td></tr>
+        <tr><td>CWE-362</td><td>Improper Synchronization ("Race Condition")</td><td>Data races</td></tr>
+      </tbody>
+    </table>
+    <p class="caption">CWE identifiers are stable references published by MITRE.<sup class="cite"><a href="#ref-5" id="c5a">5</a></sup><sup class="cite"><a href="#ref-6" id="c6a">6</a></sup><sup class="cite"><a href="#ref-7" id="c7a">7</a></sup><sup class="cite"><a href="#ref-8" id="c8a">8</a></sup><sup class="cite"><a href="#ref-9" id="c9a">9</a></sup></p>
+  </section>
+
+  <!-- ===================== 2. BUFFER OVERFLOW ===================== -->
+  <section id="overflow">
+    <h2><span class="num">02 / CWE-787 &amp; CWE-125</span>Buffer overflows</h2>
+
+    <p>A buffer overflow occurs when a program writes (or reads) past the bounds of a fixed-size region of memory. Because C arrays carry no length and most string functions stop only at a terminating byte or a caller-supplied count, supplying more data than the buffer can hold simply spills into whatever lies adjacent &mdash; other variables, saved registers, or, most dangerously, the function's saved return address.</p>
+
+    <h3>The bug that started the field</h3>
+    <p>The canonical example is the Morris worm of November 2, 1988. One of its propagation vectors targeted the BSD <code>fingerd</code> daemon, which read a network request into a fixed stack buffer using <code>gets()</code> &mdash; a function that performs no bounds checking whatsoever.<sup class="cite"><a href="#ref-1" id="c1b">1</a></sup><sup class="cite"><a href="#ref-2" id="c2a">2</a></sup> By sending a carefully constructed string longer than the buffer, the worm overwrote the saved return address on the stack so that, when the function returned, execution jumped into attacker-supplied code rather than back to the caller.<sup class="cite"><a href="#ref-2" id="c2b">2</a></sup> The incident infected roughly six thousand machines, prompted the creation of the first CERT coordination center, and produced the first conviction under the U.S. Computer Fraud and Abuse Act.<sup class="cite"><a href="#ref-2" id="c2c">2</a></sup></p>
+
+    <p>The technique was largely folklore until 1996, when Elias Levy &mdash; writing as "Aleph One" &mdash; published <em>Smashing the Stack for Fun and Profit</em> in <em>Phrack</em> issue 49. It was the first high-quality, step-by-step public explanation of how stack buffer overflows work and how to exploit them, and it shaped a generation of both attackers and defenders.<sup class="cite"><a href="#ref-3" id="c3a">3</a></sup></p>
+
+    <h3>Anatomy of a stack smash</h3>
+    <p>Consider a function that copies an external string into a local array. The vulnerable version trusts the input; the fixed version bounds it.</p>
+
+    <div class="code">
+      <div class="toggle" data-group="g1">
+        <button class="on" data-target="g1-bad">vulnerable.c</button>
+        <button data-target="g1-good">hardened.c</button>
+      </div>
+      <div class="panel on" id="g1-bad">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">vulnerable.c</span><span class="tag bad">CWE-787</span></div>
+<pre><span class="pp">#include &lt;string.h&gt;</span>
+
+<span class="kw">void</span> <span class="fn">handle</span>(<span class="kw">const char</span> *input) {
+    <span class="kw">char</span> name[<span class="num">64</span>];            <span class="com">// fixed 64-byte stack buffer</span>
+    <span class="fn">strcpy</span>(name, input);       <span class="com">// no length check: copies until '\0'</span>
+    <span class="com">// if input is longer than 63 bytes, strcpy writes past `name`,</span>
+    <span class="com">// clobbering saved registers and the return address.</span>
+    <span class="fn">use</span>(name);
+}                              <span class="com">// &lt;- return jumps to whatever now sits in the slot</span></pre>
+      </div>
+      <div class="panel" id="g1-good">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">hardened.c</span><span class="tag good">bounded</span></div>
+<pre><span class="pp">#include &lt;string.h&gt;</span>
+
+<span class="kw">void</span> <span class="fn">handle</span>(<span class="kw">const char</span> *input) {
+    <span class="kw">char</span> name[<span class="num">64</span>];
+    <span class="com">// copy at most 63 bytes, always leave room for the terminator</span>
+    <span class="fn">snprintf</span>(name, <span class="kw">sizeof</span> name, <span class="str">"%s"</span>, input);
+    name[<span class="kw">sizeof</span> name - <span class="num">1</span>] = <span class="str">'\0'</span>;  <span class="com">// defensive: guarantee NUL</span>
+    <span class="fn">use</span>(name);
+}</pre>
+      </div>
+    </div>
+    <p class="caption">The fix is not "use a bigger buffer" &mdash; it is "never write more than the buffer holds." Functions like <code>gets</code>, <code>strcpy</code>, and <code>sprintf</code> have no notion of a destination size; their bounded counterparts (<code>fgets</code>, <code>strncpy</code>/<code>strlcpy</code>, <code>snprintf</code>) do.</p>
+
+    <p>On the stack, the local buffer typically sits below the saved frame pointer and return address. Writing past the buffer marches upward into those slots. Overwriting the return address with the address of injected code (classic stack smashing) or with the address of an existing function or instruction sequence (return-oriented programming, the modern technique used once stacks became non-executable) redirects control flow.<sup class="cite"><a href="#ref-3" id="c3b">3</a></sup></p>
+
+    <h3>Heap overflows and over-reads</h3>
+    <p>Overflows are not confined to the stack. Writing past a heap allocation can corrupt allocator metadata or adjacent objects, and reading past a buffer &mdash; an <em>over-read</em>, CWE-125 &mdash; leaks whatever happens to be in adjacent memory. The most consequential over-read in history is <strong>Heartbleed</strong> (CVE-2014-0160).</p>
+
+    <div class="note warn">
+      <h4>Case study &middot; Heartbleed (CVE-2014-0160)</h4>
+      <p>OpenSSL's implementation of the TLS heartbeat extension trusted a length field supplied by the remote peer. A client could claim its small payload was up to 64&nbsp;KB long; OpenSSL allocated a response buffer and <code>memcpy</code>'d that many bytes from the request &mdash; copying far past the actual payload and returning whatever lived in adjacent process memory, including private keys, passwords, and session cookies.<sup class="cite"><a href="#ref-14" id="c14a">14</a></sup><sup class="cite"><a href="#ref-15" id="c15a">15</a></sup></p>
+      <p>The flaw was a single missing bounds check before a <code>memcpy</code> using non-sanitized user input as the length.<sup class="cite"><a href="#ref-15" id="c15b">15</a></sup> Introduced in 2012 and disclosed in April 2014, it affected OpenSSL 1.0.1 through 1.0.1f and was fixed in 1.0.1g by validating the declared length against the real record length.<sup class="cite"><a href="#ref-14" id="c14b">14</a></sup></p>
+    </div>
+
+    <p>Heartbleed illustrates two points. First, a memory bug need not write anything to be catastrophic &mdash; reading too much was enough to undermine confidentiality across a large fraction of the web's servers. Second, the defect was textbook: trusting an attacker-controlled length without checking it against the buffer's real size.</p>
+
+    <h4>Primary mitigations</h4>
+    <p>Defenders layered several mechanisms in response to stack smashing: <strong>stack canaries</strong>, a random value placed before the return address and checked on return; <strong>non-executable memory</strong> (NX/DEP), which marks the stack and heap as data-only so injected shellcode cannot run; and <strong>Address Space Layout Randomization</strong> (ASLR), which randomizes the base addresses of the stack, heap, and libraries so an attacker cannot reliably predict where to jump.<sup class="cite"><a href="#ref-3" id="c3c">3</a></sup> Compiler-side, GCC and Clang's <code>_FORTIFY_SOURCE</code> and <code>-fstack-protector</code> add bounds-aware versions of common functions and canary checks. None of these eliminates the bug; they raise the cost of exploiting it.</p>
+  </section>
+
+  <!-- ===================== 3. UAF ===================== -->
+  <section id="uaf">
+    <h2><span class="num">03 / CWE-416</span>Use-after-free &amp; double-free</h2>
+
+    <p>Use-after-free (UAF) is the act of dereferencing a pointer to memory that has already been freed. In C and C++, calling <code>free</code> or <code>delete</code> returns the memory to the allocator but does <em>not</em> alter the pointer &mdash; it becomes a <em>dangling pointer</em> still holding the old address. Reading or writing through it touches memory whose contents and ownership are now undefined.</p>
+
+    <div class="code">
+      <div class="toggle" data-group="g2">
+        <button class="on" data-target="g2-bad">uaf.cpp</button>
+        <button data-target="g2-good">raii.cpp</button>
+      </div>
+      <div class="panel on" id="g2-bad">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">uaf.cpp</span><span class="tag bad">CWE-416</span></div>
+<pre><span class="kw">struct</span> Session { <span class="kw">int</span> id; <span class="kw">char</span> token[<span class="num">32</span>]; };
+
+<span class="kw">void</span> <span class="fn">logout</span>(Session *s) {
+    <span class="kw">delete</span> s;                  <span class="com">// memory returned to the allocator...</span>
+}                              <span class="com">// ...but the caller's pointer still holds the address</span>
+
+<span class="kw">void</span> <span class="fn">flow</span>() {
+    Session *s = <span class="kw">new</span> Session{<span class="num">7</span>, <span class="str">"secret"</span>};
+    <span class="fn">logout</span>(s);
+    <span class="com">// s is now DANGLING. The next line is undefined behavior:</span>
+    <span class="fn">printf</span>(<span class="str">"%d\n"</span>, s-&gt;id);   <span class="com">// may print garbage, crash, or read attacker data</span>
+}</pre>
+      </div>
+      <div class="panel" id="g2-good">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">raii.cpp</span><span class="tag good">ownership-managed</span></div>
+<pre><span class="pp">#include &lt;memory&gt;</span>
+
+<span class="kw">struct</span> Session { <span class="kw">int</span> id; <span class="kw">char</span> token[<span class="num">32</span>]; };
+
+<span class="kw">void</span> <span class="fn">flow</span>() {
+    <span class="kw">auto</span> s = std::<span class="fn">make_unique</span>&lt;Session&gt;(Session{<span class="num">7</span>, <span class="str">"secret"</span>});
+    <span class="fn">printf</span>(<span class="str">"%d\n"</span>, s-&gt;id);
+    <span class="com">// unique_ptr frees the Session automatically at end of scope.</span>
+    <span class="com">// There is no raw pointer left to dangle, and no manual delete.</span>
+}</pre>
+      </div>
+    </div>
+    <p class="caption">RAII &mdash; "Resource Acquisition Is Initialization" &mdash; ties the object's lifetime to a scope. <code>std::unique_ptr</code> and <code>std::shared_ptr</code> express ownership in the type system so the compiler frees memory deterministically and no dangling raw pointer remains.</p>
+
+    <h3>Why UAF is dangerous, not just buggy</h3>
+    <p>The reason UAF is a security problem and not merely a crash is the allocator's behavior. After <code>free</code>, the allocator may hand the same block to the next allocation request. An attacker who can trigger an allocation of the right size between the free and the dangling use can place <em>their own data</em> where the freed object used to be &mdash; a technique called heap grooming or "feng shui." If the dangling pointer is then used as, say, a C++ object with a vtable, the attacker controls the function pointers it invokes.</p>
+
+    <p>A close relative is the <strong>double-free</strong>: calling <code>free</code> twice on the same pointer. This corrupts the allocator's internal free lists and, in many classic allocators, can be manipulated into an arbitrary write. Microsoft's analysis of its own vulnerability data found use-after-free among the recurring root causes of memory-safety CVEs, alongside heap out-of-bounds access, type confusion, and uninitialized use.<sup class="cite"><a href="#ref-10" id="c10b">10</a></sup></p>
+
+    <div class="pull">A freed pointer is a loaded weapon left on the table. C and C++ <span>never clear it for you.</span></div>
+
+    <h4>Primary mitigations</h4>
+    <p>The modern C++ answer is to stop managing lifetimes by hand: prefer stack objects and RAII, express ownership with <code>unique_ptr</code> (single owner) and <code>shared_ptr</code> (reference-counted shared owner), and use <code>weak_ptr</code> to hold non-owning references that can be checked for validity. Setting raw pointers to <code>nullptr</code> immediately after freeing converts a silent UAF into a more visible null dereference. At the allocator level, hardened allocators such as Android's Scudo are specifically designed to resist heap-based use-after-free, double-free, and overflow exploitation.<sup class="cite"><a href="#ref-20" id="c20a">20</a></sup></p>
+  </section>
+
+  <!-- ===================== 4. NULL ===================== -->
+  <section id="null">
+    <h2><span class="num">04 / CWE-476</span>Null-pointer dereferences</h2>
+
+    <p>A null-pointer dereference is an attempt to read or write through a pointer whose value is null &mdash; a sentinel meaning "points at nothing." The concept itself has a famous origin and a famous apology.</p>
+
+    <div class="note">
+      <h4>The billion-dollar mistake</h4>
+      <p>Sir Tony Hoare introduced the null reference in 1965 while designing the type system for ALGOL&nbsp;W, reasoning that it was trivial to implement. In a 2009 talk he renounced it: he called it his "billion-dollar mistake," arguing that the single null reference had since caused innumerable errors, vulnerabilities, and system crashes.<sup class="cite"><a href="#ref-4" id="c4a">4</a></sup></p>
+    </div>
+
+    <p>In C and C++ the consequences are sharper than in managed languages. Dereferencing null is itself undefined behavior. On a typical desktop operating system the virtual page at address zero is unmapped, so the access faults and the process is killed &mdash; a denial of service, but a relatively clean one. On embedded systems without memory protection, or where address zero is mapped, the same operation may silently read or write real memory. Worse, because the standard says dereferencing null cannot happen, optimizing compilers sometimes <em>delete</em> the very null checks programmers add after a dereference, on the logic that the pointer must have been non-null to reach that point &mdash; turning a defensive check into a removed one.</p>
+
+    <div class="code">
+      <div class="toggle" data-group="g3">
+        <button class="on" data-target="g3-bad">null.cpp</button>
+        <button data-target="g3-good">checked.cpp</button>
+      </div>
+      <div class="panel on" id="g3-bad">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">null.cpp</span><span class="tag bad">CWE-476</span></div>
+<pre>Config *<span class="fn">load</span>(<span class="kw">const char</span> *path);   <span class="com">// returns nullptr on failure</span>
+
+<span class="kw">int</span> <span class="fn">port_of</span>(<span class="kw">const char</span> *path) {
+    Config *c = <span class="fn">load</span>(path);      <span class="com">// may fail and return nullptr</span>
+    <span class="kw">return</span> c-&gt;port;             <span class="com">// dereference without checking -&gt; UB / crash</span>
+}</pre>
+      </div>
+      <div class="panel" id="g3-good">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">checked.cpp</span><span class="tag good">validated</span></div>
+<pre><span class="pp">#include &lt;optional&gt;</span>
+
+std::optional&lt;<span class="kw">int</span>&gt; <span class="fn">port_of</span>(<span class="kw">const char</span> *path) {
+    Config *c = <span class="fn">load</span>(path);
+    <span class="kw">if</span> (c == <span class="kw">nullptr</span>)           <span class="com">// handle the absent case explicitly</span>
+        <span class="kw">return</span> std::nullopt;
+    <span class="kw">return</span> c-&gt;port;
+}
+<span class="com">// Better still: design APIs to return references or std::optional,</span>
+<span class="com">// so "no value" is a type the caller is forced to handle.</span></pre>
+      </div>
+    </div>
+    <p class="caption">The structural fix is to make absence visible in the type. A <code>std::optional&lt;T&gt;</code> or a reference (<code>T&amp;</code>, which cannot legally be null) forces the caller to confront the missing-value case at compile time rather than discover it at runtime.</p>
+
+    <p>Defensively, the rules are simple: check any pointer that can be null before using it; prefer references over pointers when the value is mandatory; and model optionality with <code>std::optional</code> rather than a bare nullable pointer. Static analyzers and the compiler's own <code>-Wnull-dereference</code> warning catch many of these paths before they ship.</p>
+  </section>
+
+  <!-- ===================== 5. DATA RACE ===================== -->
+  <section id="race">
+    <h2><span class="num">05 / CWE-362</span>Data races &amp; the memory model</h2>
+
+    <p>The first three defects are about <em>space</em> &mdash; touching the wrong bytes. A data race is about <em>time</em>. Before 2011, the C and C++ standards did not even acknowledge threads; multithreading was a platform extension layered on top of a single-threaded language. C++11 (and C11) changed that by defining a formal multithreaded memory model, and with it, a precise definition of the data race.</p>
+
+    <p>Under that model, two evaluations <em>conflict</em> if they access the same memory location and at least one is a write. A program has a <strong>data race</strong> if two conflicting accesses occur on different threads, at least one is non-atomic, and neither <em>happens-before</em> the other. If a data race occurs, the behavior of the entire program is undefined.<sup class="cite"><a href="#ref-16" id="c16a">16</a></sup></p>
+
+    <div class="pull">A data race is not "a bug that sometimes prints the wrong number." It is <span>undefined behavior for the whole program.</span></div>
+
+    <p>This is stronger than intuition suggests. Programmers often imagine a racy <code>counter++</code> simply loses some increments. In reality, because the behavior is undefined, the compiler may assume the race never happens and optimize on that basis, producing outcomes that no interleaving of the source statements could explain.</p>
+
+    <div class="code">
+      <div class="toggle" data-group="g4">
+        <button class="on" data-target="g4-bad">race.cpp</button>
+        <button data-target="g4-good">atomic.cpp</button>
+      </div>
+      <div class="panel on" id="g4-bad">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">race.cpp</span><span class="tag bad">CWE-362</span></div>
+<pre><span class="pp">#include &lt;thread&gt;</span>
+
+<span class="kw">int</span> counter = <span class="num">0</span>;                 <span class="com">// plain int, shared, non-atomic</span>
+
+<span class="kw">void</span> <span class="fn">work</span>() {
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">100000</span>; ++i)
+        ++counter;                <span class="com">// read-modify-write, unsynchronized</span>
+}
+
+<span class="kw">int</span> <span class="fn">main</span>() {
+    std::thread t1{work}, t2{work};   <span class="com">// two threads, same `counter`</span>
+    t1.<span class="fn">join</span>(); t2.<span class="fn">join</span>();
+    <span class="com">// DATA RACE -&gt; undefined behavior. The total is not merely</span>
+    <span class="com">// "less than 200000"; the program has no defined meaning.</span>
+}</pre>
+      </div>
+      <div class="panel" id="g4-good">
+        <div class="code-head"><span class="dots"><i></i><i></i><i></i></span><span class="fname">atomic.cpp</span><span class="tag good">synchronized</span></div>
+<pre><span class="pp">#include &lt;thread&gt;</span>
+<span class="pp">#include &lt;atomic&gt;</span>
+
+std::atomic&lt;<span class="kw">int</span>&gt; counter{<span class="num">0</span>};      <span class="com">// atomic: no data race by definition</span>
+
+<span class="kw">void</span> <span class="fn">work</span>() {
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">100000</span>; ++i)
+        counter.<span class="fn">fetch_add</span>(<span class="num">1</span>, std::memory_order_relaxed);
+}
+
+<span class="kw">int</span> <span class="fn">main</span>() {
+    std::thread t1{work}, t2{work};
+    t1.<span class="fn">join</span>(); t2.<span class="fn">join</span>();
+    <span class="com">// Defined behavior; final value is exactly 200000.</span>
+    <span class="com">// (Use a std::mutex instead when guarding multiple variables.)</span>
+}</pre>
+      </div>
+    </div>
+    <p class="caption">cppreference states the rule directly: three threads incrementing a plain shared <code>int</code> is undefined behavior; the same threads incrementing a <code>std::atomic&lt;int&gt;</code> are well-defined.<sup class="cite"><a href="#ref-16" id="c16b">16</a></sup></p>
+
+    <h3>Happens-before and memory order</h3>
+    <p>The way to make conflicting accesses safe is to establish a <em>happens-before</em> relationship between them. Acquiring and releasing a <code>std::mutex</code> does this: releasing a mutex synchronizes-with a later acquisition of the same mutex by another thread, ordering everything before the release ahead of everything after the acquire.<sup class="cite"><a href="#ref-16" id="c16c">16</a></sup> Atomic operations do it explicitly through <code>std::memory_order</code>. The default, <code>memory_order_seq_cst</code>, gives the strongest guarantee &mdash; a single global order all threads agree on &mdash; at some performance cost; weaker orders such as acquire/release and relaxed trade ordering guarantees for speed and must be used with care.<sup class="cite"><a href="#ref-17" id="c17a">17</a></sup></p>
+
+    <p>A related but distinct hazard is the <strong>race condition</strong> of the time-of-check-to-time-of-use (TOCTOU) variety, where correctness depends on timing even without a low-level data race &mdash; for instance, checking that a file exists and then opening it, when another process can swap the file in between. CWE-362 covers improper synchronization broadly; the data race is its sharpest, language-level form.</p>
+  </section>
+
+  <!-- ===================== 6. DEFENSE ===================== -->
+  <section id="defense">
+    <h2><span class="num">06 / Tooling</span>Detection &amp; defense</h2>
+
+    <p>Because the compiler will not reject memory-unsafe code, the ecosystem has built an arsenal of tools that find these bugs at compile time, at run time, or by brute force.</p>
+
+    <h4>Sanitizers</h4>
+    <p><strong>AddressSanitizer (ASan)</strong>, introduced by a Google team in 2012, instruments a program at compile time with "shadow memory" and redzones so that out-of-bounds accesses, use-after-free, and double-frees are caught at the moment they happen, with a precise stack trace, at roughly a 2&times; slowdown.<sup class="cite"><a href="#ref-21" id="c21a">21</a></sup> Its sibling <strong>ThreadSanitizer (TSan)</strong> detects data races at run time by tracking the happens-before relationship between accesses, flagging exactly the conflicting unsynchronized pairs the C++ memory model forbids. <strong>MemorySanitizer</strong> targets uninitialized reads, and <strong>UndefinedBehaviorSanitizer</strong> catches a grab-bag of other UB. These are enabled with a single compiler flag (e.g. <code>-fsanitize=address</code>) and are now standard in CI pipelines.</p>
+
+    <h4>Dynamic analysis &amp; fuzzing</h4>
+    <p><strong>Valgrind</strong>'s Memcheck tool finds leaks and invalid accesses without recompilation, at a heavier performance cost. <strong>Fuzzing</strong> &mdash; feeding a program vast quantities of malformed input to provoke crashes &mdash; pairs naturally with sanitizers: the fuzzer produces the haystack of inputs, and ASan turns each silent corruption into a loud, diagnosable failure. Google's OSS-Fuzz has found tens of thousands of bugs in open-source C/C++ this way.</p>
+
+    <h4>Static analysis &amp; safer language constructs</h4>
+    <p>Compiler warnings (<code>-Wall -Wextra</code>), the Clang Static Analyzer, and commercial tools reason about code paths without running them. Within C++ itself, the discipline that prevents whole bug classes is consistent: prefer standard containers (<code>std::vector</code>, <code>std::string</code>) over raw arrays and manual buffers; prefer smart pointers and RAII over manual <code>new</code>/<code>delete</code>; prefer <code>std::atomic</code> and <code>std::mutex</code> over hand-rolled synchronization; and prefer references and <code>std::optional</code> over nullable raw pointers. The C++ Core Guidelines codify these into rules a tool can enforce.</p>
+
+    <div class="note">
+      <h4>The uncomfortable lesson</h4>
+      <p>Microsoft's data is sobering: despite decades of code review, training, static analysis, and fuzzing, roughly 70% of the vulnerabilities it assigned CVEs each year remained memory-safety issues.<sup class="cite"><a href="#ref-11" id="c11b">11</a></sup> The conclusion drawn by Microsoft, Google, and later by the U.S. NSA and CISA was that tooling alone, layered on a memory-unsafe language, hits a ceiling &mdash; because it depends on developers never making a mistake.<sup class="cite"><a href="#ref-12" id="c12a">12</a></sup></p>
+    </div>
+  </section>
+
+  <!-- ===================== 7. ROAD ===================== -->
+  <section id="road">
+    <h2><span class="num">07 / Outlook</span>The road to memory safety</h2>
+
+    <p>The most significant shift of the last decade is the argument that these bugs should be prevented by construction rather than caught after the fact. A <em>memory-safe language</em> &mdash; one whose type system and runtime guarantee that out-of-bounds access, use-after-free, and data races cannot occur in safe code &mdash; eliminates the class rather than chasing instances. Rust is the prominent systems-level example: its ownership-and-borrowing model enforces, at compile time, that a value has a single owner, that references cannot outlive what they point to, and that shared mutable access across threads is rejected outright.</p>
+
+    <p>The data from large codebases is striking. Google reported that the number of memory-safety vulnerabilities in Android fell from 223 in 2019 to fewer than 50 in 2024, and their share of total vulnerabilities dropped from 76% to about 24% over the same period &mdash; well below the roughly 70% industry norm &mdash; as new code was increasingly written in Rust rather than C and C++.<sup class="cite"><a href="#ref-18" id="c18b">18</a></sup><sup class="cite"><a href="#ref-19" id="c19a">19</a></sup> By 2025 that share fell below 20% for the first time, and Google described a roughly 1000&times; lower memory-safety vulnerability density in its Rust code than in its C and C++.<sup class="cite"><a href="#ref-20" id="c20b">20</a></sup> In 2023, U.S. and allied cybersecurity agencies formally urged software manufacturers to publish "memory-safe roadmaps."<sup class="cite"><a href="#ref-11" id="c11c">11</a></sup></p>
+
+    <p>None of this makes C and C++ disappear. They run the kernels, the firmware, the cryptographic libraries, and the trillion lines of existing software that the rest of the stack depends on. The realistic posture is layered: harden new C/C++ with the constructs and sanitizers above, fuzz relentlessly, isolate untrusted parsing, and write the riskiest new components &mdash; the ones that touch attacker-controlled input &mdash; in a memory-safe language where it is feasible. The four bugs in this article are not exotic. They are the predictable consequence of a design that trusts the programmer completely. Understanding exactly how that trust is betrayed is the first step toward not betraying it.</p>
+
+    <div class="endmark">&middot; &middot; &middot;</div>
+  </section>
+
+  <!-- ===================== REFERENCES ===================== -->
+  <section class="refs" id="references">
+    <h2><span class="num">Sources</span>References</h2>
+    <p class="caption">Vancouver style. Each entry links back to the point of citation. Statistics and historical claims are drawn from the cited primary and authoritative sources.</p>
+    <ol>
+      <li id="ref-1">Spafford EH. <span class="src">The Internet Worm Program: An Analysis.</span> Purdue University Technical Report CSD-TR-823; 1988. Available from: https://spaf.cerias.purdue.edu/tech-reps/823.pdf <span class="back">[<a href="#c1a">&uarr;a</a>, <a href="#c1b">b</a>]</span></li>
+      <li id="ref-2">Wikipedia. <span class="src">Morris worm.</span> [cited 2026 Jun 5]. Available from: https://en.wikipedia.org/wiki/Morris_worm <span class="back">[<a href="#c2a">&uarr;a</a>, <a href="#c2b">b</a>, <a href="#c2c">c</a>]</span></li>
+      <li id="ref-3">Aleph One (Levy E). <span class="src">Smashing the Stack for Fun and Profit.</span> Phrack Magazine. 1996 Nov 8;7(49):File 14 of 16. Available from: https://phrack.org/issues/49/14 <span class="back">[<a href="#c3a">&uarr;a</a>, <a href="#c3b">b</a>, <a href="#c3c">c</a>]</span></li>
+      <li id="ref-4">Hoare CAR. <span class="src">Null References: The Billion Dollar Mistake.</span> Presentation, QCon London; 2009. Quoted in: Wikipedia, Void safety [cited 2026 Jun 5]. Available from: https://en.wikipedia.org/wiki/Void_safety <span class="back">[<a href="#c4a">&uarr;</a>]</span></li>
+      <li id="ref-5">MITRE. <span class="src">CWE-787: Out-of-bounds Write.</span> Common Weakness Enumeration. Available from: https://cwe.mitre.org/data/definitions/787.html <span class="back">[<a href="#c5a">&uarr;</a>]</span></li>
+      <li id="ref-6">MITRE. <span class="src">CWE-125: Out-of-bounds Read.</span> Common Weakness Enumeration. Available from: https://cwe.mitre.org/data/definitions/125.html <span class="back">[<a href="#c6a">&uarr;</a>]</span></li>
+      <li id="ref-7">MITRE. <span class="src">CWE-416: Use After Free.</span> Common Weakness Enumeration. Available from: https://cwe.mitre.org/data/definitions/416.html <span class="back">[<a href="#c7a">&uarr;</a>]</span></li>
+      <li id="ref-8">MITRE. <span class="src">CWE-476: NULL Pointer Dereference.</span> Common Weakness Enumeration. Available from: https://cwe.mitre.org/data/definitions/476.html <span class="back">[<a href="#c8a">&uarr;</a>]</span></li>
+      <li id="ref-9">MITRE. <span class="src">CWE-362: Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition').</span> Common Weakness Enumeration. Available from: https://cwe.mitre.org/data/definitions/362.html <span class="back">[<a href="#c9a">&uarr;</a>]</span></li>
+      <li id="ref-10">Miller M. <span class="src">Trends, Challenges, and Strategic Shifts in the Software Vulnerability Mitigation Landscape.</span> Microsoft Security Response Center, presented at BlueHat IL; 2019 Feb 7. Reported by InfoQ. Available from: https://www.infoq.com/news/2019/02/mitigating-vulnerabilities <span class="back">[<a href="#c10a">&uarr;a</a>, <a href="#c10b">b</a>]</span></li>
+      <li id="ref-11">Australian Cyber Security Centre, et&nbsp;al. <span class="src">The case for memory safe roadmaps.</span> Joint guidance; 2023 Dec. Available from: https://www.cyber.gov.au/business-government/secure-design/secure-by-design/the-case-for-memory-safe-roadmaps <span class="back">[<a href="#c11a">&uarr;a</a>, <a href="#c11b">b</a>, <a href="#c11c">c</a>]</span></li>
+      <li id="ref-12">National Security Agency &amp; CISA. <span class="src">Memory Safe Languages: Reducing Vulnerabilities in Modern Software Development.</span> Cybersecurity Information Sheet; 2025 Jun. Available from: https://media.defense.gov/2025/Jun/23/2003742198/-1/-1/0/CSI_MEMORY_SAFE_LANGUAGES_REDUCING_VULNERABILITIES_IN_MODERN_SOFTWARE_DEVELOPMENT.PDF <span class="back">[<a href="#c12a">&uarr;</a>]</span></li>
+      <li id="ref-14">Wikipedia. <span class="src">Heartbleed.</span> [cited 2026 Jun 5]. Available from: https://en.wikipedia.org/wiki/Heartbleed <span class="back">[<a href="#c14a">&uarr;a</a>, <a href="#c14b">b</a>]</span></li>
+      <li id="ref-15">OWASP Foundation. <span class="src">Heartbleed Bug.</span> [cited 2026 Jun 5]. Available from: https://owasp.org/www-community/vulnerabilities/Heartbleed_Bug <span class="back">[<a href="#c15a">&uarr;a</a>, <a href="#c15b">b</a>]</span></li>
+      <li id="ref-16">cppreference. <span class="src">Multi-threaded executions and data races.</span> [cited 2026 Jun 5]. Available from: https://en.cppreference.com/w/cpp/language/multithread.html <span class="back">[<a href="#c16a">&uarr;a</a>, <a href="#c16b">b</a>, <a href="#c16c">c</a>]</span></li>
+      <li id="ref-17">cppreference. <span class="src">std::memory_order.</span> [cited 2026 Jun 5]. Available from: https://en.cppreference.com/w/cpp/atomic/memory_order <span class="back">[<a href="#c17a">&uarr;</a>]</span></li>
+      <li id="ref-18">Vander Stoep J, Rebert A. <span class="src">Eliminating Memory Safety Vulnerabilities at the Source.</span> Google Security Blog; 2024 Sep. Reported by The Register. Available from: https://www.theregister.com/2024/09/25/google_rust_safe_code_android/ <span class="back">[<a href="#c18a">&uarr;a</a>, <a href="#c18b">b</a>]</span></li>
+      <li id="ref-19">Vander Stoep J. <span class="src">Memory Safe Languages in Android 13.</span> Google Security Blog; 2022 Dec. Reported by The Register. Available from: https://www.theregister.com/2022/12/02/android_google_rust/ <span class="back">[<a href="#c19a">&uarr;</a>]</span></li>
+      <li id="ref-20">Vander Stoep J, Rebert A. <span class="src">Rust in Android: move fast and fix things.</span> Google Security Blog; 2025 Nov 13. Available from: https://blog.google/security/rust-in-android-move-fast-fix-things/ <span class="back">[<a href="#c20a">&uarr;a</a>, <a href="#c20b">b</a>]</span></li>
+      <li id="ref-21">Serebryany K, Bruening D, Potapenko A, Vyukov D. <span class="src">AddressSanitizer: A Fast Address Sanity Checker.</span> Proceedings of the USENIX Annual Technical Conference (ATC); 2012. <span class="back">[<a href="#c21a">&uarr;</a>]</span></li>
+    </ol>
+  </section>
+
+</main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p><b>MEMORY UNSAFE</b> &mdash; a technical longread on memory-management defects in C and C++.</p>
+    <p>Code samples are illustrative; vulnerable snippets are labelled with their CWE and must not be deployed. Compile examples with sanitizers (<b>-fsanitize=address,undefined</b>) to observe the failures described.</p>
+  </div>
+</footer>
+
+<script>
+  // code panel toggles
+  document.querySelectorAll('.toggle').forEach(function(t){
+    var btns = t.querySelectorAll('button');
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        var wrap = t.parentElement;
+        btns.forEach(function(x){x.classList.remove('on')});
+        b.classList.add('on');
+        wrap.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on')});
+        wrap.querySelector('#'+b.dataset.target).classList.add('on');
+      });
+    });
+  });
+
+  // reading progress bar
+  var prog = document.getElementById('prog');
+  function onScroll(){
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    prog.style.width = (max>0 ? (h.scrollTop/max*100) : 0) + '%';
+  }
+  document.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+
+  // TOC scrollspy
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var secs = links.map(function(a){return document.querySelector(a.getAttribute('href'))});
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        var id = '#'+e.target.id;
+        links.forEach(function(a){a.classList.toggle('active', a.getAttribute('href')===id)});
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px'});
+  secs.forEach(function(s){ if(s) io.observe(s); });
+</script>
+</body>
+</html>
