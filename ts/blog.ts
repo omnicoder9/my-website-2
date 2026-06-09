@@ -42,6 +42,24 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/ping.html",
+    publishedAt: "2026-06-09",
+    summary: "A practical guide to advanced ping usage, covering controlled probes, IPv4 and IPv6 selection, path MTU testing, source interfaces, TTL, QoS markings, Windows options, and troubleshooting playbooks.",
+    title: "Advanced Use of the Ping Utility: Options, Examples, and Troubleshooting Scenarios"
+  },
+  {
+    path: "blog-articles/cpp.html",
+    publishedAt: "2026-06-09",
+    summary: "A technical deep dive into C++ covering language evolution, performance, memory management, templates, tooling, libraries, safety tradeoffs, and where C++ still matters.",
+    title: "C++: The Enduring Colossus — A Technical Deep Dive"
+  },
+  {
+    path: "blog-articles/graph-problems.html",
+    publishedAt: "2026-06-09",
+    summary: "Seven foundational graph problems with reusable DFS and BFS patterns, covering grids, islands, rotting oranges, water flow, clone graph, course scheduling, and word ladders across six languages.",
+    title: "Every Grid Is a Graph — Seven Foundational Graph Problems"
+  },
+  {
     path: "blog-articles/supply-chain-vulnerabilities.html",
     publishedAt: "2026-06-08",
     summary: "A technical reference on software and hardware supply chain risk, covering malicious updates, dependency confusion, vendor access, CI/CD compromise, code signing, SBOMs, SLSA, and defensive governance.",
@@ -1058,6 +1076,9 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/ping.html": ["Networks"],
+  "blog-articles/cpp.html": ["Programming & Software", "Operating Systems", "Engineering"],
+  "blog-articles/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math & Physics"],
   "blog-articles/supply-chain-vulnerabilities.html": ["Security", "DevSecOps", "Programming & Software", "Engineering"],
   "blog-articles/impossibility.html": ["Philosophy", "Math & Physics", "Engineering"],
   "blog-articles/cloud-vulnerabilities.html": ["Security", "Networks", "DevSecOps"],
