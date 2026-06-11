@@ -42,6 +42,60 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/timing-attacks.html",
+    publishedAt: "2026-06-11",
+    summary: "A technical deep dive into timing side channels, covering constant-time failures, remote and local measurement models, classic cryptographic breaks, microarchitectural leakage, and defensive design patterns.",
+    title: "Timing Attacks: The Clock as Cryptanalyst"
+  },
+  {
+    path: "blog-articles/power-analysis-attacks.html",
+    publishedAt: "2026-06-11",
+    summary: "A field guide to power analysis attacks, covering simple and differential power analysis, leakage models, trace collection, key extraction workflows, countermeasures, and hardware-security tradeoffs.",
+    title: "Power Analysis Attacks: Extracting Secrets from Silicon"
+  },
+  {
+    path: "blog-articles/mobile-device-vulnerabilities.html",
+    publishedAt: "2026-06-11",
+    summary: "A technical reference on mobile device vulnerabilities, covering rooting and jailbreaking, outdated operating systems, radio-interface attacks, risky apps, and data-protection failures across modern phones.",
+    title: "Mobile Device Vulnerabilities — A Field Guide to the Modern Handset Threat Model"
+  },
+  {
+    path: "blog-articles/windows-legacy-security.html",
+    publishedAt: "2026-06-10",
+    summary: "A security and penetration-testing guide to legacy Windows systems in critical infrastructure, covering end-of-life risk, common exploit paths, segmentation, compensating controls, and modernization tradeoffs.",
+    title: "Dead Code Walking: Security and Penetration Testing of Legacy Windows Systems in Critical Infrastructure"
+  },
+  {
+    path: "blog-articles/cobol.html",
+    publishedAt: "2026-06-10",
+    summary: "A technical survey of COBOL covering its origins, language model, strengths in business processing, modernization pressure, tooling, mainframe reality, and why it still runs critical systems.",
+    title: "COBOL: The Language That Runs the World — A Technical Survey"
+  },
+  {
+    path: "blog-articles/advanced-graph-problems.html",
+    publishedAt: "2026-06-10",
+    summary: "A competitive programming field guide to advanced graph problems, including shortest paths, minimum spanning trees, constrained routing, bottleneck paths, Eulerian tours, and implementation pitfalls.",
+    title: "Advanced Graph Problems — A Competitive Programming Field Guide"
+  },
+  {
+    path: "blog-articles/cache-invalidation.html",
+    publishedAt: "2026-06-10",
+    summary: "A deep dive into cache invalidation across CPUs, distributed systems, CDNs, and application stacks, covering coherence, consistency, TTLs, event-driven invalidation, and failure modes.",
+    title: "Cache Invalidation: The Problem That Ate Computer Science"
+  },
+  {
+    path: "blog-articles/its-always-dns.html",
+    publishedAt: "2026-06-10",
+    summary: "A technical guide to DNS failure modes, history, and security, covering recursive resolution, delegation, caching behavior, outages, poisoning, hijacking, and defensive operations.",
+    title: "It's Always DNS — Domain Name System Failure Modes, History, and Security"
+  },
+  {
+    path: "blog-articles/printer-troubleshooting.html",
+    publishedAt: "2026-06-10",
+    summary: "A technical printer troubleshooting reference covering print paths, drivers, spoolers, network queues, laser and inkjet hardware faults, maintenance, and field diagnostics.",
+    title: "Printer Troubleshooting: A Technical Reference — TechOps Series"
+  },
+  {
     path: "blog-articles/ping.html",
     publishedAt: "2026-06-09",
     summary: "A practical guide to advanced ping usage, covering controlled probes, IPv4 and IPv6 selection, path MTU testing, source interfaces, TTL, QoS markings, Windows options, and troubleshooting playbooks.",
@@ -1076,6 +1130,15 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/timing-attacks.html": ["Security", "Programming & Software"],
+  "blog-articles/power-analysis-attacks.html": ["Security", "Engineering"],
+  "blog-articles/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
+  "blog-articles/windows-legacy-security.html": ["Security", "Operating Systems", "Pentesting", "Cyber-Physical Systems"],
+  "blog-articles/cobol.html": ["Programming & Software", "Engineering"],
+  "blog-articles/advanced-graph-problems.html": ["Competitive Programming", "Programming & Software", "Math & Physics"],
+  "blog-articles/cache-invalidation.html": ["Programming & Software", "Engineering", "DevSecOps"],
+  "blog-articles/its-always-dns.html": ["Networks", "Security"],
+  "blog-articles/printer-troubleshooting.html": ["Engineering", "Operating Systems"],
   "blog-articles/ping.html": ["Networks"],
   "blog-articles/cpp.html": ["Programming & Software", "Operating Systems", "Engineering"],
   "blog-articles/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math & Physics"],

@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power Analysis Attacks: Extracting Secrets from Silicon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #090c14;
+    --surface:   #0f1522;
+    --card:      #141b2d;
+    --border:    #1d2c48;
+    --text:      #dde3ef;
+    --muted:     #7a8499;
+    --cyan:      #00d4ff;
+    --orange:    #ff6b2b;
+    --green:     #39d98a;
+    --purple:    #9d7dff;
+    --red:       #ff4d6a;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.75;
+  }
+
+  /* ── MASTHEAD ── */
+  .masthead {
+    background: linear-gradient(180deg, #060810 0%, #090c14 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 0 0 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .masthead-inner {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 64px 32px 48px;
+    position: relative;
+    z-index: 2;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 28px;
+    height: 1px;
+    background: var(--cyan);
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(26px, 4vw, 44px);
+    font-weight: 700;
+    line-height: 1.18;
+    color: #fff;
+    letter-spacing: -0.02em;
+    max-width: 720px;
+    margin-bottom: 22px;
+  }
+  h1 span { color: var(--cyan); }
+  .deck {
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--muted);
+    max-width: 660px;
+    margin-bottom: 36px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+  .meta-row span { color: var(--text); }
+
+  /* oscilloscope hero */
+  .scope-wrap {
+    width: 100%;
+    height: 130px;
+    position: relative;
+    margin-top: 40px;
+    border-top: 1px solid var(--border);
+    background: #060810;
+    overflow: hidden;
+  }
+  .scope-wrap svg { width: 100%; height: 100%; }
+  .grid-line { stroke: #1a2540; stroke-width: 0.5; }
+  .trace { fill: none; stroke: var(--cyan); stroke-width: 1.8; filter: drop-shadow(0 0 4px #00d4ff88); }
+  .trace-ghost { fill: none; stroke: #00d4ff22; stroke-width: 1; }
+  .spike { stroke: var(--orange); stroke-width: 2.5; filter: drop-shadow(0 0 6px #ff6b2bbb); }
+  .annotation { font-family: var(--mono); font-size: 9px; fill: var(--orange); }
+  .label-cyan { font-family: var(--mono); font-size: 8px; fill: var(--cyan); opacity: 0.7; }
+
+  /* ── LAYOUT ── */
+  .page-wrap {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 56px;
+    align-items: start;
+  }
+
+  /* ── TOC ── */
+  .toc-wrap {
+    position: sticky;
+    top: 32px;
+  }
+  .toc-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toc ol {
+    list-style: none;
+    counter-reset: toc-counter;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toc li { counter-increment: toc-counter; }
+  .toc a {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+    line-height: 1.4;
+  }
+  .toc a::before {
+    content: counter(toc-counter, decimal-leading-zero);
+    font-size: 9px;
+    color: var(--border);
+    flex-shrink: 0;
+  }
+  .toc a:hover { background: var(--card); color: var(--cyan); }
+  .toc a:hover::before { color: var(--cyan); }
+
+  /* ── ARTICLE ── */
+  .article { min-width: 0; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    margin: 60px 0 18px;
+    padding-top: 60px;
+    border-top: 1px solid var(--border);
+    letter-spacing: -0.01em;
+  }
+  h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+  h3 {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--cyan);
+    margin: 32px 0 12px;
+    letter-spacing: 0.02em;
+  }
+
+  h4 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--orange);
+    margin: 24px 0 10px;
+    letter-spacing: 0.04em;
+  }
+
+  p { margin-bottom: 18px; color: var(--text); }
+
+  a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid #00d4ff44; transition: border-color 0.15s; }
+  a:hover { border-color: var(--cyan); }
+
+  sup a { border: none; font-family: var(--mono); font-size: 10px; color: var(--cyan); }
+  sup a:hover { color: #fff; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-left: 3px solid var(--cyan);
+    background: var(--card);
+    border-radius: 0 6px 6px 0;
+    padding: 18px 22px;
+    margin: 28px 0;
+  }
+  .callout.orange { border-color: var(--orange); }
+  .callout.green  { border-color: var(--green); }
+  .callout.purple { border-color: var(--purple); }
+  .callout .callout-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    color: var(--cyan);
+  }
+  .callout.orange .callout-label { color: var(--orange); }
+  .callout.green  .callout-label { color: var(--green); }
+  .callout.purple .callout-label { color: var(--purple); }
+  .callout p { margin: 0; font-size: 14.5px; }
+
+  /* ── CODE ── */
+  pre {
+    background: #060a10;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    overflow-x: auto;
+    margin: 24px 0;
+    position: relative;
+  }
+  pre .lang-tag {
+    position: absolute;
+    top: 10px; right: 14px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: #c5d8f0;
+  }
+  p code, li code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 12.5px;
+    color: var(--cyan);
+  }
+
+  /* syntax highlight */
+  .kw   { color: #9d7dff; }
+  .fn   { color: #00d4ff; }
+  .str  { color: #39d98a; }
+  .cmt  { color: #3d5068; font-style: italic; }
+  .num  { color: #ff9d5c; }
+  .cls  { color: #ffd166; }
+
+  /* ── MATH / FORMULA ── */
+  .formula {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 22px 0;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: #e2e8f0;
+    overflow-x: auto;
+  }
+  .formula .formula-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* ── TABLE ── */
+  .tbl-wrap { overflow-x: auto; margin: 24px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    background: var(--card);
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 16px; border-bottom: 1px solid #151e31; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #0f1726; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+  .badge-cyan   { background: #00d4ff1a; color: var(--cyan);   border: 1px solid #00d4ff33; }
+  .badge-orange { background: #ff6b2b1a; color: var(--orange); border: 1px solid #ff6b2b33; }
+  .badge-green  { background: #39d98a1a; color: var(--green);  border: 1px solid #39d98a33; }
+  .badge-red    { background: #ff4d6a1a; color: var(--red);    border: 1px solid #ff4d6a33; }
+
+  /* ── FIGURES ── */
+  figure {
+    margin: 30px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .fig-body { padding: 24px; }
+  figcaption {
+    padding: 12px 24px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ── ASCII DIAGRAM ── */
+  .diagram {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #8eb8d8;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  /* ── STEP LIST ── */
+  .step-list { list-style: none; counter-reset: steps; display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
+  .step-list li {
+    counter-increment: steps;
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 14px;
+    align-items: start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .step-list li::before {
+    content: counter(steps);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cyan);
+    background: #00d4ff14;
+    border: 1px solid #00d4ff33;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    margin-top: -2px;
+  }
+  .step-list li > div strong { font-family: var(--mono); font-size: 12px; color: #fff; display: block; margin-bottom: 4px; letter-spacing: 0.03em; }
+  .step-list li > div { font-size: 14px; color: var(--muted); }
+
+  /* ── REFERENCES ── */
+  .refs {
+    border-top: 1px solid var(--border);
+    padding-top: 48px;
+    margin-top: 64px;
+  }
+  .refs h2 { border-top: none; padding-top: 0; margin-top: 0; }
+  .ref-list { list-style: none; counter-reset: ref-counter; display: flex; flex-direction: column; gap: 12px; }
+  .ref-list li {
+    counter-increment: ref-counter;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+  .ref-list li::before {
+    content: counter(ref-counter) ".";
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--cyan);
+    padding-top: 2px;
+  }
+  .ref-list li a { font-size: 13px; color: var(--cyan); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 860px) {
+    .page-wrap { grid-template-columns: 1fr; gap: 32px; padding: 32px 16px 60px; }
+    .toc-wrap { position: static; }
+    .masthead-inner { padding: 40px 20px 32px; }
+    h2 { margin: 40px 0 14px; padding-top: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ MASTHEAD ═══════════════════════════════ -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="eyebrow">Hardware Security &nbsp;·&nbsp; Side-Channel Analysis</div>
+    <h1>Power Analysis Attacks:<br><span>Extracting Secrets from Silicon</span></h1>
+    <p class="deck">How the physics of semiconductors betrays cryptographic keys — an in-depth examination of simple, differential, correlation, and machine-learning-based power analysis, the mathematics behind them, real-world targets, open-source tooling, and the countermeasures defending modern secure hardware.</p>
+    <div class="meta-row">
+      <div>Category &nbsp;<span>Cryptographic Hardware / Side-Channel Attacks</span></div>
+      <div>Difficulty &nbsp;<span>Advanced</span></div>
+      <div>Reading Time &nbsp;<span>~30 min</span></div>
+    </div>
+  </div>
+  <!-- Oscilloscope hero -->
+  <div class="scope-wrap">
+    <svg viewBox="0 0 1200 130" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- grid -->
+      <line class="grid-line" x1="0" y1="32" x2="1200" y2="32"/>
+      <line class="grid-line" x1="0" y1="65" x2="1200" y2="65"/>
+      <line class="grid-line" x1="0" y1="98" x2="1200" y2="98"/>
+      <line class="grid-line" x1="200" y1="0" x2="200" y2="130"/>
+      <line class="grid-line" x1="400" y1="0" x2="400" y2="130"/>
+      <line class="grid-line" x1="600" y1="0" x2="600" y2="130"/>
+      <line class="grid-line" x1="800" y1="0" x2="800" y2="130"/>
+      <line class="grid-line" x1="1000" y1="0" x2="1000" y2="130"/>
+      <!-- ghost trace -->
+      <polyline class="trace-ghost" points="0,72 30,68 60,74 90,70 120,73 150,69 180,71 210,68 240,75 270,70 300,72 330,69 360,74 390,70 420,71 450,69 480,72 510,70 540,74 570,69 600,72 630,68 660,73 690,70 720,72 750,69 780,71 810,68 840,75 870,70 900,72 930,69 960,74 990,70 1020,71 1050,69 1080,72 1110,70 1140,74 1170,69 1200,72"/>
+      <!-- main trace -->
+      <polyline class="trace" points="0,72 25,70 55,74 80,71 100,70 120,68 135,40 140,22 145,8 148,18 151,45 155,70 165,72 200,70 220,68 240,73 270,71 290,70 310,69 330,15 335,8 340,20 345,65 355,72 380,70 400,69 420,72 450,70 480,71 510,69 530,14 534,7 538,18 542,62 550,72 580,70 610,69 640,72 670,70 695,15 700,5 705,20 710,65 720,72 750,70 780,68 810,72 850,70 880,69 910,72 940,70 960,13 964,4 968,18 972,62 982,72 1020,70 1060,69 1100,72 1140,71 1180,70 1200,72"/>
+      <!-- spike annotations -->
+      <line class="spike" x1="143" y1="8" x2="143" y2="130" stroke-dasharray="3,4"/>
+      <text class="annotation" x="148" y="22">SBox lookup leak</text>
+      <line class="spike" x1="333" y1="8" x2="333" y2="130" stroke-dasharray="3,4"/>
+      <text class="annotation" x="338" y="22">Round 2 key</text>
+      <line class="spike" x1="700" y1="5" x2="700" y2="130" stroke-dasharray="3,4"/>
+      <text class="annotation" x="705" y="18">Key schedule</text>
+      <line class="spike" x1="964" y1="4" x2="964" y2="130" stroke-dasharray="3,4"/>
+      <text class="annotation" x="969" y="18">Final round</text>
+      <text class="label-cyan" x="8" y="125">t →</text>
+      <text class="label-cyan" x="8" y="28">P↑</text>
+    </svg>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ BODY ════════════════════════════════════ -->
+<div class="page-wrap">
+
+  <!-- TOC -->
+  <aside class="toc-wrap">
+    <div class="toc-title">Contents</div>
+    <nav class="toc">
+      <ol>
+        <li><a href="#introduction">Introduction</a></li>
+        <li><a href="#history">History &amp; Origins</a></li>
+        <li><a href="#physics">Physical Foundations</a></li>
+        <li><a href="#power-models">Power Leakage Models</a></li>
+        <li><a href="#attack-taxonomy">Attack Taxonomy</a></li>
+        <li><a href="#spa">Simple Power Analysis</a></li>
+        <li><a href="#dpa">Differential Power Analysis</a></li>
+        <li><a href="#cpa">Correlation Power Analysis</a></li>
+        <li><a href="#template">Template Attacks</a></li>
+        <li><a href="#higher-order">Higher-Order DPA</a></li>
+        <li><a href="#ml-attacks">Deep Learning Attacks</a></li>
+        <li><a href="#methodology">Attack Methodology</a></li>
+        <li><a href="#tooling">Tools &amp; Platforms</a></li>
+        <li><a href="#source-code">Source Code</a></li>
+        <li><a href="#targets">Real-World Targets</a></li>
+        <li><a href="#countermeasures">Countermeasures</a></li>
+        <li><a href="#standards">Standards &amp; Certification</a></li>
+        <li><a href="#future">Future Directions</a></li>
+        <li><a href="#references">References</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <!-- ARTICLE -->
+  <article class="article">
+
+    <!-- ── 1. INTRODUCTION ── -->
+    <section id="introduction">
+      <h2>1. Introduction</h2>
+      <p>Modern cryptographic algorithms — AES, RSA, ECDSA, and their contemporaries — are designed to be computationally secure against mathematical attacks. A properly keyed AES-256 cipher should resist brute force for longer than the age of the universe under current computing paradigms. Yet a $20 piece of test equipment, a few hundred milliseconds of measurement time, and some freely available Python code can recover that same key from a carelessly implemented microcontroller. The reason lies not in the mathematics of the cipher but in the physics of its execution.</p>
+      <p>Power analysis attacks exploit the fundamental reality that every operation a digital device performs consumes energy. The amount of energy consumed varies with the data being processed and the operations being performed. By carefully measuring the instantaneous power draw of a cryptographic device during computation, an attacker can statistically infer the intermediate values inside the cipher — and from those values, reconstruct the secret key. This class of technique is known as a <em>side-channel attack</em>, because the information leaks not through the intended output channel (the ciphertext) but through an unintended physical side channel: the power supply. <sup><a href="#ref1">[1]</a></sup></p>
+      <p>Power analysis sits in a broader category of physical attacks that includes timing analysis, electromagnetic (EM) analysis, acoustic cryptanalysis, and fault injection. Of these, power analysis has historically attracted the most research attention — accounting for approximately 36.5% of published side-channel work between 2015 and 2020 — because it is non-invasive, requires minimal equipment, and can be applied without the device owner's knowledge. <sup><a href="#ref2">[2]</a></sup></p>
+
+      <div class="callout orange">
+        <div class="callout-label">Key insight</div>
+        <p>A cryptographic algorithm may be mathematically unbreakable, yet its hardware implementation can be trivially vulnerable. Security proofs apply to the abstract cipher; physics governs the silicon.</p>
+      </div>
+    </section>
+
+    <!-- ── 2. HISTORY ── -->
+    <section id="history">
+      <h2>2. History &amp; Origins</h2>
+      <p>The notion that physical emissions from a computing device might leak secret information predates the modern academic treatment of the problem by decades. In 1965, Peter Wright — then a scientist at GCHQ — documented how British intelligence had exploited electromagnetic emissions from a cipher machine used by the Egyptian Embassy in London as far back as the 1950s. <sup><a href="#ref3">[3]</a></sup> The United States National Security Agency maintained a classified program called TEMPEST throughout the Cold War, studying emanation security from electronic equipment, though the existence of this program was not widely acknowledged until much later.</p>
+      <p>The modern, open academic treatment of implementation attacks began in 1996 when Paul Kocher published "Timing Attacks on Implementations of Diffie-Hellman, RSA, DSS, and Other Systems," demonstrating that non-constant execution time in cryptographic code could leak key material through the timing channel. <sup><a href="#ref4">[4]</a></sup> In the same paper, Kocher speculated that power consumption and electromagnetic radiation might offer further avenues of attack — a prescient remark that he and his colleagues would vindicate three years later.</p>
+      <p>In 1998, Kocher presented preliminary results at a cryptography conference, and in 1999 he, Joshua Jaffe, and Benjamin Jun published the landmark paper "Differential Power Analysis" at CRYPTO '99, formally introducing both Simple Power Analysis (SPA) and Differential Power Analysis (DPA) to the open research community. <sup><a href="#ref1">[1]</a></sup> The paper included practical demonstrations against DES hardware implementations and reportedly broke essentially every smart card cryptosystem deployed by financial institutions, telephone companies, and government agencies at the time. <sup><a href="#ref5">[5]</a></sup></p>
+      <p>The shock of DPA's publication triggered an avalanche of follow-on research. The annual Cryptographic Hardware and Embedded Systems (CHES) workshop, founded in 1999 by Kocher and Christof Paar, quickly became the primary venue for publication of both attacks and countermeasures, and remains so today. <sup><a href="#ref6">[6]</a></sup> Subsequent milestones in the field include template attacks (Chari et al., 2002), correlation power analysis (Brier et al., 2004), machine learning-based attacks (Lerman et al., 2011), and deep neural network attacks (Maghrebi et al., 2016; Prouff et al., 2018). <sup><a href="#ref7">[7]</a><a href="#ref8">[8]</a><a href="#ref9">[9]</a><a href="#ref10">[10]</a></sup></p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Year</th><th>Event</th><th>Significance</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1965</td><td>GCHQ documents EM attack on Egyptian Embassy cipher</td><td>First recorded side-channel exploitation</td></tr>
+            <tr><td>1996</td><td>Kocher publishes timing attacks on RSA/DH/DSS</td><td>Opens academic field of implementation attacks</td></tr>
+            <tr><td>1999</td><td>Kocher, Jaffe &amp; Jun publish SPA and DPA at CRYPTO '99</td><td>Establishes power analysis as a discipline</td></tr>
+            <tr><td>1999</td><td>CHES workshop founded</td><td>Dedicated venue for hardware security research</td></tr>
+            <tr><td>2002</td><td>Chari et al. introduce template attacks</td><td>First profiling-based attacks</td></tr>
+            <tr><td>2004</td><td>Brier et al. introduce CPA with leakage model</td><td>More efficient and principled than DPA</td></tr>
+            <tr><td>2011</td><td>First machine-learning-based side-channel attacks</td><td>Profiling without statistical assumptions</td></tr>
+            <tr><td>2014</td><td>ChipWhisperer open-source platform released</td><td>Democratises power analysis research</td></tr>
+            <tr><td>2016–2018</td><td>Deep learning attacks (CNNs, MLPs)</td><td>Defeats desynchronisation and masking countermeasures</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── 3. PHYSICS ── -->
+    <section id="physics">
+      <h2>3. Physical Foundations</h2>
+      <p>To understand why power analysis works, one must understand why digital logic circuits consume data-dependent power in the first place.</p>
+
+      <h3>3.1 CMOS Switching Power</h3>
+      <p>Virtually all modern digital ICs are fabricated in Complementary Metal-Oxide-Semiconductor (CMOS) technology. A CMOS inverter consists of a PMOS transistor (conducting when input is LOW) and an NMOS transistor (conducting when input is HIGH) connected in series between the supply voltage V<sub>DD</sub> and ground. During a logic transition from LOW to HIGH, charge must be supplied from V<sub>DD</sub> to charge the load capacitance C<sub>L</sub>. During a transition from HIGH to LOW, that charge is discharged to ground. In both cases, current flows — and current means power dissipation. <sup><a href="#ref11">[11]</a></sup></p>
+      <p>The dynamic power dissipation of a CMOS gate can be expressed as:</p>
+
+      <div class="formula">
+        <div class="formula-label">CMOS Dynamic Power</div>
+        P<sub>dynamic</sub> = α · C<sub>L</sub> · V<sub>DD</sub>² · f
+      </div>
+
+      <p>where α is the switching activity factor (the fraction of clock cycles in which a transition occurs), C<sub>L</sub> is the load capacitance, V<sub>DD</sub> is the supply voltage, and f is the clock frequency. The critical observation for power analysis is α: the switching activity factor is <em>data-dependent</em>. Different data values processed by the circuit produce different numbers of bit transitions, and therefore different amounts of power consumption. <sup><a href="#ref12">[12]</a></sup></p>
+
+      <h3>3.2 Two Sources of Current</h3>
+      <p>In practice, the current consumed by a CMOS gate during a transition has two components. The first is the displacement current required to charge or discharge the load capacitance — this is the dominant term at normal operating voltages. The second is a short-circuit current that flows briefly when both PMOS and NMOS transistors are simultaneously conducting during the transition edge. <sup><a href="#ref8">[8]</a></sup></p>
+      <p>Neither source of current is constant across computations. Both depend on which bits are changing, what their new values are, and which transistors are switching. The aggregate effect across tens of thousands of gates on a single chip is a power trace that is noisy but statistically correlated with the data being processed — and this correlation is the foundation of every power analysis attack.</p>
+
+      <h3>3.3 Static Power</h3>
+      <p>As CMOS technology has scaled to nanometre feature sizes, a second source of leakage has become significant: static (or leakage) power, arising from sub-threshold conduction, gate oxide tunnelling, and other quantum mechanical effects. In advanced process nodes, static power can approach or exceed dynamic power, and it also exhibits data dependence, enabling a class of attacks known as Leakage Power Analysis. <sup><a href="#ref13">[13]</a></sup></p>
+
+      <div class="callout">
+        <div class="callout-label">Physical intuition</div>
+        <p>Charging a bus line to '1' takes energy; leaving it at '0' takes none. Consequently, a byte with many '1' bits consumes more power than a byte with few — and this tiny difference, measured thousands of times, is enough to reconstruct a secret key.</p>
+      </div>
+    </section>
+
+    <!-- ── 4. POWER MODELS ── -->
+    <section id="power-models">
+      <h2>4. Power Leakage Models</h2>
+      <p>Because actual power consumption is the aggregate of millions of transistors, attackers use simplified <em>leakage models</em> to predict how power should correlate with hypothetical key guesses. The two dominant models are the Hamming Weight model and the Hamming Distance model. <sup><a href="#ref12">[12]</a></sup></p>
+
+      <h3>4.1 Hamming Weight Model</h3>
+      <p>The Hamming weight HW(v) of a binary value v is simply the number of '1' bits it contains. The Hamming Weight power model assumes that the power consumed by a CMOS circuit at any point is proportional to the number of '1' bits on the data bus:</p>
+
+      <div class="formula">
+        <div class="formula-label">Hamming Weight Model</div>
+        P(v) ≈ HW(v) + noise = Σᵢ vᵢ + noise
+      </div>
+
+      <p>This model is most applicable to devices that pre-charge data buses to '0' before writing a value. In that case, every '1' bit in the written value requires a 0→1 transition, consuming power, while '0' bits require no transition. This is the most widely used model for 8-bit microcontrollers — including the ATmega and 8051 families commonly found in smart cards. <sup><a href="#ref14">[14]</a></sup></p>
+
+      <h3>4.2 Hamming Distance Model</h3>
+      <p>The Hamming Distance model recognises that power is consumed by <em>changes</em> in bit values, not by the values themselves. The Hamming distance HD(v₁, v₂) between two successive data bus values v₁ and v₂ is the number of bit positions in which they differ, which equals HW(v₁ XOR v₂):</p>
+
+      <div class="formula">
+        <div class="formula-label">Hamming Distance Model</div>
+        P(v₁ → v₂) ≈ HD(v₁, v₂) + noise = HW(v₁ ⊕ v₂) + noise
+      </div>
+
+      <p>This model better captures the switching activity in circuits without a pre-charge step, because each bit transition — regardless of direction — contributes equally to power consumption. For devices where a bus is pre-charged to all '1' before writing, the Hamming distance from 0xFF to the written value equals the number of '0' bits in the written value, making the HD model equivalent to the complement of the HW model. <sup><a href="#ref14">[14]</a></sup></p>
+
+      <h3>4.3 Generalised Linear Model</h3>
+      <p>Both models are special cases of a general linear leakage model in which the power trace sample at time t is expressed as a linear combination of the intermediate values, plus noise:</p>
+
+      <div class="formula">
+        <div class="formula-label">General Linear Leakage Model</div>
+        P(t) = Σⱼ αⱼ · bⱼ(v) + β + N(t)
+      </div>
+
+      <p>where bⱼ(v) are bit functions of the processed value v, αⱼ are device-specific coefficients, β is a constant offset (static current, base logic activity), and N(t) is measurement noise. The goal of correlation power analysis is to find the hypothetical key guess k̂ whose predicted leakage HW(f(plaintext, k̂)) best correlates with the actual measured trace, across many measurements. <sup><a href="#ref8">[8]</a></sup></p>
+    </section>
+
+    <!-- ── 5. TAXONOMY ── -->
+    <section id="attack-taxonomy">
+      <h2>5. Attack Taxonomy</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Attack</th><th>Traces Needed</th><th>Statistical Method</th><th>Attacker Model</th><th>Masking Resilience</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>SPA</td>
+              <td><span class="badge badge-green">1–10</span></td>
+              <td>Visual inspection</td>
+              <td>Non-profiling</td>
+              <td><span class="badge badge-red">None</span></td>
+            </tr>
+            <tr>
+              <td>DPA</td>
+              <td><span class="badge badge-orange">100–10,000</span></td>
+              <td>Mean difference</td>
+              <td>Non-profiling</td>
+              <td><span class="badge badge-red">None (1st order)</span></td>
+            </tr>
+            <tr>
+              <td>CPA</td>
+              <td><span class="badge badge-orange">50–5,000</span></td>
+              <td>Pearson correlation</td>
+              <td>Non-profiling</td>
+              <td><span class="badge badge-red">None (1st order)</span></td>
+            </tr>
+            <tr>
+              <td>Template Attack</td>
+              <td><span class="badge badge-green">1–100</span></td>
+              <td>Maximum likelihood</td>
+              <td>Profiling</td>
+              <td><span class="badge badge-orange">Partial</span></td>
+            </tr>
+            <tr>
+              <td>Higher-Order DPA</td>
+              <td><span class="badge badge-red">10,000–1,000,000</span></td>
+              <td>Higher moments</td>
+              <td>Non-profiling</td>
+              <td><span class="badge badge-orange">Defeats 1st order</span></td>
+            </tr>
+            <tr>
+              <td>DL-based SCA</td>
+              <td><span class="badge badge-orange">1,000–100,000</span></td>
+              <td>Neural network</td>
+              <td>Profiling</td>
+              <td><span class="badge badge-green">High</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── 6. SPA ── -->
+    <section id="spa">
+      <h2>6. Simple Power Analysis (SPA)</h2>
+      <p>Simple Power Analysis is the most direct form of power analysis. The attacker measures the power consumption of a device during a single cryptographic operation (or at most a handful) and attempts to read off information about the secret key directly from the waveform, without statistical processing. <sup><a href="#ref1">[1]</a></sup></p>
+      <p>SPA is possible whenever the power signature of a cryptographic operation differs visibly depending on the data or key value processed. The canonical example is the square-and-multiply algorithm used in RSA exponentiation. In the standard binary method, the algorithm iterates over bits of the private exponent. For each '0' bit, it performs a squaring; for each '1' bit, it performs both a squaring and a multiplication. Because squaring and multiplication have different power signatures and durations, an oscilloscope trace of a single RSA decryption directly reveals the private exponent bit-by-bit. <sup><a href="#ref15">[15]</a></sup></p>
+
+      <figure>
+        <div class="fig-body">
+          <div class="diagram">
+ RSA Square-and-Multiply — power trace schematic view
+ ─────────────────────────────────────────────────────────
+
+ Power
+   │
+   │  ┌──┐  ┌──┬──┐  ┌──┐  ┌──┬──┐  ┌──┬──┐  ┌──┐
+   │  │S │  │S │M │  │S │  │S │M │  │S │M │  │S │
+   │  └──┘  └──┴──┘  └──┘  └──┴──┘  └──┴──┘  └──┘
+   └────────────────────────────────────────────────→ t
+
+       1  →  0  1  →  0  →  0  1  →  0  1  →  1
+                      Private exponent bits (MSB→LSB)
+
+ S = Squaring operation   M = Multiply operation
+ Exponent digit read directly from visual pattern.
+          </div>
+        </div>
+        <figcaption>Figure 1 — Schematic SPA trace during RSA square-and-multiply exponentiation. The presence or absence of a multiplication step after each squaring directly reveals the corresponding private exponent bit.</figcaption>
+      </figure>
+
+      <p>SPA is also effective against naive implementations of AES key schedule, DES permutation tables, and ECC scalar multiplication (double-and-add). The vulnerability is greatest when the algorithm has clearly distinct power signatures for different code paths — particularly conditional branches. The standard defence against SPA is to make all code paths consume equal power and take equal time, regardless of the data or key value.</p>
+    </section>
+
+    <!-- ── 7. DPA ── -->
+    <section id="dpa">
+      <h2>7. Differential Power Analysis (DPA)</h2>
+      <p>Differential Power Analysis moves beyond visual inspection and applies statistical analysis to a large collection of power traces, each measured during a separate cryptographic operation. DPA can recover key material even when individual traces are dominated by noise, because the signal of interest is consistent across traces while noise averages out. <sup><a href="#ref1">[1]</a></sup></p>
+
+      <h3>7.1 Classical DPA Procedure</h3>
+      <p>The attacker targets a single intermediate value inside the cipher that depends on both a known quantity (part of the plaintext or ciphertext) and a small, guessable portion of the key (typically one byte). The attack proceeds as follows:</p>
+
+      <ol class="step-list">
+        <li>
+          <div>
+            <strong>Collect traces</strong>
+            Encrypt N random plaintexts on the target device, recording a power trace tᵢ(t) for each encryption i = 1…N alongside the plaintext Pᵢ.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Guess a key byte</strong>
+            For each of the 256 candidate values k̂ of the targeted key byte, compute the hypothetical intermediate value vᵢ = f(Pᵢ, k̂) for every trace. For AES, f is typically the SubBytes output for the first round S-Box.
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Partition traces by selection function</strong>
+            Apply a selection function D(vᵢ) that extracts a single bit — e.g., the MSB of vᵢ. Partition traces into two sets: A (D = 1) and B (D = 0).
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Compute differential trace</strong>
+            Compute ΔT(t) = mean(A at t) − mean(B at t) for each time sample. If the key guess is correct, ΔT(t) will show a spike at the time the targeted intermediate value is processed. If wrong, ΔT(t) is flat (noise).
+          </div>
+        </li>
+        <li>
+          <div>
+            <strong>Identify the correct key byte</strong>
+            The candidate k̂ that produces the largest ΔT peak corresponds to the correct key byte. Repeat for each byte of the key.
+          </div>
+        </li>
+      </ol>
+
+      <div class="formula">
+        <div class="formula-label">DPA Differential Trace</div>
+        ΔT(t) = (1/|A|) Σᵢ∈A tᵢ(t) − (1/|B|) Σᵢ∈B tᵢ(t)
+      </div>
+
+      <p>For AES-128, the attacker recovers all 16 key bytes independently, requiring 256 guesses per byte — a total of 256 × 16 = 4,096 hypotheses, each tested against the same set of traces. This is astronomically more efficient than brute-forcing the 2<sup>128</sup> possible keys. <sup><a href="#ref6">[6]</a></sup></p>
+
+      <h3>7.2 Signal-to-Noise Ratio</h3>
+      <p>The number of traces required for a successful DPA attack is governed by the signal-to-noise ratio (SNR) of the side-channel leakage. More noise — from the measurement environment, on-chip decoupling, or countermeasures — requires more traces. In a noise-free environment, as few as a few dozen traces may suffice; with aggressive noise injection, attackers may need millions. The fundamental result is that DPA requires only O(1/SNR²) traces, meaning the square root of the number of key candidates — which is always polynomial in the key length. <sup><a href="#ref6">[6]</a></sup></p>
+    </section>
+
+    <!-- ── 8. CPA ── -->
+    <section id="cpa">
+      <h2>8. Correlation Power Analysis (CPA)</h2>
+      <p>Correlation Power Analysis, introduced by Brier, Clavier, and Olivier at CHES 2004, improves upon DPA by using a richer statistical model. Instead of a binary selection function, CPA uses a continuous leakage hypothesis — typically the Hamming weight or Hamming distance of the targeted intermediate value — and computes the Pearson correlation coefficient between predicted and measured power. <sup><a href="#ref8">[8]</a></sup></p>
+
+      <div class="formula">
+        <div class="formula-label">Pearson Correlation — CPA Key Recovery</div>
+        ρ(k̂, t) = [N·Σhᵢ·Tᵢ(t) − Σhᵢ·ΣTᵢ(t)] / √{[N·Σhᵢ² − (Σhᵢ)²] · [N·ΣTᵢ(t)² − (ΣTᵢ(t))²]}
+        
+        where hᵢ = HW(f(Pᵢ, k̂)) is the predicted Hamming weight of the intermediate value.
+      </div>
+
+      <p>The key guess k̂* that maximises |ρ(k̂, t)| over all time points t is the recovered key byte. CPA typically requires fewer traces than classical DPA because the continuous leakage model extracts more information per trace — averaging the signal rather than binary-partitioning it. In practice, CPA attacks on unprotected AES running on 8-bit microcontrollers succeed with as few as 50–200 power traces. <sup><a href="#ref16">[16]</a></sup></p>
+
+      <div class="callout green">
+        <div class="callout-label">Why CPA outperforms DPA</div>
+        <p>DPA's binary partition discards information about the magnitude of the leakage — it only asks whether the Hamming weight exceeds a threshold. CPA uses the full Hamming weight value, extracting log₂(word_width + 1) bits of leakage information per trace rather than one bit.</p>
+      </div>
+    </section>
+
+    <!-- ── 9. TEMPLATE ATTACKS ── -->
+    <section id="template">
+      <h2>9. Template Attacks</h2>
+      <p>Template attacks, introduced by Chari, Rao, and Rohatgi at CHES 2002, are the most powerful of the classical power analysis techniques in the information-theoretic sense — given sufficient profiling data, they are provably optimal. <sup><a href="#ref7">[7]</a></sup> They belong to the class of <em>profiling attacks</em>, in which the attacker has access to an identical copy of the target device for a training phase.</p>
+
+      <h3>9.1 Two-Phase Structure</h3>
+
+      <h4>Phase 1: Profiling</h4>
+      <p>Using the cloned device, the attacker collects a large number of power traces for known plaintext-key pairs. For each possible value v of the targeted intermediate variable, a multivariate Gaussian template (μᵥ, Σᵥ) is constructed, where μᵥ is the mean power trace and Σᵥ is the covariance matrix of the trace population for that value. Dimensionality reduction (PCA, LDA, or POI selection) is applied to make the covariance estimation tractable. <sup><a href="#ref7">[7]</a></sup></p>
+
+      <h4>Phase 2: Matching</h4>
+      <p>On the actual target device, the attacker observes one or more power traces during encryptions with an unknown key. For each candidate key byte k̂, they compute the log-likelihood that the observed trace was generated by the template corresponding to intermediate value f(plaintext, k̂):</p>
+
+      <div class="formula">
+        <div class="formula-label">Template Matching — Log-Likelihood</div>
+        L(k̂) = −½(t − μ_{f(P,k̂)})ᵀ · Σ⁻¹_{f(P,k̂)} · (t − μ_{f(P,k̂)})
+      </div>
+
+      <p>The key guess with the highest likelihood is taken as the recovered key. Because template attacks exploit the full multivariate distribution of traces, they can succeed with as few as a single attack trace when the templates are of sufficient quality. <sup><a href="#ref7">[7]</a></sup></p>
+    </section>
+
+    <!-- ── 10. HIGHER ORDER ── -->
+    <section id="higher-order">
+      <h2>10. Higher-Order DPA</h2>
+      <p>First-order attacks (SPA, DPA, CPA) exploit linear correlation between a single leakage point and an intermediate value. When a device is protected with <em>masking</em> — a countermeasure in which intermediate values are split into random shares — first-order attacks fail because no single leakage point correlates with the secret. <sup><a href="#ref17">[17]</a></sup></p>
+      <p>Higher-order DPA (HO-DPA) defeats first-order masking by combining multiple leakage points across time before computing the correlation. For a first-order masking scheme with shares (v ⊕ m) and m, a second-order attack combines two leakage points: one corresponding to the masked value and one corresponding to the mask itself. The combination (typically a centred product or absolute difference) removes the masking randomness:</p>
+
+      <div class="formula">
+        <div class="formula-label">Second-Order Combination Function</div>
+        C(t₁, t₂) = (T(t₁) − E[T(t₁)]) · (T(t₂) − E[T(t₂)])
+      </div>
+
+      <p>The price of higher-order attacks is a dramatically increased trace requirement. A d-th order attack against a d-th order masking scheme requires O(SNR^{-d}) traces — exponential in the masking order. However, in practice, even second-order attacks with large trace sets have been demonstrated against 1st-order masked implementations of AES. <sup><a href="#ref17">[17]</a></sup></p>
+    </section>
+
+    <!-- ── 11. DEEP LEARNING ── -->
+    <section id="ml-attacks">
+      <h2>11. Deep Learning-Based Attacks</h2>
+      <p>The convergence of side-channel analysis with modern machine learning has produced a new class of attacks that can outperform classical methods, particularly against countermeasures such as trace desynchronisation and software masking. <sup><a href="#ref9">[9]</a></sup></p>
+
+      <h3>11.1 Profiled Deep Learning Attacks</h3>
+      <p>Profiled deep learning attacks treat the power analysis problem as a multi-class classification task. During profiling, a neural network (MLP, CNN, or LSTM) is trained on labelled traces from a clone device to predict the Hamming weight class (or directly the key byte value) from a raw power trace. During the attack phase, the network outputs key hypotheses ranked by probability, and the correct key rises to the top as more traces are analysed. <sup><a href="#ref10">[10]</a></sup></p>
+      <p>Prouff et al. introduced the ASCAD (ANSSI SCA Database) benchmark dataset in 2018, enabling reproducible comparison of deep learning SCA methods. Convolutional Neural Networks operating on ASCAD traces have demonstrated attacks on masked AES with fewer traces than classical methods, and are resilient to trace misalignment because convolutions can learn temporal invariance. <sup><a href="#ref9">[9]</a></sup></p>
+
+      <h3>11.2 Non-Profiled Deep Learning Attacks</h3>
+      <p>Timon (2018) demonstrated that non-profiled deep learning attacks — analogous to DPA/CPA, but replacing correlation with gradient-based neural network optimisation — can be effective when the attacker does not have access to a clone device. These methods apply back-propagation to find the key hypothesis that minimises the network's classification loss on the attack traces, without prior profiling. <sup><a href="#ref18">[18]</a></sup></p>
+
+      <h3>11.3 Advantages over Classical Methods</h3>
+      <p>Deep learning attacks offer several advantages over classical statistical approaches. They can learn complex, non-linear leakage functions without the attacker specifying a leakage model. They are inherently robust to trace misalignment, which defeats time-based countermeasures such as random delays and clock jitter. They have been shown to break certain higher-order masking implementations without explicit combination preprocessing, because the network learns to internally combine the relevant leakage points. <sup><a href="#ref9">[9]</a><a href="#ref10">[10]</a></sup></p>
+
+      <div class="callout purple">
+        <div class="callout-label">Research frontier</div>
+        <p>As of 2024, transformer-based architectures and attention mechanisms are being explored for side-channel analysis, with early results suggesting they can better capture long-range temporal dependencies in power traces than CNNs.</p>
+      </div>
+    </section>
+
+    <!-- ── 12. METHODOLOGY ── -->
+    <section id="methodology">
+      <h2>12. Attack Methodology</h2>
+      <p>Regardless of the specific attack technique, the practical execution of a power analysis attack follows a common experimental workflow.</p>
+
+      <h3>12.1 Measurement Setup</h3>
+      <p>The standard measurement configuration inserts a small resistor (1–100 Ω) in series with the target device's power supply line (VCC or GND). As current flows through the resistor, a voltage drop proportional to the current develops across it. This voltage drop is measured by an oscilloscope or a dedicated analogue-to-digital converter synchronised to the device's clock. The sampling rate must be sufficient to capture the significant features of the power trace — typically between 10 MS/s and 1 GS/s depending on the clock frequency of the target. <sup><a href="#ref16">[16]</a></sup></p>
+
+      <figure>
+        <div class="fig-body">
+          <div class="diagram">
+ Standard Power Analysis Measurement Setup
+ ──────────────────────────────────────────
+
+  ┌─────────────┐      ┌──────────────┐
+  │  Power      │      │              │
+  │  Supply     ├──────┤  Rshunt      │
+  │  (VCC)      │   1Ω ─ 100Ω        │
+  └─────────────┘      │              │
+                       │    ┌─────────┤
+                       │    │         │
+                       │  ──┼──  ┌────┴─────────┐
+                       │  V │   │  Oscilloscope  │
+                       │  │ │   │  or ADC        │
+                       │  ──┼──  │  (10MS/s–1GS/s)│
+                       │    │    └────────────────┘
+                       │    │         │
+                  ┌────┴────┴──┐      │
+                  │  Target    │      │
+                  │  Device    │      │
+                  │  (DUT)     │─────→│ Trigger signal
+                  └────────────┘      │
+                       │              │
+                       GND            │
+                                      ↓
+                               Power Trace T(t)
+          </div>
+        </div>
+        <figcaption>Figure 2 — Standard shunt-resistor power analysis measurement configuration. The voltage drop across R<sub>shunt</sub> provides a current proxy. A trigger signal from the DUT synchronises trace acquisition.</figcaption>
+      </figure>
+
+      <h3>12.2 Trace Processing</h3>
+      <p>Raw power traces typically require preprocessing before analysis. Common steps include high-pass filtering to remove the DC offset, bandpass filtering to select the frequency range of interest, averaging to reduce noise when multiple traces of the same operation are available, and alignment (resynchronisation) to correct for timing jitter between traces. Trace alignment is critical for classical attacks; desynchronised traces degrade correlation. <sup><a href="#ref6">[6]</a></sup></p>
+
+      <h3>12.3 Identifying Points of Interest</h3>
+      <p>Not all time samples in a trace contain useful leakage information. Attacks are most efficient when focused on Points of Interest (POIs) — the time samples where leakage is highest. POIs can be identified by examining the variance of the trace set (high-variance samples are more likely to contain data-dependent leakage), by T-test (TVLA methodology), or by training a model to identify the most informative features. <sup><a href="#ref3">[3]</a></sup></p>
+    </section>
+
+    <!-- ── 13. TOOLING ── -->
+    <section id="tooling">
+      <h2>13. Tools &amp; Platforms</h2>
+
+      <h3>13.1 ChipWhisperer</h3>
+      <p>ChipWhisperer, developed by Colin O'Flynn and released as open source in 2014, is the most widely used open-source platform for power analysis research. It provides a complete hardware and software toolchain: a capture board that samples power at up to 105 MS/s synchronised to the target's clock, a range of target boards (AVR, STM32, and others), and a Python API (ChipWhisperer Analyzer) for trace acquisition and attack execution. <sup><a href="#ref19">[19]</a></sup></p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Tool</th><th>Type</th><th>Primary Use</th><th>Licence</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ChipWhisperer</td><td>HW + SW</td><td>SPA, DPA, CPA, glitching, deep learning SCA</td><td><span class="badge badge-green">Open source (BSD)</span></td></tr>
+            <tr><td>Riscure Inspector</td><td>SW</td><td>Professional SCA evaluation, FIPS 140 prep</td><td><span class="badge badge-orange">Commercial</span></td></tr>
+            <tr><td>LASCAR / scared</td><td>SW (Python)</td><td>CPA, DPA, MIA on trace files</td><td><span class="badge badge-green">Open source</span></td></tr>
+            <tr><td>ASCAD database</td><td>Dataset</td><td>Benchmarking ML-based SCA</td><td><span class="badge badge-green">Public</span></td></tr>
+            <tr><td>SCALib</td><td>SW (Python/Rust)</td><td>High-performance leakage assessment</td><td><span class="badge badge-green">Open source</span></td></tr>
+            <tr><td>Picoscope / DSO</td><td>HW</td><td>General oscilloscope trace capture</td><td><span class="badge badge-orange">Commercial</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>13.2 Software Libraries</h3>
+      <p>The Python ecosystem has matured considerably for SCA work. The <code>scared</code> library (Eshard) provides efficient implementations of DPA, CPA, and MIA that operate on HDF5 trace files. <code>SCALib</code> provides Rust-backed high-performance leakage assessment functions including the Signal-to-Noise Ratio, T-test, and profiling attacks. The ASCAD dataset and associated code from ANSSI (French National Cybersecurity Agency) provides a standardised benchmark for comparing deep learning attacks. <sup><a href="#ref9">[9]</a></sup></p>
+    </section>
+
+    <!-- ── 14. SOURCE CODE ── -->
+    <section id="source-code">
+      <h2>14. Source Code: CPA against AES-128 (Python)</h2>
+      <p>The following Python implementation demonstrates a first-order Correlation Power Analysis attack against AES-128 running on a target device. It assumes a set of power traces and corresponding plaintexts are available, and targets the output of the AES S-Box during the first encryption round to recover all 16 key bytes.</p>
+
+      <pre><code><span class="lang-tag">Python</span><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> scipy.stats <span class="kw">import</span> pearsonr
+
+<span class="cmt"># ─── AES S-Box (standard substitution table) ───────────────────────────────</span>
+AES_SBOX = np.array([
+    <span class="num">0x63</span>, <span class="num">0x7c</span>, <span class="num">0x77</span>, <span class="num">0x7b</span>, <span class="num">0xf2</span>, <span class="num">0x6b</span>, <span class="num">0x6f</span>, <span class="num">0xc5</span>,
+    <span class="num">0x30</span>, <span class="num">0x01</span>, <span class="num">0x67</span>, <span class="num">0x2b</span>, <span class="num">0xfe</span>, <span class="num">0xd7</span>, <span class="num">0xab</span>, <span class="num">0x76</span>,
+    <span class="cmt"># ... (full 256-byte table)</span>
+], dtype=np.uint8)
+
+<span class="kw">def</span> <span class="fn">hamming_weight</span>(x: np.ndarray) -> np.ndarray:
+    <span class="str">"""Return the number of '1' bits in each element of x (uint8 array)."""</span>
+    counts = np.zeros(x.shape, dtype=np.uint8)
+    v = x.copy()
+    <span class="kw">while</span> np.any(v):
+        counts += (v & <span class="num">1</span>).astype(np.uint8)
+        v >>= <span class="num">1</span>
+    <span class="kw">return</span> counts
+
+<span class="kw">def</span> <span class="fn">aes_sbox</span>(byte_val: int) -> int:
+    <span class="str">"""AES S-Box substitution for a single byte."""</span>
+    <span class="kw">return</span> int(AES_SBOX[byte_val])
+
+<span class="kw">def</span> <span class="fn">cpa_attack</span>(
+    traces: np.ndarray,          <span class="cmt"># shape (N, T): N traces, T time samples</span>
+    plaintexts: np.ndarray,      <span class="cmt"># shape (N, 16): N plaintexts, 16 bytes</span>
+    key_byte_index: int = <span class="num">0</span>     <span class="cmt"># which key byte to attack (0–15)</span>
+) -> tuple[int, np.ndarray]:
+    <span class="str">"""
+    First-order CPA attack on AES-128 first-round S-Box output.
+
+    Returns (best_key_guess, correlation_matrix) where:
+      - best_key_guess: the recovered key byte value (0–255)
+      - correlation_matrix: shape (256, T), ρ for each hypothesis × time sample
+    """</span>
+    N, T = traces.shape
+    <span class="kw">assert</span> plaintexts.shape == (N, <span class="num">16</span>), <span class="str">"Plaintext array must be (N, 16)"</span>
+
+    pb = plaintexts[:, key_byte_index].astype(np.uint32)  <span class="cmt"># (N,) plaintext bytes</span>
+
+    correlation = np.zeros((<span class="num">256</span>, T), dtype=np.float64)
+
+    <span class="kw">for</span> k_guess <span class="kw">in</span> range(<span class="num">256</span>):
+        <span class="cmt"># Hypothetical intermediate value: AES_SBox(plaintext_byte XOR key_byte)</span>
+        hyp_values = np.array(
+            [aes_sbox(int(p) ^ k_guess) <span class="kw">for</span> p <span class="kw">in</span> pb], dtype=np.uint8
+        )
+
+        <span class="cmt"># Leakage model: Hamming weight of the S-Box output</span>
+        h = hamming_weight(hyp_values).astype(np.float64)   <span class="cmt"># (N,)</span>
+
+        <span class="cmt"># Pearson correlation at every time sample</span>
+        <span class="kw">if</span> h.std() < <span class="num">1e-10</span>:
+            <span class="kw">continue</span>  <span class="cmt"># degenerate hypothesis — skip</span>
+
+        h_c = h - h.mean()
+        t_c = traces - traces.mean(axis=<span class="num">0</span>)          <span class="cmt"># (N, T) centred traces</span>
+        num  = h_c @ t_c                              <span class="cmt"># (T,)</span>
+        denom = np.sqrt((h_c @ h_c) * (t_c * t_c).sum(axis=<span class="num">0</span>))
+        safe  = denom > <span class="num">1e-12</span>
+        correlation[k_guess, safe] = num[safe] / denom[safe]
+
+    <span class="cmt"># Best key guess: maximise |correlation| over all time samples</span>
+    max_corr_per_guess = np.max(np.abs(correlation), axis=<span class="num">1</span>)   <span class="cmt"># (256,)</span>
+    best_guess = int(np.argmax(max_corr_per_guess))
+
+    <span class="kw">return</span> best_guess, correlation
+
+
+<span class="kw">def</span> <span class="fn">recover_full_key</span>(
+    traces: np.ndarray,
+    plaintexts: np.ndarray
+) -> bytes:
+    <span class="str">"""Recover all 16 bytes of an AES-128 key via CPA."""</span>
+    key = []
+    <span class="kw">for</span> byte_idx <span class="kw">in</span> range(<span class="num">16</span>):
+        guess, corr = cpa_attack(traces, plaintexts, byte_idx)
+        peak = np.max(np.abs(corr[guess]))
+        print(f<span class="str">"Key byte {byte_idx:2d}: 0x{guess:02X}  (peak ρ = {peak:.4f})"</span>)
+        key.append(guess)
+    <span class="kw">return</span> bytes(key)
+
+
+<span class="cmt"># ─── Demonstration with simulated traces ────────────────────────────────────</span>
+<span class="kw">if</span> __name__ == <span class="str">"__main__"</span>:
+    rng = np.random.default_rng(seed=<span class="num">42</span>)
+
+    SECRET_KEY = bytes.fromhex(<span class="str">"2b7e151628aed2a6abf7158809cf4f3c"</span>)
+    N_TRACES   = <span class="num">500</span>
+    T_SAMPLES  = <span class="num">200</span>
+
+    <span class="cmt"># Simulated plaintext bytes</span>
+    plaintexts = rng.integers(<span class="num">0</span>, <span class="num">256</span>, size=(N_TRACES, <span class="num">16</span>), dtype=np.uint8)
+
+    <span class="cmt"># Simulated traces: leakage = HW(SBox(pt XOR key)) + Gaussian noise</span>
+    traces = rng.standard_normal((N_TRACES, T_SAMPLES)) * <span class="num">0.5</span>  <span class="cmt"># noise floor</span>
+    LEAK_TIME = <span class="num">50</span>  <span class="cmt"># time sample where leakage occurs</span>
+
+    <span class="kw">for</span> i <span class="kw">in</span> range(N_TRACES):
+        <span class="kw">for</span> b <span class="kw">in</span> range(<span class="num">16</span>):
+            sbox_out = aes_sbox(int(plaintexts[i, b]) ^ SECRET_KEY[b])
+            hw = bin(sbox_out).count(<span class="str">'1'</span>)
+            traces[i, LEAK_TIME + b] += hw  <span class="cmt"># inject correlated leakage</span>
+
+    print(<span class="str">"=== CPA Attack: AES-128 Key Recovery ==="</span>)
+    recovered = recover_full_key(traces, plaintexts)
+    print(<span class="str">f"\nRecovered key : {recovered.hex()}"</span>)
+    print(<span class="str">f"Actual key    : {SECRET_KEY.hex()}"</span>)
+    print(<span class="str">f"Match         : {recovered == SECRET_KEY}"</span>)
+</code></pre>
+
+      <div class="callout orange">
+        <div class="callout-label">Important note</div>
+        <p>This implementation is provided for educational purposes. The simulated leakage model is simplified; real device traces are noisier, may have jitter, and often require preprocessing and alignment. The vectorised correlation loop can be further optimised with <code>numpy</code> broadcasting to attack all 256 candidates simultaneously.</p>
+      </div>
+
+      <h3>14.1 Vectorised CPA Core (NumPy)</h3>
+      <p>The inner loop over 256 key candidates can be eliminated with broadcasting, reducing the attack from O(256 × N × T) scalar operations to a single matrix multiply:</p>
+
+      <pre><code><span class="lang-tag">Python</span><span class="kw">def</span> <span class="fn">cpa_vectorised</span>(traces: np.ndarray, plaintexts: np.ndarray, byte_idx: int):
+    <span class="str">"""All-at-once vectorised CPA for one key byte. Returns correlation (256, T)."""</span>
+    N, T = traces.shape
+    pb   = plaintexts[:, byte_idx].astype(np.uint32)  <span class="cmt"># (N,)</span>
+
+    <span class="cmt"># Build hypothesis matrix H: shape (256, N)</span>
+    all_k  = np.arange(<span class="num">256</span>, dtype=np.uint32)          <span class="cmt"># (256,)</span>
+    xor_pt = (pb[np.newaxis, :] ^ all_k[:, np.newaxis]) & <span class="num">0xFF</span>  <span class="cmt"># (256, N)</span>
+    H      = hamming_weight(AES_SBOX[xor_pt].astype(np.uint8))   <span class="cmt"># (256, N)</span>
+    H      = H.astype(np.float64)
+
+    <span class="cmt"># Centre H and traces</span>
+    H_c = H - H.mean(axis=<span class="num">1</span>, keepdims=<span class="num">True</span>)    <span class="cmt"># (256, N)</span>
+    T_c = traces - traces.mean(axis=<span class="num">0</span>)            <span class="cmt"># (N, T)</span>
+
+    <span class="cmt"># Numerator: (256, N) @ (N, T) → (256, T)</span>
+    num   = H_c @ T_c
+
+    <span class="cmt"># Denominator: std(h) × std(trace) per (key_guess, time_sample)</span>
+    h_std = H_c.std(axis=<span class="num">1</span>, keepdims=<span class="num">True</span>)     <span class="cmt"># (256, 1)</span>
+    t_std = T_c.std(axis=<span class="num">0</span>, keepdims=<span class="num">True</span>)     <span class="cmt"># (1, T)</span>
+    denom = (h_std * t_std * N)
+
+    corr  = np.where(denom > <span class="num">1e-12</span>, num / denom, <span class="num">0.0</span>)
+    <span class="kw">return</span> corr  <span class="cmt"># (256, T)</span>
+</code></pre>
+
+      <h3>14.2 ChipWhisperer CPA (Jupyter)</h3>
+      <p>Using the ChipWhisperer Python API and its built-in Analyzer, the same attack can be performed against real hardware with a few lines of code:</p>
+
+      <pre><code><span class="lang-tag">Python / ChipWhisperer</span><span class="kw">import</span> chipwhisperer <span class="kw">as</span> cw
+<span class="kw">import</span> chipwhisperer.analyzer <span class="kw">as</span> cwa
+
+<span class="cmt"># Load previously captured traces from ChipWhisperer project</span>
+proj = cw.open_project(<span class="str">"aes_traces.cwp"</span>)
+traces   = proj.waves     <span class="cmt"># numpy array (N, T)</span>
+txts     = proj.textins   <span class="cmt"># plaintexts</span>
+
+<span class="cmt"># Define the leakage model: AES S-Box output, Hamming weight</span>
+leak_model = cwa.leakage_models.sbox_output
+
+<span class="cmt"># Run CPA and print results</span>
+attack = cwa.cpa()
+attack.set_trace_source(cw.attack_traces(proj))
+attack.set_leak_model(leak_model)
+attack.run()
+
+results = attack.results
+<span class="kw">for</span> i, subkey <span class="kw">in</span> enumerate(results.best_guesses()):
+    print(<span class="str">f"Subkey {i:2d}: 0x{subkey:02X}"</span>)
+</code></pre>
+    </section>
+
+    <!-- ── 15. TARGETS ── -->
+    <section id="targets">
+      <h2>15. Real-World Targets &amp; Case Studies</h2>
+
+      <h3>15.1 Smart Cards</h3>
+      <p>Smart cards were the primary target of the original Kocher et al. paper and remain the most studied platform. A smart card contains a microcontroller, non-volatile memory, and typically a hardware cryptographic co-processor, all embedded in a plastic card. When inserted into a reader, the card is powered externally through the card interface — giving an attacker direct access to the power supply line. Kocher reported that essentially all smart card cryptosystems deployed by financial institutions, telephone companies, and governments at the time of the 1999 publication were vulnerable to DPA. <sup><a href="#ref5">[5]</a></sup></p>
+      <p>Smart cards running pay-television conditional access systems have been particularly targeted: attackers who obtain the session key can produce unlimited clones of the access card. This was demonstrated against several major satellite television platforms in the early 2000s. <sup><a href="#ref20">[20]</a></sup> SIM cards, ATM cards, and electronic passport chips have also been subject to power analysis research.</p>
+
+      <h3>15.2 EMV Payment Cards</h3>
+      <p>EMV (Europay, Mastercard, Visa) cards authenticate transactions using public-key cryptography (RSA) or symmetric cryptography (3DES, AES). The private key or session key is stored in tamper-resistant hardware on the card. Power analysis attacks against EMV implementations have been demonstrated in academic literature, though the payment industry's response — including mandatory countermeasure requirements in EMVCo certification — has substantially reduced the practical risk in compliant implementations. <sup><a href="#ref21">[21]</a></sup></p>
+
+      <h3>15.3 Embedded Microcontrollers</h3>
+      <p>ATmega (Atmel/Microchip), STM32 (STMicroelectronics), and ARM Cortex-M series microcontrollers are the standard targets for academic CPA research. An unprotected AES-128 implementation running on an ATmega328P has been broken with as few as 50 traces using CPA, a result reproducible on a ChipWhisperer Lite at a cost of approximately $250. <sup><a href="#ref16">[16]</a></sup></p>
+
+      <h3>15.4 FPGAs and ASICs</h3>
+      <p>Field-Programmable Gate Arrays (FPGAs) are increasingly common in cryptographic accelerators, and their parallel structure produces rich power side channels. ASIC implementations, while harder to attack due to on-chip decoupling capacitors and better process control, are not immune. Power analysis against hardware AES cores in FPGAs has been demonstrated at CHES repeatedly since the early 2000s. <sup><a href="#ref22">[22]</a></sup></p>
+
+      <h3>15.5 Elliptic Curve Cryptography</h3>
+      <p>ECC implementations are vulnerable to SPA through the double-and-add scalar multiplication algorithm, analogous to RSA's square-and-multiply. The ECDSA signing algorithm is particularly sensitive: the per-signature nonce k must remain secret, and any leakage of k (even a few bits via power analysis) allows reconstruction of the private key using lattice attacks. Coron in 1999 was the first to apply power analysis attacks to ECC, proposing resistant scalar multiplication algorithms simultaneously. <sup><a href="#ref3">[3]</a></sup></p>
+
+      <h3>15.6 Post-Quantum Cryptography</h3>
+      <p>NIST's post-quantum cryptography standardisation process has brought new algorithms — CRYSTALS-Kyber, CRYSTALS-Dilithium, SPHINCS+, and FALCON — into production. These algorithms are not immune to power analysis, and their implementations have been shown to leak key material through the same Hamming weight and Hamming distance mechanisms as classical ciphers. The lattice-based algorithms are particularly challenging to protect because their arithmetic operations involve polynomial coefficient processing that is inherently data-dependent. <sup><a href="#ref23">[23]</a></sup></p>
+    </section>
+
+    <!-- ── 16. COUNTERMEASURES ── -->
+    <section id="countermeasures">
+      <h2>16. Countermeasures</h2>
+      <p>Defending against power analysis requires reducing the statistical dependence between the power consumption of a device and the cryptographic values it processes. Countermeasures fall into two broad categories: <em>hiding</em> techniques, which aim to reduce the SNR of the leakage, and <em>masking</em> techniques, which aim to destroy the correlation entirely. <sup><a href="#ref24">[24]</a></sup></p>
+
+      <h3>16.1 Masking (Algebraic Countermeasures)</h3>
+      <p>Masking splits every intermediate value v into d + 1 shares s₀, s₁, …, s_d such that no d shares alone reveal v, yet they recombine to give v:</p>
+
+      <div class="formula">
+        <div class="formula-label">Boolean Masking — Share Decomposition</div>
+        v = s₀ ⊕ s₁ ⊕ … ⊕ s_d     (s₁, …, s_d are uniform random values)
+      </div>
+
+      <p>All computations are performed on the shares rather than on v directly. A first-order masking scheme (d = 1) uses one mask share: v is processed as (v ⊕ m) and m separately. No single leakage point reveals v. Second-order attacks can combine two leakage points to defeat first-order masking, which is why higher-order masking (d ≥ 2) is required for stronger security guarantees. <sup><a href="#ref24">[24]</a></sup></p>
+      <p>For AES, the S-Box is the only non-linear operation and is the hardest to mask. Many published masked AES implementations compute the inverse in GF(2⁸) on shares using either tower-field arithmetic or precomputed masked S-Box lookup tables. The cost is typically a 2–10× increase in execution time and 2–5× increase in code/RAM. <sup><a href="#ref17">[17]</a></sup></p>
+
+      <h3>16.2 Hiding — Temporal Randomisation</h3>
+      <p>Hiding countermeasures reduce the SNR of power analysis attacks. Temporal hiding techniques include: inserting random dummy operations to desynchronise traces between acquisitions; shuffling the order of independent operations (e.g., processing AES bytes in a random order each encryption); and clock jittering via a noise-injecting PLL. These countermeasures force DPA/CPA attacks to analyse many more traces, and resist simple alignment, but they do not defeat attacks that are resilient to misalignment — including deep learning-based attacks. <sup><a href="#ref19">[19]</a></sup></p>
+
+      <h3>16.3 Hiding — Amplitude Randomisation</h3>
+      <p>Amplitude hiding techniques reduce the power-data correlation by making power consumption more uniform regardless of the data being processed. Approaches include: on-chip noise generation circuits; dual-rail logic styles (Wave Dynamic Differential Logic, WDDL) that consume equal power for '0' and '1' transitions; and current flattening circuits that regulate the supply current to a constant. These are expensive in area and power but can provide theoretical first-order security. <sup><a href="#ref25">[25]</a></sup></p>
+
+      <h3>16.4 Algorithm-Level Countermeasures</h3>
+      <p>At the algorithm level, SPA against RSA is defeated by replacing square-and-multiply with Montgomery's ladder, which performs both a squaring and a multiplication in every step regardless of the exponent bit value. For ECC, the Montgomery ladder and Co-Z addition formulae achieve the same goal. <sup><a href="#ref15">[15]</a></sup></p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>Countermeasure</th><th>Defeats</th><th>Cost</th><th>Limitations</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1st-order Boolean masking</td>
+              <td>1st-order DPA/CPA/SPA</td>
+              <td>Medium (2–10× slower)</td>
+              <td>Defeated by 2nd-order attacks; glitches can unmask</td>
+            </tr>
+            <tr>
+              <td>d-th order masking</td>
+              <td>Up to d-th order attacks</td>
+              <td>High (exponential in d)</td>
+              <td>High implementation complexity; side-channel of randomness generation</td>
+            </tr>
+            <tr>
+              <td>Random delay / shuffling</td>
+              <td>Fixed-position correlation attacks</td>
+              <td>Low–medium</td>
+              <td>Defeated by DL attacks; more traces needed, not impossible</td>
+            </tr>
+            <tr>
+              <td>Clock jitter / PLL noise</td>
+              <td>Synchronized attacks</td>
+              <td>Low</td>
+              <td>Partial; defeated by resynchronisation preprocessing</td>
+            </tr>
+            <tr>
+              <td>Dual-rail logic (WDDL)</td>
+              <td>1st-order amplitude leakage</td>
+              <td>Very high (2× area)</td>
+              <td>Routing asymmetries introduce residual leakage; FPGA-unfriendly</td>
+            </tr>
+            <tr>
+              <td>Current regulator / on-chip filter</td>
+              <td>External power measurement</td>
+              <td>Medium hardware</td>
+              <td>EM attacks bypass this; regulator may itself leak</td>
+            </tr>
+            <tr>
+              <td>Montgomery ladder (RSA/ECC)</td>
+              <td>SPA on exponentiation</td>
+              <td>Low (1.5× slower)</td>
+              <td>Higher-order faults can still recover exponent</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>16.5 The Ishai-Sahai-Wagner Framework</h3>
+      <p>The theoretical foundation for masking countermeasures was established by Ishai, Sahai, and Wagner (CRYPTO 2003) through their private circuits framework. They proved that any circuit can be compiled into a functionally equivalent <em>t-private</em> circuit — one in which any t intermediate values are statistically independent of the inputs — at the cost of O(t²) multiplication in the circuit size. This framework underpins the security proofs of higher-order masking schemes, though the proofs apply to the idealised probing security model rather than to physical devices, which can exhibit additional leakage through glitches and memory transitions. <sup><a href="#ref26">[26]</a></sup></p>
+    </section>
+
+    <!-- ── 17. STANDARDS ── -->
+    <section id="standards">
+      <h2>17. Standards &amp; Certification</h2>
+      <p>The threat posed by power analysis has been incorporated into several security standards and evaluation schemes.</p>
+      <p>The Common Criteria (ISO/IEC 15408) evaluation framework includes side-channel attack resistance as a component of the Evaluation Assurance Level (EAL) for cryptographic devices. High-assurance evaluations (EAL 4+, EAL 5+) require testing against SPA, DPA, and in some cases template attacks. <sup><a href="#ref27">[27]</a></sup></p>
+      <p>FIPS 140-3 (the current US federal cryptographic module standard) incorporates requirements from ISO/IEC 19790 and addresses non-invasive attacks including power analysis at Security Level 3 and above. The standard requires that physical security mechanisms protect against power analysis, though it does not mandate specific countermeasures. <sup><a href="#ref3">[3]</a></sup></p>
+      <p>The EMVCo security evaluation methodology for payment cards includes mandatory DPA testing. Chips must be evaluated by an approved laboratory against standardised attack scenarios with defined minimum trace counts. DPA countermeasures are a mandatory requirement for all chips deployed in EMV contact and contactless payment cards. <sup><a href="#ref21">[21]</a></sup></p>
+      <p>Test Vector Leakage Assessment (TVLA), standardised by Rambus/Cryptography Research and adopted in ISO/IEC 17825, provides a fixed-vs-random t-test methodology for assessing whether a device leaks information, without requiring knowledge of the underlying cryptographic algorithm. TVLA is used both by device designers and evaluators as a first-pass screening tool. <sup><a href="#ref3">[3]</a></sup></p>
+    </section>
+
+    <!-- ── 18. FUTURE ── -->
+    <section id="future">
+      <h2>18. Future Directions</h2>
+
+      <h3>18.1 Remote Power Analysis</h3>
+      <p>Recent research has demonstrated that power analysis can be conducted remotely on cloud FPGA platforms (such as AWS F1, which uses Xilinx Virtex UltraScale+ devices). By deploying power-sensing circuits (ring oscillators used as voltage sensors) in user-space FPGA fabric, an attacker co-located with a victim tenant can measure power fluctuations caused by the victim's cryptographic workloads — without any physical access. This threat motivated cloud providers to introduce policies against certain types of ring oscillator use in multi-tenant FPGA environments. <sup><a href="#ref28">[28]</a></sup></p>
+
+      <h3>18.2 Transformer-Based Attacks</h3>
+      <p>The success of transformer architectures in natural language processing and computer vision has motivated their application to side-channel analysis. The attention mechanism's ability to model long-range dependencies in sequences makes it a natural fit for power trace analysis, where the relevant leakage may span many time samples. Early results suggest that transformer-based attacks can exceed CNN-based attacks on desynchronised traces. <sup><a href="#ref2">[2]</a></sup></p>
+
+      <h3>18.3 Post-Quantum SCA</h3>
+      <p>With the standardisation of CRYSTALS-Kyber and related algorithms by NIST in 2024, the field has pivoted significantly toward power analysis of post-quantum implementations. Lattice operations — including polynomial multiplication (NTT-based), rejection sampling, and centred binomial distribution sampling — all exhibit data-dependent power consumption, and both profiling and non-profiling attacks have been demonstrated in the literature. Developing efficient countermeasures for post-quantum algorithms is an active and urgent research priority. <sup><a href="#ref23">[23]</a></sup></p>
+
+      <h3>18.4 Formal Verification of SCA Resistance</h3>
+      <p>Several research groups are developing automated tools for formally verifying that a given circuit or program is free of d-th order leakage in the probing model. Tools such as maskVerif, SILVER, and MATCHI can automatically verify Boolean masking schemes at the circuit level, reducing the reliance on expensive physical evaluation for first-pass assessment. <sup><a href="#ref29">[29]</a></sup></p>
+
+      <div class="callout green">
+        <div class="callout-label">Open Problem</div>
+        <p>No efficient, provably secure, and practically deployable countermeasure against all orders of power analysis currently exists for general-purpose microcontrollers. Higher-order masking provides asymptotic security but with rapidly growing cost. The gap between theoretical security and practical deployability remains the central open problem in the field.</p>
+      </div>
+    </section>
+
+    <!-- ══ REFERENCES ══ -->
+    <div class="refs">
+      <h2>References</h2>
+      <ol class="ref-list">
+        <li id="ref1">Kocher PC, Jaffe J, Jun B. Differential power analysis. In: Wiener M, editor. Advances in Cryptology — CRYPTO 1999. Lecture Notes in Computer Science, vol. 1666. Berlin: Springer; 1999. p. 388–397.</li>
+        <li id="ref2">Randolph M, Diehl W. Power side-channel attack analysis: a review of 20 years of study for the layman. Cryptography. 2020;4(2):15. doi:10.3390/cryptography4020015</li>
+        <li id="ref3">National Institute of Standards and Technology. Physical security testing workshop proceedings [Internet]. Gaithersburg: NIST; 2005 [cited 2024]. Available from: https://csrc.nist.gov/csrc/media/events/physical-security-testing-workshop/documents/papers/physecpaper19.pdf</li>
+        <li id="ref4">Kocher PC. Timing attacks on implementations of Diffie-Hellman, RSA, DSS, and other systems. In: Koblitz N, editor. Advances in Cryptology — CRYPTO 1996. Lecture Notes in Computer Science, vol. 1109. Berlin: Springer; 1996. p. 104–113.</li>
+        <li id="ref5">Biham E, Shamir A. Protecting smart cards from power analysis with detachable power supplies [patent]. US6507913. 2003 Jan 14.</li>
+        <li id="ref6">Mangard S, Oswald E, Popp T. Power Analysis Attacks: Revealing the Secrets of Smart Cards. New York: Springer; 2007. 338 p. ISBN 978-0-387-30857-9.</li>
+        <li id="ref7">Chari S, Rao JR, Rohatgi P. Template attacks. In: Kaliski BS, Koç CK, Paar C, editors. Cryptographic Hardware and Embedded Systems — CHES 2002. Lecture Notes in Computer Science, vol. 2523. Berlin: Springer; 2002. p. 13–28.</li>
+        <li id="ref8">Brier E, Clavier C, Olivier F. Correlation power analysis with a leakage model. In: Joye M, Quisquater JJ, editors. Cryptographic Hardware and Embedded Systems — CHES 2004. Lecture Notes in Computer Science, vol. 3156. Berlin: Springer; 2004. p. 16–29.</li>
+        <li id="ref9">Prouff E, Strullu R, Benadjila R, Cagli E, Dumas C. Study of deep learning techniques for side-channel analysis and introduction to ASCAD database. IACR Cryptology ePrint Archive. 2018; Report 2018/053.</li>
+        <li id="ref10">Gilmore R, Hanley N, O'Neill M. Neural network based attack on a masked implementation of AES. In: Proceedings of the IEEE International Symposium on Hardware Oriented Security and Trust (HOST); 2015 May 5–7; Washington DC, USA. IEEE; 2015. p. 106–111.</li>
+        <li id="ref11">Weste N, Harris D. CMOS VLSI Design: A Circuits and Systems Perspective. 4th ed. Boston: Addison-Wesley; 2011. 840 p. ISBN 978-0-321-54774-3.</li>
+        <li id="ref12">Mangard S, Oswald E, Standaert FX. One for all — all for one: unifying standard differential power analysis attacks. IET Information Security. 2011;5(2):100–110. doi:10.1049/iet-ifs.2010.0096</li>
+        <li id="ref13">Alioto M, Bongiovanni S, Djukanovic M, Scotti G, Trifiletti A. Effectiveness of leakage power analysis attacks on DPA-resistant logic styles under process variations. IEEE Transactions on Circuits and Systems I: Regular Papers. 2014;61(2):429–442.</li>
+        <li id="ref14">Moradi A. Power analysis based side channel attack [Internet]. arXiv:1801.00932 [cs.CR]; 2018 [cited 2024]. Available from: https://arxiv.org/abs/1801.00932</li>
+        <li id="ref15">Joye M, Yen SM. The Montgomery powering ladder. In: Kaliski BS, Koç CK, Paar C, editors. Cryptographic Hardware and Embedded Systems — CHES 2002. Lecture Notes in Computer Science, vol. 2523. Berlin: Springer; 2002. p. 291–302.</li>
+        <li id="ref16">O'Flynn C. Introduction to differential power analysis and related attacks. NewAE Technology Technical Report [Internet]. 2012 [cited 2024]. Available from: https://www.rambus.com/wp-content/uploads/2015/08/DPATechInfo.pdf</li>
+        <li id="ref17">Chari S, Jutla CS, Rao JR, Rohatgi P. Towards sound approaches to counteract power-analysis attacks. In: Wiener M, editor. Advances in Cryptology — CRYPTO 1999. Lecture Notes in Computer Science, vol. 1666. Berlin: Springer; 1999. p. 398–412.</li>
+        <li id="ref18">Timon B. Non-profiled deep learning-based side-channel attacks. IACR Transactions on Cryptographic Hardware and Embedded Systems. 2019;2019(3):107–131. doi:10.13154/tches.v2019.i3.107-131</li>
+        <li id="ref19">O'Flynn C, Chen ZD. ChipWhisperer: an open-source platform for hardware embedded security research. In: Prouff E, editor. Constructive Side-Channel Analysis and Secure Design — COSADE 2014. Lecture Notes in Computer Science, vol. 8622. Berlin: Springer; 2014. p. 243–260.</li>
+        <li id="ref20">Messerges TS, Dabbish EA, Sloan RH. Examining smart-card security under the threat of power analysis attacks. IEEE Transactions on Computers. 2002;51(5):541–552. doi:10.1109/TC.2002.1004591</li>
+        <li id="ref21">EMVCo. EMV Integrated Circuit Card Specifications for Payment Systems: Book 2 — Security and Key Management. Version 4.3. London: EMVCo LLC; 2011.</li>
+        <li id="ref22">Standaert FX, Peeters E, Rouvroy G, Quisquater JJ. An overview of power analysis attacks against field programmable gate arrays. Proceedings of the IEEE. 2006;94(2):383–394. doi:10.1109/JPROC.2005.862438</li>
+        <li id="ref23">Ravi P, Bhasin S, Roy SS, Chattopadhyay A. Drop by drop: Browning the scalability of side-channel attacks on post-quantum cryptography implementations. arXiv:2003.03901 [cs.CR]; 2020.</li>
+        <li id="ref24">Ishai Y, Sahai A, Wagner D. Private circuits: securing hardware against probing attacks. In: Boneh D, editor. Advances in Cryptology — CRYPTO 2003. Lecture Notes in Computer Science, vol. 2729. Berlin: Springer; 2003. p. 463–481.</li>
+        <li id="ref25">Tiri K, Verbauwhede I. A logic level design methodology for a secure DPA resistant ASIC or FPGA implementation. In: Proceedings of the Design, Automation and Test in Europe Conference (DATE 2004); 2004; Paris, France. IEEE; 2004. p. 246–251.</li>
+        <li id="ref26">Ishai Y, Sahai A, Wagner D. Private circuits: securing hardware against probing attacks. In: Boneh D, editor. Advances in Cryptology — CRYPTO 2003. Lecture Notes in Computer Science, vol. 2729. Berlin: Springer; 2003. p. 463–481.</li>
+        <li id="ref27">International Organization for Standardization. ISO/IEC 15408-1:2022 — Information security, cybersecurity and privacy protection — Evaluation criteria for IT security — Part 1: Introduction and general model. Geneva: ISO; 2022.</li>
+        <li id="ref28">Ramesh C, Patil SB, Dhanuskodi SN, Provelengios G, Pillement S, Holcomb D, et al. FPGA side channel attacks without physical access. In: Proceedings of the IEEE International Symposium on Field-Programmable Custom Computing Machines (FCCM); 2018; Boulder CO, USA. IEEE; 2018. p. 45–52.</li>
+        <li id="ref29">Barthe G, Belaïd S, Cassiers G, Fouque PA, Grégoire B, Standaert FX. maskVerif: automated verification of higher-order masking in presence of physical defaults. In: Sako K, Schneider S, Ryan PY, editors. Computer Security — ESORICS 2019. Lecture Notes in Computer Science, vol. 11735. Cham: Springer; 2019. p. 300–318.</li>
+      </ol>
+    </div>
+
+  </article>
+</div>
+
+</body>
+</html>

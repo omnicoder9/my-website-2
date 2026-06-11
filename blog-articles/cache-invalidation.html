@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache Invalidation: The Problem That Ate Computer Science</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+/* ─── TOKENS ─────────────────────────────────────────────────────────────── */
+:root {
+  --bg:          #0B0F18;
+  --surface:     #111621;
+  --surface-2:   #171D2C;
+  --border:      #1E2840;
+  --border-soft: #162035;
+  --text:        #CDD6E8;
+  --text-muted:  #6E809E;
+  --text-dim:    #3D4F6A;
+  --valid:       #00C9A7;    /* cache VALID — teal */
+  --stale:       #F5A623;    /* cache STALE — amber */
+  --invalid:     #FF5252;    /* cache INVALID — red */
+  --accent:      #00C9A7;
+  --accent-dim:  rgba(0,201,167,0.12);
+  --mono:        'JetBrains Mono', monospace;
+  --display:     'Fraunces', Georgia, serif;
+  --body:        'Inter', system-ui, sans-serif;
+  --radius:      6px;
+  --code-bg:     #080C14;
+}
+
+/* ─── RESET ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--valid); text-decoration: none; }
+a:hover { text-decoration: underline; text-decoration-color: var(--valid); }
+
+/* ─── MASTHEAD ────────────────────────────────────────────────────────────── */
+.masthead {
+  background: linear-gradient(160deg, #060914 0%, #0E1422 60%, #0B1229 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 72px 40px 64px;
+  position: relative;
+  overflow: hidden;
+}
+.masthead::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(0,201,167,0.07) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 10% 80%, rgba(245,166,35,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+/* Grid-line background texture */
+.masthead::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,201,167,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,201,167,0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+.masthead-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+.masthead-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--valid);
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cache-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,201,167,0.1);
+  border: 1px solid rgba(0,201,167,0.25);
+  border-radius: 100px;
+  padding: 3px 10px 3px 7px;
+  font-size: 10px;
+}
+.cache-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--valid);
+  animation: pulse-state 4s ease-in-out infinite;
+}
+@keyframes pulse-state {
+  0%,33%   { background: var(--valid);   box-shadow: 0 0 6px var(--valid); }
+  40%,60%  { background: var(--stale);   box-shadow: 0 0 6px var(--stale); }
+  67%,90%  { background: var(--invalid); box-shadow: 0 0 6px var(--invalid); }
+  97%,100% { background: var(--valid);   box-shadow: 0 0 6px var(--valid); }
+}
+.badge-label {
+  animation: label-state 4s ease-in-out infinite;
+}
+@keyframes label-state {
+  0%,33%   { content: 'VALID';   }
+  40%,60%  { content: 'STALE';   }
+  67%,90%  { content: 'INVALID'; }
+  97%,100% { content: 'VALID';   }
+}
+.masthead h1 {
+  font-family: var(--display);
+  font-size: clamp(32px, 5vw, 58px);
+  font-weight: 700;
+  line-height: 1.1;
+  color: #EEF2FB;
+  letter-spacing: -0.02em;
+  margin-bottom: 18px;
+  max-width: 800px;
+}
+.masthead h1 em {
+  font-style: italic;
+  color: var(--stale);
+}
+.masthead-lead {
+  font-size: 18px;
+  line-height: 1.65;
+  color: #8A9DBF;
+  max-width: 680px;
+  margin-bottom: 36px;
+}
+.masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 24px;
+  border-top: 1px solid var(--border-soft);
+}
+.meta-item strong { color: var(--text); font-weight: 500; }
+
+/* ─── LAYOUT ──────────────────────────────────────────────────────────────── */
+.page-body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-areas: 'toc article';
+  gap: 0 56px;
+  align-items: start;
+}
+
+/* ─── TOC (STICKY) ────────────────────────────────────────────────────────── */
+.toc-wrap {
+  grid-area: toc;
+  position: sticky;
+  top: 32px;
+  padding: 32px 0;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.toc-wrap::-webkit-scrollbar { display: none; }
+.toc-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+.toc ol { list-style: none; counter-reset: toc; }
+.toc > ol > li { counter-increment: toc; margin-bottom: 2px; }
+.toc a {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: block;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.toc a:hover, .toc a.active {
+  color: var(--valid);
+  border-left-color: var(--valid);
+  text-decoration: none;
+}
+.toc-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-right: 6px;
+}
+
+/* ─── ARTICLE ─────────────────────────────────────────────────────────────── */
+.article {
+  grid-area: article;
+  padding: 48px 0 80px;
+  min-width: 0;
+}
+
+/* ─── SECTION ANATOMY ─────────────────────────────────────────────────────── */
+.section {
+  margin-bottom: 80px;
+  scroll-margin-top: 32px;
+}
+.section-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--valid);
+  margin-bottom: 14px;
+}
+.section h2 {
+  font-family: var(--display);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 700;
+  color: #EEF2FB;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.section h3 {
+  font-family: var(--body);
+  font-size: 18px;
+  font-weight: 600;
+  color: #C8D5EC;
+  margin-top: 44px;
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+}
+.section h4 {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--stale);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 28px;
+  margin-bottom: 10px;
+}
+p { margin-bottom: 18px; }
+p:last-child { margin-bottom: 0; }
+sup { font-size: 11px; color: var(--valid); font-family: var(--mono); }
+sup a { color: var(--valid); }
+
+/* ─── PULLQUOTE ───────────────────────────────────────────────────────────── */
+.pullquote {
+  border-left: 3px solid var(--stale);
+  padding: 18px 24px;
+  margin: 36px 0;
+  background: rgba(245,166,35,0.05);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.pullquote blockquote {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 21px;
+  line-height: 1.5;
+  color: #C8D5EC;
+  margin-bottom: 10px;
+}
+.pullquote cite {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+/* ─── CALLOUT ─────────────────────────────────────────────────────────────── */
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 28px 0;
+  position: relative;
+}
+.callout.valid  { border-left: 3px solid var(--valid);   background: rgba(0,201,167,0.05); }
+.callout.stale  { border-left: 3px solid var(--stale);   background: rgba(245,166,35,0.05); }
+.callout.danger { border-left: 3px solid var(--invalid); background: rgba(255,82,82,0.05); }
+.callout-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.callout.valid  .callout-head { color: var(--valid); }
+.callout.stale  .callout-head { color: var(--stale); }
+.callout.danger .callout-head { color: var(--invalid); }
+.callout p { margin-bottom: 0; font-size: 15px; }
+
+/* ─── CODE ────────────────────────────────────────────────────────────────── */
+.code-block {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 28px 0;
+  overflow: hidden;
+}
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #0E1220;
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--valid);
+}
+.code-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.code-block pre {
+  padding: 20px 20px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #B8CADF;
+  scrollbar-color: var(--border) transparent;
+}
+.code-block pre::-webkit-scrollbar { height: 6px; }
+.code-block pre::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Syntax highlight colours */
+.kw  { color: #7B9FFF; }          /* keywords */
+.ty  { color: #66D9EF; }          /* types */
+.fn  { color: #A6E22E; }          /* functions */
+.st  { color: #E6DB74; }          /* strings */
+.cm  { color: #4A5C7A; font-style: italic; } /* comments */
+.nm  { color: #F5A623; }          /* numbers / constants */
+.op  { color: #F92672; }          /* operators */
+.dc  { color: #00C9A7; }          /* decorators/annotations */
+.at  { color: #AE81FF; }          /* attributes */
+.vr  { color: #FD971F; }          /* variables (orange) */
+
+/* ─── TABLE ───────────────────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; margin: 28px 0; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+th {
+  background: var(--surface-2);
+  color: #96ABCC;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+  color: var(--text);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.015); }
+td code, th code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: var(--valid);
+}
+.tag-valid   { color: var(--valid); font-weight: 600; }
+.tag-stale   { color: var(--stale); font-weight: 600; }
+.tag-invalid { color: var(--invalid); font-weight: 600; }
+
+/* ─── INLINE CODE ─────────────────────────────────────────────────────────── */
+p code, li code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #8ECFB0;
+}
+
+/* ─── DIAGRAM ─────────────────────────────────────────────────────────────── */
+.diagram {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin: 28px 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: #7B9FFF;
+  overflow-x: auto;
+  white-space: pre;
+}
+.diagram-caption {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: -20px;
+  margin-bottom: 24px;
+}
+
+/* ─── FOOTNOTES / REFERENCES ──────────────────────────────────────────────── */
+.references {
+  border-top: 1px solid var(--border);
+  padding-top: 40px;
+  margin-top: 60px;
+}
+.references h2 {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+.ref-list { list-style: none; counter-reset: refs; }
+.ref-list li {
+  counter-increment: refs;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.ref-list li::before {
+  content: counter(refs) '.';
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  padding-top: 2px;
+}
+.ref-list a { color: var(--text-muted); }
+.ref-list a:hover { color: var(--valid); }
+
+/* ─── STRATEGY CARDS ──────────────────────────────────────────────────────── */
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 28px 0;
+}
+.strategy-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.strategy-card h4 {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--valid);
+  margin-bottom: 8px;
+  margin-top: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.strategy-card p { font-size: 14px; color: var(--text-muted); margin-bottom: 0; }
+.strategy-pill {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  margin-bottom: 10px;
+  border: 1px solid;
+}
+.pill-strong { color: var(--valid); border-color: rgba(0,201,167,0.4); background: rgba(0,201,167,0.08); }
+.pill-eventual { color: var(--stale); border-color: rgba(245,166,35,0.4); background: rgba(245,166,35,0.08); }
+.pill-complex { color: var(--invalid); border-color: rgba(255,82,82,0.4); background: rgba(255,82,82,0.08); }
+
+/* ─── MESI STATE MACHINE ──────────────────────────────────────────────────── */
+.mesi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 24px 0;
+}
+.mesi-state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+}
+.mesi-letter {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.mesi-state:nth-child(1) .mesi-letter { color: var(--valid); }
+.mesi-state:nth-child(2) .mesi-letter { color: #7B9FFF; }
+.mesi-state:nth-child(3) .mesi-letter { color: var(--stale); }
+.mesi-state:nth-child(4) .mesi-letter { color: var(--invalid); }
+.mesi-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #96ABCC;
+  margin-bottom: 6px;
+}
+.mesi-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+/* ─── TIMELINE ────────────────────────────────────────────────────────────── */
+.timeline { margin: 28px 0; position: relative; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 56px;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+.tl-item {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 20px;
+  margin-bottom: 28px;
+  position: relative;
+}
+.tl-year {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--valid);
+  text-align: right;
+  padding-top: 3px;
+  line-height: 1.2;
+}
+.tl-dot {
+  position: absolute;
+  left: 52px;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--valid);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--valid);
+}
+.tl-content {
+  padding-left: 24px;
+}
+.tl-content strong {
+  display: block;
+  font-size: 15px;
+  color: #C8D5EC;
+  margin-bottom: 4px;
+}
+.tl-content p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 0;
+}
+
+/* ─── FOOTER ──────────────────────────────────────────────────────────────── */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 24px 40px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+/* ─── RESPONSIVE ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .page-body {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'article';
+  }
+  .toc-wrap { display: none; }
+  .masthead { padding: 48px 24px 40px; }
+  .mesi-grid { grid-template-columns: repeat(2, 1fr); }
+  .timeline::before { left: 44px; }
+  .tl-item { grid-template-columns: 44px 1fr; }
+  .tl-dot { left: 40px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ MASTHEAD -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-eyebrow">
+      <span>Systems Architecture</span>
+      <span class="cache-badge">
+        <span class="cache-dot"></span>
+        <span class="badge-label">VALID</span>
+      </span>
+    </div>
+    <h1>Cache Invalidation: <em>The Problem That Ate Computer Science</em></h1>
+    <p class="masthead-lead">
+      A deep technical examination of one of computing's most deceptively simple problems — from 1960s hardware coherence
+      protocols to distributed CDN tag invalidation — and why getting it wrong brings systems to their knees.
+    </p>
+    <div class="masthead-meta">
+      <div class="meta-item"><strong>Audience</strong> — Expert practitioners</div>
+      <div class="meta-item"><strong>Scope</strong> — CPU caches · Distributed systems · HTTP · CDN</div>
+      <div class="meta-item"><strong>Citation style</strong> — Vancouver</div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════ BODY GRID -->
+<div class="page-body">
+
+<!-- ──────────────────────────────────────────────────────────────────── TOC -->
+<nav class="toc-wrap" aria-label="Table of contents">
+  <div class="toc-head">Contents</div>
+  <nav class="toc">
+    <ol>
+      <li><a href="#s1"><span class="toc-num">01</span>The Problem, Precisely</a></li>
+      <li><a href="#s2"><span class="toc-num">02</span>A Taxonomy of Caches</a></li>
+      <li><a href="#s3"><span class="toc-num">03</span>Historical Arc</a></li>
+      <li><a href="#s4"><span class="toc-num">04</span>Invalidation Strategies</a></li>
+      <li><a href="#s5"><span class="toc-num">05</span>CPU Cache Coherence</a></li>
+      <li><a href="#s6"><span class="toc-num">06</span>Distributed Invalidation</a></li>
+      <li><a href="#s7"><span class="toc-num">07</span>HTTP &amp; CDN Caching</a></li>
+      <li><a href="#s8"><span class="toc-num">08</span>Surrogate Keys &amp; Cache Tags</a></li>
+      <li><a href="#s9"><span class="toc-num">09</span>Failure Modes</a></li>
+      <li><a href="#s10"><span class="toc-num">10</span>Research Frontiers</a></li>
+      <li><a href="#s11"><span class="toc-num">11</span>Implementation Patterns</a></li>
+      <li><a href="#refs"><span class="toc-num">—</span>References</a></li>
+    </ol>
+  </nav>
+</nav>
+
+<!-- ─────────────────────────────────────────────────────────────── ARTICLE -->
+<article class="article">
+
+<!-- ══════════════════════════════════════════════════════════════════ §1 -->
+<section class="section" id="s1">
+  <div class="section-label">§ 01</div>
+  <h2>The Problem, Precisely</h2>
+
+  <div class="pullquote">
+    <blockquote>"There are only two hard things in Computer Science: cache invalidation and naming things."</blockquote>
+    <cite>— Phil Karlton, Netscape principal engineer, circa 1996–1997<sup><a href="#r1">[1]</a></sup></cite>
+  </div>
+
+  <p>
+    Phil Karlton's aphorism is so widely repeated that its origins have become apocryphal — Tim Bray, who heard it directly, is among the few primary sources.<sup><a href="#r1">[1]</a></sup>
+    The witticism lands because it is simultaneously a joke and a precise technical claim. Naming is a problem of abstraction and human cognition. Cache invalidation is a problem of <em>distributed agreement about the truth of a mutable world in the presence of bounded observation and partial failure</em>. It just looks simpler.
+  </p>
+
+  <p>
+    The core tension is this: caching exploits the temporal and spatial locality of data access to trade memory capacity for speed. You keep a copy of something close to the consumer so it needn't be fetched from the authoritative source on every request. The moment the authoritative source changes, you have a consistency problem. The cached copy is now a lie. The question is: how do you know? When do you care? What do you do about it?
+  </p>
+
+  <p>
+    These deceptively simple questions force a confrontation with the most uncomfortable tradeoffs in distributed systems: consistency vs. availability, freshness vs. throughput, and simplicity vs. correctness. As Brewer's CAP theorem formalizes, a distributed system cannot simultaneously guarantee consistency, availability, and partition tolerance.<sup><a href="#r2">[2]</a></sup> Every caching architecture encodes an implicit choice among these dimensions, usually informally, often wrongly.
+  </p>
+
+  <div class="callout danger">
+    <div class="callout-head">⚠ The fundamental difficulty</div>
+    <p>Cache invalidation is hard not because the algorithms are complex, but because it requires solving distributed consensus under real-world constraints: network partitions, clock skew, concurrent writes, partial failures, and indefinite latency. Any solution involves compromises that most systems teams do not make explicitly.</p>
+  </div>
+
+  <p>
+    What makes invalidation distinct from related problems — consistency, replication, synchronization — is that it is asymmetric. Writes are rare; reads are common. A cache exists precisely because reads dominate. The write path is the exceptional case that must somehow reach every cached copy, including those whose existence the writer may not know about. This is fundamentally an <em>observer problem</em>: the thing being observed must somehow notify observers it does not know exist.
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §2 -->
+<section class="section" id="s2">
+  <div class="section-label">§ 02</div>
+  <h2>A Taxonomy of Caches</h2>
+
+  <p>
+    Before examining invalidation strategies, it helps to understand the layers at which caching occurs, because the invalidation mechanisms appropriate to each layer differ dramatically.
+  </p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Layer</th>
+        <th>Examples</th>
+        <th>Typical TTL</th>
+        <th>Invalidation primitive</th>
+        <th>Consistency model</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>CPU register / L1–L3</strong></td>
+        <td>Modern x86, ARM, RISC-V cores</td>
+        <td>Nanoseconds</td>
+        <td>Hardware coherence (MESI)</td>
+        <td class="tag-valid">Sequential consistency</td>
+      </tr>
+      <tr>
+        <td><strong>TLB</strong></td>
+        <td>MMU page-table walk cache</td>
+        <td>Microseconds</td>
+        <td><code>INVLPG</code> / TLB shootdown</td>
+        <td class="tag-valid">Strong</td>
+      </tr>
+      <tr>
+        <td><strong>OS page cache</strong></td>
+        <td>Linux VFS, macOS unified buffer cache</td>
+        <td>Until eviction</td>
+        <td><code>fsync</code>, <code>msync</code>, drop_caches</td>
+        <td class="tag-valid">Strong (single host)</td>
+      </tr>
+      <tr>
+        <td><strong>DNS resolver</strong></td>
+        <td>Stub, recursive, ISP resolvers</td>
+        <td>TTL field (seconds–days)</td>
+        <td>TTL expiry; no push model</td>
+        <td class="tag-stale">Eventual</td>
+      </tr>
+      <tr>
+        <td><strong>Application cache</strong></td>
+        <td>Guava/Caffeine, EhCache, local HashMap</td>
+        <td>Configurable</td>
+        <td>Explicit eviction, TTL, LFU/LRU</td>
+        <td class="tag-stale">Application-defined</td>
+      </tr>
+      <tr>
+        <td><strong>Distributed cache</strong></td>
+        <td>Memcached, Redis, Hazelcast</td>
+        <td>Configurable</td>
+        <td>DEL, pub/sub, keyspace notifications</td>
+        <td class="tag-stale">Eventual / none</td>
+      </tr>
+      <tr>
+        <td><strong>HTTP / reverse proxy</strong></td>
+        <td>Varnish, Nginx, Squid, HAProxy</td>
+        <td>Cache-Control headers</td>
+        <td>PURGE method, BAN, surrogate keys</td>
+        <td class="tag-stale">Eventual</td>
+      </tr>
+      <tr>
+        <td><strong>CDN / edge</strong></td>
+        <td>Cloudflare, Fastly, Akamai, CloudFront</td>
+        <td>TTL or surrogate keys</td>
+        <td>API purge, cache tags, stale-while-revalidate</td>
+        <td class="tag-invalid">Weak / eventual</td>
+      </tr>
+      <tr>
+        <td><strong>Browser cache</strong></td>
+        <td>Chrome, Firefox, Safari HTTP cache</td>
+        <td>Cache-Control, Expires</td>
+        <td>Hard reload, versioned URLs, ETag</td>
+        <td class="tag-invalid">Weakest</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The consistency model weakens as we move down the stack, not by accident but by necessity: the farther a cache sits from the authoritative source, the higher the network cost of guaranteeing freshness, and the higher the traffic justifying the cache in the first place. The browser cache protecting a single user's session and the CDN edge node serving millions of concurrent users are solving the same abstract problem but with dramatically different operational constraints.
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §3 -->
+<section class="section" id="s3">
+  <div class="section-label">§ 03</div>
+  <h2>Historical Arc</h2>
+
+  <p>
+    Cache invalidation is not a problem invented by the web. It is a fundamental tension that emerged the moment computer architects noticed that main memory was slower than computation — a gap that has only widened over six decades.
+  </p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <span class="tl-year">1965</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Wilkes proposes cache memories</strong>
+        <p>Maurice Wilkes introduced the concept of a "slave memory" — a small fast store acting as a transparent intermediary between the processor and main store — in a landmark paper at the IFIP Congress.<sup><a href="#r3">[3]</a></sup> Wilkes recognized that the slave must be kept coherent with main store, a problem he considered "the principal difficulty."</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">1968</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>IBM System/360 Model 85 — first commercial CPU cache</strong>
+        <p>The IBM 360/85 shipped with a 16 KB cache, managing coherence in hardware. With only a single CPU sharing memory, the invalidation problem was manageable: writes directly updated the cache and main memory (write-through).<sup><a href="#r4">[4]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">1983</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Goodman formalizes cache coherence</strong>
+        <p>James Goodman's landmark paper on snoopy cache-based multiprocessors laid the formal groundwork for bus-snooping coherence protocols, demonstrating how caches on a shared bus could observe each other's traffic to maintain consistency.<sup><a href="#r5">[5]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">1984</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>MESI protocol — the Illinois Protocol</strong>
+        <p>Papamarcos and Patel at the University of Illinois published the MESI protocol, introducing four cache-line states (Modified, Exclusive, Shared, Invalid) and a snooping mechanism that remains the foundation of virtually every modern multicore processor.<sup><a href="#r6">[6]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">1995</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>HTTP caching — RFC 1945 / 2068</strong>
+        <p>HTTP/1.0 introduced the <code>Expires</code> header; HTTP/1.1 (RFC 2068, then RFC 2616) introduced the <code>Cache-Control</code> directive family, ETags, conditional GET, and the <code>Vary</code> header — establishing the web's TTL-plus-validation invalidation model.<sup><a href="#r7">[7]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">1997</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Consistent hashing — distributing cache space</strong>
+        <p>Karger et al. published consistent hashing at STOC, solving the problem of distributing cache entries across a cluster with minimal reshuffling when nodes are added or removed.<sup><a href="#r8">[8]</a></sup> This made large-scale distributed caches viable.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">2003</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Memcached — distributed caching enters the mainstream</strong>
+        <p>Brad Fitzpatrick built Memcached for LiveJournal over a weekend, solving a database bottleneck that had made the site unusable at scale.<sup><a href="#r9">[9]</a></sup> Memcached made a deliberate design choice: no invalidation primitives beyond TTL and explicit delete. Simplicity over feature richness.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">2006</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Varnish Cache — VCL and BAN invalidation</strong>
+        <p>Poul-Henning Kamp designed Varnish Cache with a programmable invalidation layer (VCL) and introduced the BAN mechanism: rather than purging individual objects, a BAN is a predicate stored in memory and evaluated lazily as objects are fetched — allowing O(1) invalidation of arbitrarily large cache populations.<sup><a href="#r10">[10]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">2009</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Redis — rich invalidation semantics</strong>
+        <p>Salvatore Sanfilippo released Redis with built-in pub/sub, keyspace notifications, Lua scripting, and expiry. Redis gave applications the primitives to build event-driven invalidation on top of a distributed cache, a significant architectural leap beyond Memcached's key-value delete model.<sup><a href="#r11">[11]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">2013</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Facebook Memcache paper — invalidation at planetary scale</strong>
+        <p>Nishtala et al. published the definitive account of caching at Facebook's scale — trillions of cache lookups per day — documenting novel solutions to invalidation during replication lag (mcrouter's "delete replication"), thundering herds (leases), and stale reads during failover (cold cluster warmup).<sup><a href="#r12">[12]</a></sup></p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <span class="tl-year">2015–</span>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Cache tags / surrogate keys at the CDN edge</strong>
+        <p>Fastly introduced surrogate keys; Cloudflare introduced cache tags; Varnish formalized the concept in core. This allowed CDN operators to invalidate structured subsets of edge-cached content in milliseconds, collapsing the historically-enormous gap between "delete everything" and "delete one URL."<sup><a href="#r13">[13]</a></sup></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §4 -->
+<section class="section" id="s4">
+  <div class="section-label">§ 04</div>
+  <h2>Invalidation Strategies</h2>
+
+  <p>
+    There is no universally optimal cache invalidation strategy. The choice depends on data mutability, read:write ratios, acceptable staleness windows, operational complexity budget, and the consistency requirements of the consuming application. What follows is a comprehensive taxonomy of the principal strategies with their mechanics, tradeoffs, and appropriate use cases.
+  </p>
+
+  <h3>4.1 TTL-Based Expiry (Time-to-Live)</h3>
+
+  <p>
+    The simplest and most widely deployed strategy: cache entries carry a maximum age, after which they are treated as expired and must be re-fetched. No write-time coordination is required. The cache is self-healing: stale data will eventually be replaced regardless of producer behavior. The staleness window is bounded by the TTL value.
+  </p>
+
+  <div class="callout stale">
+    <div class="callout-head">Tradeoff</div>
+    <p>TTL conflates two distinct questions: "Is this entry still valid?" and "How long should I keep it?" Data with highly variable mutation rates (a product price vs. a user's name) cannot be efficiently served by a single TTL policy. Short TTLs reduce staleness but increase origin load. Long TTLs improve hit ratios but extend inconsistency windows after writes.</p>
+  </div>
+
+  <p>
+    The correct TTL is often unknown at write time, and wrong in any case because data lifetimes are non-uniform. A TTL of 60 seconds on a configuration entry that changes once a year is wasteful; a TTL of 60 seconds on a real-time inventory count is stale within milliseconds of a sale. Systems that use a single TTL policy for all data are implicitly accepting this mismatch.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Python</span>
+      <span class="code-label">TTL Cache with per-key expiry (simplified)</span>
+    </div>
+    <pre><span class="kw">import</span> time
+<span class="kw">import</span> threading
+<span class="kw">from</span> typing <span class="kw">import</span> Any, Optional
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass, field
+
+<span class="dc">@dataclass</span>
+<span class="kw">class</span> <span class="ty">CacheEntry</span>:
+    value:      Any
+    expires_at: <span class="ty">float</span>    <span class="cm"># absolute epoch seconds</span>
+
+<span class="kw">class</span> <span class="ty">TTLCache</span>:
+    <span class="st">"""Thread-safe TTL cache with per-key expiry and passive expiration."""</span>
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, default_ttl: <span class="ty">float</span> <span class="op">=</span> <span class="nm">60.0</span>) <span class="op">-></span> <span class="ty">None</span>:
+        self._store: dict[<span class="ty">str</span>, <span class="ty">CacheEntry</span>] <span class="op">=</span> {}
+        self._lock  <span class="op">=</span> threading.<span class="fn">RLock</span>()
+        self.default_ttl <span class="op">=</span> default_ttl
+
+    <span class="kw">def</span> <span class="fn">set</span>(self, key: <span class="ty">str</span>, value: Any, ttl: Optional[<span class="ty">float</span>] <span class="op">=</span> <span class="ty">None</span>) <span class="op">-></span> <span class="ty">None</span>:
+        ttl <span class="op">=</span> ttl <span class="kw">if</span> ttl <span class="kw">is</span> <span class="kw">not</span> <span class="ty">None</span> <span class="kw">else</span> self.default_ttl
+        <span class="kw">with</span> self._lock:
+            self._store[key] <span class="op">=</span> <span class="ty">CacheEntry</span>(
+                value<span class="op">=</span>value,
+                expires_at<span class="op">=</span>time.<span class="fn">monotonic</span>() <span class="op">+</span> ttl
+            )
+
+    <span class="kw">def</span> <span class="fn">get</span>(self, key: <span class="ty">str</span>) <span class="op">-></span> Optional[Any]:
+        <span class="kw">with</span> self._lock:
+            entry <span class="op">=</span> self._store.<span class="fn">get</span>(key)
+            <span class="kw">if</span> entry <span class="kw">is</span> <span class="ty">None</span>:
+                <span class="kw">return</span> <span class="ty">None</span>                              <span class="cm"># cold miss</span>
+            <span class="kw">if</span> time.<span class="fn">monotonic</span>() <span class="op">></span> entry.expires_at:
+                <span class="kw">del</span> self._store[key]                        <span class="cm"># passive expiry</span>
+                <span class="kw">return</span> <span class="ty">None</span>                              <span class="cm"># stale miss</span>
+            <span class="kw">return</span> entry.value
+
+    <span class="kw">def</span> <span class="fn">invalidate</span>(self, key: <span class="ty">str</span>) <span class="op">-></span> <span class="ty">bool</span>:
+        <span class="kw">with</span> self._lock:
+            <span class="kw">return</span> self._store.<span class="fn">pop</span>(key, <span class="ty">None</span>) <span class="kw">is</span> <span class="kw">not</span> <span class="ty">None</span>
+
+    <span class="kw">def</span> <span class="fn">_expired</span>(self, entry: <span class="ty">CacheEntry</span>) <span class="op">-></span> <span class="ty">bool</span>:
+        <span class="kw">return</span> time.<span class="fn">monotonic</span>() <span class="op">></span> entry.expires_at</pre>
+  </div>
+
+  <h3>4.2 Write-Through</h3>
+
+  <p>
+    On every write, the cache and the authoritative store are updated atomically (or near-atomically) before the write is acknowledged to the caller. The cache is therefore always consistent with the store — at the cost of write latency, since the write path now includes both the cache layer and the store.
+  </p>
+
+  <p>
+    Write-through is most appropriate when reads are frequent and writes are rare, when read latency is critical, and when the cache and store are co-located or connected by a reliable, low-latency link. It does not handle external mutations — writes made directly to the underlying store bypassing the cache will still create stale entries.
+  </p>
+
+  <h3>4.3 Write-Back (Write-Behind)</h3>
+
+  <p>
+    Writes are acknowledged to the caller immediately after updating the cache; the write to the authoritative store is deferred and batched. This dramatically reduces write latency and can coalesce multiple writes to the same key into a single store operation. The tradeoff is durability: data in the cache-but-not-the-store is vulnerable to loss if the cache node fails before the write is flushed.
+  </p>
+
+  <p>
+    Write-back is the dominant policy in CPU L1/L2 caches, where the performance gain is essential and the hardware can coordinate coherence. At the application level it requires careful handling of failure modes (write-ahead logging, idempotent retries) to avoid data loss.
+  </p>
+
+  <h3>4.4 Cache-Aside (Lazy Population)</h3>
+
+  <p>
+    The application is explicitly responsible for cache population and invalidation. On a cache miss, the application fetches the data from the authoritative store, populates the cache, and returns the value. On a write, the application updates the store and then either deletes or updates the cache entry. The cache is never written directly by the producer; it is always populated lazily by the consumer on miss.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Go</span>
+      <span class="code-label">Cache-aside pattern with Redis and invalidation-on-write</span>
+    </div>
+    <pre><span class="kw">package</span> cache
+
+<span class="kw">import</span> (
+    <span class="st">"context"</span>
+    <span class="st">"encoding/json"</span>
+    <span class="st">"errors"</span>
+    <span class="st">"fmt"</span>
+    <span class="st">"time"</span>
+
+    <span class="st">"github.com/redis/go-redis/v9"</span>
+)
+
+<span class="kw">type</span> <span class="ty">UserRepository</span> <span class="kw">struct</span> {
+    redis *redis.<span class="ty">Client</span>
+    db    <span class="ty">Database</span>       <span class="cm">// authoritative store</span>
+    ttl   time.<span class="ty">Duration</span>
+}
+
+<span class="kw">const</span> userKeyFmt <span class="op">=</span> <span class="st">"user:%d"</span>
+
+<span class="cm">// GetUser implements cache-aside: check cache, fall back to DB, populate cache.</span>
+<span class="kw">func</span> (r *<span class="ty">UserRepository</span>) <span class="fn">GetUser</span>(ctx <span class="ty">context</span>.<span class="ty">Context</span>, id <span class="ty">int64</span>) (*<span class="ty">User</span>, <span class="ty">error</span>) {
+    key <span class="op">:=</span> fmt.<span class="fn">Sprintf</span>(userKeyFmt, id)
+
+    <span class="cm">// 1. Check cache.</span>
+    raw, err <span class="op">:=</span> r.redis.<span class="fn">Get</span>(ctx, key).<span class="fn">Bytes</span>()
+    <span class="kw">if</span> err <span class="op">==</span> <span class="ty">nil</span> {
+        <span class="kw">var</span> u <span class="ty">User</span>
+        <span class="kw">if</span> jsonErr <span class="op">:=</span> json.<span class="fn">Unmarshal</span>(raw, &u); jsonErr <span class="op">==</span> <span class="ty">nil</span> {
+            <span class="kw">return</span> &u, <span class="ty">nil</span>   <span class="cm">// cache hit</span>
+        }
+    } <span class="kw">else</span> <span class="kw">if</span> !errors.<span class="fn">Is</span>(err, redis.<span class="ty">Nil</span>) {
+        <span class="kw">return</span> <span class="ty">nil</span>, fmt.<span class="fn">Errorf</span>(<span class="st">"redis GET: %w"</span>, err)
+    }
+
+    <span class="cm">// 2. Cache miss — fetch from authoritative store.</span>
+    u, err <span class="op">:=</span> r.db.<span class="fn">GetUser</span>(ctx, id)
+    <span class="kw">if</span> err <span class="op">!=</span> <span class="ty">nil</span> {
+        <span class="kw">return</span> <span class="ty">nil</span>, fmt.<span class="fn">Errorf</span>(<span class="st">"db GetUser: %w"</span>, err)
+    }
+
+    <span class="cm">// 3. Populate cache asynchronously (fire-and-forget with deadline).</span>
+    <span class="kw">go func</span>() {
+        data, _ <span class="op">:=</span> json.<span class="fn">Marshal</span>(u)
+        _ <span class="op">=</span> r.redis.<span class="fn">SetEx</span>(ctx, key, data, r.ttl).<span class="fn">Err</span>()
+    }()
+
+    <span class="kw">return</span> u, <span class="ty">nil</span>
+}
+
+<span class="cm">// UpdateUser writes through to DB first, then invalidates the cache entry.</span>
+<span class="kw">func</span> (r *<span class="ty">UserRepository</span>) <span class="fn">UpdateUser</span>(ctx <span class="ty">context</span>.<span class="ty">Context</span>, u *<span class="ty">User</span>) <span class="ty">error</span> {
+    <span class="cm">// CRITICAL: Update the DB *before* invalidating the cache.</span>
+    <span class="cm">// Reverse order creates a race: another goroutine repopulates the cache</span>
+    <span class="cm">// with stale data between the delete and the DB write completing.</span>
+    <span class="kw">if</span> err <span class="op">:=</span> r.db.<span class="fn">UpdateUser</span>(ctx, u); err <span class="op">!=</span> <span class="ty">nil</span> {
+        <span class="kw">return</span> fmt.<span class="fn">Errorf</span>(<span class="st">"db UpdateUser: %w"</span>, err)
+    }
+    key <span class="op">:=</span> fmt.<span class="fn">Sprintf</span>(userKeyFmt, u.ID)
+    <span class="kw">if</span> err <span class="op">:=</span> r.redis.<span class="fn">Del</span>(ctx, key).<span class="fn">Err</span>(); err <span class="op">!=</span> <span class="ty">nil</span> {
+        <span class="cm">// Non-fatal: cache will expire eventually. Log and continue.</span>
+        <span class="fn">logWarn</span>(<span class="st">"cache invalidation failed for key %s: %v"</span>, key, err)
+    }
+    <span class="kw">return</span> <span class="ty">nil</span>
+}</pre>
+  </div>
+
+  <div class="callout danger">
+    <div class="callout-head">The update-then-invalidate ordering requirement</div>
+    <p>In cache-aside, the ordering of "write to store" and "delete from cache" is not arbitrary. Deleting the cache entry before the store write completes opens a race: a concurrent reader triggers a miss, queries the store, finds the old value, and repopulates the cache — all before your write lands. The new write then invalidates a now-stale entry, but the cache repopulation with old data has already occurred. Write to the authoritative store first; invalidate the cache after.</p>
+  </div>
+
+  <h3>4.5 Read-Through</h3>
+
+  <p>
+    Unlike cache-aside, where the application orchestrates cache misses, read-through places the miss-handling logic inside the cache layer itself. On a miss, the cache fetches from the store, populates itself, and returns the value — the application never talks to the store directly. This simplifies application code but couples the cache to the store interface.
+  </p>
+
+  <h3>4.6 Event-Driven (Push) Invalidation</h3>
+
+  <p>
+    Rather than relying on TTL expiry or write-time coordination, event-driven invalidation uses a message bus or pub/sub system to broadcast invalidation signals when the authoritative source changes. Cache consumers subscribe to these signals and either delete the relevant entries or schedule background refreshes.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Python</span>
+      <span class="code-label">Redis pub/sub cache invalidation — publisher and subscriber</span>
+    </div>
+    <pre><span class="cm"># ── Publisher: runs in the service that owns the data ──────────────────────</span>
+<span class="kw">import</span> redis, json
+
+<span class="vr">r</span> <span class="op">=</span> redis.<span class="fn">Redis</span>(host<span class="op">=</span><span class="st">'localhost'</span>, port<span class="op">=</span><span class="nm">6379</span>, decode_responses<span class="op">=</span><span class="nm">True</span>)
+
+<span class="kw">def</span> <span class="fn">update_product</span>(product_id: <span class="ty">int</span>, new_price: <span class="ty">float</span>) <span class="op">-></span> <span class="ty">None</span>:
+    <span class="cm"># 1. Persist to authoritative store (DB omitted for brevity).</span>
+    db.<span class="fn">execute</span>(<span class="st">"UPDATE products SET price=? WHERE id=?"</span>, new_price, product_id)
+
+    <span class="cm"># 2. Publish invalidation event on a typed channel.</span>
+    payload <span class="op">=</span> json.<span class="fn">dumps</span>({<span class="st">"entity"</span>: <span class="st">"product"</span>, <span class="st">"id"</span>: product_id, <span class="st">"op"</span>: <span class="st">"update"</span>})
+    vr.<span class="fn">publish</span>(<span class="st">"cache_invalidation:product"</span>, payload)
+
+
+<span class="cm"># ── Subscriber: runs in every service instance with a product cache ────────</span>
+<span class="kw">import</span> threading
+
+<span class="vr">local_cache</span>: dict[<span class="ty">str</span>, Any] <span class="op">=</span> {}
+<span class="vr">pubsub</span> <span class="op">=</span> vr.<span class="fn">pubsub</span>()
+pubsub.<span class="fn">subscribe</span>(<span class="st">"cache_invalidation:product"</span>)
+
+<span class="kw">def</span> <span class="fn">_invalidation_worker</span>() <span class="op">-></span> <span class="ty">None</span>:
+    <span class="kw">for</span> message <span class="kw">in</span> pubsub.<span class="fn">listen</span>():
+        <span class="kw">if</span> message[<span class="st">"type"</span>] <span class="op">!=</span> <span class="st">"message"</span>:
+            <span class="kw">continue</span>
+        event <span class="op">=</span> json.<span class="fn">loads</span>(message[<span class="st">"data"</span>])
+        cache_key <span class="op">=</span> <span class="fn">f</span><span class="st">"product:{event['id']}"</span>
+        local_cache.<span class="fn">pop</span>(cache_key, <span class="ty">None</span>)    <span class="cm"># evict from process-local cache</span>
+        vr.<span class="fn">delete</span>(cache_key)                  <span class="cm"># evict from shared Redis cache</span>
+
+<span class="cm"># Run listener in daemon thread; or use an async event loop.</span>
+threading.<span class="fn">Thread</span>(target<span class="op">=</span>_invalidation_worker, daemon<span class="op">=</span><span class="nm">True</span>).<span class="fn">start</span>()</pre>
+  </div>
+
+  <p>
+    Event-driven invalidation can achieve near-instantaneous consistency across all caches in a cluster, but it introduces coupling to the message bus, requires exactly-once or at-least-once delivery guarantees, and must handle the window between the write and the delivery of the invalidation event (during which any reader may serve stale data). It also does not handle the case where a subscriber is temporarily offline — on reconnect it must either re-subscribe from a durable log or fall back to TTL-bounded staleness.
+  </p>
+
+  <h3>4.7 Stale-While-Revalidate</h3>
+
+  <p>
+    Formalised in RFC 5861, <code>stale-while-revalidate</code> decouples serving from freshness verification.<sup><a href="#r14">[14]</a></sup> When a cached entry is past its <code>max-age</code> but within the <code>stale-while-revalidate</code> window, the cache serves the stale copy immediately and triggers an asynchronous background revalidation with the origin. The user experiences zero additional latency; the cache self-heals within one request cycle.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">HTTP</span>
+      <span class="code-label">stale-while-revalidate response header</span>
+    </div>
+    <pre><span class="cm"># Serve fresh for 60 s. After 60 s, serve stale while revalidating for up to 3600 s.</span>
+<span class="kw">Cache-Control:</span> max-age=<span class="nm">60</span>, stale-while-revalidate=<span class="nm">3600</span>
+
+<span class="cm"># Serve stale if the origin is unreachable for up to 86400 s (1 day).</span>
+<span class="kw">Cache-Control:</span> max-age=<span class="nm">60</span>, stale-if-error=<span class="nm">86400</span></pre>
+  </div>
+
+  <p>
+    This pattern shifts the consistency model from "never serve stale" to "serve stale for a bounded window." It is particularly well-suited to content that changes infrequently but must appear fresh and where revalidation latency would be user-visible. It should not be used for data with hard consistency requirements: financial balances, inventory counts, access control rules.
+  </p>
+
+  <div class="strategy-grid">
+    <div class="strategy-card">
+      <span class="strategy-pill pill-strong">Strong consistency</span>
+      <h4>Write-Through</h4>
+      <p>Cache and store updated together on every write. Highest consistency, highest write latency. Appropriate for user-facing mutable data.</p>
+    </div>
+    <div class="strategy-card">
+      <span class="strategy-pill pill-eventual">Eventual consistency</span>
+      <h4>TTL Expiry</h4>
+      <p>Simplest strategy. Staleness is bounded by TTL. No coordination on write. Appropriate for slowly-changing reference data.</p>
+    </div>
+    <div class="strategy-card">
+      <span class="strategy-pill pill-eventual">Near-real-time</span>
+      <h4>Event-Driven</h4>
+      <p>Pub/sub delivers invalidation signals on write. Sub-second propagation possible. Requires reliable message bus and reconnect handling.</p>
+    </div>
+    <div class="strategy-card">
+      <span class="strategy-pill pill-complex">Durability risk</span>
+      <h4>Write-Back</h4>
+      <p>Lowest write latency; highest throughput. Cache absorbs burst writes; store updated asynchronously. Unsuitable without WAL or durable queue.</p>
+    </div>
+    <div class="strategy-card">
+      <span class="strategy-pill pill-eventual">Lazy</span>
+      <h4>Cache-Aside</h4>
+      <p>Application manages all cache logic. Flexible but error-prone. Requires careful ordering of writes and deletes.</p>
+    </div>
+    <div class="strategy-card">
+      <span class="strategy-pill pill-eventual">UX-optimised</span>
+      <h4>Stale-While-Revalidate</h4>
+      <p>Serve stale immediately; revalidate asynchronously. Zero user-visible latency. Bounded staleness window.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §5 -->
+<section class="section" id="s5">
+  <div class="section-label">§ 05</div>
+  <h2>CPU Cache Coherence: The MESI Protocol</h2>
+
+  <p>
+    The most thoroughly engineered cache invalidation system in existence is not a web framework — it is the cache coherence hardware in every modern multicore processor. The MESI protocol (Modified, Exclusive, Shared, Invalid), introduced by Papamarcos and Patel in 1984,<sup><a href="#r6">[6]</a></sup> defines a finite state machine for each cache line that governs when a cache may serve a local copy and when it must invalidate.
+  </p>
+
+  <div class="mesi-grid">
+    <div class="mesi-state">
+      <div class="mesi-letter">M</div>
+      <div class="mesi-name">Modified</div>
+      <div class="mesi-desc">This cache has the only up-to-date copy. Main memory is stale. The cache must write back before another core can read.</div>
+    </div>
+    <div class="mesi-state">
+      <div class="mesi-letter">E</div>
+      <div class="mesi-name">Exclusive</div>
+      <div class="mesi-desc">This cache has the only copy; main memory is also current. The line can be written without broadcasting an invalidation — transition to M is silent.</div>
+    </div>
+    <div class="mesi-state">
+      <div class="mesi-letter">S</div>
+      <div class="mesi-name">Shared</div>
+      <div class="mesi-desc">Multiple caches hold clean copies. A write requires broadcasting an invalidation to all sharers before transitioning to M.</div>
+    </div>
+    <div class="mesi-state">
+      <div class="mesi-letter">I</div>
+      <div class="mesi-name">Invalid</div>
+      <div class="mesi-desc">The cache line does not contain valid data. A read triggers a cache miss and a fetch from another cache or main memory.</div>
+    </div>
+  </div>
+
+  <p>
+    Coherence is maintained by a <em>snooping</em> mechanism: every cache controller monitors the shared bus (or in modern ring/mesh topologies, the interconnect) and reacts to transactions it observes. When core A writes to a cache line currently in state S on core B, the bus transaction broadcasts an invalidation; core B transitions its copy from S to I. Core A transitions from S to M. If core B subsequently reads the line, it sees a miss, signals a cache-to-cache transfer, and core A writes back.
+  </p>
+
+  <div class="diagram">State transitions for a MESI cache line (from the perspective of one core):
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                                                                         │
+  │                         ┌───────┐                                       │
+  │        local read ───── │       │ ──── local write ────────────┐        │
+  │        (hit)            │   E   │                              │        │
+  │                         │       │                              ▼        │
+  │         ┌──────────────►│Exclus.│◄─────────────────────────┌─────┐     │
+  │         │               └───────┘                          │     │     │
+  │         │                  │  bus read (other core)        │  M  │     │
+  │         │                  │  → transition to Shared       │Modif│     │
+  │         │                  ▼                               │     │     │
+  │  local ─┤             ┌───────┐     local write →         └──┬──┘     │
+  │  read   │    snoop ◄──│       │──── invalidate all sharers    │        │
+  │  (miss) │    write    │   S   │     → transition to M         │        │
+  │         │             │       │                               │        │
+  │         │             │Shared │◄──── bus read (shared hit) ───┘        │
+  │         │             └───────┘                                        │
+  │         │                  │  snoop write / bus invalidate              │
+  │         │                  ▼                                            │
+  │         └──────────────┌───────┐                                        │
+  │                        │       │◄── any operation on invalid line       │
+  │                        │   I   │                                        │
+  │                        │Invalid│                                        │
+  │                        └───────┘                                        │
+  └─────────────────────────────────────────────────────────────────────────┘</div>
+  <p class="diagram-caption">Figure 1 — Simplified MESI state transitions; actual protocols add HITM (hit-in-modified) states and snoop filter optimisations.</p>
+
+  <p>
+    Modern processors extend MESI with additional states: MOESI (Modified, Owned, Exclusive, Shared, Invalid) adds an Owned state that allows a cache to supply data to other caches without writing back to memory, used in AMD processors. Intel's MESIF adds a Forward state designating one cache as the designated responder among sharers.<sup><a href="#r15">[15]</a></sup>
+  </p>
+
+  <h3>TLB Shootdowns: OS-Level Cache Invalidation</h3>
+
+  <p>
+    The Translation Lookaside Buffer (TLB) is a cache of virtual-to-physical address mappings. When the OS modifies a page table entry — on <code>munmap</code>, fork/CoW, or permission change — it must invalidate the corresponding TLB entries on all CPUs that might have cached them. This is a TLB shootdown.
+  </p>
+
+  <p>
+    On x86, this is accomplished by sending an inter-processor interrupt (IPI) to each affected CPU, which executes <code>INVLPG</code> to flush the specific mapping or <code>MOV CR3</code> to flush the entire TLB. TLB shootdowns are a significant source of latency in systems with many CPUs and high virtual memory churn — a reminder that hardware-level cache invalidation carries real costs even at nanosecond timescales.<sup><a href="#r16">[16]</a></sup>
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §6 -->
+<section class="section" id="s6">
+  <div class="section-label">§ 06</div>
+  <h2>Distributed Cache Invalidation</h2>
+
+  <p>
+    When caches are distributed across multiple nodes — as in any horizontally-scaled service — the invalidation problem acquires the full weight of distributed systems theory. A write on one node must reach every cache replica across the cluster, but the network is unreliable, nodes may fail mid-operation, and you cannot know in advance which nodes have cached a given key.
+  </p>
+
+  <h3>6.1 Delete Replication: Facebook's Approach</h3>
+
+  <p>
+    At Facebook's scale (trillions of cache lookups per day), the dominant approach for cache invalidation is <em>delete replication</em> via a dedicated invalidation daemon — McSqueal (later mcrouter).<sup><a href="#r12">[12]</a></sup> When a MySQL replica applies a binlog event representing a write, McSqueal reads the binlog, derives the affected cache keys, and sends DELETE commands to the appropriate Memcached pools.
+  </p>
+
+  <p>
+    This architecture has important properties: it is asynchronous, it decouples the application write path from cache invalidation latency, and it provides a durable record (the binlog) of all mutations that can be replayed on reconnect. The tradeoff is that the cache remains stale for the replication lag window — typically tens of milliseconds, occasionally longer during failover.
+  </p>
+
+  <div class="diagram">Facebook McSqueal / mcrouter invalidation pipeline:
+
+  Web Server ──write──► MySQL Primary ──binlog──► MySQL Replica
+                             │                        │
+                             │                    McSqueal
+                             │                        │
+                             │                   cache key
+                             │                   derivation
+                             │                        │
+                             └────────────────────────► Memcached pool
+                                   DELETE (key)        (invalidate)</div>
+  <p class="diagram-caption">Figure 2 — Delete replication: invalidations derived from the replication stream, not the application write path.</p>
+
+  <h3>6.2 Leases: Solving the Thundering Herd on Invalidation</h3>
+
+  <p>
+    The Facebook Memcache paper introduced <em>leases</em> to address two problems simultaneously: stale sets and thundering herds after invalidation.<sup><a href="#r12">[12]</a></sup>
+  </p>
+
+  <p>
+    When a key is invalidated, the next request that misses receives a <em>lease token</em> — a unique identifier that grants exclusive write permission for that key for a short window (typically 10 seconds). Subsequent requests that also miss are asked to wait or retry. When the key-holder fetches the data and calls <code>set</code> with the lease token, the cache validates the token and accepts the write. If the token has been invalidated by a subsequent write, the <code>set</code> is rejected and the key-holder discards its data.
+  </p>
+
+  <p>
+    This is, in essence, an optimistic lock at the cache layer — preventing concurrent repopulation by racing readers and preventing stale sets from an old computation completing after a write has already invalidated and repopulated the key.
+  </p>
+
+  <h3>6.3 Cache Invalidation in Event-Sourced Systems</h3>
+
+  <p>
+    Event sourcing — where the authoritative state is a log of events rather than a snapshot — provides a natural invalidation substrate. Every write is an event published to a durable log (Kafka, Kinesis, Pulsar). Cache consumers can subscribe to the event stream and invalidate (or recompute) cache entries as events arrive. The log provides durability, ordering, and a replay mechanism for consumers that fall behind.
+  </p>
+
+  <p>
+    The fundamental advantage over ad-hoc pub/sub is that the event log is the authoritative record. A consumer that was offline for an hour can replay the missed events and bring its cache to full consistency with the source — without polling, without TTL gaps, and without relying on a separate invalidation channel that might have different reliability characteristics than the write path.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Python</span>
+      <span class="code-label">Kafka-driven cache invalidation consumer</span>
+    </div>
+    <pre><span class="kw">from</span> confluent_kafka <span class="kw">import</span> Consumer
+<span class="kw">import</span> json, redis
+
+<span class="vr">cache</span> <span class="op">=</span> redis.<span class="fn">Redis</span>(host<span class="op">=</span><span class="st">"localhost"</span>, decode_responses<span class="op">=</span><span class="nm">True</span>)
+
+<span class="vr">consumer</span> <span class="op">=</span> <span class="fn">Consumer</span>({
+    <span class="st">"bootstrap.servers"</span>: <span class="st">"kafka:9092"</span>,
+    <span class="st">"group.id"</span>:          <span class="st">"cache-invalidator"</span>,
+    <span class="st">"auto.offset.reset"</span>: <span class="st">"earliest"</span>,   <span class="cm"># replay from beginning on restart</span>
+    <span class="st">"enable.auto.commit"</span>: <span class="nm">False</span>,
+})
+consumer.<span class="fn">subscribe</span>([<span class="st">"domain.events"</span>])
+
+<span class="kw">def</span> <span class="fn">cache_key_for_event</span>(event: dict) <span class="op">-></span> <span class="ty">str</span> <span class="op">|</span> <span class="ty">None</span>:
+    <span class="st">"""Derive the cache key affected by an event. Return None if not cacheable."""</span>
+    entity, op, eid <span class="op">=</span> event.<span class="fn">get</span>(<span class="st">"entity"</span>), event.<span class="fn">get</span>(<span class="st">"op"</span>), event.<span class="fn">get</span>(<span class="st">"id"</span>)
+    <span class="kw">if</span> op <span class="kw">not in</span> {<span class="st">"updated"</span>, <span class="st">"deleted"</span>}:
+        <span class="kw">return</span> <span class="ty">None</span>
+    <span class="kw">return</span> <span class="fn">f</span><span class="st">"{entity}:{eid}"</span>
+
+<span class="kw">try</span>:
+    <span class="kw">while</span> <span class="nm">True</span>:
+        msg <span class="op">=</span> consumer.<span class="fn">poll</span>(timeout<span class="op">=</span><span class="nm">1.0</span>)
+        <span class="kw">if</span> msg <span class="kw">is</span> <span class="ty">None</span> <span class="kw">or</span> msg.<span class="fn">error</span>():
+            <span class="kw">continue</span>
+        event <span class="op">=</span> json.<span class="fn">loads</span>(msg.<span class="fn">value</span>())
+        key   <span class="op">=</span> <span class="fn">cache_key_for_event</span>(event)
+        <span class="kw">if</span> key:
+            cache.<span class="fn">delete</span>(key)
+            <span class="fn">print</span>(<span class="fn">f</span><span class="st">"Invalidated: {key} (offset {msg.offset()})"</span>)
+        consumer.<span class="fn">commit</span>(asynchronous<span class="op">=</span><span class="nm">False</span>)  <span class="cm"># commit after successful invalidation</span>
+<span class="kw">finally</span>:
+    consumer.<span class="fn">close</span>()</pre>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §7 -->
+<section class="section" id="s7">
+  <div class="section-label">§ 07</div>
+  <h2>HTTP and CDN Caching</h2>
+
+  <p>
+    HTTP caching is governed by RFC 7234,<sup><a href="#r17">[17]</a></sup> which defines a layered model of cache directives, validation mechanisms, and freshness computation. Unlike most distributed cache systems, HTTP caching operates through the request/response layer — the cache is a man-in-the-middle between client and server, and invalidation must work through the same HTTP interface.
+  </p>
+
+  <h3>7.1 Freshness and Validation</h3>
+
+  <p>
+    RFC 7234 defines <em>freshness</em> as a function of the response's age relative to its <code>max-age</code> or <code>Expires</code> header. A fresh response may be served without contacting the origin. A stale response must be <em>validated</em> with a conditional request before serving.
+  </p>
+
+  <p>
+    The two validation mechanisms are: <strong>ETags</strong> (entity tags — a hash or opaque version identifier for the response body, sent in <code>If-None-Match</code> conditional requests) and <strong>Last-Modified</strong> dates (sent in <code>If-Modified-Since</code> requests). If the origin responds with <code>304 Not Modified</code>, the cache updates its headers and serves the existing body. If the origin responds with <code>200</code>, the cache replaces its stored copy.
+  </p>
+
+  <p>
+    The critical insight is that HTTP caching has no <em>push</em> invalidation model in the base protocol. The origin cannot reach out and tell caches to invalidate a stored response — it can only respond to validation requests. This is why CDN cache invalidation APIs exist as out-of-band mechanisms: they are compensating for a fundamental gap in the HTTP model.
+  </p>
+
+  <h3>7.2 The <code>Vary</code> Header: Caching's Silent Complicator</h3>
+
+  <p>
+    The <code>Vary</code> header instructs caches that a response's cacheability depends on specific request headers. A response with <code>Vary: Accept-Language</code> must be cached separately for each language variant requested. A response with <code>Vary: Cookie</code> is essentially uncacheable at a shared cache because every user has unique cookies.
+  </p>
+
+  <p>
+    <code>Vary</code> does not affect invalidation directly, but it dramatically complicates it: to invalidate a resource that varies, you must invalidate every variant. CDNs typically handle this by storing all variants under a common cache key namespace and purging the entire namespace on invalidation — which is one of the motivating use cases for surrogate keys.
+  </p>
+
+  <h3>7.3 CDN Invalidation: APIs and Propagation</h3>
+
+  <p>
+    CDN invalidation is a fundamentally different problem from application-level cache invalidation. A CDN operates hundreds of points of presence (PoPs) globally, each caching potentially millions of objects. When you publish a new version of a CSS file at <code>/static/styles.css</code>, you need every PoP to stop serving the old version — across multiple continents, within seconds, without affecting availability.
+  </p>
+
+  <p>
+    Major CDN providers offer URL-based purge APIs, but these have significant limitations. Akamai's "Fast Purge" API promises propagation within 5 seconds globally.<sup><a href="#r18">[18]</a></sup> Cloudflare's Cache Purge API accepts up to 30 URLs per request. Purging by prefix or pattern is available from some providers. Purging an entire zone ("cache everything for this domain") is the nuclear option — it works, but it guarantees an origin flood as the CDN cache warms up from scratch.
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §8 -->
+<section class="section" id="s8">
+  <div class="section-label">§ 08</div>
+  <h2>Surrogate Keys and Cache Tags</h2>
+
+  <p>
+    Surrogate keys (Fastly) and cache tags (Cloudflare, Varnish) are among the most significant innovations in HTTP cache invalidation of the past decade.<sup><a href="#r13">[13]</a></sup> They solve a fundamental mismatch: URL-based purging is a one-to-one operation (one URL per purge), but the relationship between content and cached objects is many-to-many.
+  </p>
+
+  <p>
+    Consider a product page on an e-commerce site. It caches images, prices, availability data, related recommendations, and category breadcrumbs — all potentially from different data sources with different mutation rates. A single change to the product record should invalidate all cache objects that include product data for that SKU. Without surrogate keys, you need to know every URL that includes that product and purge each individually — which is impossible at scale.
+  </p>
+
+  <h3>How Surrogate Keys Work</h3>
+
+  <p>
+    The origin server annotates each response with a <code>Surrogate-Key</code> (Fastly) or <code>Cache-Tag</code> (Cloudflare) header containing a space-separated list of opaque identifiers representing the content's logical dependencies:
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">HTTP</span>
+      <span class="code-label">Surrogate key / cache tag response headers</span>
+    </div>
+    <pre><span class="cm"># Fastly surrogate keys</span>
+HTTP/1.1 200 OK
+<span class="kw">Surrogate-Key:</span> product-<span class="nm">42371</span> category-electronics brand-samsung price-tier-2
+<span class="kw">Surrogate-Control:</span> max-age=<span class="nm">3600</span>
+
+<span class="cm"># Cloudflare cache tags</span>
+HTTP/1.1 200 OK
+<span class="kw">Cache-Tag:</span> product-<span class="nm">42371</span>,category-electronics,brand-samsung
+<span class="kw">Cache-Control:</span> public, max-age=<span class="nm">3600</span>
+
+<span class="cm"># Varnish (xkey module)</span>
+HTTP/1.1 200 OK
+<span class="kw">xkey:</span> product-<span class="nm">42371</span> category-electronics brand-samsung</pre>
+  </div>
+
+  <p>
+    The CDN stores the mapping from each tag to every cached object annotated with it. When a product record changes, the origin calls the CDN purge API with the tag <code>product-42371</code>. The CDN invalidates every cached object across every PoP that carries that tag — potentially thousands of objects — in a single API call, typically within seconds.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Python</span>
+      <span class="code-label">Fastly surrogate key purge on data update</span>
+    </div>
+    <pre"><span class="kw">import</span> httpx, os
+
+<span class="vr">FASTLY_SERVICE_ID</span> <span class="op">=</span> os.environ[<span class="st">"FASTLY_SERVICE_ID"</span>]
+<span class="vr">FASTLY_API_TOKEN</span>  <span class="op">=</span> os.environ[<span class="st">"FASTLY_API_TOKEN"</span>]
+
+<span class="kw">async def</span> <span class="fn">purge_surrogate_key</span>(key: <span class="ty">str</span>) <span class="op">-></span> <span class="ty">None</span>:
+    <span class="st">"""
+    Invalidate all CDN objects tagged with `key` across all PoPs.
+    Uses Fastly's soft-purge (marks stale, allows stale-while-revalidate).
+    """</span>
+    url <span class="op">=</span> <span class="fn">f</span><span class="st">"https://api.fastly.com/service/{FASTLY_SERVICE_ID}/purge/{key}"</span>
+    <span class="kw">async with</span> httpx.<span class="fn">AsyncClient</span>() <span class="kw">as</span> client:
+        resp <span class="op">=</span> <span class="kw">await</span> client.<span class="fn">post</span>(
+            url,
+            headers<span class="op">=</span>{
+                <span class="st">"Fastly-Key"</span>:      FASTLY_API_TOKEN,
+                <span class="st">"Fastly-Soft-Purge"</span>: <span class="st">"1"</span>,  <span class="cm"># soft-purge: serve stale until fresh</span>
+            }
+        )
+        resp.<span class="fn">raise_for_status</span>()
+
+<span class="kw">async def</span> <span class="fn">update_product</span>(product_id: <span class="ty">int</span>, data: dict) <span class="op">-></span> <span class="ty">None</span>:
+    <span class="kw">await</span> db.<span class="fn">update_product</span>(product_id, data)            <span class="cm"># write to DB</span>
+    <span class="kw">await</span> <span class="fn">purge_surrogate_key</span>(<span class="fn">f</span><span class="st">"product-{product_id}"</span>)  <span class="cm"># invalidate all CDN copies</span>
+    <span class="cm"># All pages, API responses, images tagged product-{product_id} are now stale.</span></pre>
+  </div>
+
+  <p>
+    Varnish's implementation — the <code>xkey</code> VMOD — uses a BAN-based approach internally. A BAN is a stored predicate evaluated lazily against cached objects as they are fetched, avoiding the need to maintain an explicit tag-to-object index in memory. The tradeoff is that stale objects are not immediately purged from memory — they are only invalidated when next requested, which means the memory footprint is not immediately reduced.<sup><a href="#r10">[10]</a></sup>
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §9 -->
+<section class="section" id="s9">
+  <div class="section-label">§ 09</div>
+  <h2>Failure Modes: When Cache Invalidation Goes Wrong</h2>
+
+  <p>
+    Cache invalidation failures are a category of bug that is disproportionately severe: they tend to be silent (the system appears functional), persistent (they self-heal only after TTL expiry or a deployment), and potentially catastrophic (serving incorrect data to users at scale). Here are the principal failure modes.
+  </p>
+
+  <h3>9.1 The Cache Stampede (Thundering Herd)</h3>
+
+  <p>
+    When a popular cache entry expires or is invalidated, the next N requests all see a miss simultaneously and all proceed to query the origin. If N is large and the origin query is expensive, the origin is overwhelmed — potentially cascading into a full outage. The cache, designed to protect the origin, has become the mechanism of its destruction.
+  </p>
+
+  <p>
+    The canonical solution is <em>probabilistic early expiration</em>, proposed by Vattani et al.<sup><a href="#r19">[19]</a></sup> Rather than serving from cache until the exact TTL boundary and then causing a synchronized miss, each request uses a randomized function that increases the probability of early revalidation as the TTL approaches zero. The first request to decide to revalidate (probabilistically) does so in the background; subsequent requests continue to serve from cache.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Python</span>
+      <span class="code-label">Probabilistic early expiration (XFetch algorithm)</span>
+    </div>
+    <pre><span class="kw">import</span> time, math, random
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">from</span> typing <span class="kw">import</span> Callable, Any
+
+<span class="dc">@dataclass</span>
+<span class="kw">class</span> <span class="ty">XFetchEntry</span>:
+    value:      Any
+    expires_at: <span class="ty">float</span>    <span class="cm"># absolute monotonic time</span>
+    delta:      <span class="ty">float</span>    <span class="cm"># time (seconds) taken to recompute value</span>
+
+<span class="kw">def</span> <span class="fn">xfetch_get</span>(
+    key:      <span class="ty">str</span>,
+    store:    dict[<span class="ty">str</span>, <span class="ty">XFetchEntry</span>],
+    fetch_fn: Callable[[], Any],
+    ttl:      <span class="ty">float</span> <span class="op">=</span> <span class="nm">60.0</span>,
+    beta:     <span class="ty">float</span> <span class="op">=</span> <span class="nm">1.0</span>,          <span class="cm"># aggressiveness: 1.0 is optimal in most cases</span>
+) <span class="op">-></span> Any:
+    <span class="st">"""
+    XFetch (Optimal Probabilistic Cache Stampede Prevention).
+    Serves cached value with probability that increases as TTL approaches zero.
+    Early revalidation happens on the serving request, not a background job.
+    """</span>
+    now   <span class="op">=</span> time.<span class="fn">monotonic</span>()
+    entry <span class="op">=</span> store.<span class="fn">get</span>(key)
+
+    <span class="kw">if</span> entry <span class="kw">is</span> <span class="kw">not</span> <span class="ty">None</span>:
+        <span class="cm"># XFetch formula: early-revalidate if random() < beta * delta * -log(uniform(0,1))</span>
+        <span class="cm"># Equivalently: revalidate if expires_at - now < beta * delta * -log(rand)</span>
+        time_to_expiry <span class="op">=</span> entry.expires_at <span class="op">-</span> now
+        should_revalidate <span class="op">=</span> time_to_expiry <span class="op">-</span> beta <span class="op">*</span> entry.delta <span class="op">*</span> math.<span class="fn">log</span>(random.<span class="fn">random</span>()) <span class="op"><</span> <span class="nm">0</span>
+
+        <span class="kw">if</span> <span class="kw">not</span> should_revalidate:
+            <span class="kw">return</span> entry.value   <span class="cm"># serve cached value</span>
+
+    <span class="cm"># Recompute (on cache miss OR probabilistic early revalidation).</span>
+    t_start <span class="op">=</span> time.<span class="fn">monotonic</span>()
+    value   <span class="op">=</span> <span class="fn">fetch_fn</span>()
+    delta   <span class="op">=</span> time.<span class="fn">monotonic</span>() <span class="op">-</span> t_start
+
+    store[key] <span class="op">=</span> <span class="ty">XFetchEntry</span>(
+        value<span class="op">=</span>value,
+        expires_at<span class="op">=</span>time.<span class="fn">monotonic</span>() <span class="op">+</span> ttl,
+        delta<span class="op">=</span>delta,   <span class="cm"># recorded so future requests know recompute cost</span>
+    )
+    <span class="kw">return</span> value</pre>
+  </div>
+
+  <h3>9.2 Stale Sets: Writing Stale Data into a Fresh Cache</h3>
+
+  <p>
+    A stale set occurs when a slow reader fetches data from the origin, and by the time it attempts to populate the cache, a write has already invalidated the key and a subsequent reader has already repopulated it with fresh data. The slow reader's <code>SET</code> now overwrites fresh data with stale data — the exact opposite of what the cache should provide.
+  </p>
+
+  <p>
+    This is the problem that Facebook's lease mechanism was specifically designed to solve. Without leases, stale sets are possible whenever the application uses a read-then-set pattern without version checking. The fix is to use conditional <code>SET</code> commands or generation-number versioning: the read captures a version number from the cache, and the <code>SET</code> is only accepted if the current version number has not changed.
+  </p>
+
+  <h3>9.3 Cache Avalanche</h3>
+
+  <p>
+    Cache avalanche occurs when a large number of cache entries expire simultaneously — typically because they were all populated in the same batch operation with the same TTL. On expiry, all corresponding origin queries fire at once.
+  </p>
+
+  <p>
+    The standard mitigations are: jitter (add a random offset to TTLs so entries expire at different times), cache warming (pre-populate before expiry), and graduated background refresh (refresh the cache before entries expire, rather than on demand).
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Python</span>
+      <span class="code-label">TTL jitter to prevent cache avalanche</span>
+    </div>
+    <pre><span class="kw">import</span> random
+
+<span class="kw">def</span> <span class="fn">jittered_ttl</span>(base_ttl: <span class="ty">float</span>, jitter_factor: <span class="ty">float</span> <span class="op">=</span> <span class="nm">0.2</span>) <span class="op">-></span> <span class="ty">float</span>:
+    <span class="st">"""
+    Returns a TTL between base_ttl * (1 - jitter_factor) and base_ttl.
+    A jitter_factor of 0.2 spreads expiry across a 20% window.
+    """</span>
+    lower <span class="op">=</span> base_ttl <span class="op">*</span> (<span class="nm">1</span> <span class="op">-</span> jitter_factor)
+    <span class="kw">return</span> random.<span class="fn">uniform</span>(lower, base_ttl)
+
+<span class="cm"># Instead of: redis.setex(key, value, 3600)</span>
+<span class="cm"># Use:         redis.setex(key, value, jittered_ttl(3600))</span>
+<span class="cm">#              → expiry between 2880 s and 3600 s, distributed uniformly</span></pre>
+  </div>
+
+  <h3>9.4 Inconsistency During Partial Failure</h3>
+
+  <p>
+    In any distributed system, invalidation is not atomic. A cache-aside write succeeds in updating the DB but fails to delete the cache key (network error, Redis node restart). The cache now holds stale data indefinitely — or until TTL expiry. This is an unavoidable consequence of the two-phase nature of cache-aside writes.
+  </p>
+
+  <p>
+    Mitigations include: short TTLs as a safety net, write-through with transactional semantics (some Redis Cluster setups), CDC-based invalidation (which derives invalidations from the DB's own commit log and is therefore reliable), or accepting bounded staleness as a product decision.
+  </p>
+
+  <h3>9.5 The Negative Cache Problem</h3>
+
+  <p>
+    Negative caching — caching the <em>absence</em> of a resource — is important for performance (avoiding repeated DB queries for non-existent keys) but creates a specific invalidation problem: when a previously-absent entity is created, the negative cache entry must be invalidated. This requires the write path to know which keys were negatively cached, which may be impossible in a decentralized architecture.
+  </p>
+
+  <p>
+    DNS suffers from this acutely: a negatively cached NXDOMAIN response (RFC 2308) for a hostname will continue to be served for its negative TTL even after the hostname is created — affecting zone delegation propagation and new service launches.<sup><a href="#r20">[20]</a></sup>
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §10 -->
+<section class="section" id="s10">
+  <div class="section-label">§ 10</div>
+  <h2>Research Frontiers</h2>
+
+  <h3>10.1 Caffeine and W-TinyLFU: Rethinking Eviction as Invalidation</h3>
+
+  <p>
+    Eviction policy and invalidation policy are distinct concerns, but they interact: an optimal eviction policy keeps the most valuable entries in cache, reducing the need for re-population after invalidation. Caffeine, the modern Java caching library that replaced Guava Cache,<sup><a href="#r21">[21]</a></sup> implements the Window TinyLFU (W-TinyLFU) admission policy — maintaining a frequency sketch (a compact probabilistic data structure) to estimate access frequency, and only admitting entries that are accessed more frequently than the entry they would evict.
+  </p>
+
+  <p>
+    W-TinyLFU achieves near-optimal cache hit ratios by effectively predicting which entries are likely to be needed again, dramatically reducing the number of re-population events that follow evictions — which, from a consistency standpoint, are indistinguishable from invalidation-driven misses.
+  </p>
+
+  <h3>10.2 CRDT-Based Cache Consistency</h3>
+
+  <p>
+    Conflict-free Replicated Data Types (CRDTs) offer a mathematical framework for managing replicated mutable state without coordination — operations are designed to be commutative and associative so that any ordering of concurrent operations converges to the same result.<sup><a href="#r22">[22]</a></sup> Applied to caching, CRDT-based approaches can represent cache entries as grow-only sets, counters with merge semantics, or last-writer-wins registers with causal timestamps, allowing cache replicas to converge without explicit invalidation coordination.
+  </p>
+
+  <p>
+    Antidote DB is an example of a system combining CRDT semantics with strong eventual consistency guarantees, which can serve as both the authoritative store and the caching layer with predictable consistency properties.<sup><a href="#r23">[23]</a></sup>
+  </p>
+
+  <h3>10.3 Change Data Capture for Cache Invalidation</h3>
+
+  <p>
+    Change Data Capture (CDC) derives a stream of database mutations from the database's own write-ahead log, providing a reliable, ordered, and comprehensive record of all writes. Systems like Debezium (for MySQL, PostgreSQL, MongoDB) can publish CDC events to Kafka, which are then consumed by cache invalidation services. This approach has several advantages over application-level invalidation: it catches writes from any application (including migrations and manual admin queries), it is transactionally consistent with the database write, and it provides a durable log for replay on consumer restart.
+  </p>
+
+  <div class="callout valid">
+    <div class="callout-head">CDC as the authoritative invalidation substrate</div>
+    <p>The combination of CDC (for reliable write detection), Kafka (for durable event transport), and surrogate key purge APIs (for efficient CDN invalidation) represents the current state of the art for cache invalidation at scale: reliable, comprehensive, replay-capable, and decoupled from application write paths.</p>
+  </div>
+
+  <h3>10.4 Lease-Based Caching in Distributed Databases</h3>
+
+  <p>
+    Conditional leases — short-duration locks granted to cache-populating readers, invalidated on writes, and with fine-grained scope — remain an active research and engineering area. Google's Spanner uses a variant of read-write leases for external consistency.<sup><a href="#r24">[24]</a></sup> The core insight is that a lease is a lightweight form of distributed coordination that avoids the full overhead of two-phase commit while providing stronger freshness guarantees than TTL alone.
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════ §11 -->
+<section class="section" id="s11">
+  <div class="section-label">§ 11</div>
+  <h2>Implementation Patterns and Engineering Guidance</h2>
+
+  <h3>11.1 Versioned Cache Keys</h3>
+
+  <p>
+    The most reliable cache invalidation for immutable content (CSS, JS bundles, static images) is to never invalidate: use content-addressable versioned URLs. A file's URL contains a hash of its content; when the content changes, the URL changes. Old URLs can be cached forever. New URLs are always cold-cached. No invalidation required.
+  </p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="code-lang">Shell</span>
+      <span class="code-label">Content-hash URL generation (the only truly correct cache invalidation)</span>
+    </div>
+    <pre><span class="cm"># Generate content-hashed filenames for static assets</span>
+<span class="kw">sha256sum</span> styles.css | <span class="kw">awk</span> <span class="st">'{print $1}'</span> | <span class="kw">head</span> -c <span class="nm">16</span>
+<span class="cm"># → a3f9c12b44e8d701</span>
+
+<span class="cm"># Deploy as /static/styles.a3f9c12b44e8d701.css</span>
+<span class="cm"># Set Cache-Control: public, max-age=31536000, immutable</span>
+<span class="cm"># The response is cacheable for 1 year — zero invalidation required.</span></pre>
+  </div>
+
+  <h3>11.2 The Two-Phase Cache Invalidation Pattern</h3>
+
+  <p>
+    For mutable resources where versioned URLs are impractical, the two-phase pattern provides strong consistency guarantees with minimal coordination overhead. On write: (1) mark the existing cache entry as "purging" — serve stale with a header indicating revalidation is in progress; (2) write to the authoritative store; (3) delete the cache entry. New readers will trigger a miss and repopulate with fresh data. In-flight readers continue to serve stale (phase 1) rather than hitting the origin during the write window.
+  </p>
+
+  <h3>11.3 Choosing a Consistency Model</h3>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Use case</th>
+        <th>Acceptable staleness</th>
+        <th>Recommended strategy</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Financial balances, inventory counts, access control</td>
+        <td class="tag-invalid">Zero</td>
+        <td>No caching, or write-through with very short TTL (&lt;1 s) for read-heavy paths</td>
+      </tr>
+      <tr>
+        <td>User profile data, preferences, configuration</td>
+        <td class="tag-stale">Seconds</td>
+        <td>Cache-aside with event-driven invalidation; TTL as safety net</td>
+      </tr>
+      <tr>
+        <td>Product catalog, CMS content, search indexes</td>
+        <td class="tag-stale">Minutes</td>
+        <td>CDN caching with surrogate key purge on write; stale-while-revalidate</td>
+      </tr>
+      <tr>
+        <td>Analytics dashboards, aggregate counts</td>
+        <td class="tag-valid">Minutes to hours</td>
+        <td>TTL-based with generous expiry; scheduled background refresh</td>
+      </tr>
+      <tr>
+        <td>Static assets (CSS, JS, images)</td>
+        <td class="tag-valid">Infinite (versioned)</td>
+        <td>Content-hash URLs; <code>immutable</code> Cache-Control; no invalidation</td>
+      </tr>
+      <tr>
+        <td>DNS records</td>
+        <td class="tag-stale">TTL field (operator choice)</td>
+        <td>Low TTL before planned changes; awareness of negative caching (RFC 2308)</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>11.4 Observability: Making Cache State Visible</h3>
+
+  <p>
+    Cache invalidation bugs are notoriously difficult to debug precisely because caches make state invisible. The system appears correct until a specific sequence of reads and writes exposes the inconsistency — and by then the cache has often self-healed. Engineering teams should instrument their caches with the following metrics as a baseline:
+  </p>
+
+  <p>
+    Cache hit rate by key namespace (detect which namespaces have poor effectiveness or abnormal miss rates following writes), invalidation lag (time from DB write to cache invalidation completion, derived from CDC timestamps), stale read rate (if your cache supports conditional reads with ETags, track how often a revalidation returns 304 vs 200), and cache error rate (failed <code>SET</code> or <code>DEL</code> operations that may leave stale entries). Coupling these metrics to deployment events reveals whether new code changes are altering cache behavior in unexpected ways.
+  </p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════════ REFERENCES -->
+<div class="references" id="refs">
+  <h2>References</h2>
+  <ol class="ref-list">
+    <li id="r1">Bray T. On Identification. Ongoing [Internet]. 2007 [cited 2025]. Available from: https://www.tbray.org/ongoing/When/200x/2005/12/23/UPI</li>
+    <li id="r2">Brewer EA. CAP twelve years later: How the "rules" have changed. Computer. 2012;45(2):23–29. doi:10.1109/MC.2012.37</li>
+    <li id="r3">Wilkes MV. Slave memories and dynamic storage allocation. IEEE Trans Electron Comput. 1965;EC-14(2):270–271. doi:10.1109/PGEC.1965.264302</li>
+    <li id="r4">Liptay JS. Structural aspects of the System/360 Model 85, II: the cache. IBM Syst J. 1968;7(1):15–21. doi:10.1147/sj.71.0015</li>
+    <li id="r5">Goodman JR. Using cache memory to reduce processor-memory traffic. In: Proceedings of the 10th Annual International Symposium on Computer Architecture (ISCA). 1983. p. 124–131. doi:10.1145/800046.801647</li>
+    <li id="r6">Papamarcos MS, Patel JH. A low-overhead coherence solution for multiprocessors with private cache memories. In: Proceedings of the 11th Annual International Symposium on Computer Architecture (ISCA). 1984. p. 348–354. doi:10.1145/800015.808204</li>
+    <li id="r7">Fielding RT, Gettys J, Mogul JC, Frystyk H, Masinter L, Leach P, et al. RFC 2616: Hypertext Transfer Protocol — HTTP/1.1. Internet Engineering Task Force; 1999.</li>
+    <li id="r8">Karger D, Lehman E, Leighton T, Panigrahy R, Levine M, Lewin D. Consistent hashing and random trees: distributed caching protocols for relieving hot spots on the World Wide Web. In: Proceedings of the 29th Annual ACM Symposium on Theory of Computing (STOC). 1997. p. 654–663. doi:10.1145/258533.258660</li>
+    <li id="r9">Fitzpatrick B. Distributed caching with Memcached. Linux J. 2004;(124):5.</li>
+    <li id="r10">Poul-Henning Kamp. Varnish design principles [Internet]. Varnish Software; 2006 [cited 2025]. Available from: https://varnish-cache.org/docs/</li>
+    <li id="r11">Sanfilippo S. Redis documentation: data types and commands [Internet]. Redis Ltd; 2009–2025 [cited 2025]. Available from: https://redis.io/docs/</li>
+    <li id="r12">Nishtala R, Fugal H, Grimm S, Kwiatkowski M, Lee H, Li HC, et al. Scaling Memcache at Facebook. In: Proceedings of the 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI '13). 2013. p. 385–398.</li>
+    <li id="r13">Fastly. Surrogate keys [Internet]. Fastly Developer Hub; 2015–2025 [cited 2025]. Available from: https://developer.fastly.com/reference/http/http-headers/Surrogate-Key/</li>
+    <li id="r14">Nottingham M, Kelsey R. RFC 5861: HTTP Cache-Control Extensions for Stale Content. Internet Engineering Task Force; 2010.</li>
+    <li id="r15">Culler D, Singh JP, Gupta A. Parallel Computer Architecture: A Hardware/Software Approach. San Francisco: Morgan Kaufmann; 1999. Chapter 5: Shared-Memory Multiprocessors.</li>
+    <li id="r16">Gorman M. Understanding the Linux Virtual Memory Manager. Upper Saddle River: Prentice Hall; 2004. Chapter 3: Page Table Management.</li>
+    <li id="r17">Fielding R, Reschke J. RFC 7234: Hypertext Transfer Protocol (HTTP/1.1): Caching. Internet Engineering Task Force; 2014.</li>
+    <li id="r18">Akamai Technologies. Fast Purge API [Internet]. Akamai Developer; 2025 [cited 2025]. Available from: https://techdocs.akamai.com/purge-cache/</li>
+    <li id="r19">Vattani A, Chierichetti F, Lowenstein K. Optimal probabilistic cache stampede prevention. Proc VLDB Endow. 2015;8(8):886–897. doi:10.14778/2757807.2757813</li>
+    <li id="r20">Andrews M. RFC 2308: Negative Caching of DNS Queries (DNS NCACHE). Internet Engineering Task Force; 1998.</li>
+    <li id="r21">Manes B. Caffeine: A high performance caching library for Java [Internet]. GitHub; 2015–2025 [cited 2025]. Available from: https://github.com/ben-manes/caffeine</li>
+    <li id="r22">Shapiro M, Preguiça N, Baquero C, Zawirski M. Conflict-free replicated data types. In: Proceedings of the 13th International Symposium on Stabilization, Safety, and Security of Distributed Systems (SSS). 2011. p. 386–400. doi:10.1007/978-3-642-24550-3_29</li>
+    <li id="r23">Akkoorath DK, Tomsic AZ, Bravo M, Li Z, Crain T, Bieniusa A, et al. Cure: Strong semantics meets high availability and low latency. In: Proceedings of the 36th IEEE International Conference on Distributed Computing Systems (ICDCS). 2016. p. 405–414. doi:10.1109/ICDCS.2016.98</li>
+    <li id="r24">Corbett JC, Dean J, Epstein M, Fikes A, Frost C, Furman JJ, et al. Spanner: Google's globally-distributed database. In: Proceedings of the 10th USENIX Symposium on Operating Systems Design and Implementation (OSDI). 2012. p. 251–264.</li>
+  </ol>
+</div>
+
+</article>
+</div><!-- end page-body -->
+
+<footer class="footer">
+  Cache Invalidation: The Problem That Ate Computer Science &nbsp;·&nbsp; Vancouver Citation Style &nbsp;·&nbsp; Expert-level reference article
+</footer>
+
+<script>
+/* Active TOC link highlighting */
+(function () {
+  const toc   = document.querySelectorAll('.toc a');
+  const sects = Array.from(document.querySelectorAll('.section[id], .references[id]'));
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        toc.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`.toc a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sects.forEach(s => obs.observe(s));
+})();
+</script>
+</body>
+</html>

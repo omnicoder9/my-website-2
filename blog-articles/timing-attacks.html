@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timing Attacks: The Clock as Cryptanalyst</title>
+<style>
+  /* ── TOKENS ─────────────────────────────────────────────────────────── */
+  :root {
+    --ink:       #0e0f13;
+    --surface:   #f5f4ef;
+    --muted:     #6b6d77;
+    --rule:      #d8d6ce;
+    --accent:    #c0392b;          /* deep crimson — danger / precision */
+    --accent2:   #1a3a52;          /* navy — authority / depth          */
+    --code-bg:   #141820;
+    --code-fg:   #e8e6df;
+    --code-str:  #a8d8a8;
+    --code-kw:   #7ec8e3;
+    --code-cmt:  #636b78;
+    --code-num:  #f0a070;
+    --code-fn:   #d4a0f0;
+    --toc-w:     260px;
+    --body-max:  860px;
+    --mono: 'JetBrains Mono','Fira Code','Cascadia Code',ui-monospace,monospace;
+    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: 'Georgia','Times New Roman',serif;
+  }
+
+  /* ── RESET & BASE ───────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; font-size: 17px; }
+  body {
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.72;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── MASTHEAD ───────────────────────────────────────────────────────── */
+  .masthead {
+    background: var(--ink);
+    color: #e8e6df;
+    padding: 3.5rem 2rem 2.8rem;
+  }
+  .masthead-inner {
+    max-width: calc(var(--body-max) + var(--toc-w) + 4rem);
+    margin: 0 auto;
+  }
+  .masthead .eyebrow {
+    font-size: .72rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 1.1rem;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 400;
+    line-height: 1.12;
+    letter-spacing: -.015em;
+    max-width: 26ch;
+    margin-bottom: 1rem;
+  }
+  .masthead h1 em {
+    color: var(--accent);
+    font-style: italic;
+  }
+  .masthead .subtitle {
+    font-size: .95rem;
+    color: #9a9a9a;
+    max-width: 64ch;
+    line-height: 1.6;
+    margin-bottom: 1.8rem;
+  }
+  .masthead-meta {
+    display: flex;
+    gap: 2rem;
+    font-size: .75rem;
+    color: #666;
+    letter-spacing: .04em;
+    border-top: 1px solid #252525;
+    padding-top: 1.2rem;
+    flex-wrap: wrap;
+  }
+  .masthead-meta span strong { color: #bbb; }
+
+  /* ── LAYOUT ─────────────────────────────────────────────────────────── */
+  .layout {
+    display: flex;
+    max-width: calc(var(--body-max) + var(--toc-w) + 5rem);
+    margin: 0 auto;
+    width: 100%;
+    align-items: flex-start;
+    padding: 0 1.5rem;
+    gap: 3rem;
+  }
+
+  /* ── STICKY TOC ──────────────────────────────────────────────────────── */
+  .toc-rail {
+    width: var(--toc-w);
+    flex-shrink: 0;
+    position: sticky;
+    top: 1.5rem;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    padding: 1.5rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+  .toc-rail::-webkit-scrollbar { width: 4px; }
+  .toc-rail::-webkit-scrollbar-track { background: transparent; }
+  .toc-rail::-webkit-scrollbar-thumb { background: var(--rule); }
+
+  .toc-label {
+    font-size: .65rem;
+    letter-spacing: .17em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: .9rem;
+    padding-left: .1rem;
+  }
+  .toc-list { list-style: none; border-left: 2px solid var(--rule); }
+  .toc-list li { line-height: 1.3; }
+  .toc-list a {
+    display: block;
+    padding: .28rem .7rem;
+    font-size: .8rem;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    margin-left: -2px;
+    transition: color .15s, border-color .15s;
+  }
+  .toc-list a:hover { color: var(--ink); border-left-color: var(--accent); }
+  .toc-list .toc-sub a {
+    font-size: .76rem;
+    padding-left: 1.4rem;
+    color: #aaa;
+  }
+  .toc-list .toc-sub a:hover { color: var(--ink); }
+
+  /* ── ARTICLE BODY ───────────────────────────────────────────────────── */
+  .article-body {
+    max-width: var(--body-max);
+    min-width: 0;
+    padding: 2.8rem 0 5rem;
+    flex: 1;
+  }
+
+  /* ── SECTIONS ───────────────────────────────────────────────────────── */
+  .article-body section { margin-bottom: 3.8rem; }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 1.7rem;
+    font-weight: 400;
+    letter-spacing: -.01em;
+    line-height: 1.18;
+    color: var(--ink);
+    margin-bottom: 1.1rem;
+    padding-bottom: .55rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 2rem 0 .7rem;
+    letter-spacing: .01em;
+  }
+  h4 {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--accent2);
+    margin: 1.6rem 0 .5rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  p { margin-bottom: 1.1rem; }
+  p + p { text-indent: 0; }
+
+  a { color: var(--accent2); text-decoration-thickness: 1px; }
+  a:hover { color: var(--accent); }
+
+  strong { font-weight: 700; color: var(--accent2); }
+  em { font-style: italic; }
+
+  /* ── CALLOUT / ASIDE ────────────────────────────────────────────────── */
+  .callout {
+    background: #fff;
+    border-left: 4px solid var(--accent);
+    padding: 1.1rem 1.3rem;
+    margin: 1.8rem 0;
+    border-radius: 0 6px 6px 0;
+    font-size: .92rem;
+  }
+  .callout .callout-label {
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: .4rem;
+  }
+  .callout p { margin: 0; }
+
+  .callout-navy {
+    border-left-color: var(--accent2);
+    background: #f0f4f8;
+  }
+  .callout-navy .callout-label { color: var(--accent2); }
+
+  /* ── CODE BLOCKS ────────────────────────────────────────────────────── */
+  .code-wrap {
+    margin: 1.8rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,.12);
+  }
+  .code-header {
+    background: #1e2430;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 1rem;
+  }
+  .code-title {
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: #8899aa;
+    letter-spacing: .05em;
+  }
+  .code-lang {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    padding: .18rem .5rem;
+    background: rgba(255,255,255,.08);
+    color: #ccc;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    font-family: var(--mono);
+    font-size: .815rem;
+    line-height: 1.6;
+    padding: 1.3rem 1.4rem;
+    overflow-x: auto;
+    margin: 0;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: .84em;
+    background: rgba(0,0,0,.07);
+    padding: .12em .35em;
+    border-radius: 3px;
+    color: var(--accent2);
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: 1em;
+    color: inherit;
+  }
+
+  /* syntax colour helpers */
+  .kw  { color: var(--code-kw); }
+  .st  { color: var(--code-str); }
+  .cm  { color: var(--code-cmt); font-style: italic; }
+  .nm  { color: var(--code-num); }
+  .fn  { color: var(--code-fn); }
+  .hl  { background: rgba(255,230,0,.07); display: block; }
+
+  /* ── FIGURES / DIAGRAMS ─────────────────────────────────────────────── */
+  .fig-wrap {
+    background: #fff;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 1.6rem;
+    margin: 2rem 0;
+    text-align: center;
+  }
+  .fig-cap {
+    font-size: .78rem;
+    color: var(--muted);
+    margin-top: .8rem;
+    font-style: italic;
+  }
+  .timing-diagram {
+    font-family: var(--mono);
+    font-size: .8rem;
+    text-align: left;
+    display: inline-block;
+    background: #fafaf8;
+    border: 1px solid var(--rule);
+    padding: 1.1rem 1.4rem;
+    border-radius: 6px;
+    line-height: 1.7;
+    color: var(--ink);
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* ── REFERENCE LIST ─────────────────────────────────────────────────── */
+  .refs ol {
+    padding-left: 2.2rem;
+    font-size: .84rem;
+    line-height: 1.7;
+    color: #444;
+  }
+  .refs ol li { margin-bottom: .6rem; }
+  .refs ol li a { word-break: break-all; }
+
+  /* ── ATTACK TIMELINE TABLE ──────────────────────────────────────────── */
+  .timeline-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .84rem;
+    margin: 1.5rem 0;
+  }
+  .timeline-table th {
+    background: var(--ink);
+    color: #ddd;
+    text-align: left;
+    padding: .55rem .8rem;
+    font-size: .72rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .timeline-table td {
+    padding: .55rem .8rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  .timeline-table tr:nth-child(even) td { background: rgba(0,0,0,.025); }
+  .year-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 800;
+    padding: .12rem .45rem;
+    border-radius: 3px;
+    letter-spacing: .06em;
+  }
+
+  /* ── RESPONSIVE ─────────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; padding: 0 1rem; gap: 0; }
+    .toc-rail {
+      position: static;
+      width: 100%;
+      max-height: none;
+      border-bottom: 1px solid var(--rule);
+      padding: 1.2rem 0;
+      margin-bottom: 1.5rem;
+    }
+    .toc-list { columns: 2; }
+    .toc-list .toc-sub { break-inside: avoid; }
+    .article-body { padding-top: 1.2rem; }
+  }
+  @media (max-width: 540px) {
+    .toc-list { columns: 1; }
+    pre { font-size: .74rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ MASTHEAD === -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow">Security Engineering · Side-Channel Analysis</p>
+    <h1>Timing Attacks:<br><em>The Clock as Cryptanalyst</em></h1>
+    <p class="subtitle">
+      A comprehensive technical reference covering the theory, history, landmark
+      exploits, implementation vulnerabilities, source-code demonstrations, and
+      hardened countermeasures of timing-based side-channel attacks against
+      cryptographic systems.
+    </p>
+    <div class="masthead-meta">
+      <span><strong>Category</strong> Cryptographic Side-Channels</span>
+      <span><strong>Coverage</strong> RSA · TLS · Cache · Web Auth</span>
+      <span><strong>Citations</strong> Vancouver Style</span>
+      <span><strong>Level</strong> Intermediate / Advanced</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ LAYOUT  === -->
+<div class="layout">
+
+  <!-- ─────────────────────────────────────── TOC RAIL ─────────────── -->
+  <nav class="toc-rail" aria-label="Table of contents">
+    <p class="toc-label">Contents</p>
+    <ul class="toc-list">
+      <li><a href="#introduction">1. Introduction</a></li>
+      <li><a href="#history">2. Historical Background</a></li>
+      <ul class="toc-sub">
+        <li><a href="#history-pre">Pre-Kocher Era</a></li>
+        <li><a href="#history-kocher">Kocher 1996</a></li>
+      </ul>
+      <li><a href="#fundamentals">3. Fundamentals</a></li>
+      <ul class="toc-sub">
+        <li><a href="#threat-model">Threat Model</a></li>
+        <li><a href="#signal-noise">Signal vs. Noise</a></li>
+        <li><a href="#taxonomy">Attack Taxonomy</a></li>
+      </ul>
+      <li><a href="#rsa-attacks">4. RSA Timing Attacks</a></li>
+      <ul class="toc-sub">
+        <li><a href="#modexp">Modular Exponentiation</a></li>
+        <li><a href="#montgomery">Montgomery Reduction</a></li>
+        <li><a href="#brumley-boneh">Brumley &amp; Boneh (2003)</a></li>
+      </ul>
+      <li><a href="#cache-attacks">5. Cache-Based Attacks</a></li>
+      <ul class="toc-sub">
+        <li><a href="#bernstein">Bernstein AES (2005)</a></li>
+        <li><a href="#flush-reload">FLUSH+RELOAD</a></li>
+        <li><a href="#spectre-meltdown">Spectre &amp; Meltdown</a></li>
+      </ul>
+      <li><a href="#string-compare">6. String Comparison Attacks</a></li>
+      <li><a href="#tls-attacks">7. TLS Protocol Attacks</a></li>
+      <ul class="toc-sub">
+        <li><a href="#lucky13">Lucky 13 (2013)</a></li>
+        <li><a href="#robot">ROBOT (2018)</a></li>
+      </ul>
+      <li><a href="#code">8. Source Code</a></li>
+      <ul class="toc-sub">
+        <li><a href="#code-vuln">Vulnerable Patterns</a></li>
+        <li><a href="#code-measure">Measurement Demo</a></li>
+        <li><a href="#code-ct">Constant-Time Fixes</a></li>
+      </ul>
+      <li><a href="#countermeasures">9. Countermeasures</a></li>
+      <li><a href="#tools">10. Tools &amp; Detection</a></li>
+      <li><a href="#research">11. Research Landscape</a></li>
+      <li><a href="#references">References</a></li>
+    </ul>
+  </nav>
+
+  <!-- ─────────────────────────────────────── ARTICLE ───────────────── -->
+  <article class="article-body">
+
+    <!-- ══════════════════════════════════════ §1 INTRODUCTION ═══════ -->
+    <section id="introduction">
+      <h2>1. Introduction</h2>
+      <p>
+        In cryptography, a <strong>timing attack</strong> is a side-channel attack in which the
+        attacker attempts to compromise a cryptosystem by analysing the time taken to
+        execute cryptographic algorithms. Every logical operation in a computer takes time
+        to execute, and the time can differ based on the input; with precise measurements
+        of the time for each operation, an attacker may be able to work backwards to the
+        input.<sup>[1]</sup> Unlike classical cryptanalysis — which attacks the
+        mathematical structure of an algorithm — timing attacks target its
+        <em>implementation</em>. A provably secure cipher can fall completely to a timing
+        attack if the code that runs it branches on secret data.
+      </p>
+      <p>
+        How much information leaks through timing depends on many variables: the
+        cryptographic system's design, the CPU running it, the algorithms employed,
+        assorted implementation details, countermeasures deployed, and the accuracy of
+        the attacker's timing measurements.<sup>[1]</sup> Modern timing attacks span a
+        remarkable range — from a researcher sitting on the same LAN as a web server to a
+        JavaScript exploit running in a browser tab, and from smart-card power-consumption
+        analysis to speculative-execution microarchitectural attacks that read kernel
+        memory from user-space processes.
+      </p>
+      <p>
+        This article provides a comprehensive technical treatment: historical context,
+        mathematical intuition, landmark real-world exploits, annotated source code, and
+        the state-of-the-art in countermeasures.
+      </p>
+    </section>
+
+    <!-- ══════════════════════════════════════ §2 HISTORY ════════════ -->
+    <section id="history">
+      <h2>2. Historical Background</h2>
+
+      <h3 id="history-pre">2.1 The Pre-Kocher Era</h3>
+      <p>
+        The concept of exploiting physical properties of computation to infer secret
+        information predates the modern literature. The first officially documented
+        side-channel observation dates to 1965, when Peter Wright — a scientist with
+        GCHQ — reported that MI5 was attempting to break a cipher used by the Egyptian
+        Embassy in London by monitoring the physical characteristics of the encrypting
+        device.<sup>[2]</sup> This work remained classified for decades.
+      </p>
+      <p>
+        In the domain of public-key cryptography, practitioners intuitively understood
+        that implementation-level optimisations could introduce data-dependent timing
+        variation, but the attack surface was not formally characterised. Until 1996 it
+        was widely assumed that software implementations of RSA running on general-purpose
+        hardware were immune to such analysis — in part because the decryption times of
+        concurrent network servers were thought to be masked by process scheduling noise.
+      </p>
+
+      <h3 id="history-kocher">2.2 Kocher's Seminal 1996 Paper</h3>
+      <p>
+        In 1996, Paul Kocher published the seminal paper <em>"Timing Attacks on
+        Implementations of Diffie-Hellman, RSA, DSS, and Other Systems"</em>, showing that
+        non-constant running time of ciphers can leak information about the key.<sup>[3]</sup>
+        Presented at CRYPTO 1996, the paper demonstrated that by carefully measuring the
+        amount of time required to perform private-key operations, an attacker could find
+        fixed Diffie-Hellman exponents, factor RSA keys, and break other cryptosystems.
+        The attack required only known ciphertext and was computationally
+        inexpensive.<sup>[4]</sup>
+      </p>
+
+      <div class="callout">
+        <p class="callout-label">Key Insight — Kocher 1996</p>
+        <p>
+          "By carefully measuring the amount of time required to perform private key
+          operations, attackers may be able to find fixed Diffie-Hellman exponents,
+          factor RSA keys, and break other cryptosystems." — Kocher (1996)<sup>[4]</sup>
+        </p>
+      </div>
+
+      <p>
+        Kocher warned vendors about the attack prior to publication, catching the
+        attention of cryptographers including the inventors of RSA itself.<sup>[5]</sup>
+        The paper inaugurated what became a rapidly proliferating research area: within
+        a decade, researchers had extended timing attacks to symmetric ciphers (DES,
+        AES), smart-card hardware, network servers, web browsers, and finally the
+        speculative-execution hardware of virtually every modern CPU.
+      </p>
+
+      <table class="timeline-table">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Event</th>
+            <th>Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="year-badge">1965</span></td>
+            <td>GCHQ / MI5 first documented side-channel observation (Wright)</td>
+            <td>Classified; no public disclosure</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">1996</span></td>
+            <td>Kocher publishes timing attack on RSA, DH, DSS at CRYPTO</td>
+            <td>Field of implementation attacks founded</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">1998</span></td>
+            <td>Bleichenbacher: PKCS#1 v1.5 padding oracle on SSL</td>
+            <td>All SSL/TLS implementations at risk</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">2000</span></td>
+            <td>Dhem et al.: practical RSA timing on smart cards (512-bit key)</td>
+            <td>Hardware tokens vulnerable</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">2003</span></td>
+            <td>Brumley &amp; Boneh: remote timing attack on OpenSSL</td>
+            <td>Network servers shown to be vulnerable</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">2005</span></td>
+            <td>Bernstein: AES cache-timing attack</td>
+            <td>Symmetric crypto subject to cache side-channels</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">2013</span></td>
+            <td>AlFardan &amp; Paterson: Lucky 13 attack on TLS CBC</td>
+            <td>All TLS 1.0–1.2 CBC implementations affected</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">2018</span></td>
+            <td>Spectre &amp; Meltdown disclosed (Kocher et al.)</td>
+            <td>Hardware timing leaks in every modern CPU</td>
+          </tr>
+          <tr>
+            <td><span class="year-badge">2018</span></td>
+            <td>ROBOT: Bleichenbacher resurfaces on 27 of top-100 domains</td>
+            <td>Facebook, PayPal keys compromised in demo</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══════════════════════════════════════ §3 FUNDAMENTALS ═══════ -->
+    <section id="fundamentals">
+      <h2>3. Fundamentals</h2>
+
+      <h3 id="threat-model">3.1 Threat Model</h3>
+      <p>
+        A timing attacker has the ability to submit chosen inputs to a target system
+        and precisely measure the elapsed time between submission and response. The
+        attacker's goal is to recover secret information (a private key, password, or
+        token) that influences computation time. Threat scenarios range in capability:
+      </p>
+      <ul style="margin: .8rem 0 1rem 1.5rem; line-height:1.8;">
+        <li><strong>Local / same-process:</strong> attacker shares CPU with the victim (e.g. cloud multi-tenancy, shared cache).</li>
+        <li><strong>Local network:</strong> attacker and server on the same LAN; network jitter is small and manageable.</li>
+        <li><strong>Remote / WAN:</strong> attacker across the Internet; requires statistical averaging over thousands of queries to suppress noise.</li>
+        <li><strong>Browser-based:</strong> JavaScript executing in a tab measures timing of operations in a co-located tab or the browser engine itself.</li>
+      </ul>
+      <p>
+        The attack is a signal-detection problem. The "signal" is the timing variation
+        caused by secret-dependent branches or memory accesses; the "noise" is everything
+        else: OS scheduling, network jitter, cache interference, thermal throttling,
+        and measurement overhead.
+      </p>
+
+      <h3 id="signal-noise">3.2 Signal vs. Noise</h3>
+      <p>
+        Research by Crosby, Wallach, and Riedi showed that filters can significantly
+        reduce the effects of jitter, allowing an attacker to measure events with
+        15–100 µs accuracy across the Internet, and as good as 100 ns over a local
+        network.<sup>[6]</sup> At 100 ns resolution, even a single extra conditional
+        subtraction inside a modular multiplication routine is detectable.
+      </p>
+      <p>
+        Increasing sample sizes is the attacker's primary tool for overcoming noise.
+        Because the secret-dependent component of the timing is consistent across queries
+        for the same key material, averaging many measurements suppresses random noise
+        while preserving the signal. The attacker effectively performs a statistical
+        hypothesis test: "does this input cause a timing difference consistent with bit
+        <em>b</em> of the key being 1?"
+      </p>
+
+      <div class="fig-wrap">
+        <div class="timing-diagram">
+Attack submits ciphertext C₁           Attack submits ciphertext C₂
+         │                                       │
+         ▼                                       ▼
+  ┌──────────────┐  t = 1.423 ms         ┌──────────────┐  t = 1.419 ms
+  │  RSA Decrypt │                       │  RSA Decrypt │
+  │  (bit d_i=0) │                       │  (bit d_i=1) │
+  └──────────────┘                       └──────────────┘
+         │                                       │
+  no extra reduction                   extra Montgomery reduction
+         │                                       │ (+0.004 ms)
+         ▼                                       ▼
+    Response sent                           Response sent
+
+  → Over N=10 000 measurements, ΔAVG reveals bit d_i of private key
+        </div>
+        <p class="fig-cap">Figure 1. Conceptual diagram of a timing measurement revealing a secret key bit through extra Montgomery reduction steps.</p>
+      </div>
+
+      <h3 id="taxonomy">3.3 Attack Taxonomy</h3>
+      <p>
+        Timing attacks belong to the broader family of <strong>side-channel attacks</strong>,
+        which also includes power analysis (SPA/DPA), electromagnetic analysis (EMA),
+        acoustic cryptanalysis, and fault injection.<sup>[7]</sup> Within timing attacks,
+        three sub-classes are most studied:
+      </p>
+      <ul style="margin: .8rem 0 1rem 1.5rem; line-height:1.8;">
+        <li><strong>Algorithm-level timing:</strong> data-dependent branching or early termination in the cryptographic algorithm itself (e.g. RSA square-and-multiply, string comparison).</li>
+        <li><strong>Cache-timing:</strong> secret-dependent memory access patterns cause cache hits and misses with measurable latency differences (e.g. AES S-box lookups, FLUSH+RELOAD).</li>
+        <li><strong>Microarchitectural timing:</strong> speculative execution, branch prediction, TLB state, and other CPU micro-features leak information through timing (e.g. Spectre, Meltdown).</li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════════════════ §4 RSA ATTACKS ═════════ -->
+    <section id="rsa-attacks">
+      <h2>4. RSA Timing Attacks</h2>
+
+      <h3 id="modexp">4.1 Modular Exponentiation and the Square-and-Multiply Algorithm</h3>
+      <p>
+        RSA decryption computes <strong>M = C<sup>d</sup> mod N</strong>, where <em>N</em> is
+        the RSA modulus, <em>C</em> is the ciphertext, and <em>d</em> is the secret private
+        key.<sup>[5]</sup> The dominant algorithm for modular exponentiation is
+        <em>square-and-multiply</em>, which processes the exponent <em>d</em> bit by bit:
+        for each bit of <em>d</em>, it squares the running result; for bits equal to 1,
+        it additionally performs a multiplication.
+      </p>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">square_and_multiply.py — naive (timing-vulnerable) modular exponentiation</span>
+          <span class="code-lang">Python</span>
+        </div>
+        <pre><code><span class="kw">def</span> <span class="fn">square_and_multiply</span>(base, exp, mod):
+    <span class="st">"""
+    Naive binary exponentiation: timing leaks each bit of 'exp'.
+    DO NOT use for secret exponents.
+    """</span>
+    result = <span class="nm">1</span>
+    base = base % mod
+    <span class="kw">while</span> exp > <span class="nm">0</span>:
+        <span class="kw">if</span> exp % <span class="nm">2</span> == <span class="nm">1</span>:          <span class="cm"># ← branch on secret bit</span>
+            result = (result * base) % mod  <span class="cm"># extra multiply when bit=1</span>
+        base = (base * base) % mod          <span class="cm"># always square</span>
+        exp //= <span class="nm">2</span>
+    <span class="kw">return</span> result
+
+<span class="cm"># For bit d_i = 0: 1 squaring per round
+# For bit d_i = 1: 1 squaring + 1 multiplication per round
+# → timing difference is measurable and leaks the private key</span></code></pre>
+      </div>
+
+      <p>
+        Because each bit of <em>d</em> controls whether an extra multiplication occurs, the
+        time to complete the exponentiation is correlated with the Hamming weight of
+        <em>d</em>. More subtly, the <em>order</em> of the bits leaks as well, because the
+        attacker can recover them one at a time by submitting carefully chosen ciphertexts
+        and observing timing differences.<sup>[3]</sup>
+      </p>
+      <p>
+        Dhem et al. reported breaking a 512-bit key in a few minutes with 350,000 timing
+        measurements, and showed that a 128-bit key could be broken at a rate of
+        4 bits per second using 10,000 samples.<sup>[5]</sup> Crucially, even with fewer
+        than the required number of samples, the attack can still recover a partial key;
+        Dhem et al. observed that with only half the required sample count, roughly half
+        of the key bits could be recovered.<sup>[5]</sup>
+      </p>
+
+      <h3 id="montgomery">4.2 The Montgomery Reduction Side-Channel</h3>
+      <p>
+        Real-world RSA implementations use <strong>Montgomery modular multiplication</strong>
+        to avoid costly division operations.<sup>[8]</sup> The algorithm includes a
+        conditional final subtraction: if the intermediate result exceeds the modulus, an
+        extra reduction step is performed. This conditional subtraction is secret-dependent
+        — its occurrence depends on the values of intermediate results that are tied to
+        the private key.
+      </p>
+      <p>
+        Brumley and Boneh exploited exactly this: the key relevant fact about Montgomery
+        reduction is that an extra reduction step may be required depending on the input,
+        while for the multi-precision integer multiplication routines, two algorithms
+        with different performance characteristics (Karatsuba and schoolbook multiplication)
+        are used depending on the number of words representing the two operands.<sup>[9]</sup>
+        Together, these timing differences are large enough to be measured across a campus
+        network.
+      </p>
+
+      <h3 id="brumley-boneh">4.3 Brumley &amp; Boneh: Remote Timing Attacks Are Practical (2003)</h3>
+      <p>
+        Until 2003 it was widely believed that timing attacks could not be used against
+        general-purpose network servers: decryption times were assumed to be masked by
+        scheduling and network jitter.<sup>[10]</sup> Brumley and Boneh overturned this
+        assumption at USENIX Security 2003, demonstrating a complete timing attack
+        against OpenSSL running on a machine separated from the attacker by three routers
+        and multiple switches.<sup>[10]</sup>
+      </p>
+      <p>
+        Their attack client measured the time an OpenSSL server took to respond to
+        decryption queries, recovering the private RSA key stored on the server. The
+        attack worked across a campus LAN, a WAN link, and even against a loaded server
+        under concurrent traffic — though wireless links introduced too much jitter for
+        practical exploitation without additional filtering.<sup>[10]</sup>
+      </p>
+
+      <div class="callout callout-navy">
+        <p class="callout-label">Attack Parameters — Brumley &amp; Boneh 2003</p>
+        <p>
+          Successful key extraction from an OpenSSL web server across a campus network.
+          The target ran OpenSSL 0.9.7 without RSA blinding enabled (blinding was not
+          the default at the time). Applying RSA blinding as a patch defeated the
+          attack with no measurable performance overhead.<sup>[10]</sup>
+        </p>
+      </div>
+
+      <p>
+        OpenSSL responded by enabling RSA blinding by default. However, subsequent work
+        (Schindler, 2014–2016) demonstrated that even exclusive exponent blinding may
+        not suffice when Montgomery's multiplication algorithm is used with the Chinese
+        Remainder Theorem, because the distribution of extra reductions still retains a
+        statistical signal recoverable with a larger number of timing
+        measurements.<sup>[11]</sup>
+      </p>
+    </section>
+
+    <!-- ══════════════════════════════════════ §5 CACHE ATTACKS ══════ -->
+    <section id="cache-attacks">
+      <h2>5. Cache-Based Timing Attacks</h2>
+      <p>
+        Cache-timing attacks exploit the fundamental latency difference between
+        a cache hit (~4–10 ns from L1) and a cache miss that reaches main memory
+        (~60–100 ns).<sup>[12]</sup> When a cryptographic algorithm performs
+        secret-dependent memory accesses — such as table lookups indexed by key material
+        — an attacker who can measure or influence cache state can infer which addresses
+        were accessed and thereby recover the secret.
+      </p>
+
+      <h3 id="bernstein">5.1 Bernstein's AES Cache-Timing Attack (2005)</h3>
+      <p>
+        Daniel Bernstein proposed a remote timing attack against a weak implementation
+        of AES, exploiting internal collisions in the algorithm corresponding to a
+        varying number of cache misses during AES S-box lookups.<sup>[13]</sup>
+        Standard AES implementations use four 1 KB lookup tables (the T-tables) to
+        perform SubBytes, ShiftRows, and MixColumns in a single step. When accessed with
+        a key-dependent index, the cache lines loaded into the L1 cache depend on the
+        key. A spy process on the same machine can observe which cache lines are warm
+        after an encryption, recovering the key bytes.
+      </p>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">aes_cache_probe.c — illustrative cache-timing probe (educational)</span>
+          <span class="code-lang">C</span>
+        </div>
+        <pre><code><span class="cm">/*
+ * Illustrative cache-timing probe for a T-table AES implementation.
+ * Attacker and victim share the same process or virtual machine.
+ * This is a SIMPLIFIED model; real attacks require statistical analysis
+ * over many encryptions.
+ */</span>
+<span class="kw">#include</span> <span class="st">&lt;stdint.h&gt;</span>
+<span class="kw">#include</span> <span class="st">&lt;x86intrin.h&gt;</span>   <span class="cm">/* _mm_clflush, __rdtsc */</span>
+
+<span class="cm">/* AES T-table (256 entries × 4 bytes = 1 KB, spans 16 cache lines of 64 B) */</span>
+<span class="kw">extern</span> <span class="kw">const</span> uint32_t AES_Te0[<span class="nm">256</span>];
+
+<span class="fn">uint64_t</span> probe_cache_line(<span class="kw">const</span> uint32_t *table, <span class="fn">int</span> idx) {
+    uint64_t start, end;
+    <span class="cm">/* Read timestamp before access */</span>
+    _mm_lfence();
+    start = __rdtsc();
+    <span class="cm">/* Force a memory read at table[idx] */</span>
+    <span class="kw">volatile</span> uint32_t v = table[idx];
+    (void)v;
+    _mm_lfence();
+    end = __rdtsc();
+    <span class="kw">return</span> end - start;
+}
+
+<span class="kw">void</span> <span class="fn">flush_table</span>(<span class="kw">const</span> uint32_t *table) {
+    <span class="cm">/* Flush all 16 cache lines covering the 1 KB table */</span>
+    <span class="kw">for</span> (<span class="fn">int</span> i = <span class="nm">0</span>; i &lt; <span class="nm">256</span>; i += <span class="nm">16</span>) {  <span class="cm">/* 64-byte lines / 4 bytes = 16 */</span>
+        _mm_clflush(&amp;table[i]);
+    }
+}
+
+<span class="cm">/*
+ * spy() runs after victim_encrypt(plaintext, key):
+ *   - Entries accessed by the victim will be in the L1 cache (fast)
+ *   - Entries NOT accessed will be in main memory (slow)
+ *
+ * The access pattern correlates with (plaintext XOR key) for the first round,
+ * leaking key bytes one at a time via statistical analysis.
+ */</span>
+<span class="kw">void</span> <span class="fn">spy</span>(<span class="fn">int</span> latency[<span class="nm">256</span>]) {
+    <span class="kw">for</span> (<span class="fn">int</span> i = <span class="nm">0</span>; i &lt; <span class="nm">256</span>; i++) {
+        latency[i] = (<span class="fn">int</span>)probe_cache_line(AES_Te0, i);
+    }
+}
+<span class="cm">/* Low latency → that index was accessed → (plaintext[b] XOR key[b]) == i */</span></code></pre>
+      </div>
+
+      <h3 id="flush-reload">5.2 FLUSH+RELOAD</h3>
+      <p>
+        FLUSH+RELOAD, described by Yarom and Falkner, is a highly effective cache-timing
+        technique used as the covert channel in both Spectre and Meltdown.<sup>[14]</sup>
+        The technique proceeds in three steps:
+      </p>
+      <ol style="margin: .8rem 0 1rem 1.8rem; line-height: 1.9;">
+        <li><strong>FLUSH:</strong> The attacker flushes a target cache line from the cache using the <code>CLFLUSH</code> x86 instruction.</li>
+        <li><strong>Wait:</strong> The attacker waits for the victim process to potentially access the monitored memory location.</li>
+        <li><strong>RELOAD:</strong> The attacker reloads the cache line and measures the access latency. A fast access (cache hit) reveals that the victim accessed the line; a slow access (cache miss) reveals that it did not.</li>
+      </ol>
+      <p>
+        FLUSH+RELOAD is particularly powerful because it can be used to leak information
+        across execution cores and even across virtualisation boundaries when the attacker
+        and victim share physical memory pages (e.g. via shared libraries or
+        deduplication).<sup>[14]</sup>
+      </p>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">flush_reload.c — FLUSH+RELOAD primitive</span>
+          <span class="code-lang">C</span>
+        </div>
+        <pre><code><span class="kw">#include</span> <span class="st">&lt;stdint.h&gt;</span>
+<span class="kw">#include</span> <span class="st">&lt;x86intrin.h&gt;</span>
+
+<span class="cm">/* Cache-miss threshold in CPU cycles (tune per architecture) */</span>
+<span class="kw">#define</span> CACHE_MISS_THRESHOLD  <span class="nm">200</span>
+
+<span class="cm">/* Flush an address from all cache levels */</span>
+<span class="kw">static inline void</span> <span class="fn">clflush</span>(<span class="kw">volatile</span> <span class="kw">void</span> *addr) {
+    _mm_clflush((void *)addr);
+}
+
+<span class="cm">/* Measure access time for an address in CPU cycles */</span>
+<span class="kw">static inline</span> uint64_t <span class="fn">rdtsc_access</span>(<span class="kw">volatile</span> uint8_t *addr) {
+    uint64_t time;
+    <span class="kw">volatile</span> uint8_t val;
+    _mm_lfence();
+    time = __rdtsc();
+    val  = *addr;          <span class="cm">/* access the target address */</span>
+    (void)val;
+    _mm_lfence();
+    <span class="kw">return</span> __rdtsc() - time;
+}
+
+<span class="cm">/*
+ * flush_reload_probe: returns 1 if victim accessed 'addr' since last flush.
+ *
+ * Usage:
+ *   1. clflush(shared_page + offset)      // Flush the line
+ *   2. wait_for_victim()                   // Let victim run
+ *   3. hit = flush_reload_probe(shared_page + offset)
+ */</span>
+<span class="fn">int</span> <span class="fn">flush_reload_probe</span>(<span class="kw">volatile</span> uint8_t *addr) {
+    uint64_t cycles = rdtsc_access(addr);
+    clflush(addr);                          <span class="cm">/* flush for next round */</span>
+    <span class="kw">return</span> (cycles &lt; CACHE_MISS_THRESHOLD) ? <span class="nm">1</span> : <span class="nm">0</span>;
+}
+
+<span class="cm">/*
+ * To leak a secret byte B (0-255):
+ *   - Create a 256-element probe array (each entry on its own page).
+ *   - Victim speculatively accesses probe_array[B * PAGE_SIZE].
+ *   - Scan probe_array with flush_reload_probe() to find which page
+ *     is cached, revealing B.
+ */</span></code></pre>
+      </div>
+
+      <h3 id="spectre-meltdown">5.3 Spectre and Meltdown (2018)</h3>
+      <p>
+        Spectre and Meltdown represent a class of discovered cache timing side-channel
+        attacks that leverage the effects of out-of-order and speculative execution on
+        cache state.<sup>[15]</sup> Disclosed in January 2018 by a team that included
+        Paul Kocher, Jann Horn, Mike Hamburg, and others, they exposed fundamental
+        security weaknesses in every modern CPU implementing performance optimisations.
+      </p>
+      <p>
+        <strong>Meltdown</strong> breaks the mechanism that keeps applications from
+        accessing arbitrary kernel memory by exploiting out-of-order execution: a
+        transient (speculatively executed) instruction reads a privileged address, and
+        uses FLUSH+RELOAD to exfiltrate the result before the exception is raised and
+        architectural state is rolled back.<sup>[15]</sup>
+      </p>
+      <p>
+        <strong>Spectre</strong> mistrains branch predictors in modern processors to trick
+        applications into speculatively executing code paths that access locations in
+        their own address space they should not reach under normal control flow. The
+        speculative execution leaves a cache footprint that FLUSH+RELOAD can read.<sup>[15]</sup>
+        Unlike Meltdown, Spectre is not limited to kernel memory — it can leak data
+        between processes or browser tabs.
+      </p>
+
+      <div class="callout">
+        <p class="callout-label">Why These Are Timing Attacks</p>
+        <p>
+          While all software-visible effects of a speculative instruction are erased when
+          the branch is resolved, the microarchitectural state — specifically, which cache
+          lines are resident — is not rolled back. The attacker reads that state using
+          FLUSH+RELOAD timing. The secret travels from inaccessible memory into an
+          accessible timing channel.<sup>[15]</sup>
+        </p>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════ §6 STRING COMPARISON ══ -->
+    <section id="string-compare">
+      <h2>6. String Comparison Timing Attacks</h2>
+      <p>
+        The most common timing vulnerability in web applications is non-constant-time
+        string comparison. Most standard string comparison functions (C's <code>strcmp</code>,
+        Python's <code>==</code>, Java's <code>String.equals()</code>) compare characters
+        from left to right and return <em>as soon as a mismatch is found</em>. When the
+        secret being compared is a password, token, HMAC signature, or API key, an
+        attacker can exploit this early-exit behaviour to recover the secret character
+        by character.<sup>[16]</sup>
+      </p>
+      <p>
+        Python compares strings character-by-character, so a password closer to the
+        correct password takes longer to check. With thousands of requests and statistical
+        analysis, an attacker can guess the password much faster than they should be able
+        to.<sup>[17]</sup>
+      </p>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">timing_leak_demo.py — demonstrating non-constant-time comparison</span>
+          <span class="code-lang">Python</span>
+        </div>
+        <pre><code><span class="kw">import</span> time, statistics
+
+SECRET_TOKEN = <span class="st">"s3cr3t-api-k3y-9a7b"</span>
+
+<span class="kw">def</span> <span class="fn">validate_token_unsafe</span>(user_token: str) -> bool:
+    <span class="st">"""Vulnerable: early exit leaks token length and prefix."""</span>
+    <span class="kw">return</span> user_token == SECRET_TOKEN       <span class="cm"># early-exit comparison</span>
+
+<span class="kw">def</span> <span class="fn">measure_time</span>(token: str, n: <span class="fn">int</span> = <span class="nm">50_000</span>) -> <span class="fn">float</span>:
+    times = []
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(n):
+        t0 = time.perf_counter_ns()
+        validate_token_unsafe(token)
+        times.append(time.perf_counter_ns() - t0)
+    <span class="kw">return</span> statistics.median(times)
+
+<span class="cm"># Demonstrating the timing oracle:
+# The attacker probes each possible first character</span>
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    CHARS = <span class="st">"abcdefghijklmnopqrstuvwxyz0123456789-_"</span>
+    guessed = <span class="st">""</span>
+
+    <span class="kw">for</span> position <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(SECRET_TOKEN)):
+        best_char, best_time = <span class="st">""</span>, <span class="nm">0.0</span>
+        <span class="kw">for</span> c <span class="kw">in</span> CHARS:
+            candidate = guessed + c + <span class="st">"x"</span> * (len(SECRET_TOKEN) - position - <span class="nm">1</span>)
+            t = measure_time(candidate)
+            <span class="kw">if</span> t > best_time:
+                best_time, best_char = t, c
+        guessed += best_char
+        <span class="fn">print</span>(<span class="fn">f</span><span class="st">f"Position {position}: '{best_char}' (median {best_time:.1f} ns)"</span>)
+
+    <span class="fn">print</span>(<span class="fn">f</span><span class="st">"Recovered: {guessed}"</span>)</code></pre>
+      </div>
+
+      <p>
+        Practical attack scenarios include:
+      </p>
+      <ul style="margin:.8rem 0 1rem 1.5rem; line-height:1.8;">
+        <li>API key validation in HTTP endpoints.</li>
+        <li>Password reset token verification.</li>
+        <li>HMAC signature checking in webhook handlers.</li>
+        <li>Session cookie comparison in middleware.</li>
+        <li>Security question answers.<sup>[18]</sup></li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════════════════ §7 TLS ATTACKS ═════════ -->
+    <section id="tls-attacks">
+      <h2>7. TLS Protocol Timing Attacks</h2>
+
+      <h3 id="lucky13">7.1 Lucky 13 (AlFardan &amp; Paterson, 2013)</h3>
+      <p>
+        The Lucky 13 attack (CVE-2013-0169) is a cryptographic timing side-channel attack
+        against implementations of TLS and DTLS that use Cipher Block Chaining (CBC) mode
+        of symmetric encryption, discovered in 2013 by Nadhem J. AlFardan and Kenneth G.
+        Paterson of the Information Security Group at Royal Holloway, University of
+        London.<sup>[19]</sup>
+      </p>
+      <p>
+        It is a variant of Serge Vaudenay's 2002 padding oracle attack — previously
+        thought to have been fixed — that uses a timing side-channel against the MAC check
+        stage of TLS decryption to break the protocol in a way that prior mitigations
+        had not addressed.<sup>[19]</sup>
+      </p>
+      <p>
+        The root cause is elegant and subtle: what makes Lucky 13 possible is the fact
+        that an HMAC of 55 bytes takes slightly less time than an HMAC of 56 bytes, and
+        the TLS CBC record structure means that 55 − 13 (header overhead) + 20 (MAC size)
+        = 62, which is fortuitously close to a block-size multiple (64 bytes for SHA-1).
+        This small timing difference can be exploited to reveal information about the
+        plaintext length and content.<sup>[20]</sup>
+      </p>
+      <p>
+        The attack applies to all TLS and DTLS implementations compliant with TLS 1.1
+        or 1.2, or with DTLS 1.0 or 1.2, and also to implementations of SSL 3.0 and
+        TLS 1.0 that incorporated countermeasures to previous padding oracle
+        attacks.<sup>[21]</sup> All TLS/DTLS cipher suites using CBC-mode encryption
+        are potentially vulnerable.
+      </p>
+
+      <div class="callout callout-navy">
+        <p class="callout-label">Attack Requirements — Lucky 13</p>
+        <p>
+          In its basic form, Lucky 13 requires approximately 2<sup>23</sup> TLS sessions
+          to recover a complete block of plaintext. Under optimal conditions (attacker
+          on the same LAN as the server), this can be reduced to as few as 2<sup>13</sup>
+          sessions to recover a single plaintext byte.<sup>[22]</sup>
+        </p>
+      </div>
+
+      <p>
+        Paterson and Albrecht later demonstrated in 2016 that Amazon's TLS implementation
+        (<code>s2n</code>) remained susceptible to a variant of Lucky 13 despite explicit
+        attempts to mitigate it in the code, due to an even more subtle pattern in HMAC
+        timing.<sup>[20]</sup> This illustrates the difficulty of achieving genuinely
+        constant-time HMAC in MAC-then-encrypt mode — the most robust long-term
+        mitigation is to abandon CBC entirely in favour of AEAD cipher suites.<sup>[22]</sup>
+      </p>
+
+      <h3 id="robot">7.2 ROBOT — Return of Bleichenbacher's Oracle Threat (2018)</h3>
+      <p>
+        In 1998, Daniel Bleichenbacher discovered that PKCS#1 v1.5 padding error messages
+        sent by TLS servers could enable an adaptive-chosen-ciphertext attack capable of
+        completely breaking TLS confidentiality for RSA key-exchange sessions.<sup>[23]</sup>
+        Countermeasures were defined in TLS and other standards, and the vulnerability was
+        believed to have been addressed.
+      </p>
+      <p>
+        In 2017–2018, Böck, Somorovsky, and Young conducted the first large-scale
+        evaluation of Bleichenbacher's vulnerability and found that it was still very
+        prevalent on the Internet, affecting almost a third of the top 100 domains in the
+        Alexa Top 1 Million list, including Facebook and PayPal.<sup>[24]</sup> They
+        identified vulnerable products from at least nine different vendors and open source
+        projects, among them F5, Citrix, Radware, Palo Alto Networks, IBM, and
+        Cisco.<sup>[24]</sup>
+      </p>
+      <p>
+        The ROBOT attack used timing as one of several oracle signals — alongside TCP
+        resets, duplicate TLS alerts, and connection timeouts — to distinguish between
+        valid and invalid PKCS#1 v1.5 padding without requiring explicit error messages.
+        The researchers demonstrated practical exploitation by signing a message with the
+        private key of facebook.com's HTTPS certificate.<sup>[24]</sup>
+      </p>
+
+      <div class="callout">
+        <p class="callout-label">Lesson</p>
+        <p>
+          ROBOT demonstrates that it is a poor strategy to counter cryptographic attacks
+          with increasingly complex workarounds layered into a protocol. The PKCS#1 v1.5
+          standard should have been deprecated after the original 1998 discovery; TLS 1.3
+          drops RSA PKCS#1 v1.5 key exchange entirely.<sup>[24]</sup>
+        </p>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════ §8 SOURCE CODE ═════════ -->
+    <section id="code">
+      <h2>8. Source Code Demonstrations</h2>
+
+      <h3 id="code-vuln">8.1 Vulnerable Patterns Across Languages</h3>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">vulnerable_patterns.py / .go / .java — non-constant-time comparisons</span>
+          <span class="code-lang">Python · Go · Java</span>
+        </div>
+        <pre><code><span class="cm"># ═══════════════════════════════════════════════
+# PYTHON — vulnerable
+# ═══════════════════════════════════════════════</span>
+<span class="kw">def</span> <span class="fn">verify_hmac_unsafe</span>(received: bytes, expected: bytes) -> bool:
+    <span class="kw">return</span> received == expected   <span class="cm"># early-exit byte comparison</span>
+
+<span class="cm"># ═══════════════════════════════════════════════
+# GO — vulnerable (string comparison is NOT constant-time)
+# ═══════════════════════════════════════════════
+# func isValidAPIKey(input string) bool {
+#     return input == "super-secret-api-key"  // byte-by-byte, early exit
+# }
+
+# ═══════════════════════════════════════════════
+# JAVA — vulnerable
+# ═══════════════════════════════════════════════
+# public boolean verifyToken(String supplied, String expected) {
+#     return supplied.equals(expected);  // early-exit; also leaks length
+# }</span></code></pre>
+      </div>
+
+      <h3 id="code-measure">8.2 Measuring Timing Differences (Python)</h3>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">timing_oracle.py — statistical timing oracle demonstration</span>
+          <span class="code-lang">Python</span>
+        </div>
+        <pre><code><span class="kw">import</span> time, statistics, hmac, hashlib
+
+<span class="cm">"""
+Demonstrates that a remote attacker can measure timing differences
+in HMAC verification using non-constant-time comparison.
+In a real attack, requests cross a network; here we simulate locally.
+"""</span>
+
+SECRET_KEY = <span class="st">b"supersecretkey"</span>
+N_SAMPLES  = <span class="nm">100_000</span>          <span class="cm"># samples per candidate</span>
+
+<span class="kw">def</span> <span class="fn">compute_mac</span>(msg: bytes) -> bytes:
+    <span class="kw">return</span> hmac.new(SECRET_KEY, msg, hashlib.sha256).digest()
+
+<span class="kw">def</span> <span class="fn">verify_unsafe</span>(msg: bytes, mac: bytes) -> bool:
+    <span class="st">"""Non-constant-time verification — vulnerable to timing attack."""</span>
+    expected = compute_mac(msg)
+    <span class="kw">return</span> mac == expected   <span class="cm"># early exit on first mismatch byte</span>
+
+<span class="kw">def</span> <span class="fn">measure_ns</span>(mac_candidate: bytes, n: int = N_SAMPLES) -> float:
+    msg = <span class="st">b"test-message"</span>
+    times = []
+    <span class="kw">for</span> _ <span class="kw">in</span> range(n):
+        t0 = time.perf_counter_ns()
+        verify_unsafe(msg, mac_candidate)
+        times.append(time.perf_counter_ns() - t0)
+    <span class="kw">return</span> statistics.median(times)
+
+<span class="cm"># Build the correct MAC so we can forge prefixes</span>
+real_mac = compute_mac(<span class="st">b"test-message"</span>)
+forged   = bytearray(<span class="nm">32</span>)   <span class="cm"># 32-byte SHA-256 output</span>
+
+<span class="fn">print</span>(<span class="st">"Recovering MAC byte-by-byte via timing oracle..."</span>)
+<span class="kw">for</span> pos <span class="kw">in</span> range(<span class="nm">32</span>):
+    best_byte, best_t = <span class="nm">0</span>, <span class="nm">0.0</span>
+    <span class="kw">for</span> b <span class="kw">in</span> range(<span class="nm">256</span>):
+        candidate = bytes(forged[:pos]) + bytes([b]) + <span class="st">b"\x00"</span> * (<span class="nm">31</span> - pos)
+        t = measure_ns(candidate, n=<span class="nm">1000</span>)   <span class="cm"># fewer samples per byte in demo</span>
+        <span class="kw">if</span> t > best_t:
+            best_t, best_byte = t, b
+    forged[pos] = best_byte
+    <span class="fn">print</span>(<span class="fn">f</span><span class="st">f"  byte[{pos:02d}] = 0x{best_byte:02x}  (timing: {best_t:.0f} ns)"</span>)
+
+<span class="fn">print</span>(<span class="fn">f</span><span class="st">f"\nForged: {bytes(forged).hex()}"</span>)
+<span class="fn">print</span>(<span class="fn">f</span><span class="st">f"Real:   {real_mac.hex()}"</span>)
+<span class="fn">print</span>(<span class="fn">f</span><span class="st">f"Match:  {bytes(forged) == real_mac}"</span>)</code></pre>
+      </div>
+
+      <h3 id="code-ct">8.3 Constant-Time Fixes</h3>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">constant_time_compare.py / .go / .c / .java — secure patterns</span>
+          <span class="code-lang">Python · Go · C · Java</span>
+        </div>
+        <pre><code><span class="cm"># ═══════════════════════════════════════════════
+# PYTHON — secure: hmac.compare_digest (Python 3.3+)
+# ═══════════════════════════════════════════════</span>
+<span class="kw">import</span> hmac
+
+<span class="kw">def</span> <span class="fn">verify_hmac_safe</span>(received: bytes, expected: bytes) -> bool:
+    <span class="st">"""
+    hmac.compare_digest uses a constant-time comparison that touches
+    every byte regardless of where the mismatch occurs.
+    """</span>
+    <span class="kw">return</span> hmac.compare_digest(received, expected)
+
+
+<span class="cm"># Django also ships constant_time_compare():
+# from django.utils.crypto import constant_time_compare</span>
+
+
+<span class="cm"># ═══════════════════════════════════════════════
+# GO — crypto/subtle.ConstantTimeCompare
+# ═══════════════════════════════════════════════
+# import "crypto/subtle"
+#
+# func verifyToken(supplied, expected []byte) bool {
+#     return subtle.ConstantTimeCompare(supplied, expected) == 1
+# }</span>
+
+
+<span class="cm">/* ═══════════════════════════════════════════════
+ * C — manual constant-time comparison using XOR accumulation
+ * ═══════════════════════════════════════════════ */</span>
+<span class="kw">#include</span> <span class="st">&lt;stddef.h&gt;</span>
+<span class="kw">#include</span> <span class="st">&lt;stdint.h&gt;</span>
+
+<span class="cm">/**
+ * constant_time_memcmp: returns 0 if equal, non-zero otherwise.
+ * Examines every byte regardless of differences — O(n) always.
+ * Marked volatile to prevent the compiler from short-circuiting.
+ */</span>
+<span class="fn">int</span> <span class="fn">constant_time_memcmp</span>(<span class="kw">const volatile</span> uint8_t *a,
+                          <span class="kw">const volatile</span> uint8_t *b,
+                          size_t n) {
+    <span class="kw">volatile</span> uint8_t diff = <span class="nm">0</span>;
+    <span class="kw">for</span> (size_t i = <span class="nm">0</span>; i &lt; n; i++) {
+        diff |= a[i] ^ b[i];   <span class="cm">/* XOR: 0 iff bytes equal, non-0 otherwise */</span>
+    }
+    <span class="kw">return</span> diff;               <span class="cm">/* 0 iff all bytes matched               */</span>
+}
+
+<span class="cm">/* Note: in production, prefer OpenSSL CRYPTO_memcmp() or libsodium's
+ * sodium_memcmp(), both of which have additional compiler-barrier
+ * guarantees to prevent optimisation-based timing leaks.            */</span>
+
+
+<span class="cm">// ═══════════════════════════════════════════════
+// JAVA — MessageDigest.isEqual (Java 6+)
+// ═══════════════════════════════════════════════
+// import java.security.MessageDigest;
+//
+// public static boolean verifyHMAC(byte[] received, byte[] expected) {
+//     // MessageDigest.isEqual is constant-time as of Java 6
+//     return MessageDigest.isEqual(received, expected);
+// }</span></code></pre>
+      </div>
+
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-title">constant_time_modexp.py — constant-time Montgomery ladder for RSA</span>
+          <span class="code-lang">Python</span>
+        </div>
+        <pre><code><span class="cm">"""
+Montgomery Ladder: constant-time modular exponentiation.
+Unlike square-and-multiply, it performs the same number of operations
+for every bit of the exponent regardless of its value.
+"""</span>
+
+<span class="kw">def</span> <span class="fn">montgomery_ladder</span>(base: int, exp: int, mod: int) -> int:
+    <span class="st">"""
+    Constant-time exponentiation: performs exactly len(bin(exp))-1
+    squarings and the same number of multiplications for every input.
+    No branching on secret bits.
+    """</span>
+    R0, R1 = <span class="nm">1</span>, base % mod
+    <span class="kw">for</span> bit <span class="kw">in</span> bin(exp)[<span class="nm">2</span>:]:         <span class="cm"># iterate bits MSB → LSB</span>
+        <span class="kw">if</span> bit == <span class="st">'0'</span>:
+            R1 = (R0 * R1) % mod       <span class="cm"># multiply then square</span>
+            R0 = (R0 * R0) % mod
+        <span class="kw">else</span>:
+            R0 = (R0 * R1) % mod       <span class="cm"># multiply then square</span>
+            R1 = (R1 * R1) % mod
+    <span class="kw">return</span> R0
+
+<span class="cm"># Both branches perform exactly one multiplication and one squaring.
+# The branch itself leaks the bit value through control flow — a real
+# constant-time implementation must use conditional-select (CMOV) rather
+# than an if/else, or use a branchless formulation.</span>
+
+<span class="kw">def</span> <span class="fn">montgomery_ladder_branchless</span>(base: int, exp: int, mod: int) -> int:
+    <span class="st">"""Branchless variant using arithmetic select to avoid branch prediction leaks."""</span>
+    R0, R1 = <span class="nm">1</span>, base % mod
+    bits = exp.bit_length()
+    <span class="kw">for</span> i <span class="kw">in</span> range(bits - <span class="nm">1</span>, -<span class="nm">1</span>, -<span class="nm">1</span>):
+        bit = (exp >> i) & <span class="nm">1</span>
+        <span class="cm"># Conditional swap: swap R0,R1 if bit==1</span>
+        mask = -bit & ((1 << mod.bit_length()) - <span class="nm">1</span>)
+        diff = (R0 ^ R1) & mask
+        R0 ^= diff
+        R1 ^= diff
+        <span class="cm"># Always: R1 = R0*R1, R0 = R0^2</span>
+        R1 = (R0 * R1) % mod
+        R0 = (R0 * R0) % mod
+        <span class="cm"># Conditional swap back</span>
+        diff = (R0 ^ R1) & mask
+        R0 ^= diff
+        R1 ^= diff
+    <span class="kw">return</span> R0</code></pre>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════ §9 COUNTERMEASURES ════ -->
+    <section id="countermeasures">
+      <h2>9. Countermeasures</h2>
+
+      <h3>9.1 Constant-Time Algorithms</h3>
+      <p>
+        The primary defence against algorithm-level and comparison-level timing attacks
+        is to ensure that all computations involving secret data take the same amount of
+        time regardless of the data values. This is achieved through:
+      </p>
+      <ul style="margin:.8rem 0 1rem 1.5rem; line-height:1.9;">
+        <li><strong>Branchless code:</strong> replacing <code>if (secret_bit)</code> with arithmetic operations using masks derived from the bit.</li>
+        <li><strong>Constant-time primitives:</strong> using library functions explicitly designed for constant-time operation — <code>hmac.compare_digest()</code> in Python, <code>crypto/subtle</code> in Go, <code>CRYPTO_memcmp()</code> in OpenSSL, <code>MessageDigest.isEqual()</code> in Java.</li>
+        <li><strong>Montgomery Ladder:</strong> for modular exponentiation, performing the same operations for every bit regardless of its value.<sup>[25]</sup></li>
+        <li><strong>CMOV / conditional select:</strong> using x86 conditional-move instructions (or equivalent) to select between two values without branching.</li>
+      </ul>
+
+      <h3>9.2 RSA Blinding</h3>
+      <p>
+        RSA blinding, originally proposed by Kocher himself, randomises the ciphertext
+        before decryption so that the timing of each operation depends on a random value
+        rather than on the ciphertext under attack.<sup>[3]</sup> Before decrypting
+        ciphertext <em>C</em>, the implementation:
+      </p>
+      <ol style="margin:.8rem 0 1rem 1.8rem; line-height:1.9;">
+        <li>Generates a random value <em>r</em> and computes <em>C' = C · r<sup>e</sup> mod N</em>.</li>
+        <li>Decrypts to <em>M' = (C')<sup>d</sup> mod N</em> using the private key.</li>
+        <li>Unblinds by computing <em>M = M' · r<sup>−1</sup> mod N</em>.</li>
+      </ol>
+      <p>
+        Because <em>r</em> is fresh for each operation, an attacker who measures the
+        time of step 2 sees a timing distribution that depends on <em>r</em>, not on
+        <em>C</em>. OpenSSL has enabled RSA blinding by default since version 0.9.7b.
+        However, as later research showed, exponent blinding alone may not be sufficient
+        when Montgomery's algorithm is used with CRT — the statistical signal from extra
+        reductions can still be extracted with a larger number of measurements.<sup>[11]</sup>
+      </p>
+
+      <h3>9.3 AEAD Cipher Suites</h3>
+      <p>
+        The most effective long-term mitigation for Lucky 13 class attacks is to
+        abandon CBC cipher suites entirely in favour of <strong>Authenticated
+        Encryption with Associated Data (AEAD)</strong> modes such as AES-GCM or
+        ChaCha20-Poly1305.<sup>[22]</sup> AEAD combines encryption and authentication
+        in a single pass, eliminating the MAC-then-encrypt structure that enables the
+        timing oracle. TLS 1.3 mandates AEAD-only cipher suites and drops all
+        CBC modes.
+      </p>
+
+      <h3>9.4 Noise Addition and Rate Limiting</h3>
+      <p>
+        Adding artificial random delays to responses degrades the attacker's
+        signal-to-noise ratio, increasing the number of samples required. However, noise
+        alone is not a reliable defence — Crosby et al. demonstrated that statistical
+        filtering can recover signals with 15–100 µs accuracy across the Internet, and
+        even artificial noise can be overcome with enough samples.<sup>[6]</sup> Rate
+        limiting complements noise by restricting the number of timing measurements an
+        attacker can make, but a determined attacker with time can still collect
+        sufficient data. These measures should be considered supplementary, not
+        sufficient.
+      </p>
+
+      <h3>9.5 Deprecating Vulnerable Primitives</h3>
+      <p>
+        The recurring lesson across timing attack history — from Bleichenbacher 1998 to
+        ROBOT 2018 — is that complex countermeasures built on top of vulnerable
+        primitives tend to fail over time. The most robust mitigation is to deprecate
+        the vulnerable construction entirely. Practically:
+      </p>
+      <ul style="margin:.8rem 0 1rem 1.5rem; line-height:1.9;">
+        <li>Disable TLS cipher suites starting with <code>TLS_RSA_</code> (RSA key exchange lacks forward secrecy and is subject to ROBOT).<sup>[24]</sup></li>
+        <li>Use TLS 1.3, which mandates AEAD and drops PKCS#1 v1.5 key exchange.</li>
+        <li>Avoid table-driven AES implementations on shared hardware; use AES-NI hardware instructions which execute in constant time.</li>
+        <li>Use vetted cryptographic libraries (libsodium, BoringSSL, mbedTLS) rather than hand-rolling primitives.</li>
+      </ul>
+
+      <h3>9.6 Compiler Considerations</h3>
+      <p>
+        An important and often overlooked hazard is that compilers may optimise away
+        carefully written constant-time code. A compiler that identifies dead branches
+        or redundant computations may eliminate the operations that were inserted
+        specifically to balance timing. Kaufman et al. showed that vulnerabilities can
+        persist even after compilation of ostensibly constant-time source code.<sup>[26]</sup>
+        Mitigations include:
+      </p>
+      <ul style="margin:.8rem 0 1rem 1.5rem; line-height:1.9;">
+        <li>Using <code>volatile</code> qualifiers to prevent dead-store elimination.</li>
+        <li>Inserting compiler barriers (<code>__asm__ volatile ("" ::: "memory")</code>).</li>
+        <li>Using dedicated tools such as <strong>ct-verif</strong>, <strong>binsec/rel</strong>, or <strong>FaCT</strong> to verify constant-time properties at the binary level.</li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════════════════ §10 TOOLS ══════════════ -->
+    <section id="tools">
+      <h2>10. Tools &amp; Detection</h2>
+
+      <h4>Attack / Research Tools</h4>
+      <ul style="margin:.8rem 0 1.2rem 1.5rem; line-height:1.9;">
+        <li><strong>tlsfuzzer</strong> — Comprehensive TLS fuzz and regression testing, including extensive Bleichenbacher vulnerability scripts. Used in ROBOT disclosure.</li>
+        <li><strong>SSLyze</strong> — TLS configuration analyser with ROBOT detection added post-disclosure. Identifies CBC suites, PKCS#1 v1.5 key exchange, and related weaknesses.</li>
+        <li><strong>Flush+Reload PoC (GitHub)</strong> — Reference implementation of the FLUSH+RELOAD cache-timing primitive for x86/x64 systems.</li>
+        <li><strong>Spectre / Meltdown PoC (IAIK)</strong> — Academic proof-of-concept implementations of both attacks.</li>
+        <li><strong>timing-attack (Python)</strong> — Library for statistical timing oracle attacks against web applications, supporting median, t-test, and percentile-based analysis.</li>
+        <li><strong>ROBOT Attack Scanner</strong> — The researchers' CC0-licensed scanner for detecting Bleichenbacher vulnerabilities at scale.<sup>[24]</sup></li>
+      </ul>
+
+      <h4>Defence / Verification Tools</h4>
+      <ul style="margin:.8rem 0 1.2rem 1.5rem; line-height:1.9;">
+        <li><strong>ct-verif</strong> — LLVM-based tool verifying constant-time properties at the intermediate representation level, before compiler optimisation.</li>
+        <li><strong>binsec/rel</strong> — Binary-level relational verification of constant-time code, operating on compiled binaries rather than source.</li>
+        <li><strong>FaCT (Flexible and Constant Time)</strong> — A domain-specific language and compiler for writing cryptographic code with timing-safety guarantees enforced at compile time.</li>
+        <li><strong>Valgrind / Memcheck with taint tracking</strong> — Can be adapted to track secret-dependent branches via the <strong>ctgrind</strong> patch.</li>
+        <li><strong>dudect</strong> — A statistical framework for detecting timing leaks in implementations using Welch's t-test.<sup>[27]</sup></li>
+        <li><strong>SILENT</strong> — A new statistical framework (2025) using non-parametric tests to detect software timing side-channels with improved power over t-test approaches.<sup>[28]</sup></li>
+      </ul>
+    </section>
+
+    <!-- ══════════════════════════════════════ §11 RESEARCH ═══════════ -->
+    <section id="research">
+      <h2>11. Research Landscape</h2>
+      <p>
+        Timing attack research has expanded dramatically since Kocher's 1996 paper.
+        Several contemporary frontiers are particularly active:
+      </p>
+
+      <h3>Post-Quantum Cryptography</h3>
+      <p>
+        As NIST standardises post-quantum cryptographic (PQC) schemes such as ML-KEM
+        (Kyber) and ML-DSA (Dilithium), timing attacks against their implementations
+        have emerged. Several works have demonstrated that PQC schemes, while quantum-
+        resistant mathematically, are susceptible to implementation-level timing attacks
+        when deployed on embedded systems or general-purpose CPUs without constant-time
+        discipline.<sup>[29]</sup> The Bernstein/Lange group has published attacks on
+        multiple NIST PQC candidates.
+      </p>
+
+      <h3>JavaScript and Browser-Based Timing</h3>
+      <p>
+        Spectre demonstrated that JavaScript running in a browser can exploit timing to
+        read memory across site boundaries. Browser vendors responded by reducing the
+        precision of <code>performance.now()</code> and <code>Date.now()</code>, disabling
+        SharedArrayBuffer (which enabled high-resolution timing via a counter thread),
+        and adding process isolation. As of 2025, SharedArrayBuffer is re-enabled on
+        origins that opt into cross-origin isolation headers
+        (<code>COOP: same-origin</code> + <code>COEP: require-corp</code>), but the
+        residual timing channel from other browser APIs remains an active research topic.
+      </p>
+
+      <h3>Machine Learning for Side-Channel Analysis</h3>
+      <p>
+        Deep learning has been applied to profiled side-channel attacks (using labelled
+        training traces from a clone device) with remarkable success. Convolutional neural
+        networks and transformers can automatically identify the features of timing or
+        power traces that carry key-dependent information, outperforming classical template
+        attacks in both efficiency and resilience to masking countermeasures.
+      </p>
+
+      <h3>Statistical Methodology</h3>
+      <p>
+        Recent work such as the SILENT framework (2025) addresses the statistical
+        foundations of timing side-channel testing. The paper introduces non-parametric
+        statistical tests that outperform the widely used Welch's t-test in both false
+        positive rate and detection power, particularly for distributions with heavy
+        tails — a common characteristic of timing measurements.<sup>[28]</sup>
+      </p>
+
+      <h3>Hardware Mitigations and Their Limits</h3>
+      <p>
+        Microcode updates, operating system patches (KPTI for Meltdown), retpoline
+        (compiler-based Spectre mitigation), and new CPU features such as Intel's
+        IBRS/IBPB/STIBP have substantially mitigated Spectre and Meltdown. However,
+        new Spectre variants — SpectreRSB, Spectre-SLH, Retbleed (2022) — continue to
+        be discovered, demonstrating that the underlying microarchitectural attack surface
+        is not yet closed.
+      </p>
+    </section>
+
+    <!-- ══════════════════════════════════════ REFERENCES ════════════ -->
+    <section id="references" class="refs">
+      <h2>References</h2>
+      <ol>
+        <li>Wikipedia contributors. Timing attack [Internet]. Wikipedia, The Free Encyclopedia; 2024 [cited 2025]. Available from: <a href="https://en.wikipedia.org/wiki/Timing_attack" target="_blank">https://en.wikipedia.org/wiki/Timing_attack</a></li>
+        <li>Krasovsky AV, Maro EA. Actual and historical state of side channel attacks theory. In: Proceedings of the 12th International Conference on Security of Information and Networks (SIN '19); 2019; ACM. Available from: <a href="https://dl.acm.org/doi/10.1145/3357613.3357627" target="_blank">https://dl.acm.org/doi/10.1145/3357613.3357627</a></li>
+        <li>Kocher PC. Timing attacks on implementations of Diffie-Hellman, RSA, DSS, and other systems. In: Koblitz N, editor. Advances in Cryptology — CRYPTO 1996. Lecture Notes in Computer Science, vol 1109. Berlin: Springer; 1996. p. 104–113.</li>
+        <li>Kocher PC. Timing attacks on implementations of Diffie-Hellman, RSA, DSS, and Other Systems [Internet]. Semantic Scholar; 1996 [cited 2025]. Available from: <a href="https://www.semanticscholar.org/paper/Timing-Attacks-on-Implementations-of-RSA,-DSS,-and-Kocher/3441f72f64bcd11757e9e1686996d714b06952d7" target="_blank">https://semanticscholar.org/</a></li>
+        <li>Stamp M, Low RM. Timing attacks on RSA: revealing your secrets through the fourth dimension [Internet]. San Jose State University; [cited 2025]. Available from: <a href="https://www.cs.sjsu.edu/faculty/stamp/students/article.html" target="_blank">https://www.cs.sjsu.edu/faculty/stamp/students/article.html</a></li>
+        <li>Crosby SA, Wallach DS, Riedi RH. Opportunities and limits of remote timing attacks. ACM Trans Inf Syst Secur. 2009;12(3):17.</li>
+        <li>Aljuffri A, Soussi B, Leupers R, Haas S, Merchant F. Systematic literature review of EM-SCA attacks on encryption [Internet]. arXiv; 2024. Available from: <a href="https://arxiv.org/pdf/2402.10030" target="_blank">https://arxiv.org/pdf/2402.10030</a></li>
+        <li>Montgomery PL. Modular multiplication without trial division. Math Comput. 1985;44(170):519–521.</li>
+        <li>Brumley BB, Tuveri N. Remote timing attacks are still practical. In: Proceedings of ESORICS 2011. Lecture Notes in Computer Science. Berlin: Springer; 2011. Available from: <a href="https://eprint.iacr.org/2011/232.pdf" target="_blank">https://eprint.iacr.org/2011/232.pdf</a></li>
+        <li>Brumley D, Boneh D. Remote timing attacks are practical. In: Proceedings of the 12th USENIX Security Symposium (SSYM '03); 2003 Aug 4; Washington, DC. USENIX. Also published in: Comput Netw. 2005;48(5):701–716.</li>
+        <li>Schindler W. Exclusive exponent blinding is not enough to prevent any timing attack on RSA. J Cryptogr Eng. 2016;6(2):101–119. doi:10.1007/s13389-016-0124-7.</li>
+        <li>Intel Corporation. Selective execution of cache line flush operations [Internet]. US Patent 10691594; 2020. Available from: <a href="https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10691594" target="_blank">USPTO</a></li>
+        <li>Bernstein DJ. Cache-timing attacks on AES [Internet]. 2005 [cited 2025]. Available from: <a href="https://cr.yp.to/antiforgery/cachetiming-20050414.pdf" target="_blank">https://cr.yp.to/antiforgery/cachetiming-20050414.pdf</a></li>
+        <li>Yarom Y, Falkner K. FLUSH+RELOAD: a high resolution, low noise, L3 cache side-channel attack. In: Proceedings of the 23rd USENIX Security Symposium; 2014; San Diego, CA. p. 719–732.</li>
+        <li>Abel A, Reineke J. MeltdownPrime and SpectrePrime: automatically-synthesized attacks exploiting invalidation-based coherence protocols [Internet]. arXiv:1802.03802; 2018. Available from: <a href="https://arxiv.org/pdf/1802.03802" target="_blank">https://arxiv.org/pdf/1802.03802</a></li>
+        <li>Meehan B. Comparison timing attacks: common pitfalls and prevention [Internet]. Medium; 2026 [cited 2026]. Available from: <a href="https://medium.com/@ben.meehan_27368/comparision-timing-attacks-common-pitfalls-and-prevention-9f44e03ff8a0" target="_blank">https://medium.com</a></li>
+        <li>Grinberg M. Flask-HTTPAuth issue #82: default password comparison should use constant-time string comparison [Internet]. GitHub; 2019 [cited 2025]. Available from: <a href="https://github.com/miguelgrinberg/Flask-HTTPAuth/issues/82" target="_blank">https://github.com/miguelgrinberg/Flask-HTTPAuth/issues/82</a></li>
+        <li>OnlineHashCrack. Timing attacks on password checks: mitigation tips [Internet]. 2026 [cited 2026]. Available from: <a href="https://www.onlinehashcrack.com/guides/password-recovery/timing-attacks-on-password-checks-mitigation-tips.php" target="_blank">https://www.onlinehashcrack.com/</a></li>
+        <li>AlFardan NJ, Paterson KG. Lucky thirteen: breaking the TLS and DTLS record protocols. In: Proceedings of the 2013 IEEE Symposium on Security and Privacy; 2013 May; San Francisco, CA. p. 526–540.</li>
+        <li>Cloudflare. Padding oracles and the decline of CBC-mode cipher suites [Internet]. Cloudflare Blog; [cited 2025]. Available from: <a href="https://blog.cloudflare.com/padding-oracles-and-the-decline-of-cbc-mode-ciphersuites/" target="_blank">https://blog.cloudflare.com/</a></li>
+        <li>AlFardan NJ, Paterson KG. Lucky Thirteen [project page] [Internet]. Royal Holloway University of London; 2013 [cited 2025]. Available from: <a href="https://www.isg.rhul.ac.uk/tls/Lucky13.html" target="_blank">https://www.isg.rhul.ac.uk/tls/Lucky13.html</a></li>
+        <li>Veracode. Prevent SSL LUCKY13 attacks [Internet]. Veracode Docs; 2026 [cited 2026]. Available from: <a href="https://docs.veracode.com/r/prevent-ssl-lucky13" target="_blank">https://docs.veracode.com/r/prevent-ssl-lucky13</a></li>
+        <li>Bleichenbacher D. Chosen ciphertext attacks against protocols based on the RSA encryption standard PKCS #1. In: Krawczyk H, editor. Advances in Cryptology — CRYPTO 1998. Lecture Notes in Computer Science, vol 1462. Berlin: Springer; 1998. p. 1–12.</li>
+        <li>Böck H, Somorovsky J, Young C. Return of Bleichenbacher's oracle threat (ROBOT). In: Proceedings of the 27th USENIX Security Symposium; 2018; Baltimore, MD. p. 817–849. Also at: <a href="https://robotattack.org/" target="_blank">https://robotattack.org/</a></li>
+        <li>López J, Dahab R. Fast multiplication on elliptic curves over GF(2<sup>m</sup>) without precomputation. In: Koç ÇK, Paar C, editors. Cryptographic Hardware and Embedded Systems — CHES 1999. Lecture Notes in Computer Science, vol 1717. Berlin: Springer; 1999. p. 316–327. (Montgomery Ladder generalisation.)</li>
+        <li>Kaufman MT, Shacham H. Constant-time challenges persist after compilation [abstract]. IEEE Symposium on Security and Privacy; cited in: Bernstein DJ, Lange T. Never trust a bunny. Presentation; 2013.</li>
+        <li>Reparaz O, Balasch J, Verbauwhede I. Dude, is my code constant time? In: Proceedings of Design, Automation and Test in Europe (DATE); 2017. p. 1697–1702. (dudect framework.)</li>
+        <li>SILENT research group. SILENT: a new lens on statistics in software timing side channels [Internet]. arXiv:2504.19821; 2025. Available from: <a href="https://arxiv.org/pdf/2504.19821" target="_blank">https://arxiv.org/pdf/2504.19821</a></li>
+        <li>Bernstein DJ, Brumley BB, Chen MS, Tuveri N. Timing attacks and countermeasures for post-quantum cryptography. IACR Cryptol ePrint Arch. 2021. (Extended discussion; multiple related works on PQC timing.)</li>
+      </ol>
+    </section>
+
+  </article>
+</div><!-- /layout -->
+
+</body>
+</html>
