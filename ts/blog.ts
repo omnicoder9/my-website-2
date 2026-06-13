@@ -42,6 +42,72 @@ type BlogDirectoryPost = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/nuclear-cyber-security.html",
+    publishedAt: "2026-06-13",
+    summary: "A technical examination of cyber and information security in the U.S. nuclear sector, covering reactor-adjacent industrial systems, cross-sector cascade risk, regulation, and layered engineering defenses.",
+    title: "Defending the Atom: Cyber and Information Security in the U.S. Nuclear Sector"
+  },
+  {
+    path: "blog-articles/dark-energy-accelerating-universe.html",
+    publishedAt: "2026-06-13",
+    summary: "A physics-focused history of cosmic acceleration, tracing the 1998 supernova evidence for dark energy, the Lambda-CDM model, competing explanations, and the unresolved questions behind an expanding universe that speeds up.",
+    title: "The Universe That Refused to Slow Down — Dark Energy and Cosmic Acceleration"
+  },
+  {
+    path: "blog-articles/hph-cybersecurity.html",
+    publishedAt: "2026-06-13",
+    summary: "A technical reference on cyber and information security in the U.S. healthcare and public health sector, focused on clinical technology, patient-safety risk, sector interdependence, and practical defensive controls.",
+    title: "Cyber Safety Is Patient Safety — Security in the U.S. Healthcare & Public Health Sector"
+  },
+  {
+    path: "blog-articles/financial-sector-cybersecurity.html",
+    publishedAt: "2026-06-13",
+    summary: "A technical brief on cyber and information security in the U.S. financial sector, covering payments infrastructure, systemic interdependence, regulatory pressure, resilience engineering, and collective defense.",
+    title: "Securing the Ledger — Cyber and Information Security in the U.S. Financial Sector"
+  },
+  {
+    path: "blog-articles/many-worlds-interpretation.html",
+    publishedAt: "2026-06-13",
+    summary: "A technical history of Everett's many-worlds interpretation of quantum mechanics, covering relative states, decoherence, measurement, controversy, and the implications of taking the Schrodinger equation literally.",
+    title: "The Many-Worlds Interpretation — Everett's Heresy"
+  },
+  {
+    path: "blog-articles/transportation-cyber-security.html",
+    publishedAt: "2026-06-13",
+    summary: "A technical examination of cyber and information security in the U.S. transportation sector, covering cyber-physical exposure, national interdependencies, threat scenarios, and the frameworks shaping sector defense.",
+    title: "The Lifeline That Everything Rides On — Cyber and Information Security in the U.S. Transportation Sector"
+  },
+  {
+    path: "blog-articles/water-cyber.html",
+    publishedAt: "2026-06-12",
+    summary: "A technical and policy-focused analysis of cyber and information security in the U.S. water and wastewater sector, covering ICS exposure, weak segmentation, incident history, governance gaps, and practical defensive priorities.",
+    title: "The Renegade Cursor: Cyber and Information Security in the U.S. Water and Wastewater Sector"
+  },
+  {
+    path: "blog-articles/energy-sector-cybersecurity.html",
+    publishedAt: "2026-06-12",
+    summary: "A deep dive into cybersecurity in the U.S. energy sector, covering OT and IT convergence, grid risk, ransomware, supply chain compromise, regulatory pressure, and the physical consequences of digital failure.",
+    title: "When Code Becomes Kinetic — Cyber & Information Security in the U.S. Energy Sector"
+  },
+  {
+    path: "blog-articles/continuum-hypothesis.html",
+    publishedAt: "2026-06-12",
+    summary: "A mathematical and philosophical treatment of the continuum hypothesis, covering countability, cardinality, Godel and Cohen, independence from ZFC, and what undecidability means for the foundations of mathematics.",
+    title: "The Silence of the Continuum: Independence of the Continuum Hypothesis"
+  },
+  {
+    path: "blog-articles/zero-click-attacks.html",
+    publishedAt: "2026-06-12",
+    summary: "A security deep dive into zero-click exploitation, covering parser bugs, messaging surfaces, exploit chains, spyware tradecraft, mobile attack paths, and the defensive limits of modern platform hardening.",
+    title: "Zero-Click: The Architecture of Interaction-Free Exploitation"
+  },
+  {
+    path: "blog-articles/the-nature-of-the-crime.html",
+    publishedAt: "2026-06-12",
+    summary: "A forensic and philosophical essay on the nature of crime, examining cognitive weakness, impulse, self-deception, social context, and the psychological structure behind harmful human behavior.",
+    title: "The Nature of the Crime — A Forensic Typology of Human Cognitive Weakness"
+  },
+  {
     path: "blog-articles/timing-attacks.html",
     publishedAt: "2026-06-11",
     summary: "A technical deep dive into timing side channels, covering constant-time failures, remote and local measurement models, classic cryptographic breaks, microarchitectural leakage, and defensive design patterns.",
@@ -1130,6 +1196,11 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/water-cyber.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/energy-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/continuum-hypothesis.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/zero-click-attacks.html": ["Security", "Mobile App Development", "Operating Systems"],
+  "blog-articles/the-nature-of-the-crime.html": ["Philosophy", "Society & Civics"],
   "blog-articles/timing-attacks.html": ["Security", "Programming & Software"],
   "blog-articles/power-analysis-attacks.html": ["Security", "Engineering"],
   "blog-articles/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
