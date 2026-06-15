@@ -9,7 +9,9 @@ const blogCategoryLabels = [
   "Differential Equations",
   "Django",
   "Docker",
+  "Earth Sciences",
   "Engineering",
+  "Finance",
   "Kubernetes",
   "Learning",
   "Math & Physics",
@@ -41,6 +43,66 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/chicxulub.html",
+    publishedAt: "2026-06-15",
+    summary: "A technical article on the Chicxulub impact, the Alvarez hypothesis, the end-Cretaceous extinction, and the scientific controversy that reshaped geology and paleontology.",
+    title: "The Cosmic Bullet at the K-Pg Boundary: Chicxulub, Alvarez, and the Catastrophe that Rewired Geology"
+  },
+  {
+    path: "blog-articles/commercial-facilities-cybersecurity.html",
+    publishedAt: "2026-06-15",
+    summary: "A technical briefing on cyber and information security in U.S. commercial facilities, covering building-control exposure, retail and hospitality risk, sector guidance, and practical defense priorities.",
+    title: "The Sector With No Fence — Cyber and Information Security in U.S. Commercial Facilities"
+  },
+  {
+    path: "blog-articles/the-self-in-question.html",
+    publishedAt: "2026-06-15",
+    summary: "A rigorous survey of models of the self across theology, philosophy, psychology, and cognitive science, from ancient soul theories to predictive processing and modern self-models.",
+    title: "The Self in Question — Models of the Human Person from Antiquity to Cognitive Science"
+  },
+  {
+    path: "blog-articles/dams-cyber-security.html",
+    publishedAt: "2026-06-15",
+    summary: "An expert technical analysis of cyber and information security in the U.S. dams sector, covering control systems, threat scenarios, cascade risk, and the standards and controls shaping sector defense.",
+    title: "Holding Back the Water: Cyber and Information Security in the U.S. Dams Sector"
+  },
+  {
+    path: "blog-articles/food-agriculture-cybersecurity.html",
+    publishedAt: "2026-06-15",
+    summary: "An expert-level deep dive into cyber and information security across the U.S. food and agriculture sector, including industrial technology, incident patterns, supply-chain exposure, and mitigation frameworks.",
+    title: "Farm to Foothold — Cyber & Information Security in the U.S. Food and Agriculture Sector"
+  },
+  {
+    path: "blog-articles/chaos-theory-butterfly-effect.html",
+    publishedAt: "2026-06-15",
+    summary: "A technical history of chaos theory and the butterfly effect, tracing Poincare, Lorenz, nonlinear dynamics, the Lorenz attractor, and the limits of long-range prediction.",
+    title: "The Clockwork That Stopped — Chaos, the Butterfly Effect, and the Death of Perfect Prediction"
+  },
+  {
+    path: "blog-articles/communications-sector-cybersecurity.html",
+    publishedAt: "2026-06-15",
+    summary: "An expert technical briefing on cyber and information security in the U.S. communications sector, focused on carrier infrastructure, routing and signaling risk, national dependence, and defensive frameworks.",
+    title: "The Enabling Layer: Cyber and Information Security in the U.S. Communications Sector"
+  },
+  {
+    path: "blog-articles/black-hole-singularities.html",
+    publishedAt: "2026-06-15",
+    summary: "A technical history of black hole singularities, the Penrose-Hawking theorems, cosmic censorship, and the argument that general relativity predicts its own breakdown.",
+    title: "The Edge of Predictability — Black Hole Singularities and the Theory That Foretold Its Own Collapse"
+  },
+  {
+    path: "blog-articles/defense-industrial-base-cybersecurity.html",
+    publishedAt: "2026-06-15",
+    summary: "A technical reference on cyber and information security in the U.S. defense industrial base, covering contractor risk, regulatory obligations, espionage pressure, and the mitigation stack around NIST 800-171 and CMMC.",
+    title: "Holding the Line — Cyber & Information Security of the U.S. Defense Industrial Base"
+  },
+  {
+    path: "blog-articles/libet-free-will.html",
+    publishedAt: "2026-06-15",
+    summary: "A technical history of Benjamin Libet's challenge to free will, covering the readiness potential, the 1983 experiment, later critiques, and the modern reinterpretations that reopened the debate.",
+    title: "The Half-Second Gap — Libet, the Readiness Potential, and the Fight Over Free Will"
+  },
   {
     path: "blog-articles/nuclear-cyber-security.html",
     publishedAt: "2026-06-13",
@@ -1196,6 +1258,22 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/chicxulub.html": ["Earth Sciences", "Math & Physics", "Philosophy"],
+  "blog-articles/commercial-facilities-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/the-self-in-question.html": ["Philosophy"],
+  "blog-articles/dams-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/food-agriculture-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/chaos-theory-butterfly-effect.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/communications-sector-cybersecurity.html": ["Security", "Networks", "Engineering"],
+  "blog-articles/black-hole-singularities.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/defense-industrial-base-cybersecurity.html": ["Security", "Engineering", "Society & Civics"],
+  "blog-articles/libet-free-will.html": ["Philosophy"],
+  "blog-articles/nuclear-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/dark-energy-accelerating-universe.html": ["Math & Physics"],
+  "blog-articles/hph-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/financial-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering", "Finance"],
+  "blog-articles/many-worlds-interpretation.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/transportation-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/water-cyber.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/energy-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/continuum-hypothesis.html": ["Math & Physics", "Philosophy"],
