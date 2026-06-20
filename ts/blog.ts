@@ -1254,6 +1254,96 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-05-05",
     summary: "A history and analysis of hierarchical enterprise network design, from classic three-tier campus models to spine-leaf fabrics and SDN-era adaptations.",
     title: "Hierarchical Design Models in Enterprise Networking"
+  },
+  {
+    path: "blog-articles/halting-problem.html",
+    publishedAt: "2026-06-19",
+    summary: "A history of Turing's 1936 halting proof, explaining why no general procedure can decide for every program and input whether computation will ever stop.",
+    title: "Halt, or Run Forever — Turing and the Halting Problem"
+  },
+  {
+    path: "blog-articles/authorized-adversary.html",
+    publishedAt: "2026-06-19",
+    summary: "An end-to-end field manual for network penetration testing, covering reconnaissance, enumeration, exploitation, lateral movement, segmentation testing, and engagement discipline.",
+    title: "Authorized Adversary — A Field Manual for Network Penetration Testing"
+  },
+  {
+    path: "blog-articles/active-directory-pentesting.html",
+    publishedAt: "2026-06-18",
+    summary: "An expert field manual on Active Directory penetration testing, covering Kerberoasting, delegation abuse, AD CS attack paths, privilege escalation, and domain compromise.",
+    title: "Active Directory Pentesting — A Field Manual for Enterprise Windows Environments"
+  },
+  {
+    path: "blog-articles/semmelweis-childbed-fever.html",
+    publishedAt: "2026-06-18",
+    summary: "A historical account of Ignaz Semmelweis, childbed fever, handwashing, and the institutional resistance that delayed one of medicine's most important breakthroughs.",
+    title: "The Indigestible Truth — Semmelweis, Childbed Fever, and the Birth of Germ Theory"
+  },
+  {
+    path: "blog-articles/phasor-measurement-units.html",
+    publishedAt: "2026-06-18",
+    summary: "A technical briefing on phasor measurement units, synchrophasor protocols, deployment architecture, data quality, and the real-time grid dynamics PMUs make visible.",
+    title: "Phasor Measurement Units — Deployment, Data Quality, and Real-Time Grid Dynamics"
+  },
+  {
+    path: "blog-articles/it-sector-security.html",
+    publishedAt: "2026-06-17",
+    summary: "An expert technical reference on cybersecurity in the U.S. Information Technology sector, covering sector dependencies, attack surfaces, mitigation frameworks, and systemic risk.",
+    title: "The Load-Bearing Layer: Cyber and Information Security in the U.S. Information Technology Sector"
+  },
+  {
+    path: "blog-articles/aether.html",
+    publishedAt: "2026-06-17",
+    summary: "A physics history of the luminiferous aether, the Michelson-Morley experiment, and the null result that helped force a reconstruction of space and time.",
+    title: "The Wind That Was Never There — Michelson, Morley, and the Death of the Aether"
+  },
+  {
+    path: "blog-articles/government-services-facilities-cybersecurity.html",
+    publishedAt: "2026-06-17",
+    summary: "An expert technical briefing on cybersecurity in U.S. government services and facilities, spanning the public-sector technology estate, threat landscape, and defensive priorities.",
+    title: "Defending the State — Cyber and Information Security in U.S. Government Services and Facilities"
+  },
+  {
+    path: "blog-articles/critical-manufacturing-cybersecurity.html",
+    publishedAt: "2026-06-16",
+    summary: "An in-depth technical report on cyber and information security in U.S. critical manufacturing, including OT exposure, cascade risk, mitigation frameworks, and open challenges.",
+    title: "The Sector That Builds the Others: Cyber and Information Security in U.S. Critical Manufacturing"
+  },
+  {
+    path: "blog-articles/commons.html",
+    publishedAt: "2026-06-16",
+    summary: "A field guide to tragedy-of-the-commons problems, collective-action failure, governance strategies, and the modern shared resources now under pressure.",
+    title: "The Tragedy of the Commons — A Field Guide to Collective-Action Failure"
+  },
+  {
+    path: "blog-articles/emergency-services-cybersecurity.html",
+    publishedAt: "2026-06-16",
+    summary: "A technical briefing on cybersecurity in the U.S. Emergency Services Sector, including dispatch, radio, responder systems, sector interdependence, and resilience priorities.",
+    title: "When the Call for Help Can't Get Through — Cybersecurity in the U.S. Emergency Services Sector"
+  },
+  {
+    path: "blog-articles/chemical-sector-cybersecurity.html",
+    publishedAt: "2026-06-14",
+    summary: "A technical study of cyber and information security in the U.S. chemical sector, with emphasis on industrial control, safety systems, cascade potential, and mitigation frameworks.",
+    title: "The Last Line of Defense — Cyber and Information Security in the U.S. Chemical Sector"
+  },
+  {
+    path: "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html",
+    publishedAt: "2026-06-14",
+    summary: "A scientific history of radioactivity from 1896 to 1902, showing how Becquerel and the Curies shattered the idea of the eternal, indivisible atom.",
+    title: "Cutting the Uncuttable — Radioactivity and the End of the Eternal Atom (1896–1902)"
+  },
+  {
+    path: "blog-articles/grassroots-vegan-activism.html",
+    publishedAt: "2026-06-14",
+    summary: "A research-driven study of grassroots vegan activism, covering movement structure, local tactics, coalition-building, strategic limits, and open questions.",
+    title: "From the Roots Up — The Theory and Practice of Grassroots Vegan Activism"
+  },
+  {
+    path: "blog-articles/cloud-service-models.html",
+    publishedAt: "2026-06-14",
+    summary: "A technical breakdown of IaaS, PaaS, and SaaS, comparing control boundaries, operational responsibilities, security tradeoffs, and architecture implications.",
+    title: "Cloud Service Models: IaaS, PaaS, and SaaS – A Deeper Look"
   }
 ];
 
@@ -1304,7 +1394,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring-cache.html": ["Programming & Software", "DevSecOps", "Spring"],
   "blog-articles/complexity-classes.html": ["Math & Physics", "Programming & Software"],
   "blog-articles/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
-  "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems", "Learning"],
+  "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
   "blog-articles/system-reliability-patterns.html": ["Engineering", "DevSecOps", "Programming & Software"],
   "blog-articles/spring-cloud-devops.html": ["Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
   "blog-articles/secure-architecture.html": ["Security", "Engineering", "DevSecOps"],
@@ -1459,7 +1549,22 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/distributed-systems-networks.html": ["Networks", "Programming & Software"],
   "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy"],
   "blog-articles/graph-theory-networks.html": ["Networks", "Math & Physics"],
-  "blog-articles/hierarchical-network-design.html": ["Networks"]
+  "blog-articles/hierarchical-network-design.html": ["Networks"],
+  "blog-articles/halting-problem.html": ["Programming & Software", "Math & Physics", "Philosophy"],
+  "blog-articles/authorized-adversary.html": ["Security", "Networks", "Pentesting"],
+  "blog-articles/active-directory-pentesting.html": ["Security", "Networks", "Pentesting", "Operating Systems"],
+  "blog-articles/semmelweis-childbed-fever.html": ["Philosophy", "Learning", "Society & Civics"],
+  "blog-articles/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
+  "blog-articles/it-sector-security.html": ["Security", "Networks", "Engineering", "Society & Civics"],
+  "blog-articles/aether.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/government-services-facilities-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
+  "blog-articles/critical-manufacturing-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/commons.html": ["Society & Civics", "Philosophy"],
+  "blog-articles/emergency-services-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
+  "blog-articles/chemical-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/cloud-service-models.html": ["Programming & Software", "Networks", "DevSecOps"]
 };
 
 function formatBlogDate(dateString: string): string {

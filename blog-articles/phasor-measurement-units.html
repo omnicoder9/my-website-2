@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phasor Measurement Units — Deployment, Data Quality, and Real-Time Grid Dynamics</title>
+<meta name="description" content="A technical briefing on phasor measurement units: deployment and integration in utility and ISO/RTO operations, IEEE C37.118 protocols and PDC configuration, synchrophasor data quality and streaming performance, and the real-time grid dynamics — oscillations, inertia, damping, and voltage and frequency excursions — that PMU data makes observable.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   SYNCHROPHASOR — instrument-panel identity
+   Palette: deep instrument navy + phosphor amber, with a
+   disciplined phase-trace triad (cyan/rose/green) reserved
+   strictly for measurement graphics.
+   Type: Archivo (industrial grotesque display) / Spectral
+   (engineering-review serif body) / IBM Plex Mono (readouts).
+   ============================================================ */
+
+:root{
+  --ink:#0A1722;          /* page background — control room at night */
+  --ink-2:#0E2031;        /* raised ground */
+  --panel:#102A3D;        /* panel surface */
+  --panel-2:#16374E;      /* raised panel / table header */
+  --line:rgba(150,184,202,.16);
+  --line-strong:rgba(150,184,202,.30);
+  --amber:#F3A93C;        /* PRIMARY accent — oscilloscope phosphor */
+  --amber-dim:#C9842B;
+  --cyan:#46C2D6;         /* phase / trace A */
+  --rose:#E76A88;         /* phase / trace B */
+  --green:#7BC68C;        /* phase / trace C / nominal */
+  --text:#DCE6EC;         /* body */
+  --text-bright:#EEF4F8;  /* headings */
+  --muted:#9DB2C2;        /* secondary */
+  --muted-2:#6E879A;      /* captions / tertiary */
+  --maxw:1080px;
+  --colw:710px;
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(70,194,214,.05), transparent 60%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(243,169,60,.05), transparent 55%),
+    var(--ink);
+  color:var(--text);
+  font-family:'Spectral', Georgia, serif;
+  font-size:18px;
+  line-height:1.78;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+.col{max-width:var(--colw);margin-left:auto;margin-right:auto;}
+
+/* ---------- selection / links ---------- */
+::selection{background:rgba(243,169,60,.26);color:#fff;}
+a{color:var(--amber);text-decoration:none;}
+a:hover{text-decoration:underline;text-underline-offset:3px;}
+
+/* ============================================================
+   MASTHEAD / HERO
+   ============================================================ */
+.masthead{
+  border-bottom:1px solid var(--line);
+  padding:30px 0 0;
+  margin-bottom:8px;
+}
+.mast-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:24px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--muted-2);
+}
+.mast-row .live{display:inline-flex;align-items:center;gap:8px;color:var(--amber);}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--amber);
+  box-shadow:0 0 0 0 rgba(243,169,60,.6);animation:pulse 2.4s infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(243,169,60,.5)}70%{box-shadow:0 0 0 7px rgba(243,169,60,0)}100%{box-shadow:0 0 0 0 rgba(243,169,60,0)}}
+
+.hero{
+  display:grid;grid-template-columns:1.15fr .85fr;gap:38px;align-items:center;
+  padding:46px 0 40px;
+}
+.hero-eyebrow{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--amber);margin:0 0 20px;
+}
+.hero h1{
+  font-family:'Archivo',system-ui,sans-serif;font-weight:800;
+  font-size:clamp(2.4rem,5.2vw,4rem);line-height:1.02;letter-spacing:-.02em;
+  color:var(--text-bright);margin:0 0 22px;
+}
+.hero h1 .thin{font-weight:500;color:var(--amber);display:block;font-size:.55em;letter-spacing:.01em;margin-top:.35em;}
+.hero-dek{font-size:1.18rem;color:var(--muted);margin:0;max-width:42ch;line-height:1.7;}
+
+/* the instrument — phasor plot */
+.instrument{
+  position:relative;border:1px solid var(--line-strong);border-radius:10px;
+  background:
+    repeating-linear-gradient(0deg, rgba(150,184,202,.045) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(90deg, rgba(150,184,202,.045) 0 1px, transparent 1px 26px),
+    radial-gradient(120% 120% at 50% 30%, rgba(70,194,214,.06), transparent 60%),
+    var(--ink-2);
+  padding:18px;overflow:hidden;
+}
+.instrument .read{
+  display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;
+  font-size:11px;color:var(--muted-2);letter-spacing:.08em;margin-bottom:6px;
+}
+.instrument .read b{color:var(--amber);font-weight:500;}
+
+/* spinning phasor group */
+.phasors{transform-box:view-box;transform-origin:150px 168px;animation:spin 16s linear infinite;}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ============================================================
+   READOUT CARDS (key parameters, LCD-ish)
+   ============================================================ */
+.readouts{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;margin:14px 0 6px;
+}
+.ro{background:var(--ink-2);padding:18px 16px 16px;}
+.ro .v{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:1.5rem;
+  color:var(--amber);line-height:1;letter-spacing:-.01em;}
+.ro .l{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--muted-2);margin-top:9px;line-height:1.45;}
+
+/* ============================================================
+   BODY TYPOGRAPHY
+   ============================================================ */
+.lede{font-size:1.32rem;line-height:1.66;color:var(--text-bright);
+  margin:40px auto 6px;font-weight:400;}
+.lede .drop{float:left;font-family:'Archivo',sans-serif;font-weight:800;
+  font-size:3.5rem;line-height:.82;padding:6px 12px 0 0;color:var(--amber);}
+
+p{margin:0 0 1.25em;}
+.col > p, .col > .figure, .col > blockquote, .col > .note, .col > .rate-table,
+.col > h2, .col > h3, .col > ul, .col > ol, .col > .standalone{margin-left:auto;margin-right:auto;}
+
+section{padding:34px 0;}
+.sec-head{display:flex;gap:16px;align-items:baseline;margin:0 auto 26px;max-width:var(--colw);}
+.sec-num{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--amber);
+  letter-spacing:.1em;padding-top:6px;white-space:nowrap;}
+h2{font-family:'Archivo',sans-serif;font-weight:700;font-size:clamp(1.7rem,3.4vw,2.3rem);
+  line-height:1.1;letter-spacing:-.015em;color:var(--text-bright);margin:0;}
+h3{font-family:'Archivo',sans-serif;font-weight:600;font-size:1.28rem;letter-spacing:-.01em;
+  color:var(--text-bright);margin:2.1em 0 .7em;}
+h3 .tick{color:var(--amber);font-family:'IBM Plex Mono',monospace;font-size:.82em;margin-right:.5em;}
+
+strong{color:var(--text-bright);font-weight:600;}
+em{color:var(--muted);}
+.term{color:var(--cyan);font-weight:500;font-style:normal;}
+
+ul,ol{padding-left:1.25em;margin:0 0 1.4em;}
+li{margin:.4em 0;padding-left:.2em;}
+ul li::marker{color:var(--amber-dim);}
+ol li::marker{color:var(--amber-dim);font-family:'IBM Plex Mono',monospace;font-size:.85em;}
+
+/* citations */
+sup.cite{font-family:'IBM Plex Mono',monospace;font-size:.62em;font-weight:500;
+  line-height:0;letter-spacing:.02em;white-space:nowrap;top:-.7em;}
+sup.cite a{color:var(--amber);}
+sup.cite a:hover{color:#fff;}
+
+/* pull quote */
+blockquote{margin:2.4em auto;max-width:var(--colw);padding:6px 0 6px 28px;
+  border-left:2px solid var(--amber);}
+blockquote p{font-family:'Spectral',serif;font-style:italic;font-weight:400;
+  font-size:1.5rem;line-height:1.5;color:var(--text-bright);margin:0 0 .4em;}
+blockquote cite{font-family:'IBM Plex Mono',monospace;font-style:normal;font-size:11.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);}
+
+/* note / aside box */
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--cyan);
+  border-radius:8px;padding:20px 24px;margin:2em auto;}
+.note .nlab{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--cyan);margin:0 0 8px;}
+.note p{margin:0;font-size:1.02rem;color:var(--muted);line-height:1.65;}
+.note p + p{margin-top:.8em;}
+
+/* ============================================================
+   FIGURES
+   ============================================================ */
+.figure{margin:2.6em auto;max-width:var(--maxw);}
+.figure.wide{max-width:var(--maxw);}
+.fig-frame{background:
+    repeating-linear-gradient(0deg, rgba(150,184,202,.04) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(90deg, rgba(150,184,202,.04) 0 1px, transparent 1px 30px),
+    var(--ink-2);
+  border:1px solid var(--line-strong);border-radius:10px;padding:26px 26px 20px;}
+.fig-svg{width:100%;height:auto;display:block;}
+figcaption{font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;
+  color:var(--muted-2);margin-top:16px;max-width:var(--colw);}
+figcaption b{color:var(--muted);font-weight:600;}
+.fig-kicker{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin-right:.5em;}
+
+/* svg primitives */
+.s-fill-none{fill:none;}
+.s-axis{fill:none;stroke:var(--muted-2);stroke-width:1.1;}
+.s-grid{fill:none;stroke:var(--line);stroke-width:1;}
+.s-grid-d{fill:none;stroke:var(--line);stroke-width:1;stroke-dasharray:3 4;}
+.s-amber{stroke:var(--amber);stroke-width:2.4;fill:none;}
+.s-amber-f{fill:var(--amber);}
+.s-cyan{stroke:var(--cyan);stroke-width:2.4;fill:none;}
+.s-cyan-f{fill:var(--cyan);}
+.s-rose{stroke:var(--rose);stroke-width:2.2;fill:none;}
+.s-rose-d{stroke:var(--rose);stroke-width:1.8;fill:none;stroke-dasharray:4 4;}
+.s-green{stroke:var(--green);stroke-width:2.2;fill:none;}
+.s-box{fill:var(--panel-2);stroke:var(--line-strong);stroke-width:1.2;}
+.s-box-soft{fill:var(--panel);stroke:var(--line-strong);stroke-width:1.2;}
+.s-box-clk{fill:rgba(70,194,214,.10);stroke:var(--cyan);stroke-width:1.3;}
+.s-flow{fill:none;stroke:var(--muted);stroke-width:1.6;}
+.s-fill-amber-soft{fill:rgba(243,169,60,.12);stroke:none;}
+.s-fill-rose-soft{fill:rgba(231,106,136,.12);stroke:none;}
+.s-fill-cyan-soft{fill:rgba(70,194,214,.10);stroke:none;}
+.s-t{fill:var(--text-bright);font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;}
+.s-l{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11.5px;}
+.s-l-s{fill:var(--muted-2);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.s-amb-t{fill:var(--amber);font-family:'IBM Plex Mono',monospace;font-size:11.5px;}
+.s-cyan-t{fill:var(--cyan);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.s-rose-t{fill:var(--rose);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.s-mono{font-family:'IBM Plex Mono',monospace;}
+.glow-a{filter:drop-shadow(0 0 5px rgba(243,169,60,.5));}
+.glow-c{filter:drop-shadow(0 0 5px rgba(70,194,214,.45));}
+.glow-r{filter:drop-shadow(0 0 5px rgba(231,106,136,.4));}
+
+/* ============================================================
+   RATE TABLE
+   ============================================================ */
+.rate-table{margin:2.2em auto;max-width:var(--colw);border:1px solid var(--line-strong);
+  border-radius:10px;overflow:hidden;}
+table{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:13.5px;}
+caption{caption-side:top;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--amber);padding:16px 18px 12px;
+  background:var(--ink-2);}
+thead th{background:var(--panel-2);color:var(--text-bright);font-weight:600;text-align:left;
+  padding:11px 18px;border-bottom:1px solid var(--line-strong);font-size:12px;letter-spacing:.04em;}
+tbody td{padding:10px 18px;border-bottom:1px solid var(--line);color:var(--muted);}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:nth-child(even){background:rgba(150,184,202,.03);}
+tbody td:first-child{color:var(--amber);}
+
+/* ============================================================
+   SECTION DIVIDER — sine rule
+   ============================================================ */
+.divider{max-width:var(--maxw);margin:6px auto;padding:0 28px;}
+.divider svg{width:100%;height:26px;display:block;opacity:.5;}
+
+/* ============================================================
+   REFERENCES
+   ============================================================ */
+.refs-sec{border-top:1px solid var(--line);margin-top:30px;padding-top:8px;}
+.refs{counter-reset:none;list-style:none;padding:0;margin:0 auto;max-width:var(--maxw);
+  columns:2;column-gap:46px;}
+.refs li{break-inside:avoid;margin:0 0 1em;padding-left:2.4em;position:relative;
+  font-family:'Spectral',serif;font-size:13.5px;line-height:1.55;color:var(--muted);text-indent:0;}
+.refs li::before{content:counter(refcount);counter-increment:refcount;
+  position:absolute;left:0;top:.05em;font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  color:var(--amber);font-weight:500;}
+.refs{counter-reset:refcount;}
+.refs li a{color:var(--muted);word-break:break-word;}
+.refs li a:hover{color:var(--amber);}
+.refs li:target{background:rgba(243,169,60,.08);outline:1px solid rgba(243,169,60,.3);
+  border-radius:4px;}
+.ref-src{color:var(--text);font-style:italic;}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer{border-top:1px solid var(--line);margin-top:40px;padding:30px 0 60px;
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;
+  color:var(--muted-2);line-height:1.7;}
+footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+footer b{color:var(--muted);font-weight:600;}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:900px){
+  .hero{grid-template-columns:1fr;gap:30px;}
+  .instrument{max-width:440px;}
+  .readouts{grid-template-columns:repeat(2,1fr);}
+  .refs{columns:1;}
+}
+@media (max-width:560px){
+  body{font-size:17px;}
+  .wrap{padding:0 18px;}
+  .readouts{grid-template-columns:1fr;}
+  .sec-head{flex-direction:column;gap:4px;}
+  .lede{font-size:1.18rem;}
+  blockquote p{font-size:1.25rem;}
+  .fig-frame{padding:16px 14px 14px;}
+  .mast-row{font-size:10px;letter-spacing:.1em;}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;}
+}
+
+/* focus visibility */
+a:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:2px;}
+
+</style>
+</head>
+<body>
+<!-- ===================== MASTHEAD ===================== -->
+<header class="masthead">
+  <div class="wrap">
+    <div class="mast-row">
+      <span>Grid Operations &nbsp;/&nbsp; Synchrophasor Systems</span>
+      <span class="live"><span class="dot"></span> Streaming · 60 frames/s</span>
+    </div>
+    <div class="hero">
+      <div class="hero-text">
+        <p class="hero-eyebrow">Technical Briefing · Wide-Area Measurement</p>
+        <h1>Phasor Measurement Units
+          <span class="thin">Time, angle, and the dynamics SCADA never saw</span>
+        </h1>
+        <p class="hero-dek">How GPS-synchronized measurement turned the power grid from a slow still photograph into a continuous, high-resolution recording of its own behavior — and what operators now do with it in real time.</p>
+      </div>
+
+      <!-- ===== SIGNATURE INSTRUMENT: synchrophasor polar plot ===== -->
+      <div class="instrument" role="img" aria-label="A polar phasor diagram showing two GPS-synchronized phasors measured at distant substations and the angular separation between them, above a sixty-hertz waveform.">
+        <div class="read"><span>PMU&middot;01 &nbsp;|&nbsp; SUBSTATION A</span><span><b>UTC</b> 12:00:00.016667</span></div>
+        <svg class="fig-svg" viewBox="0 0 300 320" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="s-amber-f"/></marker>
+            <marker id="arC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="s-cyan-f"/></marker>
+          </defs>
+          <!-- graticule (static) -->
+          <circle cx="150" cy="168" r="128" class="s-grid"/>
+          <circle cx="150" cy="168" r="90" class="s-grid-d"/>
+          <circle cx="150" cy="168" r="50" class="s-grid-d"/>
+          <path class="s-grid" d="M150 168 L278 168 M150 168 L260.8 104 M150 168 L214 57.2 M150 168 L150 40 M150 168 L86 57.2 M150 168 L39.2 104 M150 168 L22 168 M150 168 L39.2 232 M150 168 L86 278.8 M150 168 L150 296 M150 168 L214 278.8 M150 168 L260.8 232"/>
+          <text x="283" y="172" class="s-l-s">0&deg;</text>
+          <text x="143" y="32" class="s-l-s">90&deg;</text>
+          <text x="2" y="172" class="s-l-s">180&deg;</text>
+          <text x="138" y="312" class="s-l-s">270&deg;</text>
+          <!-- rotating phasors (snapshot turns; angular separation delta preserved) -->
+          <g class="phasors">
+            <path d="M183 168 A33 33 0 0 0 169.6 138.4" class="s-rose" stroke-width="1.6" fill="none"/>
+            <text x="190" y="150" class="s-rose-t">&delta;</text>
+            <line x1="150" y1="168" x2="241.8" y2="119.2" class="s-cyan glow-c" marker-end="url(#arC)"/>
+            <line x1="150" y1="168" x2="225.1" y2="71.9" class="s-amber glow-a" marker-end="url(#arA)" stroke-width="2.8"/>
+            <circle cx="150" cy="168" r="3.4" class="s-amber-f"/>
+          </g>
+          <!-- 60 Hz waveform strip (static) -->
+          <path class="s-amber glow-a" stroke-width="2" d="M26 296 C 40 296, 44 272, 58 272 S 76 296, 90 296 S 108 320, 122 320 S 140 296, 154 296 S 172 272, 186 272 S 204 296, 218 296 S 236 320, 250 320 S 268 296, 274 296"/>
+        </svg>
+        <div class="read" style="margin-top:6px;"><span class="s-mono" style="color:var(--cyan)">PMU&middot;02 · SUBSTATION B &nbsp;&rarr;&nbsp; &delta; = 41.3&deg;</span><span><b>60.000</b> Hz</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- ===== READOUT CARDS ===== -->
+  <div class="readouts">
+    <div class="ro"><div class="v">&le;1%</div><div class="l">Total vector<br>error limit</div></div>
+    <div class="ro"><div class="v">30&ndash;60</div><div class="l">Frames per<br>second</div></div>
+    <div class="ro"><div class="v">&lt;1&micro;s</div><div class="l">GPS time<br>alignment</div></div>
+    <div class="ro"><div class="v">~1,700+</div><div class="l">PMUs on the<br>N. American grid</div></div>
+    <div class="ro"><div class="v">0.2&ndash;1</div><div class="l">Hz inter-area<br>oscillation band</div></div>
+  </div>
+</div>
+
+<!-- ===================== LEDE + INTRO ===================== -->
+<div class="wrap">
+<div class="col">
+  <p class="lede"><span class="drop">F</span>or most of the twentieth century, the people running the electric power grid watched it through a keyhole. Supervisory control and data acquisition (SCADA) systems polled substations every two to four seconds and returned unsynchronized scalar readings — voltage here, current there, megawatts somewhere else, each stamped at whatever moment it happened to arrive.<sup class="cite">[<a href="#ref1">1</a>]</sup> That refresh rate is fast enough to manage the slow business of dispatching generation, but the grid also lives on a much quicker clock. Electromechanical swings between regions, the collapse of voltage support, the rate at which frequency falls after a unit trips — these unfold in fractions of a second, faster than SCADA can sample and far faster than it can compare two distant points on the same timeline.</p>
+
+  <p>The phasor measurement unit changed the time base. A <span class="term">PMU</span> measures the voltage and current waveforms at a point on the network, computes the magnitude and phase angle of each as a complex number — a <em>phasor</em> — and stamps every measurement against a clock disciplined by the Global Positioning System. Because every PMU on the continent shares that same absolute time reference to better than a microsecond, phasors measured hundreds of kilometers apart can be lined up at the same instant and compared directly. A synchronized phasor measurement is a <span class="term">synchrophasor</span>, and the device that produces it is one of the most consequential instruments in modern power engineering.<sup class="cite">[<a href="#ref2">2</a>]</sup> Arun Phadke, who built the first PMUs, has put the change in resolution simply: where the old tools gave an X-ray of the system, synchrophasors provide <q>MRI-quality data.</q><sup class="cite">[<a href="#ref3">3</a>]</sup></p>
+
+  <p>That upgrade in vision is not merely cosmetic. The forensic reconstruction of the 2003 Northeast blackout took investigators many person-years of painstaking work to assemble a coherent sequence of events; later disturbances, captured by synchrophasors, were reconstructed in a fraction of the time, and the same data now feeds the planning models, situational-awareness displays, and early-warning tools that operators lean on every day.<sup class="cite">[<a href="#ref4">4</a>]</sup> This briefing walks through what a synchrophasor actually is, how the technology and its standards came to be, how PMU data travels from a substation to a control-room application, how its quality and streaming performance are judged, and — most importantly — what the data reveals about the live dynamics of the grid: oscillations and their damping, system inertia and frequency, and the voltage and frequency excursions that precede a collapse.</p>
+</div>
+</div>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §1 WHAT A SYNCHROPHASOR IS ===================== -->
+<section id="what">
+<div class="sec-head"><div class="sec-num">§ 01</div><h2>The measurement: magnitude, angle, and a shared clock</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>The mathematics is older than the grid's troubles. In 1893 Charles Proteus Steinmetz introduced a compact way to describe an alternating waveform by a single complex number capturing its magnitude and phase, and called that representation a phasor.<sup class="cite">[<a href="#ref2">2</a>]</sup> A phasor is a useful fiction for a pure sinusoid in steady state: it freezes a rotating quantity into a fixed arrow in the complex plane. The difficulty, historically, was that two engineers measuring the same nominal 60-hertz system in two different cities had no common reference for the <em>angle</em> of their arrows. Phase is meaningful only relative to something, and without a shared timeline the phase angle measured in one place could not be compared with the phase angle measured in another.</p>
+
+  <p>The breakthrough was to nail the reference to absolute time. With prototypes built at Virginia Tech beginning in 1988, Arun Phadke and James Thorp turned Steinmetz's static phasor into a stream of <em>synchronized</em> phasor measurements, each angle expressed relative to a cosine at the nominal system frequency aligned to Coordinated Universal Time; the manufacturer Macrodyne produced the first commercial unit, the model 1690, in 1992.<sup class="cite">[<a href="#ref2">2</a>]</sup> Early adoption was slow, constrained by the cost of the hardware and the communications needed to move the data.<sup class="cite">[<a href="#ref5">5</a>]</sup> By convention the synchrophasor's phase angle is referenced to the UTC one-second rollover, so that two units anywhere on the interconnection share the same zero.<sup class="cite">[<a href="#ref6">6</a>]</sup> Because the phasors are genuinely simultaneous, a direct comparison of two quantities measured far apart becomes possible in real time — and that comparison is the whole point.<sup class="cite">[<a href="#ref2">2</a>]</sup></p>
+
+  <h3><span class="tick">&rsaquo;</span>Inside the instrument</h3>
+
+  <p>A PMU is, at heart, a synchronized sampling system wrapped around a digital signal processor. Voltage and current from the high-voltage network are first scaled down by instrument transformers to levels the electronics can handle. Those analog signals pass through an <span class="term">anti-aliasing filter</span> that removes frequency content above the Nyquist limit, then into an analog-to-digital converter. The crucial detail is the sampling clock: it is locked, through a phase-locked oscillator, to the one-pulse-per-second timing signal from a GPS receiver, so that the instant of each sample is known against UTC to better than a microsecond.<sup class="cite">[<a href="#ref7">7</a>]</sup><sup class="cite">[<a href="#ref2">2</a>]</sup> A phasor microprocessor applies a discrete Fourier transform over a window of samples to estimate the magnitude and phase of the fundamental, and from successive estimates it also derives frequency and its rate of change. The results are packaged and streamed out over a communications link in the IEEE C37.118 format.<sup class="cite">[<a href="#ref7">7</a>]</sup><sup class="cite">[<a href="#ref6">6</a>]</sup> The PMU function need not live in a dedicated box; the standard explicitly allows it to be a stand-alone unit or a function embedded inside a protective relay or other device, which is how a great many fielded PMUs actually exist.<sup class="cite">[<a href="#ref8">8</a>]</sup></p>
+
+</div></div>
+
+<figure class="figure wide">
+  <div class="fig-frame">
+    <svg class="fig-svg" viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="fl" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto"><path d="M0 1 L9 5 L0 9" fill="none" stroke="#9DB2C2" stroke-width="1.6"/></marker>
+        <marker id="flc" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9" fill="none" stroke="#46C2D6" stroke-width="1.6"/></marker>
+      </defs>
+      <text x="10" y="40" class="s-l">v(t), i(t)</text>
+      <path class="s-amber" stroke-width="1.8" fill="none" d="M10 94 C 20 94, 22 80, 32 80 S 44 94, 54 94 S 66 108, 76 108 S 88 94, 98 94 S 106 86, 110 88"/>
+      <line x1="112" y1="94" x2="124" y2="94" class="s-flow" marker-end="url(#fl)"/>
+      <!-- boxes -->
+      <rect x="126" y="64" width="150" height="60" rx="6" class="s-box"/><text x="201" y="90" text-anchor="middle" class="s-t">Instrument</text><text x="201" y="107" text-anchor="middle" class="s-l">transformers</text>
+      <line x1="276" y1="94" x2="306" y2="94" class="s-flow" marker-end="url(#fl)"/>
+      <rect x="306" y="64" width="128" height="60" rx="6" class="s-box-soft"/><text x="370" y="90" text-anchor="middle" class="s-t">Anti-alias</text><text x="370" y="107" text-anchor="middle" class="s-l">filter</text>
+      <line x1="434" y1="94" x2="464" y2="94" class="s-flow" marker-end="url(#fl)"/>
+      <rect x="464" y="64" width="116" height="60" rx="6" class="s-box-soft"/><text x="522" y="90" text-anchor="middle" class="s-t">A/D</text><text x="522" y="107" text-anchor="middle" class="s-l">converter</text>
+      <line x1="580" y1="94" x2="610" y2="94" class="s-flow" marker-end="url(#fl)"/>
+      <rect x="610" y="64" width="158" height="60" rx="6" class="s-box"/><text x="689" y="89" text-anchor="middle" class="s-t">Phasor estimator</text><text x="689" y="106" text-anchor="middle" class="s-l">DFT engine</text>
+      <line x1="768" y1="94" x2="798" y2="94" class="s-flow" marker-end="url(#fl)"/>
+      <rect x="798" y="64" width="120" height="60" rx="6" class="s-box-soft"/><text x="858" y="90" text-anchor="middle" class="s-t">C37.118.2</text><text x="858" y="107" text-anchor="middle" class="s-l">stream</text>
+      <line x1="918" y1="94" x2="946" y2="94" class="s-flow" marker-end="url(#fl)"/>
+      <text x="934" y="56" text-anchor="end" class="s-amb-t">to PDC &rarr;</text>
+      <!-- annotation over estimator -->
+      <text x="689" y="46" text-anchor="middle" class="s-amb-t">magnitude · angle · f · ROCOF</text>
+      <!-- clock block -->
+      <rect x="440" y="208" width="300" height="56" rx="6" class="s-box-clk"/>
+      <text x="590" y="232" text-anchor="middle" class="s-cyan-t" style="font-size:12px;">GPS receiver + phase-locked oscillator</text>
+      <text x="590" y="250" text-anchor="middle" class="s-l-s">1 PPS · UTC — disciplines the sampling clock</text>
+      <line x1="522" y1="208" x2="522" y2="126" class="s-grid-d" stroke="#46C2D6" marker-end="url(#flc)"/>
+      <line x1="689" y1="208" x2="689" y2="126" class="s-grid-d" stroke="#46C2D6" marker-end="url(#flc)"/>
+      <!-- stage brackets -->
+      <text x="305" y="150" text-anchor="middle" class="s-l-s">MEASUREMENT</text>
+      <text x="600" y="150" text-anchor="middle" class="s-l-s">PHASOR COMPUTATION</text>
+      <text x="858" y="150" text-anchor="middle" class="s-l-s">COMMUNICATION</text>
+    </svg>
+  </div>
+  <figcaption><span class="fig-kicker">Fig. 1</span><b>The PMU signal chain.</b> Scaled-down voltage and current are band-limited, sampled by a clock disciplined to GPS time, and reduced by a discrete Fourier transform to a time-stamped phasor plus frequency and rate-of-change-of-frequency, then streamed in the IEEE C37.118.2 format. Sub-microsecond timing is what makes measurements from different substations directly comparable.</figcaption>
+</figure>
+</section>
+
+<!-- ===================== §2 HISTORY ===================== -->
+<section id="history">
+<div class="sec-head"><div class="sec-num">§ 02</div><h2>From a cautionary blackout to a continental sensor network</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>For a decade after Macrodyne's first unit, PMUs were largely a research instrument. The event that proved why they mattered arrived on <strong>10 August 1996</strong>, when the Western interconnection tore itself apart. A heavily loaded north–south transfer in the west had crept into a region of low stability margin, and a poorly damped inter-area oscillation near a quarter of a hertz grew instead of decaying until the system broke into islands.<sup class="cite">[<a href="#ref9">9</a>]</sup> Reconstructions from the sparse phasor recordings then in place — units at Colstrip, Grand Coulee, Malin, and Pinnacle Peak captured the swing — showed the oscillation's frequency drifting downward from about 0.27 to 0.25 hertz as its damping ratio collapsed from roughly seven percent to barely one, the unmistakable signature of a system sliding toward instability.<sup class="cite">[<a href="#ref10">10</a>]</sup><sup class="cite">[<a href="#ref11">11</a>]</sup> The dominant mode involved generators in the Pacific Northwest and Canada swinging against the desert Southwest and Southern California, visible as power swings on the California–Oregon Intertie; the Malin–Round Mountain line flow during that afternoon became one of the most-studied traces in the field.<sup class="cite">[<a href="#ref12">12</a>]</sup></p>
+
+  <div class="note">
+    <p class="nlab">Why 1996 mattered</p>
+    <p>The breakup was a demonstration that a large interconnection can oscillate itself to destruction slowly enough to be watched — if anyone is watching at the right time base. The recordings that explained it came from a handful of phasor instruments. The Bonneville Power Administration went on to stand up the first comprehensive wide-area monitoring system around the year 2000, and the case for blanketing the grid with synchronized measurement was effectively made.<sup class="cite">[<a href="#ref2">2</a>]</sup></p>
+  </div>
+
+  <p>If 1996 made the technical case, <strong>14 August 2003</strong> made the political one. A cascading failure that began with line contacts in northern Ohio collapsed the grid across eight U.S. states and two Canadian provinces, left roughly 55 million people without power, contributed to several deaths, and cost billions.<sup class="cite">[<a href="#ref13">13</a>]</sup> The U.S.–Canada investigation concluded that a synchrophasor system would have let operators recognize the early stages of the collapse and act to contain it, and Phadke has credited the 2003 blackout with finally launching the technology into the mainstream.<sup class="cite">[<a href="#ref14">14</a>]</sup><sup class="cite">[<a href="#ref3">3</a>]</sup> The official recommendations that followed called explicitly for time-synchronized measurement and wide-area situational awareness — and the difference showed quickly: where the 2003 forensic effort consumed person-years, the investigation of the 2011 Southwest blackout moved far faster precisely because PMU data was available.<sup class="cite">[<a href="#ref4">4</a>]</sup></p>
+
+  <p>The build-out followed. By 2008 roughly a hundred PMUs were installed across the Eastern Interconnection, up from essentially zero in 2003, coordinated through the North American SynchroPhasor Initiative (NASPI) based at Pacific Northwest National Laboratory.<sup class="cite">[<a href="#ref15">15</a>]</sup> A 2008 reliability report from the North American Electric Reliability Corporation called for exactly the kind of real-time tools synchrophasors could provide.<sup class="cite">[<a href="#ref16">16</a>]</sup> Then the American Recovery and Reinvestment Act of 2009 supplied the capital. Through the Department of Energy's Smart Grid Investment Grant and demonstration programs, thirteen entities carried out synchrophasor projects worth about $358 million — more than half privately funded — that transformed a research footprint into operational infrastructure.<sup class="cite">[<a href="#ref16">16</a>]</sup><sup class="cite">[<a href="#ref1">1</a>]</sup></p>
+
+  <p>The numbers tell the story of a phase change. Before the federal effort, North America had about 166 research-grade networked PMUs; by 2015 the program had added some 1,380 networked PMUs and 226 phasor data concentrators, and with roughly 150 more installed on private funds the continent crossed 1,700 units — enough to give operators near-complete visibility of a high-voltage transmission system that serves about 88 percent of U.S. electricity demand.<sup class="cite">[<a href="#ref16">16</a>]</sup> The deployment ran largely through the system operators: the grants put more than 800 networked PMUs in the field, with the New York ISO installing 39 units reporting 60 times a second — some 360 times faster than the SCADA telemetry they supplemented — and the Midcontinent ISO fielding 161 devices across an eleven-state, 50,000-mile footprint.<sup class="cite">[<a href="#ref17">17</a>]</sup> Counting all classes of device, the installed base grew from fewer than 200 units in 2009 to more than 2,000 by 2015.<sup class="cite">[<a href="#ref5">5</a>]</sup></p>
+
+</div></div>
+</section>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §3 STANDARDS ===================== -->
+<section id="standards">
+<div class="sec-head"><div class="sec-num">§ 03</div><h2>The standards stack: C37.118 and what it guarantees</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>A measurement is only interoperable if everyone agrees what it means and how to move it. The synchrophasor standards have evolved over three decades to pin down both. The first, IEEE 1344-1995, specified synchronization to UTC, timing accuracy, and sampling, and borrowed the COMTRADE syntax for data transmission — but it predated any real deployment, set no test of the resulting measurement's accuracy, and was never widely implemented.<sup class="cite">[<a href="#ref18">18</a>]</sup><sup class="cite">[<a href="#ref19">19</a>]</sup> The pivotal revision, <strong>IEEE C37.118-2005</strong>, introduced what was missing: a quantitative accuracy test under steady-state conditions, rejection of interfering signals, and a complete messaging protocol able to carry data transparently from a PMU to a concentrator and onward.<sup class="cite">[<a href="#ref20">20</a>]</sup> It was here that the field's central error metric, total vector error, first appeared.<sup class="cite">[<a href="#ref21">21</a>]</sup></p>
+
+  <p>In 2009 the IEEE began a joint effort with the IEC to harmonize synchrophasor communications with the IEC 61850 framework, and the practical consequence was to split C37.118 into two documents.<sup class="cite">[<a href="#ref19">19</a>]</sup> <strong>IEEE C37.118.1-2011</strong> took over measurement: it kept and strengthened the steady-state requirements and, decisively, extended them to dynamic conditions, defining synchrophasor, frequency, and rate-of-change-of-frequency measurement under all operating states and pinning performance to a published reference model.<sup class="cite">[<a href="#ref8">8</a>]</sup> A 2014 amendment relaxed a handful of limits that the original models had made effectively unachievable on real hardware.<sup class="cite">[<a href="#ref22">22</a>]</sup> Its companion, <strong>IEEE C37.118.2-2011</strong>, carried the messaging — backward compatible with the 2005 protocol and deliberately independent of the transport, so it runs equally over a serial line or an IP network.<sup class="cite">[<a href="#ref19">19</a>]</sup><sup class="cite">[<a href="#ref18">18</a>]</sup> A parallel track, IEC 61850-90-5, adapted synchrophasor communication to the 61850 world.<sup class="cite">[<a href="#ref18">18</a>]</sup> The measurement definitions were then carried into a joint international standard, <strong>IEC/IEEE 60255-118-1:2018</strong>, which provides complete mathematical definitions valid for any operating case rather than steady state alone, and the data-transfer standard itself was revised again in 2024.<sup class="cite">[<a href="#ref23">23</a>]</sup><sup class="cite">[<a href="#ref22">22</a>]</sup></p>
+
+</div></div>
+
+<figure class="figure wide">
+  <div class="fig-frame">
+    <svg class="fig-svg" viewBox="0 0 960 250" xmlns="http://www.w3.org/2000/svg">
+      <line x1="70" y1="132" x2="908" y2="132" class="s-axis"/>
+      <polygon points="908,132 898,127 898,137" class="s-amber-f"/>
+      <!-- nodes -->
+      <!-- 1995 -->
+      <circle cx="112" cy="132" r="6" class="s-amber-f"/>
+      <text x="112" y="78" text-anchor="middle" class="s-t">IEEE 1344</text>
+      <text x="112" y="96" text-anchor="middle" class="s-l-s">first standard ·</text>
+      <text x="112" y="108" text-anchor="middle" class="s-l-s">sync &amp; sampling</text>
+      <text x="112" y="158" text-anchor="middle" class="s-amb-t" style="font-weight:600">1995</text>
+      <!-- 2005 -->
+      <circle cx="322" cy="132" r="6" class="s-amber-f"/>
+      <text x="322" y="78" text-anchor="middle" class="s-t">C37.118</text>
+      <text x="322" y="96" text-anchor="middle" class="s-l-s">TVE test +</text>
+      <text x="322" y="108" text-anchor="middle" class="s-l-s">messaging</text>
+      <text x="322" y="158" text-anchor="middle" class="s-amb-t" style="font-weight:600">2005</text>
+      <!-- 2011 -->
+      <circle cx="522" cy="132" r="6" class="s-amber-f"/>
+      <text x="522" y="78" text-anchor="middle" class="s-t">C37.118.1 / .2</text>
+      <text x="522" y="96" text-anchor="middle" class="s-l-s">split · dynamic ·</text>
+      <text x="522" y="108" text-anchor="middle" class="s-l-s">M &amp; P classes</text>
+      <text x="522" y="158" text-anchor="middle" class="s-amb-t" style="font-weight:600">2011</text>
+      <!-- 61850 branch -->
+      <line x1="620" y1="132" x2="620" y2="192" class="s-grid-d" stroke="#46C2D6"/>
+      <circle cx="620" cy="196" r="4.5" class="s-cyan-f"/>
+      <text x="632" y="193" class="s-cyan-t">IEC 61850-90-5</text>
+      <text x="632" y="206" class="s-l-s">synchrophasors over 61850</text>
+      <!-- 2018 -->
+      <circle cx="722" cy="132" r="6" class="s-amber-f"/>
+      <text x="722" y="78" text-anchor="middle" class="s-t">60255-118-1</text>
+      <text x="722" y="96" text-anchor="middle" class="s-l-s">joint IEC/IEEE ·</text>
+      <text x="722" y="108" text-anchor="middle" class="s-l-s">measurement</text>
+      <text x="722" y="158" text-anchor="middle" class="s-amb-t" style="font-weight:600">2018</text>
+      <!-- 2024 -->
+      <circle cx="878" cy="132" r="6" class="s-amber-f"/>
+      <text x="878" y="78" text-anchor="middle" class="s-t">C37.118.2</text>
+      <text x="878" y="96" text-anchor="middle" class="s-l-s">revised data</text>
+      <text x="878" y="108" text-anchor="middle" class="s-l-s">transfer</text>
+      <text x="878" y="158" text-anchor="middle" class="s-amb-t" style="font-weight:600">2024</text>
+    </svg>
+  </div>
+  <figcaption><span class="fig-kicker">Fig. 2</span><b>Three decades of synchrophasor standards.</b> Measurement requirements (C37.118.1 &rarr; IEC/IEEE 60255-118-1) and data transfer (C37.118.2) were separated in 2011 to harmonize with IEC 61850. The 2011 measurement revision added dynamic-condition testing and the P and M performance classes.</figcaption>
+</figure>
+
+<div class="wrap"><div class="col">
+
+  <h3><span class="tick">&rsaquo;</span>Total vector error, and why 26 microseconds matters</h3>
+
+  <p>The accuracy of a synchrophasor is judged by <span class="term">total vector error</span> (TVE), which compares the measured phasor against the true phasor as complex numbers — folding magnitude error and phase error into a single normalized quantity — and the standard caps it at one percent.<sup class="cite">[<a href="#ref20">20</a>]</sup><sup class="cite">[<a href="#ref24">24</a>]</sup> The elegance of TVE is that it converts a two-dimensional error into one number with one limit. Its discipline is in what one percent demands of timing. A pure timing error rotates the measured phasor; one percent TVE corresponds to a phase error of only about half a degree, which at 60 hertz is roughly 26 microseconds of clock error.<sup class="cite">[<a href="#ref24">24</a>]</sup> That single figure is why GPS discipline, not merely a good local oscillator, is non-negotiable: a PMU that drifts tens of microseconds from UTC is already out of specification before any other error is considered.</p>
+
+  <h3><span class="tick">&rsaquo;</span>Two personalities: the P class and the M class</h3>
+
+  <p>The 2011 revision recognized that a protection engineer and a stability analyst want different things from the same instrument, and defined two performance classes. The <strong>P class</strong> is built for protection and control: fast response, minimal filtering, minimal reporting delay, accepting more noise to gain speed. The <strong>M class</strong> is built for measurement: heavy filtering to reject out-of-band interference and aliasing, greater precision, at the cost of a slower, more delayed response.<sup class="cite">[<a href="#ref21">21</a>]</sup> The trade-off is visible in the latency budget — under the standard's tests an M-class estimate may be delayed by up to seven reporting intervals, where a P-class estimate is held to two — and both classes must track a one-hertz-per-second frequency ramp while staying inside one percent TVE.<sup class="cite">[<a href="#ref22">22</a>]</sup> Choosing a class is choosing where to sit on the speed-versus-fidelity curve for a given application.</p>
+
+  <p>Reporting rate is selectable, and the standard tabulates the rates a compliant device must support, while explicitly encouraging both higher rates for demanding control work and lower rates where bandwidth is scarce.<sup class="cite">[<a href="#ref6">6</a>]</sup><sup class="cite">[<a href="#ref24">24</a>]</sup> The messaging itself defines four frame types — <em>data</em>, <em>configuration</em>, <em>header</em>, and <em>command</em> — and three flavors of configuration frame: CFG-1 advertises what a device is capable of reporting, CFG-2 declares what it is currently reporting, and the CFG-3 frame added in 2011 carries extended, more flexibly framed information. Every device must report frequency and rate-of-change-of-frequency alongside the phasors, and every measurement must carry the UTC time tag of the instant it represents.<sup class="cite">[<a href="#ref6">6</a>]</sup></p>
+
+</div></div>
+
+<div class="rate-table">
+  <table>
+    <caption>Required PMU reporting rates — frames per second</caption>
+    <thead><tr><th>System frequency</th><th>Mandatory rates the device must support</th></tr></thead>
+    <tbody>
+      <tr><td>50 Hz</td><td>10 &nbsp;·&nbsp; 25 &nbsp;·&nbsp; 50</td></tr>
+      <tr><td>60 Hz</td><td>10 &nbsp;·&nbsp; 12 &nbsp;·&nbsp; 15 &nbsp;·&nbsp; 20 &nbsp;·&nbsp; 30 &nbsp;·&nbsp; 60</td></tr>
+      <tr><td>encouraged</td><td>higher — 100, 120 fps for control &nbsp; · &nbsp; lower — down to 1 fps where bandwidth is scarce</td></tr>
+    </tbody>
+  </table>
+</div>
+</section>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §4 DEPLOYMENT / PDC ===================== -->
+<section id="deployment">
+<div class="sec-head"><div class="sec-num">§ 04</div><h2>From substation to control room: the data path</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>A PMU on its own is a local instrument. Its value to an operator depends on a delivery chain that gathers thousands of streams from across a footprint, lines them up on the same timeline, and presents a coherent picture fast enough to act on. The workhorse of that chain is the <span class="term">phasor data concentrator</span> (PDC), a device — or, just as often, a software function — that receives streaming synchrophasors from many PMUs, checks them for integrity, and aligns them by time tag into a single system-wide dataset, all while handling 30 to 60 frames per second from each source under tight latency and reliability constraints.<sup class="cite">[<a href="#ref25">25</a>]</sup> As the open-source openPDC project puts it plainly, a concentrator "concentrates" data by GPS time tag, taking many independent streams and emitting one time-synchronized dataset for downstream applications.<sup class="cite">[<a href="#ref26">26</a>]</sup></p>
+
+  <p>The IEEE C37.244-2013 guide, written by the Power System Relaying Committee, treats the PDC as a function rather than a box and lays out what it must do well. It aggregates data with or without time alignment; it preserves the data-quality and time-quality flags each PMU attaches, so that uncertainty is never silently discarded; it manages redundant feeds, letting an operator name a preferred source and fall back to an alternate if the preferred one fails to arrive; it discards duplicates; and where a stream can be re-requested, it may ask a source to retransmit missing data.<sup class="cite">[<a href="#ref27">27</a>]</sup> All of this is protocol-independent by design.</p>
+
+  <p>At scale the concentrators form a hierarchy. A substation or local PDC gathers the PMUs at one site or nearby; a regional PDC aggregates those; and a <span class="term">super PDC</span> at a central control center collects the whole, handling anywhere from several hundred to a few thousand PMUs, archiving for post-event analysis, and decimating or filtering output streams to suit each receiving application — typically delivering the aggregate with a latency on the order of 100 milliseconds to a second.<sup class="cite">[<a href="#ref28">28</a>]</sup> That latency is not waste; it is the cost of correctness. To align a frame, a PDC must wait for the slowest contributing PMU's data for that instant, but it cannot wait forever, so it enforces a maximum wait and flags or drops whatever is still missing — the fundamental tension of real-time concentration.<sup class="cite">[<a href="#ref27">27</a>]</sup><sup class="cite">[<a href="#ref28">28</a>]</sup></p>
+
+</div></div>
+
+<figure class="figure wide">
+  <div class="fig-frame">
+    <svg class="fig-svg" viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="u" viewBox="0 0 10 10" refX="5" refY="2.5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 9 L5 1 L9 9" fill="none" stroke="#9DB2C2" stroke-width="1.5"/></marker>
+        <marker id="uc" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9" fill="none" stroke="#F3A93C" stroke-width="1.6"/></marker>
+      </defs>
+      <!-- Tier 0 : PMUs -->
+      <g>
+        <rect x="40" y="306" width="120" height="40" rx="5" class="s-box-soft"/><text x="100" y="331" text-anchor="middle" class="s-l">PMU · sub A</text>
+        <rect x="200" y="306" width="120" height="40" rx="5" class="s-box-soft"/><text x="260" y="331" text-anchor="middle" class="s-l">PMU · sub B</text>
+        <rect x="360" y="306" width="120" height="40" rx="5" class="s-box-soft"/><text x="420" y="331" text-anchor="middle" class="s-l">PMU · sub C</text>
+        <rect x="520" y="306" width="120" height="40" rx="5" class="s-box-soft"/><text x="580" y="331" text-anchor="middle" class="s-l">PMU · sub D</text>
+      </g>
+      <!-- arrows PMU -> local PDC -->
+      <line x1="100" y1="306" x2="180" y2="260" class="s-flow" marker-end="url(#u)"/>
+      <line x1="260" y1="306" x2="180" y2="260" class="s-flow" marker-end="url(#u)"/>
+      <line x1="420" y1="306" x2="500" y2="260" class="s-flow" marker-end="url(#u)"/>
+      <line x1="580" y1="306" x2="500" y2="260" class="s-flow" marker-end="url(#u)"/>
+      <!-- Tier 1 : local PDCs -->
+      <rect x="110" y="214" width="140" height="46" rx="6" class="s-box"/><text x="180" y="235" text-anchor="middle" class="s-t">Local PDC</text><text x="180" y="251" text-anchor="middle" class="s-l-s">align · flag · forward</text>
+      <rect x="430" y="214" width="140" height="46" rx="6" class="s-box"/><text x="500" y="235" text-anchor="middle" class="s-t">Local PDC</text><text x="500" y="251" text-anchor="middle" class="s-l-s">align · flag · forward</text>
+      <!-- arrows local -> regional -->
+      <line x1="180" y1="214" x2="340" y2="172" class="s-flow" marker-end="url(#u)"/>
+      <line x1="500" y1="214" x2="340" y2="172" class="s-flow" marker-end="url(#u)"/>
+      <!-- Tier 2 : regional PDC -->
+      <rect x="250" y="122" width="180" height="50" rx="6" class="s-box"/><text x="340" y="143" text-anchor="middle" class="s-t">Regional PDC</text><text x="340" y="160" text-anchor="middle" class="s-l-s">aggregate · archive</text>
+      <line x1="340" y1="122" x2="340" y2="90" class="s-amber" marker-end="url(#uc)"/>
+      <text x="356" y="110" class="s-amb-t" style="font-size:10.5px">+ aggregation · alignment · 100 ms&ndash;1 s</text>
+      <!-- Tier 3 : super PDC -->
+      <rect x="230" y="38" width="220" height="50" rx="6" class="s-box" style="stroke:#F3A93C"/><text x="340" y="59" text-anchor="middle" class="s-t">Super PDC · control center</text><text x="340" y="76" text-anchor="middle" class="s-l-s">system-wide time-aligned dataset</text>
+      <!-- apps -->
+      <line x1="450" y1="64" x2="716" y2="120" class="s-flow" marker-end="url(#u)"/>
+      <rect x="720" y="60" width="224" height="210" rx="8" class="s-box-soft"/>
+      <text x="740" y="86" class="s-amb-t" style="font-weight:600">APPLICATIONS</text>
+      <line x1="740" y1="96" x2="924" y2="96" class="s-grid"/>
+      <text x="740" y="120" class="s-l">› Situational awareness</text>
+      <text x="740" y="146" class="s-l">› Oscillation detection</text>
+      <text x="740" y="172" class="s-l">› Linear state estimation</text>
+      <text x="740" y="198" class="s-l">› Voltage / angle monitoring</text>
+      <text x="740" y="224" class="s-l">› Event &amp; disturbance archive</text>
+      <text x="740" y="250" class="s-l">› Model validation</text>
+    </svg>
+  </div>
+  <figcaption><span class="fig-kicker">Fig. 3</span><b>The concentrator hierarchy.</b> Local PDCs align and quality-flag the PMUs at a site; regional and super PDCs aggregate upward into a single time-synchronized dataset for control-center applications. Latency and aggregation grow toward the top; each tier must bound how long it waits for late frames.</figcaption>
+</figure>
+
+<div class="wrap"><div class="col">
+
+  <h3><span class="tick">&rsaquo;</span>Sampling synchronously, not stitching afterward</h3>
+
+  <p>A subtle point in the network architecture, emphasized in NASPI's guidance for the next generation of synchrophasor networks, is that the goal is to <em>sample</em> synchronously — to capture a true simultaneous snapshot — rather than to collect loosely timed streams and stitch them together after the fact. Because messages traverse the network with varying latency, alignment processes are still required at the usage point; but the validity of any wide-area calculation rests on the measurements having been taken at the same instant, not merely grouped on arrival.<sup class="cite">[<a href="#ref29">29</a>]</sup> This is the architectural reason GPS timing sits at the very front of the PMU rather than being approximated downstream.</p>
+
+  <h3><span class="tick">&rsaquo;</span>Living alongside SCADA and the EMS</h3>
+
+  <p>In an operational control room, synchrophasors do not replace SCADA and the energy management system so much as sharpen them. A modern wide-area monitoring platform can run standalone or integrate directly with the EMS, feeding high-resolution measurements into applications such as phase-angle monitoring, power-oscillation monitoring, and voltage-stability assessment, and improving the state and parameter estimation the EMS already performs.<sup class="cite">[<a href="#ref30">30</a>]</sup> Because a PMU measures voltage angle directly, the state-estimation problem — historically a nonlinear iteration over slower SCADA data — can be cast as a fast linear solve, one of several reasons operators value PMU-based estimation for its speed.<sup class="cite">[<a href="#ref31">31</a>]</sup><sup class="cite">[<a href="#ref30">30</a>]</sup> Concentrators also anchor compliance regimes: PDCs are routinely deployed to implement the dynamic disturbance recording required under NERC's reliability standards, archiving synchronized data so that disturbances can be reconstructed afterward.<sup class="cite">[<a href="#ref32">32</a>]</sup></p>
+
+  <p>None of this is free. The communications and infrastructure upgrades behind a synchrophasor program are substantial — one transmission operator reported spending more than $22 million on SCADA and PMU communications alone — which is why deployments concentrate PMUs at the network's most critical substations rather than everywhere at once.<sup class="cite">[<a href="#ref14">14</a>]</sup> The same logic has played out internationally: after the July 2012 blackouts that darkened its northern and north-eastern grids, India launched a wide-area monitoring program and connected PMUs for wide-area monitoring, protection, and control.<sup class="cite">[<a href="#ref33">33</a>]</sup></p>
+
+</div></div>
+</section>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §5 DATA QUALITY ===================== -->
+<section id="quality">
+<div class="sec-head"><div class="sec-num">§ 05</div><h2>Data quality and streaming performance</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>Wide-area decisions inherit the quality of the worst measurement feeding them, so before any application can be trusted, the data itself must be characterized. Four properties matter: <strong>accuracy</strong>, bounded by total vector error; <strong>completeness</strong>, the absence of dropped frames; <strong>timeliness</strong>, a latency low and predictable enough for the intended use; and <strong>honesty</strong>, the faithful propagation of quality flags so that a degraded measurement announces itself rather than masquerading as good.<sup class="cite">[<a href="#ref24">24</a>]</sup><sup class="cite">[<a href="#ref27">27</a>]</sup></p>
+
+</div></div>
+
+<figure class="figure">
+  <div class="fig-frame">
+    <svg class="fig-svg" viewBox="0 0 460 360" xmlns="http://www.w3.org/2000/svg" style="max-width:520px;margin:0 auto;">
+      <defs>
+        <marker id="ax" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 1 L9 5 L0 9" fill="none" stroke="#6E879A" stroke-width="1.5"/></marker>
+        <marker id="aA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="s-amber-f"/></marker>
+        <marker id="aC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="s-cyan-f"/></marker>
+      </defs>
+      <!-- axes -->
+      <line x1="70" y1="300" x2="412" y2="300" class="s-axis" marker-end="url(#ax)"/>
+      <line x1="70" y1="300" x2="70" y2="40" class="s-axis" marker-end="url(#ax)"/>
+      <text x="416" y="304" class="s-l">Re</text>
+      <text x="60" y="44" class="s-l">Im</text>
+      <!-- angle arc -->
+      <path d="M116 300 A 46 46 0 0 0 107 272.6" class="s-amber" stroke-width="1.4" fill="none"/>
+      <text x="120" y="288" class="s-amb-t">&theta;</text>
+      <!-- true phasor -->
+      <line x1="70" y1="300" x2="300" y2="130" class="s-amber glow-a" marker-end="url(#aA)" stroke-width="2.6"/>
+      <text x="196" y="196" class="s-amb-t" transform="rotate(-36.5 196 196)">true phasor &nbsp;|V|</text>
+      <!-- measured phasor -->
+      <line x1="70" y1="300" x2="320" y2="150" class="s-cyan glow-c" marker-end="url(#aC)"/>
+      <text x="250" y="240" class="s-cyan-t">measured &nbsp;V&#770;</text>
+      <!-- 1% circle around true tip (exaggerated) -->
+      <circle cx="300" cy="130" r="26" class="s-grid-d" stroke="#E76A88"/>
+      <!-- error vector -->
+      <line x1="300" y1="130" x2="320" y2="150" class="s-rose-d glow-r"/>
+      <text x="332" y="138" class="s-rose-t">error</text>
+      <text x="300" y="92" text-anchor="middle" class="s-rose-t" style="font-size:10px">1% TVE limit (exaggerated)</text>
+      <!-- formula -->
+      <rect x="84" y="56" width="196" height="34" rx="5" class="s-box-soft"/>
+      <text x="98" y="78" class="s-mono" fill="#DCE6EC" style="font-size:14px">TVE = |V&#770; &minus; V| / |V|</text>
+    </svg>
+  </div>
+  <figcaption><span class="fig-kicker">Fig. 4</span><b>Total vector error in the complex plane.</b> The measured phasor V&#770; differs from the true phasor V in both magnitude and angle; TVE is the length of the error vector normalized by the true magnitude. The one-percent limit (shown enlarged) is a tight tolerance — at 60 Hz it corresponds to roughly half a degree, or about 26 microseconds of timing error.</figcaption>
+</figure>
+
+<div class="wrap"><div class="col">
+
+  <h3><span class="tick">&rsaquo;</span>How streams go wrong</h3>
+
+  <p>The failure modes are mundane and constant. Communications hiccups drop or delay frames, so a concentrator routinely sees gaps it must identify and bound.<sup class="cite">[<a href="#ref28">28</a>]</sup> A receiver that loses its GPS lock keeps producing phasors but with degrading time quality, which is exactly why the standard carries explicit time-quality indications and the concentrator is required to preserve them rather than average them away.<sup class="cite">[<a href="#ref27">27</a>]</sup> Latency varies from feed to feed; channels can be mislabeled or instrument transformers miswired; calibration drifts. The discipline that keeps a wide-area picture honest is the same one C37.244 prescribes: maintain redundant sources with declared preferences and fallbacks, discard duplicates, and above all let every measurement carry its own data-quality and time-quality status so an application can weight or reject it.<sup class="cite">[<a href="#ref27">27</a>]</sup> Bad data caught at the concentrator is a flag; bad data that reaches a control algorithm is a wrong decision.</p>
+
+  <h3><span class="tick">&rsaquo;</span>The performance envelope</h3>
+
+  <p>Streaming performance is a budget balanced against the application. Reporting rate, channel count, and PMU population set the bandwidth; a fleet reporting 60 frames a second across many voltage and current channels is a continuous, high-rate firehose that the network and concentrators must sustain without accumulating delay.<sup class="cite">[<a href="#ref25">25</a>]</sup> The reporting-rate-versus-latency trade-off baked into the P and M classes resurfaces here at system scale: faster reporting and lighter filtering buy responsiveness for control at the price of noise, while heavier filtering buys fidelity at the price of delay. And because the validity of every wide-area computation depends on genuinely simultaneous capture, the architecture must protect synchronous sampling and tight time alignment end to end, not merely deliver bytes.<sup class="cite">[<a href="#ref29">29</a>]</sup> Where these requirements are met, the payoff is concrete — high-resolution data measurably improves voltage-stability assessment, situational awareness, and fault detection — even as the growth of low-inertia, inverter-based generation makes the underlying system harder to measure and to model.<sup class="cite">[<a href="#ref34">34</a>]</sup></p>
+
+</div></div>
+</section>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §6 PHENOMENA ===================== -->
+<section id="phenomena">
+<div class="sec-head"><div class="sec-num">§ 06</div><h2>What the data reveals: inertia, oscillations, and excursions</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>The reason a control room invests in microsecond timing is that the grid's stability lives in physics too fast and too distributed for slower telemetry to resolve. Synchrophasors make three families of dynamic behavior observable in real time: the frequency response governed by inertia, the electromechanical oscillations between machines and regions, and the voltage and angle dynamics that mark the edge of stability.</p>
+
+  <h3><span class="tick">&rsaquo;</span>Frequency, inertia, and the rate of change</h3>
+
+  <p>Grid frequency is the tachometer of the whole machine. In a system dominated by synchronous generators, the spinning masses of turbines and rotors store kinetic energy, and that <span class="term">inertia</span> resists changes in frequency — when generation and load fall out of balance, inertia slows how fast frequency moves, buying time for controls to respond.<sup class="cite">[<a href="#ref35">35</a>]</sup> The relationship is captured by the swing equation, which ties the inertia constant <em>H</em> to the power imbalance and the resulting rate of change of frequency; rearranged, a measured rate of change after a known megawatt loss yields an estimate of how much inertia the system actually has.<sup class="cite">[<a href="#ref36">36</a>]</sup> That quantity, <span class="term">rate of change of frequency</span> (ROCOF), is a mandatory PMU output for exactly this reason.</p>
+
+  <p>After a sudden generator trip, frequency does not simply step down; it falls at an initial slope set by inertia, reaches a low point — the nadir — and then recovers toward a settling value as governors and fast reserves act. Inertial response is near-instant, on the order of tenths of a second; fast frequency response and governor action follow within seconds.<sup class="cite">[<a href="#ref37">37</a>]</sup> The danger in the modern grid is that this cushion is thinning. Inverter-based resources — solar PV and most wind — connect through power electronics and provide no rotating inertia inherently, so as they displace synchronous machines, system inertia declines, ROCOF rises, nadirs deepen, and under-frequency load-shedding schemes tuned for gentler transients can be outrun.<sup class="cite">[<a href="#ref35">35</a>]</sup><sup class="cite">[<a href="#ref38">38</a>]</sup> A high ROCOF can trip generator protection and disrupt the staged load shedding meant to arrest a decline, so inertia also matters for whether protective schemes behave as designed.<sup class="cite">[<a href="#ref37">37</a>]</sup></p>
+
+  <p>The remedies and the monitoring both run through synchrophasors. Storage and inverters can be commanded to deliver synthetic inertia and fast frequency response that partly substitute for the lost rotating mass — Hydro-Québec was the first grid operator to require synthetic inertia, back in 2005 — and PMUs are the instrument that watches the result, streaming continuous frequency and ROCOF across the footprint and supporting both event-based and ambient estimation of how much inertia remains.<sup class="cite">[<a href="#ref38">38</a>]</sup><sup class="cite">[<a href="#ref36">36</a>]</sup><sup class="cite">[<a href="#ref35">35</a>]</sup></p>
+
+</div></div>
+
+<figure class="figure wide">
+  <div class="fig-frame">
+    <svg class="fig-svg" viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg">
+      <!-- axes -->
+      <line x1="80" y1="40" x2="80" y2="262" class="s-axis"/>
+      <line x1="80" y1="262" x2="916" y2="262" class="s-axis"/>
+      <text x="40" y="84" class="s-l">60.0</text>
+      <text x="34" y="218" class="s-l-s">Hz</text>
+      <text x="884" y="282" class="s-l">time &rarr;</text>
+      <!-- nominal -->
+      <line x1="80" y1="80" x2="916" y2="80" class="s-grid-d"/>
+      <!-- UFLS threshold -->
+      <line x1="80" y1="214" x2="916" y2="214" class="s-grid-d" stroke="#E76A88"/>
+      <text x="908" y="208" text-anchor="end" class="s-rose-t">under-frequency load-shed threshold</text>
+      <!-- disturbance line -->
+      <line x1="262" y1="40" x2="262" y2="262" class="s-grid-d"/>
+      <text x="266" y="54" class="s-l-s">generator trip</text>
+      <!-- high inertia curve (amber) -->
+      <path class="s-amber glow-a" d="M80 80 L262 80 C 300 92 362 150 420 150 C 480 150 580 112 700 112 L 916 112"/>
+      <!-- low inertia curve (rose) -->
+      <path class="s-rose glow-r" d="M80 80 L262 80 C 296 100 344 226 386 226 C 432 226 560 134 700 134 L 916 134"/>
+      <!-- ROCOF tangents -->
+      <line x1="262" y1="80" x2="312" y2="106" class="s-amber" stroke-width="1.3" stroke-dasharray="3 3"/>
+      <line x1="262" y1="80" x2="300" y2="150" class="s-rose" stroke-width="1.3" stroke-dasharray="3 3"/>
+      <text x="318" y="100" class="s-amb-t" style="font-size:10.5px">ROCOF (df/dt)</text>
+      <!-- nadir markers -->
+      <circle cx="420" cy="150" r="4" class="s-amber-f"/><text x="430" y="146" class="s-l-s">nadir (high inertia)</text>
+      <circle cx="386" cy="226" r="4" class="s-rose-f" fill="#E76A88"/><text x="396" y="244" class="s-rose-t" style="font-size:10.5px">deeper nadir (low inertia)</text>
+      <!-- settling -->
+      <text x="730" y="106" class="s-amb-t" style="font-size:10.5px">settling frequency</text>
+      <!-- legend -->
+      <rect x="600" y="46" width="18" height="3" class="s-amber-f"/><text x="624" y="52" class="s-l-s">high inertia</text>
+      <rect x="600" y="60" width="18" height="3" fill="#E76A88"/><text x="624" y="66" class="s-l-s">low inertia (more IBRs)</text>
+    </svg>
+  </div>
+  <figcaption><span class="fig-kicker">Fig. 5</span><b>A frequency excursion, with and without inertia.</b> After a generation loss, frequency falls at an initial slope (ROCOF) set by system inertia, reaches a nadir, and settles. Lower inertia — as inverter-based resources displace synchronous machines — steepens the slope and deepens the nadir, here far enough to cross the load-shed threshold. Synchrophasors resolve this shape that SCADA cannot.</figcaption>
+</figure>
+
+<div class="wrap"><div class="col">
+
+  <h3><span class="tick">&rsaquo;</span>Oscillations and damping</h3>
+
+  <p>An interconnected grid is, dynamically, a lattice of masses on springs. Large load and generation centers behave as the masses; the transmission lines linking them behave as springs; and the system rings at low electromechanical frequencies, generally between about 0.2 and 1.0 hertz, whenever it is disturbed.<sup class="cite">[<a href="#ref39">39</a>]</sup> Engineers distinguish two kinds of ringing. A <span class="term">local mode</span> is a single generator or plant swinging against the rest of the system, usually at the higher end of the band. An <span class="term">inter-area mode</span> is whole groups of machines in distant regions swinging against one another, at lower frequencies, through long and often weak ties carrying heavy power transfers.<sup class="cite">[<a href="#ref9">9</a>]</sup><sup class="cite">[<a href="#ref12">12</a>]</sup></p>
+
+  <p>What separates a routine swing from a blackout is <span class="term">damping</span>. Every mode has a damping ratio that decides whether the oscillation set off by a disturbance decays away or builds. Heavy transfers across weak corridors and shrinking stability margins drive inter-area modes toward low — even negative — damping, and a negatively damped mode grows on its own until something breaks. That is precisely what the 1996 Western breakup was: a mode whose damping collapsed from about seven percent to roughly one as the system stressed, after which the oscillation grew without bound.<sup class="cite">[<a href="#ref9">9</a>]</sup><sup class="cite">[<a href="#ref11">11</a>]</sup> Because damping, not amplitude, is the leading indicator, the central real-time question is not merely "is the system oscillating?" but "are its oscillations decaying fast enough?"</p>
+
+</div></div>
+
+<figure class="figure wide">
+  <div class="fig-frame">
+    <svg class="fig-svg" viewBox="0 0 960 280" xmlns="http://www.w3.org/2000/svg">
+      <!-- left panel : damped -->
+      <line x1="48" y1="150" x2="448" y2="150" class="s-grid"/>
+      <text x="60" y="40" class="s-t">Well damped &middot; stable</text>
+      <text x="60" y="58" class="s-amb-t" style="font-size:11px">&zeta; &gt; 0 — oscillation decays</text>
+      <polyline class="s-amber glow-a" fill="none" points="60.0,150.0 62.3,137.8 64.6,126.2 66.8,115.5 69.1,105.9 71.4,97.6 73.7,90.8 76.0,85.6 78.3,82.1 80.5,80.2 82.8,80.1 85.1,81.7 87.4,84.9 89.7,89.5 92.0,95.5 94.2,102.6 96.5,110.6 98.8,119.4 101.1,128.6 103.4,138.2 105.6,147.7 107.9,157.1 110.2,166.0 112.5,174.4 114.8,181.9 117.1,188.4 119.3,193.9 121.6,198.1 123.9,201.1 126.2,202.8 128.5,203.2 130.8,202.3 133.0,200.2 135.3,196.9 137.6,192.6 139.9,187.4 142.2,181.5 144.4,174.9 146.7,167.9 149.0,160.7 151.3,153.4 153.6,146.3 155.9,139.4 158.1,132.9 160.4,127.1 162.7,121.9 165.0,117.5 167.3,114.1 169.6,111.6 171.8,110.0 174.1,109.5 176.4,110.0 178.7,111.4 181.0,113.6 183.2,116.7 185.5,120.5 187.8,124.9 190.1,129.8 192.4,135.1 194.7,140.5 196.9,146.1 199.2,151.6 201.5,156.9 203.8,161.9 206.1,166.4 208.4,170.5 210.6,174.0 212.9,176.8 215.2,178.8 217.5,180.2 219.8,180.8 222.0,180.6 224.3,179.7 226.6,178.1 228.9,175.9 231.2,173.1 233.5,169.9 235.7,166.3 238.0,162.3 240.3,158.2 242.6,154.0 244.9,149.8 247.2,145.7 249.4,141.9 251.7,138.3 254.0,135.1 256.3,132.4 258.6,130.1 260.8,128.4 263.1,127.2 265.4,126.7 267.7,126.6 270.0,127.2 272.3,128.3 274.5,129.9 276.8,131.9 279.1,134.3 281.4,137.0 283.7,139.9 286.0,143.0 288.2,146.2 290.5,149.4 292.8,152.5 295.1,155.5 297.4,158.3 299.6,160.8 301.9,162.9 304.2,164.8 306.5,166.2 308.8,167.1 311.1,167.7 313.3,167.8 315.6,167.5 317.9,166.7 320.2,165.6 322.5,164.2 324.8,162.4 327.0,160.4 329.3,158.2 331.6,155.9 333.9,153.5 336.2,151.0 338.4,148.6 340.7,146.3 343.0,144.2 345.3,142.2 347.6,140.5 349.9,139.1 352.1,137.9 354.4,137.1 356.7,136.6 359.0,136.5 361.3,136.6 363.6,137.1 365.8,137.9 368.1,138.9 370.4,140.2 372.7,141.7 375.0,143.3 377.2,145.1 379.5,146.9 381.8,148.8 384.1,150.6 386.4,152.4 388.7,154.0 390.9,155.6 393.2,156.9 395.5,158.1 397.8,159.0 400.1,159.7 402.4,160.1 404.6,160.3 406.9,160.2 409.2,159.9 411.5,159.4 413.8,158.6 416.0,157.7 418.3,156.6 420.6,155.4 422.9,154.1 425.2,152.7 427.5,151.3 429.7,149.9 432.0,148.5 434.3,147.2 436.6,146.0 438.9,145.0 441.2,144.1 443.4,143.3 445.7,142.7 448.0,142.4"/>
+      <polyline class="s-grid-d" stroke="#F3A93C" fill="none" points="60.0,70.0 62.3,71.1 64.6,72.1 66.8,73.2 69.1,74.2 71.4,75.2 73.7,76.2 76.0,77.2 78.3,78.2 80.5,79.2 82.8,80.1 85.1,81.1 87.4,82.0 89.7,82.9 92.0,83.8 94.2,84.7 96.5,85.6 98.8,86.4 101.1,87.3 103.4,88.1 105.6,89.0 107.9,89.8 110.2,90.6 112.5,91.4 114.8,92.2 117.1,93.0 119.3,93.7 121.6,94.5 123.9,95.2 126.2,96.0 128.5,96.7 130.8,97.4 133.0,98.1 135.3,98.8 137.6,99.5 139.9,100.2 142.2,100.8 144.4,101.5 146.7,102.2 149.0,102.8 151.3,103.4 153.6,104.1 155.9,104.7 158.1,105.3 160.4,105.9 162.7,106.5 165.0,107.1 167.3,107.6 169.6,108.2 171.8,108.8 174.1,109.3 176.4,109.9 178.7,110.4 181.0,110.9 183.2,111.5 185.5,112.0 187.8,112.5 190.1,113.0 192.4,113.5 194.7,114.0 196.9,114.5 199.2,115.0 201.5,115.4 203.8,115.9 206.1,116.3 208.4,116.8 210.6,117.2 212.9,117.7 215.2,118.1 217.5,118.5 219.8,119.0 222.0,119.4 224.3,119.8 226.6,120.2 228.9,120.6 231.2,121.0 233.5,121.4 235.7,121.8 238.0,122.2 240.3,122.5 242.6,122.9 244.9,123.3 247.2,123.6 249.4,124.0 251.7,124.3 254.0,124.7 256.3,125.0 258.6,125.3 260.8,125.7 263.1,126.0 265.4,126.3 267.7,126.6 270.0,127.0 272.3,127.3 274.5,127.6 276.8,127.9 279.1,128.2 281.4,128.5 283.7,128.8 286.0,129.0 288.2,129.3 290.5,129.6 292.8,129.9 295.1,130.1 297.4,130.4 299.6,130.7 301.9,130.9 304.2,131.2 306.5,131.4 308.8,131.7 311.1,131.9 313.3,132.2 315.6,132.4 317.9,132.7 320.2,132.9 322.5,133.1 324.8,133.3 327.0,133.6 329.3,133.8 331.6,134.0 333.9,134.2 336.2,134.4 338.4,134.6 340.7,134.9 343.0,135.1 345.3,135.3 347.6,135.5 349.9,135.6 352.1,135.8 354.4,136.0 356.7,136.2 359.0,136.4 361.3,136.6 363.6,136.8 365.8,136.9 368.1,137.1 370.4,137.3 372.7,137.5 375.0,137.6 377.2,137.8 379.5,138.0 381.8,138.1 384.1,138.3 386.4,138.4 388.7,138.6 390.9,138.8 393.2,138.9 395.5,139.1 397.8,139.2 400.1,139.3 402.4,139.5 404.6,139.6 406.9,139.8 409.2,139.9 411.5,140.0 413.8,140.2 416.0,140.3 418.3,140.4 420.6,140.6 422.9,140.7 425.2,140.8 427.5,140.9 429.7,141.1 432.0,141.2 434.3,141.3 436.6,141.4 438.9,141.5 441.2,141.6 443.4,141.8 445.7,141.9 448.0,142.0"/>
+      <polyline class="s-grid-d" stroke="#F3A93C" fill="none" points="60.0,230.0 62.3,228.9 64.6,227.9 66.8,226.8 69.1,225.8 71.4,224.8 73.7,223.8 76.0,222.8 78.3,221.8 80.5,220.8 82.8,219.9 85.1,218.9 87.4,218.0 89.7,217.1 92.0,216.2 94.2,215.3 96.5,214.4 98.8,213.6 101.1,212.7 103.4,211.9 105.6,211.0 107.9,210.2 110.2,209.4 112.5,208.6 114.8,207.8 117.1,207.0 119.3,206.3 121.6,205.5 123.9,204.8 126.2,204.0 128.5,203.3 130.8,202.6 133.0,201.9 135.3,201.2 137.6,200.5 139.9,199.8 142.2,199.2 144.4,198.5 146.7,197.8 149.0,197.2 151.3,196.6 153.6,195.9 155.9,195.3 158.1,194.7 160.4,194.1 162.7,193.5 165.0,192.9 167.3,192.4 169.6,191.8 171.8,191.2 174.1,190.7 176.4,190.1 178.7,189.6 181.0,189.1 183.2,188.5 185.5,188.0 187.8,187.5 190.1,187.0 192.4,186.5 194.7,186.0 196.9,185.5 199.2,185.0 201.5,184.6 203.8,184.1 206.1,183.7 208.4,183.2 210.6,182.8 212.9,182.3 215.2,181.9 217.5,181.5 219.8,181.0 222.0,180.6 224.3,180.2 226.6,179.8 228.9,179.4 231.2,179.0 233.5,178.6 235.7,178.2 238.0,177.8 240.3,177.5 242.6,177.1 244.9,176.7 247.2,176.4 249.4,176.0 251.7,175.7 254.0,175.3 256.3,175.0 258.6,174.7 260.8,174.3 263.1,174.0 265.4,173.7 267.7,173.4 270.0,173.0 272.3,172.7 274.5,172.4 276.8,172.1 279.1,171.8 281.4,171.5 283.7,171.2 286.0,171.0 288.2,170.7 290.5,170.4 292.8,170.1 295.1,169.9 297.4,169.6 299.6,169.3 301.9,169.1 304.2,168.8 306.5,168.6 308.8,168.3 311.1,168.1 313.3,167.8 315.6,167.6 317.9,167.3 320.2,167.1 322.5,166.9 324.8,166.7 327.0,166.4 329.3,166.2 331.6,166.0 333.9,165.8 336.2,165.6 338.4,165.4 340.7,165.1 343.0,164.9 345.3,164.7 347.6,164.5 349.9,164.4 352.1,164.2 354.4,164.0 356.7,163.8 359.0,163.6 361.3,163.4 363.6,163.2 365.8,163.1 368.1,162.9 370.4,162.7 372.7,162.5 375.0,162.4 377.2,162.2 379.5,162.0 381.8,161.9 384.1,161.7 386.4,161.6 388.7,161.4 390.9,161.2 393.2,161.1 395.5,160.9 397.8,160.8 400.1,160.7 402.4,160.5 404.6,160.4 406.9,160.2 409.2,160.1 411.5,160.0 413.8,159.8 416.0,159.7 418.3,159.6 420.6,159.4 422.9,159.3 425.2,159.2 427.5,159.1 429.7,158.9 432.0,158.8 434.3,158.7 436.6,158.6 438.9,158.5 441.2,158.4 443.4,158.2 445.7,158.1 448.0,158.0"/>
+      <!-- divider -->
+      <line x1="480" y1="36" x2="480" y2="250" class="s-grid"/>
+      <!-- right panel : growing -->
+      <line x1="512" y1="150" x2="912" y2="150" class="s-grid"/>
+      <text x="524" y="40" class="s-t">Negatively damped &middot; Aug 10, 1996</text>
+      <text x="524" y="58" class="s-rose-t" style="font-size:11px">&zeta; &lt; 0 — oscillation grows to breakup</text>
+      <polyline class="s-rose glow-r" fill="none" points="512.0,150.0 514.4,148.4 516.7,146.9 519.1,145.3 521.4,143.9 523.8,142.6 526.1,141.4 528.5,140.4 530.8,139.6 533.2,139.1 535.5,138.8 537.9,138.7 540.2,139.0 542.6,139.5 544.9,140.3 547.3,141.3 549.6,142.6 552.0,144.1 554.4,145.8 556.7,147.6 559.1,149.5 561.4,151.5 563.8,153.5 566.1,155.4 568.5,157.3 570.8,159.0 573.2,160.6 575.5,161.9 577.9,163.0 580.2,163.8 582.6,164.2 584.9,164.3 587.3,164.1 589.6,163.5 592.0,162.6 594.4,161.3 596.7,159.8 599.1,157.9 601.4,155.9 603.8,153.6 606.1,151.2 608.5,148.7 610.8,146.2 613.2,143.7 615.5,141.3 617.9,139.0 620.2,137.0 622.6,135.3 624.9,133.8 627.3,132.7 629.6,132.1 632.0,131.8 634.4,132.0 636.7,132.6 639.1,133.7 641.4,135.2 643.8,137.1 646.1,139.3 648.5,141.9 650.8,144.7 653.2,147.8 655.5,150.9 657.9,154.1 660.2,157.3 662.6,160.4 664.9,163.3 667.3,165.9 669.6,168.2 672.0,170.1 674.4,171.6 676.7,172.6 679.1,173.0 681.4,172.9 683.8,172.3 686.1,171.1 688.5,169.3 690.8,167.0 693.2,164.2 695.5,161.1 697.9,157.6 700.2,153.8 702.6,149.8 704.9,145.8 707.3,141.7 709.6,137.8 712.0,134.0 714.4,130.6 716.7,127.5 719.1,125.0 721.4,123.0 723.8,121.6 726.1,120.8 728.5,120.8 730.8,121.5 733.2,122.9 735.5,124.9 737.9,127.7 740.2,131.0 742.6,134.9 744.9,139.3 747.3,144.0 749.6,149.0 752.0,154.2 754.4,159.3 756.7,164.4 759.1,169.2 761.4,173.6 763.8,177.6 766.1,181.0 768.5,183.8 770.8,185.7 773.2,186.9 775.5,187.1 777.9,186.5 780.2,184.9 782.6,182.5 784.9,179.2 787.3,175.1 789.6,170.3 792.0,164.9 794.4,159.0 796.7,152.8 799.1,146.3 801.4,139.7 803.8,133.3 806.1,127.1 808.5,121.3 810.8,116.1 813.2,111.6 815.5,107.9 817.9,105.2 820.2,103.5 822.6,102.9 824.9,103.4 827.3,105.1 829.6,107.9 832.0,111.8 834.4,116.8 836.7,122.7 839.1,129.4 841.4,136.7 843.8,144.6 846.1,152.7 848.5,161.1 850.8,169.3 853.2,177.2 855.5,184.7 857.9,191.5 860.2,197.5 862.6,202.4 864.9,206.2 867.3,208.7 869.6,209.8 872.0,209.4 874.4,207.6 876.7,204.4 879.1,199.7 881.4,193.7 883.8,186.6 886.1,178.3 888.5,169.1 890.8,159.3 893.2,149.0 895.5,138.5 897.9,128.0 900.2,117.8 902.6,108.1 904.9,99.3 907.3,91.5 909.6,84.9 912.0,79.7"/>
+      <polyline class="s-grid-d" stroke="#E76A88" fill="none" points="512.0,140.0 514.4,139.9 516.7,139.8 519.1,139.6 521.4,139.5 523.8,139.4 526.1,139.3 528.5,139.1 530.8,139.0 533.2,138.9 535.5,138.8 537.9,138.6 540.2,138.5 542.6,138.3 544.9,138.2 547.3,138.1 549.6,137.9 552.0,137.8 554.4,137.6 556.7,137.5 559.1,137.3 561.4,137.2 563.8,137.0 566.1,136.9 568.5,136.7 570.8,136.6 573.2,136.4 575.5,136.3 577.9,136.1 580.2,135.9 582.6,135.8 584.9,135.6 587.3,135.4 589.6,135.3 592.0,135.1 594.4,134.9 596.7,134.7 599.1,134.5 601.4,134.4 603.8,134.2 606.1,134.0 608.5,133.8 610.8,133.6 613.2,133.4 615.5,133.2 617.9,133.0 620.2,132.8 622.6,132.6 624.9,132.4 627.3,132.2 629.6,132.0 632.0,131.8 634.4,131.6 636.7,131.3 639.1,131.1 641.4,130.9 643.8,130.7 646.1,130.4 648.5,130.2 650.8,130.0 653.2,129.7 655.5,129.5 657.9,129.3 660.2,129.0 662.6,128.8 664.9,128.5 667.3,128.3 669.6,128.0 672.0,127.7 674.4,127.5 676.7,127.2 679.1,126.9 681.4,126.7 683.8,126.4 686.1,126.1 688.5,125.8 690.8,125.5 693.2,125.3 695.5,125.0 697.9,124.7 700.2,124.4 702.6,124.1 704.9,123.8 707.3,123.4 709.6,123.1 712.0,122.8 714.4,122.5 716.7,122.2 719.1,121.8 721.4,121.5 723.8,121.2 726.1,120.8 728.5,120.5 730.8,120.1 733.2,119.8 735.5,119.4 737.9,119.1 740.2,118.7 742.6,118.3 744.9,118.0 747.3,117.6 749.6,117.2 752.0,116.8 754.4,116.4 756.7,116.0 759.1,115.6 761.4,115.2 763.8,114.8 766.1,114.4 768.5,113.9 770.8,113.5 773.2,113.1 775.5,112.7 777.9,112.2 780.2,111.8 782.6,111.3 784.9,110.9 787.3,110.4 789.6,109.9 792.0,109.4 794.4,109.0 796.7,108.5 799.1,108.0 801.4,107.5 803.8,107.0 806.1,106.5 808.5,106.0 810.8,105.4 813.2,104.9 815.5,104.4 817.9,103.8 820.2,103.3 822.6,102.7 824.9,102.2 827.3,101.6 829.6,101.0 832.0,100.5 834.4,99.9 836.7,99.3 839.1,98.7 841.4,98.1 843.8,97.5 846.1,96.8 848.5,96.2 850.8,95.6 853.2,94.9 855.5,94.3 857.9,93.6 860.2,93.0 862.6,92.3 864.9,91.6 867.3,90.9 869.6,90.2 872.0,89.5 874.4,88.8 876.7,88.1 879.1,87.3 881.4,86.6 883.8,85.8 886.1,85.1 888.5,84.3 890.8,83.5 893.2,82.7 895.5,82.0 897.9,81.1 900.2,80.3 902.6,79.5 904.9,78.7 907.3,77.8 909.6,77.0 912.0,76.1"/>
+      <polyline class="s-grid-d" stroke="#E76A88" fill="none" points="512.0,160.0 514.4,160.1 516.7,160.2 519.1,160.4 521.4,160.5 523.8,160.6 526.1,160.7 528.5,160.9 530.8,161.0 533.2,161.1 535.5,161.2 537.9,161.4 540.2,161.5 542.6,161.7 544.9,161.8 547.3,161.9 549.6,162.1 552.0,162.2 554.4,162.4 556.7,162.5 559.1,162.7 561.4,162.8 563.8,163.0 566.1,163.1 568.5,163.3 570.8,163.4 573.2,163.6 575.5,163.7 577.9,163.9 580.2,164.1 582.6,164.2 584.9,164.4 587.3,164.6 589.6,164.7 592.0,164.9 594.4,165.1 596.7,165.3 599.1,165.5 601.4,165.6 603.8,165.8 606.1,166.0 608.5,166.2 610.8,166.4 613.2,166.6 615.5,166.8 617.9,167.0 620.2,167.2 622.6,167.4 624.9,167.6 627.3,167.8 629.6,168.0 632.0,168.2 634.4,168.4 636.7,168.7 639.1,168.9 641.4,169.1 643.8,169.3 646.1,169.6 648.5,169.8 650.8,170.0 653.2,170.3 655.5,170.5 657.9,170.7 660.2,171.0 662.6,171.2 664.9,171.5 667.3,171.7 669.6,172.0 672.0,172.3 674.4,172.5 676.7,172.8 679.1,173.1 681.4,173.3 683.8,173.6 686.1,173.9 688.5,174.2 690.8,174.5 693.2,174.7 695.5,175.0 697.9,175.3 700.2,175.6 702.6,175.9 704.9,176.2 707.3,176.6 709.6,176.9 712.0,177.2 714.4,177.5 716.7,177.8 719.1,178.2 721.4,178.5 723.8,178.8 726.1,179.2 728.5,179.5 730.8,179.9 733.2,180.2 735.5,180.6 737.9,180.9 740.2,181.3 742.6,181.7 744.9,182.0 747.3,182.4 749.6,182.8 752.0,183.2 754.4,183.6 756.7,184.0 759.1,184.4 761.4,184.8 763.8,185.2 766.1,185.6 768.5,186.1 770.8,186.5 773.2,186.9 775.5,187.3 777.9,187.8 780.2,188.2 782.6,188.7 784.9,189.1 787.3,189.6 789.6,190.1 792.0,190.6 794.4,191.0 796.7,191.5 799.1,192.0 801.4,192.5 803.8,193.0 806.1,193.5 808.5,194.0 810.8,194.6 813.2,195.1 815.5,195.6 817.9,196.2 820.2,196.7 822.6,197.3 824.9,197.8 827.3,198.4 829.6,199.0 832.0,199.5 834.4,200.1 836.7,200.7 839.1,201.3 841.4,201.9 843.8,202.5 846.1,203.2 848.5,203.8 850.8,204.4 853.2,205.1 855.5,205.7 857.9,206.4 860.2,207.0 862.6,207.7 864.9,208.4 867.3,209.1 869.6,209.8 872.0,210.5 874.4,211.2 876.7,211.9 879.1,212.7 881.4,213.4 883.8,214.2 886.1,214.9 888.5,215.7 890.8,216.5 893.2,217.3 895.5,218.0 897.9,218.9 900.2,219.7 902.6,220.5 904.9,221.3 907.3,222.2 909.6,223.0 912.0,223.9"/>
+      <text x="512" y="270" class="s-l-s">time &rarr;</text>
+    </svg>
+  </div>
+  <figcaption><span class="fig-kicker">Fig. 6</span><b>Damping is the leading indicator.</b> The same disturbance produces a decaying response in a well-damped system (left) and a growing one when damping turns negative (right) — the signature of the August 1996 Western collapse. Modal analysis of PMU data estimates this damping continuously, well before amplitude becomes alarming.</figcaption>
+</figure>
+
+<div class="wrap"><div class="col">
+
+  <p>Each interconnection has its own characteristic modes, and operators track the bands they must avoid exciting: the Eastern Interconnection's dominant inter-area modes sit near 0.16 to 0.33 hertz, the Texas interconnection's near 0.6 to 0.75 hertz, and the Western's near 0.24 to 0.42 hertz.<sup class="cite">[<a href="#ref40">40</a>]</sup> A further distinction is operationally critical. A <em>natural</em> (or free) oscillation is the system ringing at one of these modal frequencies after a disturbance and then — if healthy — damping out. A <span class="term">forced oscillation</span> is different: a sustained external drive, typically a malfunctioning piece of equipment or control, pumping energy into the grid at some frequency for as long as the fault persists. The two become dangerous together: when a forced oscillation's frequency lands near a lightly damped natural mode, resonance amplifies the response far out of proportion to the driving disturbance.<sup class="cite">[<a href="#ref41">41</a>]</sup> And the natural damping that would otherwise contain such events is itself eroding, as inverter-based resources and the retirement of synchronous machines fitted with power-system stabilizers leave the modes less damped than before.<sup class="cite">[<a href="#ref41">41</a>]</sup> Oscillatory events are not historical curiosities — significant interconnection-wide oscillations recur across the decades, from 1996 through the 2000 Alberta separation and events in 2005, 2015, and 2016 — which is why oscillation monitoring is now a standing operational function rather than a research exercise.<sup class="cite">[<a href="#ref42">42</a>]</sup></p>
+
+  <h3><span class="tick">&rsaquo;</span>Voltage and angle</h3>
+
+  <p>The third family is voltage, and here synchrophasors offer a quantity older telemetry could never deliver directly: the phase-angle separation between buses. The angular difference across a transmission corridor grows with the power flowing through it and with the erosion of stability margin, so a rising angle separation is a direct, intuitive stress gauge — and phase-angle monitoring turns it into an operator-facing early warning of an over-stressed corridor.<sup class="cite">[<a href="#ref30">30</a>]</sup> Voltage magnitude tells the complementary story. As reactive support is exhausted, voltage drifts toward collapse; in lightly loaded or over-compensated conditions it can instead rise dangerously. Either way the failure is dynamic, and high-resolution PMU data resolves the trajectory that precedes it, which is why voltage-stability assessment is among the applications most strengthened by synchrophasors.<sup class="cite">[<a href="#ref34">34</a>]</sup> Voltage and frequency excursions together trace the boundary of the secure operating envelope; PMUs are what render that boundary visible in motion.</p>
+
+</div></div>
+</section>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §7 APPLICATIONS ===================== -->
+<section id="applications">
+<div class="sec-head"><div class="sec-num">§ 07</div><h2>Real-time operational applications</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>Observability is a means, not an end. In an operating control room, synchrophasor data is consumed by a stack of applications that convert the live physics into displays, alarms, forensic records, and — increasingly — control actions. The major ones cluster into a handful of families.</p>
+
+  <p><strong>Wide-area situational awareness.</strong> The foundational use is simply seeing the whole interconnection at once, in motion. Operators watch frequency and voltage everywhere on the footprint and, crucially, the phase angles between key buses; a widening angle pair is an immediate flag that a corridor is over-stressed, and phase-angle monitoring builds that into the operator's display.<sup class="cite">[<a href="#ref30">30</a>]</sup><sup class="cite">[<a href="#ref43">43</a>]</sup> This is the layer that replaces inference from slow, scattered readings with a coherent real-time picture.<sup class="cite">[<a href="#ref44">44</a>]</sup></p>
+
+  <p><strong>Oscillation detection and source location.</strong> Sitting on top of awareness is power-oscillation monitoring backed by modal analysis: algorithms continuously estimate the frequency and, above all, the <em>damping</em> of the system's modes from the streaming data, so a mode sliding toward low damping can be caught long before its amplitude becomes alarming.<sup class="cite">[<a href="#ref11">11</a>]</sup><sup class="cite">[<a href="#ref30">30</a>]</sup> When a sustained forced oscillation appears, the harder problem is finding what is driving it, and a distinct class of oscillation-source-location tools has grown up to point operators at the responsible device.<sup class="cite">[<a href="#ref43">43</a>]</sup></p>
+
+  <p><strong>Disturbance and event analysis.</strong> Because concentrators archive time-synchronized, high-rate data, a disturbance can be replayed and its sequence of events reconstructed with a fidelity SCADA never allowed — the difference that turned the multi-year forensic slog of 2003 into the far quicker analysis of later events, and the capability that underpins the dynamic disturbance recording mandated by reliability standards.<sup class="cite">[<a href="#ref4">4</a>]</sup><sup class="cite">[<a href="#ref32">32</a>]</sup><sup class="cite">[<a href="#ref44">44</a>]</sup></p>
+
+  <p><strong>Model validation.</strong> The same recordings let planners check their simulations against reality. The 1996 collapse was a watershed partly because the system's behavior diverged from what the planning models had predicted; comparing measured dynamic response against simulation, and recalibrating the models when they disagree, has since become a standard synchrophasor application and a major reason operators describe the data as MRI-grade ground truth for their models.<sup class="cite">[<a href="#ref45">45</a>]</sup><sup class="cite">[<a href="#ref44">44</a>]</sup></p>
+
+  <p><strong>State estimation, islanding, and control.</strong> Direct angle measurement turns state estimation into a fast linear computation, improving the EMS picture that everything else depends on.<sup class="cite">[<a href="#ref31">31</a>]</sup><sup class="cite">[<a href="#ref30">30</a>]</sup> Synchrophasors also detect loss of synchronism and support controlled islanding — deliberately splitting the grid along chosen boundaries to arrest a cascade — and then the delicate business of re-synchronizing islands by matching frequency and angle across the reconnection point.<sup class="cite">[<a href="#ref43">43</a>]</sup><sup class="cite">[<a href="#ref31">31</a>]</sup> At the leading edge, the loop closes entirely: wide-area damping control uses synchronized feedback to modulate generators or power-electronic devices and actively inject damping into a troublesome inter-area mode, the core idea behind wide-area monitoring, protection, and control — deployed cautiously, because a control loop closed over a communications network inherits that network's latency and reliability.<sup class="cite">[<a href="#ref9">9</a>]</sup><sup class="cite">[<a href="#ref33">33</a>]</sup></p>
+
+</div></div>
+</section>
+
+<!-- ===================== §8 LESSONS ===================== -->
+<section id="lessons">
+<div class="sec-head"><div class="sec-num">§ 08</div><h2>Two events, read through synchrophasors</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>Nothing illustrates the value — and the unfinished business — of synchrophasor monitoring better than two real disturbances, one a textbook forced oscillation, the other a continental collapse.</p>
+
+  <h3><span class="tick">&rsaquo;</span>11 January 2019 — a resonant forced oscillation</h3>
+
+  <p>On that morning a steam turbine at a combined-cycle plant in Florida began feeding a faulty input to its control system. A perceived power-load-imbalance condition — set off by a failed potential-transformer connection and the errored voltage measurement that followed — drove the unit's intercept valves to shut and reopen roughly every four seconds, injecting a sustained forced oscillation near 0.25 hertz into the grid for about eighteen minutes.<sup class="cite">[<a href="#ref46">46</a>]</sup> The trouble was the frequency. A quarter of a hertz sat squarely on a lightly damped natural inter-area mode of the Eastern Interconnection, so the system resonated: an oscillation with a peak-to-peak amplitude around 200 megawatts at the source unit produced power swings on the order of 50 megawatts as far away as New England.<sup class="cite">[<a href="#ref40">40</a>]</sup><sup class="cite">[<a href="#ref47">47</a>]</sup> Synchrophasors made the event visible across the entire interconnection in real time — yet the operators' existing tools proved unable to pinpoint where it was coming from, a gap that has since driven a wave of research into oscillation source location.<sup class="cite">[<a href="#ref47">47</a>]</sup> The 2019 event is now a touchstone: proof that the data can see a continent-wide resonance, and a reminder that seeing is not the same as locating.</p>
+
+  <h3><span class="tick">&rsaquo;</span>28 April 2025 — the Iberian collapse</h3>
+
+  <p>Early that afternoon, at around 12:33 local time, the grid serving mainland Spain and Portugal collapsed, cutting power to roughly 50 million people — with brief effects reaching southern France and Andorra — and taking up to ten hours to restore in places.<sup class="cite">[<a href="#ref48">48</a>]</sup><sup class="cite">[<a href="#ref49">49</a>]</sup> The expert investigation convened by ENTSO-E found no single cause but a multifactorial failure in which power oscillations and gaps in voltage and reactive-power control featured centrally: voltage climbed, a sequence of generators disconnected in southern Spain, and overvoltage tripping cascaded through the system.<sup class="cite">[<a href="#ref50">50</a>]</sup> An oscillation episode shortly before the collapse lasted around three minutes, and the inverter-based resources that now supply much of the peninsula's power showed poor tolerance to the voltage swings.<sup class="cite">[<a href="#ref49">49</a>]</sup> The cascade itself was brutally fast — a loss of roughly 2,200 megawatts of generation, frequency plunging below 48 hertz, automatic load shedding, the French interconnection tripping, and total collapse within seconds.<sup class="cite">[<a href="#ref48">48</a>]</sup> The episode is a pointed argument for exactly the instrumentation this article describes: high-resolution synchronized measurement is what lets operators watch oscillations and voltage excursions build on an inverter-dominated system, and what makes the forensic reconstruction afterward possible at all.</p>
+
+</div></div>
+</section>
+
+<div class="divider"><svg viewBox="0 0 1000 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path class="s-amber" stroke-width="1.5" fill="none" d="M0 13 Q 25 0 50 13 T 100 13 T 150 13 T 200 13 T 250 13 T 300 13 T 350 13 T 400 13 T 450 13 T 500 13 T 550 13 T 600 13 T 650 13 T 700 13 T 750 13 T 800 13 T 850 13 T 900 13 T 950 13 T 1000 13"/></svg></div>
+
+<!-- ===================== §9 ROAD AHEAD ===================== -->
+<section id="ahead">
+<div class="sec-head"><div class="sec-num">§ 09</div><h2>Where the technology is heading</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>The trajectory points in two directions at once: outward to new parts of the grid, and inward toward closing the loop. Synchronized measurement is migrating down the voltage ladder, as compact distribution-class micro-PMUs extend the technique into distribution networks where rooftop solar, storage, and other distributed resources are proliferating and where the old assumption of a passive, one-way feeder no longer holds.<sup class="cite">[<a href="#ref31">31</a>]</sup><sup class="cite">[<a href="#ref2">2</a>]</sup> At the same time, the rise of inverter-based generation makes the bulk system's behavior harder to predict, pushing continuous inertia estimation and ROCOF management from niche studies toward standing operational concerns — precisely the quantities synchrophasors are positioned to track.<sup class="cite">[<a href="#ref35">35</a>]</sup><sup class="cite">[<a href="#ref37">37</a>]</sup></p>
+
+  <p>The forced-oscillation events of recent years have made oscillation source location a priority, and tooling that can point operators at a misbehaving device in real time is moving from research into the control room.<sup class="cite">[<a href="#ref47">47</a>]</sup> Further out, the field continues its slow shift from monitoring to control: wide-area damping and protection schemes that act on synchronized feedback promise to actively stabilize modes rather than merely report on them, as communications latency and reliability improve enough to trust a loop closed across the network.<sup class="cite">[<a href="#ref9">9</a>]</sup><sup class="cite">[<a href="#ref33">33</a>]</sup> Underpinning all of it, the standards keep advancing — the data-transfer specification was revised again in 2024 — so that a measurement taken anywhere remains comparable everywhere.<sup class="cite">[<a href="#ref22">22</a>]</sup></p>
+
+</div></div>
+</section>
+
+<!-- ===================== CONCLUSION ===================== -->
+<section id="conclusion">
+<div class="sec-head"><div class="sec-num">§ &mdash;</div><h2>The grid, finally in focus</h2></div>
+<div class="wrap"><div class="col">
+
+  <p>In a single generation the power system gained the ability to record its own dynamics. The phasor measurement unit, by fixing every measurement to a microsecond of GPS time, turned a slow and scattered still photograph into a continuous, high-resolution recording — the upgrade from an X-ray to an MRI that the technology's inventor described, now realized across a network of well over a thousand units that affords near-complete visibility of a transmission system serving the overwhelming majority of demand.<sup class="cite">[<a href="#ref3">3</a>]</sup><sup class="cite">[<a href="#ref16">16</a>]</sup> What that recording shows is the live physics that decides whether the lights stay on: the inertia that buffers frequency, the damping that decides whether an oscillation fades or grows, and the voltage and angle margins that mark the edge of stability.</p>
+
+  <p>That capability is arriving exactly as it is most needed. As synchronous machines retire and inverter-based resources take their place, inertia falls, damping thins, and the disturbances that matter unfold faster than ever — conditions under which the grid's behavior must be watched in real time rather than inferred after the fact.<sup class="cite">[<a href="#ref35">35</a>]</sup> Synchrophasor measurement began as a way to explain blackouts that had already happened. Its enduring purpose is to help operators see the next one coming in time to prevent it.</p>
+
+</div></div>
+</section>
+
+<!-- ===================== REFERENCES ===================== -->
+<section id="references" class="refs-sec">
+<div class="sec-head"><div class="sec-num">REF</div><h2>References</h2></div>
+<div class="wrap">
+  <ol class="refs">
+    <li id="ref1">U.S. Department of Energy, Office of Electricity. <span class="ref-src">Advancement of synchrophasor technology in projects funded by the American Recovery and Reinvestment Act of 2009</span>. Washington (DC): DOE; 2016. Available from: <a href="https://www.energy.gov/oe/articles/advancement-synchrophasor-technology-projects-funded-american-recovery-and-reinvestment">energy.gov/oe</a></li>
+    <li id="ref2">Wikipedia. <span class="ref-src">Phasor measurement unit</span>. Wikimedia Foundation; 2026. Available from: <a href="https://en.wikipedia.org/wiki/Phasor_measurement_unit">en.wikipedia.org/wiki/Phasor_measurement_unit</a></li>
+    <li id="ref3">Transmission &amp; Distribution World. <span class="ref-src">Dominion Virginia Power testing synchrophasors for smart grid</span>. Endeavor Business Media; 2015. Available from: <a href="https://www.tdworld.com/">tdworld.com</a></li>
+    <li id="ref4">U.S. Energy Information Administration. <span class="ref-src">New technology can improve electric power system efficiency and reliability</span>. Washington (DC): EIA; 2012. Available from: <a href="https://www.eia.gov/todayinenergy/detail.php?id=5630">eia.gov/todayinenergy</a></li>
+    <li id="ref5">PAC World Magazine. <span class="ref-src">Editorial — Issue 071</span>. PAC World; 2025. Available from: <a href="https://www.pacw.org/editorial-issue-071-march-2025">pacw.org</a></li>
+    <li id="ref6">Typhoon HIL. <span class="ref-src">IEEE C37.118 protocol</span>. Typhoon HIL Documentation; 2024. Available from: <a href="https://www.typhoon-hil.com/documentation/typhoon-hil-software-manual/References/c37_118_protocol.html">typhoon-hil.com</a></li>
+    <li id="ref7">Electric Power Research Institute. <span class="ref-src">Phasor measurement unit (PMU) implementation and applications</span>. Palo Alto (CA): EPRI; 2007. Available from: <a href="https://www.epri.com/">epri.com</a></li>
+    <li id="ref8">IEEE Standards Association. <span class="ref-src">IEEE Std C37.118.1-2011: IEEE Standard for synchrophasor measurements for power systems</span>. New York: IEEE; 2011. Available from: <a href="https://standards.ieee.org/ieee/C37.118.1/4902/">standards.ieee.org</a></li>
+    <li id="ref9"><span class="ref-src">Sparsity-promoting optimal wide-area control of power networks</span>. arXiv:1307.4342; 2013. Available from: <a href="https://arxiv.org/abs/1307.4342">arxiv.org/abs/1307.4342</a></li>
+    <li id="ref10">Pacific Northwest National Laboratory. <span class="ref-src">Roadmap to monitor data collected during the WSCC breakup of August 10, 1996</span>. Richland (WA): PNNL-19459; 2010. Available from: <a href="https://www.pnnl.gov/main/publications/external/technical_reports/PNNL-19459.pdf">pnnl.gov</a></li>
+    <li id="ref11">Pacific Northwest National Laboratory. <span class="ref-src">MANGO — Modal analysis for grid operation: a method for damping improvement through operating point adjustment</span>. Richland (WA): PNNL-19890; 2010. Available from: <a href="https://www.pnnl.gov/main/publications/external/technical_reports/PNNL-19890.pdf">pnnl.gov</a></li>
+    <li id="ref12">Western Electricity Coordinating Council. <span class="ref-src">Modes of inter-area power oscillations in the Western Interconnection</span>. Salt Lake City (UT): WECC; 2024. Available from: <a href="https://www.wecc.org/">wecc.org</a></li>
+    <li id="ref13">U.S. Department of Energy. <span class="ref-src">Synchrophasor technologies for a better grid (NASPI case study)</span>. Washington (DC): DOE; 2011. Available from: <a href="https://www.energy.gov/">energy.gov</a></li>
+    <li id="ref14">Americans for a Clean Energy Grid. <span class="ref-src">Synchrophasors</span>. Washington (DC): ACEG; 2014. Available from: <a href="https://cleanenergygrid.org/">cleanenergygrid.org</a></li>
+    <li id="ref15">Greenemeier L. <span class="ref-src">The 2003 Northeast blackout — five years later</span>. Scientific American; 2008. Available from: <a href="https://www.scientificamerican.com/article/2003-blackout-five-years-later/">scientificamerican.com</a></li>
+    <li id="ref16">Kleinman Center for Energy Policy. <span class="ref-src">Developing the high-res grid: deploying synchrophasor technology for grid modernization</span>. Philadelphia (PA): University of Pennsylvania; 2018. Available from: <a href="https://kleinmanenergy.upenn.edu/">kleinmanenergy.upenn.edu</a></li>
+    <li id="ref17">Renewable Energy World. <span class="ref-src">Update on ARRA projects</span>. Endeavor Business Media; 2013. Available from: <a href="https://www.renewableenergyworld.com/">renewableenergyworld.com</a></li>
+    <li id="ref18">Martin K. <span class="ref-src">Synchrophasor 118 standards update</span>. North American SynchroPhasor Initiative (NASPI); 2014. Available from: <a href="https://www.naspi.org/">naspi.org</a></li>
+    <li id="ref19">Martin KE, et&nbsp;al. <span class="ref-src">An overview of the IEEE Standard C37.118.2 — synchrophasor data transfer for power systems</span>. IEEE Trans Smart Grid. 2014;5(4). Available from: <a href="https://ieeexplore.ieee.org/document/6810837">ieeexplore.ieee.org</a></li>
+    <li id="ref20">IEEE. <span class="ref-src">IEEE Standard for synchrophasors for power systems</span>. IEEE Std C37.118-2005. New York: IEEE; 2006. Available from: <a href="https://ieeexplore.ieee.org/document/1611105">ieeexplore.ieee.org</a></li>
+    <li id="ref21">Elspec. <span class="ref-src">Phasor measurement unit (PMU) technique</span>. Elspec Ltd.; 2026. Available from: <a href="https://www.elspec-ltd.com/phasor-measurement-unit-pmu/">elspec-ltd.com</a></li>
+    <li id="ref22">Martin K. <span class="ref-src">Synchrophasor standards and guides for the smart grid</span>. PAC World Magazine; 2025. Available from: <a href="https://www.pacw.org/synchrophasor-standards-and-guides-for-the-smart-grid">pacw.org</a></li>
+    <li id="ref23">IEC/IEEE. <span class="ref-src">Measuring relays and protection equipment — Part 118-1: Synchrophasor for power systems — Measurements</span>. IEC/IEEE 60255-118-1:2018. Geneva/New York: IEC/IEEE; 2018. Available from: <a href="https://ieeexplore.ieee.org/document/8577045">ieeexplore.ieee.org</a></li>
+    <li id="ref24">IEEE Power System Relaying Committee. <span class="ref-src">IEEE Standard for synchrophasor measurements for power systems (C37.118.1) — measurement requirements and total vector error</span>. IEEE; 2011.</li>
+    <li id="ref25">ScienceDirect Topics. <span class="ref-src">Phasor data concentrator — an overview</span>. Elsevier; 2013. Available from: <a href="https://www.sciencedirect.com/topics/computer-science/phasor-data-concentrator">sciencedirect.com</a></li>
+    <li id="ref26">Grid Protection Alliance. <span class="ref-src">openPDC: open-source phasor data concentrator</span>. GitHub; 2024. Available from: <a href="https://github.com/GridProtectionAlliance/openPDC">github.com/GridProtectionAlliance/openPDC</a></li>
+    <li id="ref27">IEEE Power System Relaying Committee. <span class="ref-src">Phasor data concentrator guide — IEEE C37.244-2013</span> (Hands-On Relay School). 2018. Available from: <a href="https://www.relayschool.com/">relayschool.com</a></li>
+    <li id="ref28">U.S. Patent No. 9,684,700. <span class="ref-src">Systems for synchrophasor data management</span>. USPTO; 2017. Available from: <a href="https://patents.google.com/patent/US9684700B2">patents.google.com</a></li>
+    <li id="ref29">North American SynchroPhasor Initiative. <span class="ref-src">NASPInet 2.0 architecture guidance</span>. NASPI; 2018. Available from: <a href="https://www.naspi.org/">naspi.org</a></li>
+    <li id="ref30">Hitachi Energy. <span class="ref-src">Network Manager — Wide Area Monitoring System (WAMS)</span>. Hitachi Energy; 2024. Available from: <a href="https://www.hitachienergy.com/">hitachienergy.com</a></li>
+    <li id="ref31">ScienceDirect Topics. <span class="ref-src">Wide-area measurement system — an overview</span>. Elsevier; 2020. Available from: <a href="https://www.sciencedirect.com/topics/engineering/wide-area-measurement-system">sciencedirect.com</a></li>
+    <li id="ref32">GE Grid Solutions. <span class="ref-src">Multilin P30 phasor data concentrator</span>. GE; 2018. Available from: <a href="https://www.gegridsolutions.com/">gegridsolutions.com</a></li>
+    <li id="ref33"><span class="ref-src">Situational awareness in the Indian power grid using synchrophasor data</span>. arXiv:2408.15249; 2024. Available from: <a href="https://arxiv.org/abs/2408.15249">arxiv.org/abs/2408.15249</a></li>
+    <li id="ref34">Renewable and Sustainable Energy Reviews. <span class="ref-src">Wide-area monitoring systems for the modern power grid: a review</span>. Elsevier; 2021. Available from: <a href="https://www.sciencedirect.com/">sciencedirect.com</a></li>
+    <li id="ref35">Renewable and Sustainable Energy Reviews. <span class="ref-src">Inertia estimation for power grids: a review</span>. Elsevier; 2025. Available from: <a href="https://www.sciencedirect.com/">sciencedirect.com</a></li>
+    <li id="ref36"><span class="ref-src">Dynamic estimation of power-system inertia using synchrophasor measurements</span>. arXiv:2006.11520; 2020. Available from: <a href="https://arxiv.org/abs/2006.11520">arxiv.org/abs/2006.11520</a></li>
+    <li id="ref37"><span class="ref-src">Inertia-aware unit commitment for low-inertia power systems</span>. arXiv:2412.10820; 2024. Available from: <a href="https://arxiv.org/abs/2412.10820">arxiv.org/abs/2412.10820</a></li>
+    <li id="ref38">Wikipedia. <span class="ref-src">Synchronverter (virtual synchronous machine)</span>. Wikimedia Foundation; 2026. Available from: <a href="https://en.wikipedia.org/wiki/Synchronverter">en.wikipedia.org/wiki/Synchronverter</a></li>
+    <li id="ref39">U.S. Patent No. 6,252,753. <span class="ref-src">Energy service stabilizer — damping of inter-area power oscillations</span>. USPTO; 2001. Available from: <a href="https://patents.google.com/patent/US6252753B1">patents.google.com</a></li>
+    <li id="ref40">North American Electric Reliability Corporation. <span class="ref-src">Lesson learned: interconnection oscillation disturbances</span>. Atlanta (GA): NERC; 2021. Available from: <a href="https://www.nerc.com/">nerc.com</a></li>
+    <li id="ref41">Energies (MDPI). <span class="ref-src">Forced-oscillation grid vulnerability and the role of resonance with natural modes</span>. MDPI; 2022;15(8):2819. Available from: <a href="https://www.mdpi.com/1996-1073/15/8/2819">mdpi.com</a></li>
+    <li id="ref42">NERC / ERCOT. <span class="ref-src">Interconnection oscillation analysis — survey of historical oscillation events</span>. Atlanta (GA): NERC; 2021. Available from: <a href="https://www.nerc.com/">nerc.com</a></li>
+    <li id="ref43">GE Vernova. <span class="ref-src">GridOS wide-area monitoring system — oscillation source location and situational awareness</span>. GE Vernova; 2024. Available from: <a href="https://www.gevernova.com/">gevernova.com</a></li>
+    <li id="ref44">Schweitzer Engineering Laboratories. <span class="ref-src">Synchrophasors and wide-area measurement, protection, and control applications</span>. SEL; 2023. Available from: <a href="https://selinc.com/">selinc.com</a></li>
+    <li id="ref45">IEEE Power &amp; Energy Society. <span class="ref-src">Use of synchronized phasor measurements for model validation</span>. IEEE; 2010. Available from: <a href="https://ieeexplore.ieee.org/">ieeexplore.ieee.org</a></li>
+    <li id="ref46">North American Electric Reliability Corporation. <span class="ref-src">Eastern Interconnection oscillation disturbance — January 11, 2019 forced oscillation event</span>. Atlanta (GA): NERC; 2019. Available from: <a href="https://www.nerc.com/">nerc.com</a></li>
+    <li id="ref47"><span class="ref-src">Locating the source of forced oscillations in power systems using synchrophasor data</span>. arXiv:2211.16064; 2022. Available from: <a href="https://arxiv.org/abs/2211.16064">arxiv.org/abs/2211.16064</a></li>
+    <li id="ref48">Wikipedia. <span class="ref-src">2025 Iberian Peninsula blackout</span>. Wikimedia Foundation; 2026. Available from: <a href="https://en.wikipedia.org/wiki/2025_Iberian_Peninsula_blackout">en.wikipedia.org</a></li>
+    <li id="ref49">Breakthrough Institute. <span class="ref-src">What caused the Iberian blackout of April 2025?</span> Berkeley (CA): Breakthrough Institute; 2025. Available from: <a href="https://thebreakthrough.org/">thebreakthrough.org</a></li>
+    <li id="ref50">ENTSO-E. <span class="ref-src">Final report — 28 April 2025 Iberian Peninsula blackout (expert panel investigation)</span>. Brussels: ENTSO-E; 2026. Available from: <a href="https://www.entsoe.eu/">entsoe.eu</a></li>
+  </ol>
+</div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span><b>Phasor Measurement Units</b> — deployment, data quality, and real-time grid dynamics. Technical briefing.</span>
+    <span>Vancouver references · figures rendered as inline SVG · IEEE C37.118 / IEC&nbsp;60255-118-1</span>
+  </div>
+</footer>
+
+</body>
+</html>
