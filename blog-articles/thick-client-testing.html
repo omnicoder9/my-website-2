@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thick Client &amp; Desktop Application Penetration Testing — Reverse Engineering, Protocol Analysis, Privilege Escalation &amp; Binary Exploitation</title>
+<meta name="description" content="An expert field guide to assessing installed desktop software: reverse engineering with Ghidra, IDA Pro and x64dbg, protocol analysis, local privilege escalation, license-protection review and binary exploitation — with standards, certifications, labs and references.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   THICK CLIENT TESTING — "The Disassembly Listing"
+   Palette duality: AMBER (opaque machine) <-> TEAL (recovered meaning)
+   Type: IBM Plex superfamily (engineering provenance)
+   ============================================================ */
+
+:root{
+  --ink:#0E1116;          /* deep ink-blue background */
+  --ink-2:#11151D;        /* page band */
+  --panel:#161B24;        /* lifted panel */
+  --inset:#1B2230;        /* card / code inset */
+  --inset-2:#212B3B;      /* nested inset */
+  --line:#29333F;         /* steel divider (deliberate, not hairline) */
+  --line-soft:#1F2733;
+
+  --text:#E6E3DA;         /* warm off-white, primary read color */
+  --text-2:#A2ACB9;       /* cool steel secondary */
+  --text-mute:#65717F;    /* captions / addresses */
+
+  --amber:#E0A458;        /* raw machine / hex / opcodes / warning */
+  --amber-dim:#9C7740;
+  --amber-glow:rgba(224,164,88,.14);
+  --teal:#4FD6B8;         /* recovered meaning / pseudocode / safe */
+  --teal-dim:#358E7B;
+  --teal-glow:rgba(79,214,184,.12);
+  --steel:#6E97C9;        /* tertiary structural blue */
+  --steel-dim:#3C5572;
+
+  --maxw:1180px;
+  --readw:720px;
+  --gutter:168px;
+
+  --f-display:"IBM Plex Sans",system-ui,sans-serif;
+  --f-body:"IBM Plex Serif",Georgia,serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;}
+body{
+  margin:0;
+  background:var(--ink);
+  color:var(--text);
+  font-family:var(--f-body);
+  font-size:19px;
+  line-height:1.78;
+  font-weight:400;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+
+/* subtle circuit grid texture — kept very low */
+body::before{
+  content:"";
+  position:fixed;inset:0;
+  background-image:
+    linear-gradient(var(--line-soft) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+  background-size:44px 44px;
+  opacity:.10;
+  pointer-events:none;
+  z-index:0;
+}
+/* faint scan drift */
+body::after{
+  content:"";
+  position:fixed;left:0;right:0;top:0;height:200%;
+  background:repeating-linear-gradient(0deg,transparent 0,transparent 3px,rgba(255,255,255,.012) 3px,rgba(255,255,255,.012) 4px);
+  pointer-events:none;z-index:1;
+  animation:scan 28s linear infinite;
+}
+@keyframes scan{0%{transform:translateY(0);}100%{transform:translateY(-50%);}}
+
+a{color:var(--teal);text-decoration:none;border-bottom:1px solid var(--teal-dim);}
+a:hover{color:#7ee7cf;border-bottom-color:var(--teal);}
+
+/* ---------- layout shell ---------- */
+.wrap{position:relative;z-index:2;max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+
+/* ---------- top status bar ---------- */
+.statusbar{
+  position:relative;z-index:3;
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(20,25,34,.86),rgba(14,17,22,.6));
+  backdrop-filter:blur(4px);
+  font-family:var(--f-mono);
+  font-size:12px;letter-spacing:.04em;
+  color:var(--text-mute);
+}
+.statusbar .row{max-width:var(--maxw);margin:0 auto;padding:10px 28px;display:flex;gap:22px;flex-wrap:wrap;align-items:center;}
+.statusbar .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);display:inline-block;margin-right:7px;vertical-align:middle;}
+.statusbar .seg{color:var(--text-2);}
+.statusbar .amber{color:var(--amber);}
+.statusbar .spacer{flex:1;}
+
+/* ---------- HERO ---------- */
+.hero{position:relative;z-index:2;padding:74px 0 36px;}
+.hero .eyebrow{
+  font-family:var(--f-mono);font-size:13px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--amber);margin-bottom:26px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.hero .eyebrow .bar{height:1px;flex:1;min-width:30px;background:linear-gradient(90deg,var(--amber-dim),transparent);}
+
+.hero h1{
+  font-family:var(--f-display);font-weight:700;
+  font-size:clamp(2.1rem,5.4vw,4.05rem);
+  line-height:1.02;letter-spacing:-.02em;margin:0 0 22px;color:#F4F2EC;
+}
+.hero h1 .recovered{color:var(--teal);}
+.hero .dek{
+  font-family:var(--f-body);font-size:clamp(1.08rem,2vw,1.4rem);
+  line-height:1.6;color:var(--text-2);max-width:48ch;font-style:italic;margin:0 0 40px;
+}
+
+/* decompile split panel — the thesis */
+.decompile{
+  display:grid;grid-template-columns:1fr 54px 1fr;gap:0;align-items:stretch;
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;
+  background:var(--panel);box-shadow:0 30px 80px -40px rgba(0,0,0,.8);
+  margin-bottom:14px;
+}
+.decompile .pane{padding:22px 22px 26px;min-width:0;}
+.decompile .pane.raw{background:linear-gradient(180deg,rgba(224,164,88,.05),transparent 70%);border-right:1px solid var(--line-soft);}
+.decompile .pane.meaning{background:linear-gradient(180deg,rgba(79,214,184,.05),transparent 70%);border-left:1px solid var(--line-soft);}
+.decompile .ptitle{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px;}
+.decompile .raw .ptitle{color:var(--amber);}
+.decompile .meaning .ptitle{color:var(--teal);}
+.decompile pre{margin:0;font-family:var(--f-mono);font-size:12.5px;line-height:1.72;white-space:pre;overflow-x:auto;}
+.decompile .raw pre{color:#C9A66B;}
+.hx{color:#C9A66B;}      /* hex bytes */
+.op{color:#E0A458;}      /* opcode mnemonics */
+.ad{color:#5E6B7A;}      /* addresses */
+.kw{color:#6E97C9;}      /* keywords */
+.fn{color:#4FD6B8;}      /* function/identifier */
+.cm{color:#566273;font-style:italic;} /* comment */
+.st{color:#C9A66B;}      /* string/literal */
+.decompile .arrow{
+  display:flex;align-items:center;justify-content:center;
+  background:var(--inset);color:var(--text-mute);font-family:var(--f-mono);font-size:20px;
+  border-left:1px solid var(--line-soft);border-right:1px solid var(--line-soft);
+}
+.decompile .arrow span{transform:translateY(-1px);}
+.herocap{font-family:var(--f-mono);font-size:11.5px;color:var(--text-mute);letter-spacing:.03em;text-align:center;margin-top:4px;}
+
+/* ---------- meta line under hero ---------- */
+.runmeta{
+  display:flex;gap:26px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12.5px;color:var(--text-mute);
+  border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);
+  padding:16px 0;margin:46px 0 0;letter-spacing:.03em;
+}
+.runmeta b{color:var(--text-2);font-weight:500;}
+
+/* ---------- section architecture (the listing gutter) ---------- */
+.section{position:relative;padding:62px 0 8px;}
+.section-grid{display:grid;grid-template-columns:var(--gutter) 1fr;gap:34px;align-items:start;}
+.gutter{position:sticky;top:24px;align-self:start;}
+.gutter .addr{
+  font-family:var(--f-mono);font-size:12px;color:var(--amber);letter-spacing:.02em;
+  display:block;margin-bottom:10px;
+}
+.gutter .glabel{
+  font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--text-mute);line-height:1.7;border-left:2px solid var(--line);padding-left:12px;display:block;
+}
+.gutter .tick{font-family:var(--f-mono);font-size:10.5px;color:var(--steel-dim);margin-top:14px;display:block;}
+
+.col h2{
+  font-family:var(--f-display);font-weight:700;font-size:clamp(1.55rem,3.3vw,2.3rem);
+  line-height:1.1;letter-spacing:-.015em;color:#F4F2EC;margin:0 0 8px;
+}
+.col h2 .num{color:var(--amber);font-weight:600;font-size:.62em;font-family:var(--f-mono);letter-spacing:0;margin-right:.5em;vertical-align:middle;}
+.col h3{
+  font-family:var(--f-display);font-weight:600;font-size:1.28rem;color:#EDEBE3;
+  margin:38px 0 6px;letter-spacing:-.01em;
+}
+.col h4{
+  font-family:var(--f-mono);font-weight:600;font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--teal);margin:30px 0 4px;
+}
+.col p{margin:16px 0;max-width:var(--readw);}
+.lede{font-size:1.16rem;color:var(--text);line-height:1.7;}
+.lede strong{color:#fff;font-weight:600;}
+.col ul,.col ol{max-width:var(--readw);padding-left:0;margin:18px 0;list-style:none;}
+.col li{position:relative;padding-left:30px;margin:11px 0;}
+.col ul li::before{content:"▸";position:absolute;left:6px;top:0;color:var(--amber);font-size:.9em;}
+.col ol{counter-reset:li;}
+.col ol li{counter-increment:li;}
+.col ol li::before{content:counter(li,decimal-leading-zero);position:absolute;left:0;top:1px;color:var(--teal);font-family:var(--f-mono);font-size:.74em;font-weight:600;}
+.col li strong{color:#EFEDE6;font-weight:600;}
+
+strong{color:#EFEDE6;}
+em{color:var(--text);}
+.mono{font-family:var(--f-mono);font-size:.86em;background:var(--inset);color:var(--amber);padding:.08em .42em;border-radius:4px;border:1px solid var(--line-soft);}
+.tealword{color:var(--teal);}
+.amberword{color:var(--amber);}
+
+/* citation superscripts */
+sup.cite{font-family:var(--f-mono);font-size:.62em;line-height:0;vertical-align:super;}
+sup.cite a{color:var(--steel);border-bottom:none;padding:0 1px;font-weight:500;}
+sup.cite a:hover{color:#9ec0ea;}
+
+/* ---------- callouts: machine (amber) vs meaning (teal) ---------- */
+.callout{
+  max-width:var(--readw);margin:30px 0;border-radius:9px;padding:20px 22px 20px 24px;
+  background:var(--panel);border:1px solid var(--line);position:relative;font-size:.96rem;line-height:1.68;
+}
+.callout::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:9px 0 0 9px;}
+.callout .ctag{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;display:block;margin-bottom:8px;}
+.callout p{margin:8px 0;max-width:none;}
+.callout.machine::before{background:var(--amber);}
+.callout.machine .ctag{color:var(--amber);}
+.callout.meaning::before{background:var(--teal);}
+.callout.meaning .ctag{color:var(--teal);}
+.callout.legal::before{background:var(--steel);}
+.callout.legal .ctag{color:var(--steel);}
+
+/* ---------- code / listing block ---------- */
+.listing{
+  max-width:var(--readw);margin:26px 0;background:#0B0E13;border:1px solid var(--line);
+  border-radius:9px;overflow:hidden;
+}
+.listing .lhead{
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--text-mute);
+  padding:9px 16px;border-bottom:1px solid var(--line-soft);background:var(--inset);display:flex;gap:10px;align-items:center;
+}
+.listing .lhead .ld{width:9px;height:9px;border-radius:50%;background:var(--amber);opacity:.6;}
+.listing pre{margin:0;padding:16px;font-family:var(--f-mono);font-size:12.5px;line-height:1.7;color:#C8CED8;white-space:pre;overflow-x:auto;}
+
+/* ---------- tables ---------- */
+.tablewrap{max-width:var(--readw);overflow-x:auto;margin:28px 0;border:1px solid var(--line);border-radius:9px;}
+table{border-collapse:collapse;width:100%;font-size:.88rem;min-width:560px;}
+caption{caption-side:top;text-align:left;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-mute);padding:0 0 10px;}
+th,td{text-align:left;padding:12px 15px;border-bottom:1px solid var(--line-soft);vertical-align:top;line-height:1.5;}
+thead th{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--teal);background:var(--inset);border-bottom:1px solid var(--line);font-weight:600;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:rgba(110,151,201,.05);}
+td .mono,th .mono{font-size:.82em;}
+.dacode{font-family:var(--f-mono);color:var(--amber);font-size:.86em;font-weight:600;white-space:nowrap;}
+
+/* ---------- pull divider ---------- */
+.divline{max-width:var(--readw);height:1px;background:linear-gradient(90deg,var(--line),transparent);margin:40px 0;}
+
+/* ---------- references ---------- */
+.refs{position:relative;z-index:2;background:var(--ink-2);border-top:1px solid var(--line);margin-top:70px;padding:56px 0 40px;}
+.refs h2{font-family:var(--f-display);font-weight:700;font-size:1.7rem;color:#F4F2EC;margin:0 0 6px;}
+.refs .sub{font-family:var(--f-mono);font-size:12px;color:var(--text-mute);letter-spacing:.04em;margin-bottom:30px;}
+ol.reflist{list-style:none;counter-reset:ref;padding:0;margin:0;max-width:920px;column-gap:46px;}
+ol.reflist li{counter-increment:ref;position:relative;padding:11px 0 11px 52px;border-bottom:1px solid var(--line-soft);font-size:.84rem;line-height:1.55;color:var(--text-2);font-family:var(--f-body);break-inside:avoid;}
+ol.reflist li::before{content:"["counter(ref)"]";position:absolute;left:0;top:11px;font-family:var(--f-mono);font-size:.78rem;color:var(--amber);font-weight:600;}
+ol.reflist li .src{color:var(--text);font-weight:500;}
+ol.reflist li .pub{color:var(--text-mute);font-style:italic;}
+ol.reflist li a{color:var(--steel);border-bottom:none;word-break:break-word;font-family:var(--f-mono);font-size:.92em;}
+ol.reflist li a:hover{color:#9ec0ea;text-decoration:underline;}
+
+/* ---------- footer ---------- */
+.foot{position:relative;z-index:2;background:var(--ink);border-top:1px solid var(--line);padding:34px 0 60px;font-family:var(--f-mono);font-size:11.5px;color:var(--text-mute);letter-spacing:.03em;line-height:1.8;}
+.foot .wrap{display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:flex-start;}
+.foot .amber{color:var(--amber);}
+.foot .teal{color:var(--teal);}
+
+/* ---------- responsive ---------- */
+@media (max-width:880px){
+  body{font-size:18px;}
+  .section-grid{grid-template-columns:1fr;gap:0;}
+  .gutter{position:relative;top:0;display:flex;gap:16px;align-items:baseline;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap;}
+  .gutter .addr{margin-bottom:0;}
+  .gutter .glabel{border-left:none;padding-left:0;}
+  .gutter .tick{margin-top:0;}
+  .decompile{grid-template-columns:1fr;}
+  .decompile .arrow{flex-direction:row;height:40px;border-left:none;border-right:none;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);}
+  .decompile .arrow span{transform:rotate(90deg);}
+  .decompile .pane.meaning{border-left:none;}
+  .runmeta{gap:16px;}
+  ol.reflist{column-count:1;}
+}
+@media (max-width:520px){
+  .wrap,.statusbar .row{padding-left:18px;padding-right:18px;}
+  .hero{padding-top:48px;}
+  .decompile pre{font-size:11px;}
+}
+@media (min-width:1100px){
+  ol.reflist{column-count:2;}
+}
+
+@media (prefers-reduced-motion:reduce){
+  body::after{animation:none;}
+  html{scroll-behavior:auto;}
+}
+
+::selection{background:var(--teal-dim);color:#06120F;}
+</style>
+</head>
+<body>
+
+<!-- ===================== STATUS BAR ===================== -->
+<div class="statusbar">
+  <div class="row">
+    <span><span class="dot"></span>TARGET: <span class="seg">installed_desktop_app.exe</span></span>
+    <span class="amber">ARCH: x86 / x64 native + managed</span>
+    <span class="seg">MODE: authorized assessment</span>
+    <span class="spacer"></span>
+    <span>FIELD GUIDE — REV 2026.06</span>
+  </div>
+</div>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span>0x00 &nbsp;//&nbsp; entry_point</span><span class="bar"></span><span>fat client · rich client · native binary</span></div>
+    <h1>Thick Client Testing:<br>turning opaque binaries<br>into <span class="recovered">recovered meaning</span>.</h1>
+    <p class="dek">There is no web application firewall between an attacker and a program that runs on their own machine. The disassembler, the debugger and the decompiler are the assessment.</p>
+
+    <div class="decompile" role="img" aria-label="A split view showing raw machine code on the left being transformed into readable decompiled pseudocode on the right.">
+      <div class="pane raw">
+        <span class="ptitle">$ raw bytes — what ships</span>
+<pre><span class="ad">004015A0</span>  <span class="hx">55</span>              <span class="op">push</span>    <span class="kw">ebp</span>
+<span class="ad">004015A1</span>  <span class="hx">8B EC</span>           <span class="op">mov</span>     <span class="kw">ebp,esp</span>
+<span class="ad">004015A3</span>  <span class="hx">8B 45 08</span>        <span class="op">mov</span>     <span class="kw">eax,[ebp+8]</span>
+<span class="ad">004015A6</span>  <span class="hx">3D 7B 00 00 00</span>  <span class="op">cmp</span>     <span class="kw">eax,7Bh</span>
+<span class="ad">004015AB</span>  <span class="hx">75 07</span>           <span class="op">jnz</span>     <span class="ad">short loc_4015B4</span>
+<span class="ad">004015AD</span>  <span class="hx">B8 01 00 00 00</span>  <span class="op">mov</span>     <span class="kw">eax,1</span>
+<span class="ad">004015B2</span>  <span class="hx">EB 02</span>           <span class="op">jmp</span>     <span class="ad">short loc_4015B6</span>
+<span class="ad">004015B4</span>  <span class="hx">33 C0</span>           <span class="op">xor</span>     <span class="kw">eax,eax</span></pre>
+      </div>
+      <div class="arrow" aria-hidden="true"><span>→</span></div>
+      <div class="pane meaning">
+        <span class="ptitle">decompiled — what it means</span>
+<pre><span class="cm">// license check, evaluated</span>
+<span class="cm">// entirely on the client</span>
+<span class="kw">bool</span> <span class="fn">IsLicenseValid</span>(<span class="kw">int</span> key){
+    <span class="kw">if</span> (key == <span class="st">0x7B</span>) <span class="cm">// 123</span>
+        <span class="kw">return</span> <span class="st">true</span>;
+    <span class="kw">return</span> <span class="st">false</span>;
+}
+<span class="cm">// trust placed in the</span>
+<span class="cm">// attacker's own machine</span>
+<span class="cm">// is trust misplaced.</span></pre>
+      </div>
+    </div>
+    <p class="herocap">FIG 0 — The discipline in one frame: every secret a desktop binary holds can be read, and every check it makes locally can be rewritten.</p>
+
+    <div class="runmeta">
+      <span><b>SCOPE</b> &nbsp;reverse engineering · protocol analysis · LPE · license/anti-tamper review · binary exploitation</span>
+      <span><b>TOOLING</b> &nbsp;Ghidra · IDA Pro · x64dbg</span>
+      <span><b>READ</b> &nbsp;~40 min</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ 0x00 ORIENTATION ============ -->
+<section class="section">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00401000</span>
+    <span class="glabel">Orientation<br>What a thick client is</span>
+    <span class="tick">// no WAF here</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x00</span>The program is the perimeter</h2>
+    <p class="lede">A <strong>thick client</strong> — also called a fat client, rich client, or simply a desktop application — is software installed on and executed by the user's own machine, interacting with local resources, the operating system, and frequently a remote backend. Unlike a thin client, it retains substantial functionality whether or not it is connected to a network.<sup class="cite"><a href="#r1">1</a></sup> Banking platforms, trading terminals, healthcare systems, industrial engineering suites, and enterprise line-of-business tools are overwhelmingly thick clients, and they routinely handle an organisation's most sensitive data and most critical operations.<sup class="cite"><a href="#r2">2</a></sup></p>
+
+    <p>That distinction is not academic. When you assess a web application, the attacker sits on the far side of a network boundary you can instrument, throttle, and shield with a web application firewall. A thick client inverts every assumption. The code runs on the attacker's hardware, which means an adversary can <strong>attach a debugger to the running process, dump its memory to harvest secrets, modify the binary on disk before execution, and reverse engineer the entire codebase offline</strong> — and no perimeter device will ever see it happen.<sup class="cite"><a href="#r2">2</a></sup> Applying a web-application playbook to a desktop binary misses most of the attack surface, because the surface is fundamentally different: local file storage, the registry, inter-process communication channels, native code defects, insecure update mechanisms, weak local cryptography, and the binary itself are all in play.<sup class="cite"><a href="#r2">2</a></sup></p>
+
+    <h3>Two tiers or three</h3>
+    <p>Architecture dictates attack vectors, so the first question in any engagement is how the application is layered.<sup class="cite"><a href="#r2">2</a></sup> In a <strong>two-tier design</strong>, the client communicates directly with a database server; the data tier is reachable from the endpoint, which is inherently less secure because the end user can talk straight to the database.<sup class="cite"><a href="#r3">3</a></sup> In a <strong>three-tier design</strong>, the client talks to an application server, which in turn brokers access to the database — most processing moves server-side, and the user is prevented from communicating directly with the data store, materially reducing risk.<sup class="cite"><a href="#r4">4</a></sup> A two-tier client that ships a database connection string inside its own binary is the canonical thick-client finding, and the rest of this guide will return to it repeatedly.</p>
+
+    <h3>Proxy-aware versus proxy-unaware</h3>
+    <p>The second orienting question is whether you can see the traffic. A <strong>proxy-aware</strong> thick client has built-in support for an HTTP proxy — clients such as collaboration suites, mail clients, and file-sync tools fall here, and interception with an intercepting proxy is straightforward.<sup class="cite"><a href="#r4">4</a></sup> A <strong>proxy-unaware</strong> client offers no proxy configuration of its own, and frequently speaks a non-HTTP or custom binary protocol, forcing the tester to reach for transparent redirection, traffic-capture tooling, or runtime instrumentation instead. Section 0x04 is devoted to the techniques that pry these clients open.</p>
+
+    <div class="callout meaning">
+      <span class="ctag">Mental model</span>
+      <p>Treat a thick-client engagement as four overlapping investigations that feed one another: <span class="tealword">what the binary contains</span> (reverse engineering), <span class="tealword">what it says on the wire</span> (protocol analysis), <span class="tealword">what it lets a local user become</span> (privilege escalation), and <span class="tealword">whether its own defences hold</span> (anti-tamper and memory-corruption review). Findings in one almost always unlock the next.</p>
+    </div>
+
+    <h3>A consensus methodology already exists</h3>
+    <p>You are not improvising. The community has converged on a small set of reference documents that purpose-built thick-client testing around. The <strong>OWASP Thick Client Application Security Verification Standard (TASVS)</strong> establishes an open standard for designing, building, and testing thick-client applications, explicitly filling the gap between OWASP's web-focused ASVS and its Mobile ASVS — the latter can be applied to desktop software but is not an ideal fit.<sup class="cite"><a href="#r5">5</a></sup> Complementing it, the <strong>OWASP Desktop App Security Top 10</strong> is a consensus awareness document enumerating the most critical risks to desktop applications across Windows and *nix, derived from publicly known exploits and CVEs.<sup class="cite"><a href="#r6">6</a></sup> Practitioner checklists aligned to both — covering reconnaissance through exploitation and reporting — package the workflow into eighty-plus concrete test cases.<sup class="cite"><a href="#r7">7</a></sup><sup class="cite"><a href="#r8">8</a></sup> The remainder of this article is structured along that methodology, deepened with the reverse-engineering and exploitation craft that distinguishes a real assessment from an automated scan.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x01 ATTACK SURFACE ============ -->
+<section class="section" style="background:linear-gradient(180deg,var(--ink),var(--ink-2));">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00401740</span>
+    <span class="glabel">Attack surface<br>Mapping what it touches</span>
+    <span class="tick">// enumerate every entry point</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x01</span>The surface a desktop binary exposes</h2>
+    <p class="lede">Before a single byte is decompiled, the surface is mapped. A thick client touches far more of the host than its window suggests, and each contact point is an entry point: network connections, local file storage, registry keys, inter-process communication channels, and hardware interactions all need to be documented.<sup class="cite"><a href="#r2">2</a></sup></p>
+
+    <p>The local execution model is precisely what makes this both rewarding and complex. There is no WAF between the attacker and the application logic — debuggers attach directly to running processes, memory is dumped and searched, and binaries are reverse engineered entirely offline.<sup class="cite"><a href="#r7">7</a></sup> A useful reconnaissance pass walks the application's behaviour with a tool such as Sysinternals Process Monitor and notes everything it does: which files it reads and writes, which registry keys it queries, which named pipes or sockets it opens, and what it loads at startup.<sup class="cite"><a href="#r8">8</a></sup> The reward for this patience is concrete. A classic walkthrough of a deliberately vulnerable client shows Process Monitor revealing that the application stores and retrieves user credentials directly in the registry — an immediate data-storage finding that surfaces only because the tester observed the program rather than merely running it.<sup class="cite"><a href="#r9">9</a></sup></p>
+
+    <h3>The ten failure modes worth memorising</h3>
+    <p>The OWASP Desktop App Security Top 10 gives the engagement its risk vocabulary. Map every finding to it; reviewers unfamiliar with thick-client testing may not immediately grasp why a disabled UI button or a world-writable install directory is critical, and the mapping supplies the missing context.<sup class="cite"><a href="#r7">7</a></sup></p>
+
+    <div class="tablewrap">
+      <table>
+        <caption>OWASP Desktop App Security Top 10 (2021) — the thick-client risk taxonomy</caption>
+        <thead><tr><th>ID</th><th>Risk</th><th>Representative manifestations</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dacode">DA1</span></td><td>Injections</td><td>SQL, LDAP, XML, OS command injection reaching local or backend interpreters</td></tr>
+          <tr><td><span class="dacode">DA2</span></td><td>Broken Auth &amp; Session Mgmt</td><td>OS/app account auth, auth for import/export to external drives, network shares, peripherals</td></tr>
+          <tr><td><span class="dacode">DA3</span></td><td>Sensitive Data Exposure</td><td>Data left in memory after logout, secrets in logs, hardcoded secrets in files</td></tr>
+          <tr><td><span class="dacode">DA4</span></td><td>Improper Cryptography</td><td>Weak keys, outdated algorithms, reused parameters across installs, misused integrity checks</td></tr>
+          <tr><td><span class="dacode">DA5</span></td><td>Improper Authorization</td><td>Weak file/folder permissions per role, missing least-privilege, broken role enforcement</td></tr>
+          <tr><td><span class="dacode">DA6</span></td><td>Security Misconfiguration</td><td>Weak OS hardening, loose registry/firewall rules, misconfigured named pipes and services</td></tr>
+          <tr><td><span class="dacode">DA7</span></td><td>Insecure Communication</td><td>Weak TLS/DTLS suites, unencrypted DB queries in transit, cleartext custom protocols</td></tr>
+          <tr><td><span class="dacode">DA8</span></td><td>Poor Code Quality</td><td>Missing code signing, no obfuscation, DLL preloading/injection, race conditions, memory corruption</td></tr>
+          <tr><td><span class="dacode">DA9</span></td><td>Vulnerable Components</td><td>Outdated software, obsolete OS or third-party services bundled with the client</td></tr>
+          <tr><td><span class="dacode">DA10</span></td><td>Insufficient Logging</td><td>Missing or improper activity logging, no monitoring to detect abuse</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-family:var(--f-mono);font-size:.78rem;color:var(--text-mute);max-width:var(--readw);">Source: OWASP Desktop App Security Top 10 (2021), built around Windows and *nix using commonly available CVEs, exploits and write-ups.<sup class="cite"><a href="#r6">6</a></sup></p>
+
+    <h3>Where the secrets actually hide</h3>
+    <p>Across real assessments the same locations yield repeatedly. Configuration files frequently hold cleartext credentials or, worse, "encrypted" values protected by trivially recoverable schemes; database connection strings live in config or are reconstructed in memory; cryptographic and licensing keys sit in the binary itself; and insecure local storage leaks across the board.<sup class="cite"><a href="#r2">2</a></sup> The remediation direction is settled: hardcoding credentials, API keys, or encryption keys into application binaries exposes a major attack surface that attackers extract through reverse engineering or memory dumping, so secrets belong in OS-provided secure storage — DPAPI on Windows, Keychain on macOS — rather than in the application's own files.<sup class="cite"><a href="#r10">10</a></sup> A purpose-built vulnerable target, the Damn Vulnerable Thick Client Application, was deliberately seeded with the exact catalogue a tester should expect to find: insecure local data storage, insecure logging, weak cryptography, lack of code obfuscation, exposed decryption logic, SQL injection, CSV injection, sensitive data in memory, DLL hijacking, cleartext data in transit, and client-side protection bypasses achieved through reverse engineering.<sup class="cite"><a href="#r11">11</a></sup> Each of those is a section heading in the work that follows.</p>
+
+    <div class="callout machine">
+      <span class="ctag">Field note — the disabled button</span>
+      <p>A control greyed out in the UI is not a security boundary. Thick-client GUIs routinely hide privileged functionality behind disabled or invisible form objects, and re-enabling them — or invoking the underlying handler directly — is a standard early test.<sup class="cite"><a href="#r8">8</a></sup> If the only thing standing between a user and an administrative function is <span class="mono">button.Enabled = false</span>, that function is already reachable.</p>
+    </div>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x02 RECON ============ -->
+<section class="section">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00402310</span>
+    <span class="glabel">Reconnaissance<br>Fingerprinting the binary</span>
+    <span class="tick">// know the runtime first</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x02</span>Information gathering &amp; binary triage</h2>
+    <p class="lede">Everything downstream depends on correctly identifying what you are holding. The very first task is to determine the runtime: is this native machine code, a .NET assembly, a Java application, an Electron bundle, or something packed? The answer decides whether you reach for a decompiler that recovers near-source, or a disassembler that gives you assembly.</p>
+
+    <p>The triage toolkit is small and stable. A PE-inspection utility — <strong>CFF Explorer</strong>, <strong>PE-bear</strong>, or <strong>Detect It Easy (DIE)</strong> — reveals file type, headers, imports, the compiler or packer signature, and the assembly type; <strong>Strings</strong> dumps embedded ASCII and Unicode literals; and the <strong>Sysinternals Suite</strong> (Process Monitor, Process Explorer) reveals runtime behaviour.<sup class="cite"><a href="#r8">8</a></sup> Walking a real target, an analyst opens the executable in CFF Explorer, reads off that the assembly type is a .NET assembly, and on that basis switches to a managed-code decompiler — the single decision that determines the entire static-analysis path.<sup class="cite"><a href="#r9">9</a></sup></p>
+
+    <h3>The information-gathering checklist</h3>
+    <ol>
+      <li><strong>Architecture.</strong> Two-tier or three-tier? The presence of a direct database connection changes the threat model entirely.<sup class="cite"><a href="#r8">8</a></sup></li>
+      <li><strong>Technology stack.</strong> Languages and frameworks in use — native C/C++, .NET, Java, Delphi, or a web stack wrapped in Electron.<sup class="cite"><a href="#r8">8</a></sup></li>
+      <li><strong>Network communication.</strong> Identify every endpoint the client contacts; a quick capture in Wireshark on the relevant interface reveals the remote hosts and whether traffic is plaintext.<sup class="cite"><a href="#r9">9</a></sup></li>
+      <li><strong>Process and filesystem activity.</strong> Run Process Monitor with a filter on the target and catalogue the files, registry keys, and pipes it touches — this is where credential-in-registry and config-file findings first appear.<sup class="cite"><a href="#r9">9</a></sup></li>
+      <li><strong>Entry points and trust boundaries.</strong> Every input, every IPC channel, every place the app reads data it did not generate.<sup class="cite"><a href="#r8">8</a></sup></li>
+      <li><strong>Authentication model.</strong> Local credentials, domain authentication, smart cards, biometrics; online and offline behaviour.<sup class="cite"><a href="#r8">8</a></sup></li>
+    </ol>
+
+    <p>Two configuration artefacts deserve special scrutiny because they are where the cheapest wins live. The application's own folder frequently contains a <span class="mono">.config</span> file or equivalent holding connection parameters, and running the program once while Process Monitor watches reveals exactly which keys and files it reaches for.<sup class="cite"><a href="#r9">9</a></sup> When a secret is not on disk in cleartext, it is often recoverable from process memory: a tool such as Process Hacker can be filtered to extract the live memory of the target, and in documented assessments that memory yields a cleartext database connection string that a tester then uses directly against the backend with an ordinary SQL client.<sup class="cite"><a href="#r3">3</a></sup></p>
+
+    <div class="callout meaning">
+      <span class="ctag">Triage decision tree</span>
+      <p><span class="tealword">Managed (.NET / Java)</span> → decompiles to near-original source; reach for a managed decompiler and read it like code. <span class="tealword">Native (C/C++/Delphi)</span> → disassemble and decompile to pseudo-C; expect to annotate. <span class="amberword">Packed / obfuscated</span> → identify the protector first (Section 0x06), because nothing readable appears until the outer layer is peeled.</p>
+    </div>
+
+    <h3>Where the secrets actually live</h3>
+    <p>Part of triage is knowing where a thick client is likely to have hidden the things worth finding, because the storage locations are predictable across the platform. Configuration files sitting beside the executable — XML, INI, JSON, or a bundled local database — are the first stop, and they routinely hold connection strings, endpoints, and credentials in plaintext or trivially-reversible encoding.<sup class="cite"><a href="#r4">4</a></sup> Beyond the file system, the Windows registry under the user and machine hives is a common store for application settings and secrets, and the methodology treats registry inspection as a standard reconnaissance step rather than an afterthought.<sup class="cite"><a href="#r3">3</a></sup> The more interesting cases involve platform secret stores: secrets protected with the Windows Data Protection API (DPAPI) — and on macOS, items held in the Keychain — are encrypted, but because the protection is tied to the user's own context, an attacker operating as that user can frequently decrypt them, which is exactly why a "DPAPI-protected" secret is not the end of the analysis but the start of it.<sup class="cite"><a href="#r10">10</a></sup> Finally, the process's own memory is a store in its own right: whatever the client decrypts to use, it must hold in cleartext at some point, so a memory capture taken while the application is unlocked often yields the very secret the on-disk encryption was meant to protect.<sup class="cite"><a href="#r3">3</a></sup> An assessor enumerates all four tiers — files, registry, platform key stores, and live memory — before concluding that a secret is safely handled.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x03 REVERSE ENGINEERING ============ -->
+<section class="section" style="background:linear-gradient(180deg,var(--ink),var(--ink-2));">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00403C80</span>
+    <span class="glabel">Reverse engineering<br>Static &amp; dynamic analysis</span>
+    <span class="tick">// asm → meaning</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x03</span>Reverse engineering the client</h2>
+    <p class="lede">Reverse engineering is the deconstruction of a program to understand its inner workings, algorithms, and data structures.<sup class="cite"><a href="#r1">1</a></sup> Because a thick client uses compiled binaries that hide logic and secrets, the assessor applies decompilation to analyse code paths, inspect DLLs, and uncover hardcoded credentials or weak encryption — and the same work reveals how the client talks to its backend.<sup class="cite"><a href="#r2">2</a></sup></p>
+
+    <h3>Two axes: static vs dynamic, disassembly vs decompilation</h3>
+    <p>The discipline splits along two axes. <strong>Static analysis</strong> examines the program without running it; <strong>dynamic analysis</strong> observes it live, attaching a debugger to watch registers, memory, and control flow as the program executes. Independently, a <strong>disassembler</strong> converts raw machine code into assembly language, while a <strong>decompiler</strong> lifts that assembly into high-level, C-like pseudocode — and the latter is what makes modern reverse engineering tractable, because it spares the analyst from reading raw assembly line by line.<sup class="cite"><a href="#r1">1</a></sup> Real work braids all four together: you decompile statically to form a hypothesis, then confirm it dynamically in a debugger.</p>
+
+    <h3>Managed code: the gift of near-source recovery</h3>
+    <p>When the binary is a .NET assembly or Java application, the assessor is fortunate. The compilers for these platforms emit intermediate representations — .NET CIL, Java bytecode — that decompile back to something very close to the original source. A .NET decompiler such as <strong>dnSpy</strong> or <strong>.NET Reflector</strong>, or <strong>JD-GUI</strong> for Java, often renders the program in fully readable form.<sup class="cite"><a href="#r2">2</a></sup> A documented assessment of a managed thick client opens the executable in dnSpy and finds the decompiled output unobfuscated, exposing FTP credentials hardcoded directly in a button-click handler and the decryption logic for a "protected" database password sitting in a bundled DLL — every secret legible without a single instruction of assembly.<sup class="cite"><a href="#r11">11</a></sup></p>
+
+    <h3>Native code: Ghidra and IDA Pro</h3>
+    <p>When the binary is native C, C++, or Delphi, the two dominant platforms are Ghidra and IDA Pro, and a serious practitioner is fluent in both. <strong>Ghidra</strong> is the software reverse-engineering framework released publicly by the United States National Security Agency at the RSA Conference in 2019 under the Apache 2.0 licence; its capabilities include disassembly, assembly, decompilation, graphing, and scripting, across a wide range of processor instruction sets and executable formats.<sup class="cite"><a href="#r12">12</a></sup> It is written in Java with a Swing GUI, its decompiler component is implemented in C++, and analysts automate it with scripts written in Java or Python via Jython.<sup class="cite"><a href="#r13">13</a></sup> Its decisive feature for our purposes is a decompiler that turns unfamiliar assembly into annotatable pseudo-C; with version 11.3 in 2025 Ghidra added an integrated debugger that connects to GDB, LLDB, and WinDbg, putting static and dynamic analysis in a single view and cutting context-switching.<sup class="cite"><a href="#r14">14</a></sup></p>
+
+    <p><strong>IDA Pro</strong>, from Hex-Rays, is the long-standing commercial standard, an interactive multi-processor disassembler and static-analysis platform whose Hex-Rays decompiler transforms machine code into readable C-like pseudocode generated on the fly in seconds, freeing the analyst from learning assembly for routine work.<sup class="cite"><a href="#r15">15</a></sup> IDA supports more than sixty processor architectures by default and offers specialised decompilers across a dozen hardware platforms, with variable names and types editable on the fly and changes propagating between the disassembly and pseudocode views.<sup class="cite"><a href="#r16">16</a></sup> Founded in 2005 by Ilfak Guilfanov, Hex-Rays equips IDA with technologies that matter directly to thick-client work: FLIRT (Fast Library Identification and Recognition Technology) recognises statically linked library functions so you do not waste hours reversing <span class="mono">strcpy</span>, and the bundled gooMBA plug-in simplifies obfuscated Mixed Boolean-Arithmetic expressions by bridging to an SMT solver.<sup class="cite"><a href="#r17">17</a></sup></p>
+
+    <div class="callout machine">
+      <span class="ctag">What you are hunting for in the listing</span>
+      <p>Hardcoded credentials, API keys, encryption keys, and connection strings; authentication logic that can be inverted; licensing and key-derivation routines; hidden or backdoor functionality; and the cryptographic primitives the client trusts. Static analysis surfaces the constants and the logic; dynamic analysis confirms which path actually executes.<sup class="cite"><a href="#r2">2</a></sup></p>
+    </div>
+
+    <p>The deeper question this section raises — and the next one answers — is what happens when the client speaks to its backend. Decompilation tells you the protocol exists and where it is constructed; protocol analysis tells you what crosses the wire.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x04 PROTOCOL ANALYSIS ============ -->
+<section class="section">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00405110</span>
+    <span class="glabel">Protocol analysis<br>Intercepting the wire</span>
+    <span class="tick">// proxy-aware? if not, redirect</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x04</span>Protocol analysis &amp; traffic interception</h2>
+    <p class="lede">Thick clients are not isolated; they communicate. The most important single task in many engagements is intercepting the requests the application fires, and how you do it depends entirely on whether the client cooperates.<sup class="cite"><a href="#r3">3</a></sup></p>
+
+    <h3>The cooperative case: proxy-aware clients</h3>
+    <p>A proxy-aware client exposes proxy settings of its own, which makes interception with an intercepting proxy such as Burp Suite or OWASP ZAP straightforward — point the client at the proxy and read, replay, and tamper with HTTP/HTTPS at will.<sup class="cite"><a href="#r4">4</a></sup> Standard API testing applies here: authentication bypass, broken authorisation, injection, and excessive data exposure are all in scope, and the recurring findings are hardcoded API keys, weak encryption, cleartext credentials in transit, and replayable requests.<sup class="cite"><a href="#r3">3</a></sup></p>
+
+    <h3>The stubborn case: proxy-unaware and custom protocols</h3>
+    <p>Many thick clients offer no proxy configuration and may not speak HTTP at all, using a custom or binary protocol over raw TCP.<sup class="cite"><a href="#r3">3</a></sup> Here the tester escalates through a ladder of techniques: transparent redirection at the host level (hosts-file or routing tricks that send the client's traffic to your listener), full packet capture with <strong>Wireshark</strong> on the relevant adapter to read whatever the client actually emits, and — when transport encryption stands in the way — runtime instrumentation to defeat it from inside the process.<sup class="cite"><a href="#r9">9</a></sup> Wireshark frequently settles the most damaging question outright: a capture of a client's session reveals, for example, that its file-transfer channel is plaintext, exposing credentials and data because the protocol is unencrypted.<sup class="cite"><a href="#r9">9</a></sup></p>
+
+    <h3>Certificate validation and the TLS soft spot</h3>
+    <p>Transport security is only as strong as the client's willingness to verify it. A core protocol test asks whether the application accepts self-signed certificates and whether a man-in-the-middle position can therefore be established — many thick clients skip proper TLS validation, and where sensitive data is transmitted in clear text, where session tokens are poorly randomised, or where requests can be replayed, the protocol layer is exposed.<sup class="cite"><a href="#r3">3</a></sup></p>
+
+    <h3>Frida: instrumenting the running process</h3>
+    <p>When a client pins its certificate or buries its protocol behind native crypto, dynamic instrumentation is the lever. <strong>Frida</strong> is a dynamic instrumentation toolkit for developers, reverse engineers, and security researchers that injects your own scripts into black-box processes: you can hook any function, spy on crypto APIs, or trace private application code with no source code, editing and reloading scripts without recompiling or restarting the target, and it runs on Windows, macOS, Linux, iOS, and Android.<sup class="cite"><a href="#r18">18</a></sup> Created by Ole André V. Ravnås and supported by NowSecure, its core is written in C and injects a JavaScript engine into the target process, where scripts run with full access to memory, hook functions, and call native functions over a bidirectional channel.<sup class="cite"><a href="#r19">19</a></sup> In practice this means a tester hooks the function that validates a certificate and forces it to return success, or hooks the routine that encrypts an outbound buffer and reads the plaintext before it is sealed — restoring visibility into a channel the developer thought was opaque.</p>
+
+    <div class="callout meaning">
+      <span class="ctag">Interception ladder — escalate in order</span>
+      <p><span class="tealword">1.</span> Configure the client's own proxy → Burp/ZAP. <span class="tealword">2.</span> No proxy support → transparent redirection + Wireshark capture. <span class="tealword">3.</span> Custom/binary protocol → decode from the capture, cross-referenced with the decompiled construction code from Section 0x03. <span class="tealword">4.</span> Pinned TLS or native crypto → Frida hooks on the validation or crypto routine.</p>
+    </div>
+
+    <h3>The local attack surface beyond the wire</h3>
+    <p>Not all of a thick client's communication leaves the host, and the channels that stay local are exactly the ones a network capture never sees. Desktop applications routinely split themselves into a privileged background service and an unprivileged user-facing front end, and the two halves talk over local inter-process communication — named pipes, loopback-bound TCP or UDP sockets, shared memory, or COM/DCOM and RPC endpoints. Each of these is attack surface in its own right, and the security misconfiguration category in the desktop risk taxonomy calls out misconfigured named pipes and services specifically as a source of serious weakness.<sup class="cite"><a href="#r6">6</a></sup> The dangerous pattern is a trust assumption: a high-privileged helper that exposes a named pipe or local socket and then acts on whatever the low-privileged GUI sends it, without authenticating the caller or validating the request. An attacker who can reach that endpoint — and any local user often can — may be able to invoke privileged operations, inject commands, or escalate, turning an internal convenience into a local-privilege-escalation primitive.<sup class="cite"><a href="#r3">3</a></sup> A complete assessment therefore enumerates the client's local listeners and IPC objects alongside its network traffic, because the most damaging thick-client findings frequently live on channels that never touch the network at all.<sup class="cite"><a href="#r1">1</a></sup></p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x05 LOCAL PRIVILEGE ESCALATION ============ -->
+<section class="section" style="background:linear-gradient(180deg,var(--ink),var(--ink-2));">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00406A40</span>
+    <span class="glabel">Privilege escalation<br>SYSTEM from a user shell</span>
+    <span class="tick">// T1574 — hijack exec flow</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x05</span>Local privilege escalation</h2>
+    <p class="lede">Installed software runs somewhere in the privilege hierarchy, and when it runs higher than the user who can influence it, the gap is a ladder. Local privilege escalation in thick clients almost always reduces to one MITRE ATT&amp;CK technique family: <strong>Hijack Execution Flow (T1574)</strong> — abusing how the operating system locates the programs and libraries a process runs.<sup class="cite"><a href="#r20">20</a></sup></p>
+
+    <h3>DLL hijacking and side-loading</h3>
+    <p>Dynamic-link libraries are shared code loaded by multiple programs, and they are abused through search-order hijacking, side-loading, and phantom DLL hijacking.<sup class="cite"><a href="#r21">21</a></sup> The mechanics that matter to a thick-client assessor are simple: if a privileged application loads a DLL by name from a directory the current user can write to, and the search order reaches that directory before the legitimate one, a planted DLL executes inside the privileged process — and if that application runs at a higher privilege level, the attacker-controlled library runs there too, which is precisely how the technique becomes privilege escalation rather than mere persistence.<sup class="cite"><a href="#r21">21</a></sup> The deliberately vulnerable DVTA client demonstrates the full chain: an attacker with a low-privileged foothold finds DVTA running with administrative rights, identifies a missing DLL the application searches for using Process Monitor, drops a malicious DLL of that name into the application's directory, and gains an elevated shell when the application next loads it.<sup class="cite"><a href="#r22">22</a></sup></p>
+
+    <h3>Unquoted service paths</h3>
+    <p>When a Windows service is registered with an executable path that contains spaces and is not wrapped in quotation marks, the path becomes ambiguous, and an adversary can place an executable in a higher-level directory so that Windows launches it instead of the intended binary.<sup class="cite"><a href="#r23">23</a></sup> The canonical example: a service whose path is <span class="mono">C:\Program Files\Sub Dir\service.exe</span> can be hijacked by planting <span class="mono">C:\Program.exe</span>, and because services frequently run as SYSTEM, exploiting an unquoted service path yields SYSTEM privileges.<sup class="cite"><a href="#r24">24</a></sup></p>
+
+    <h3>Weak service permissions — file and registry</h3>
+    <p>Two related weaknesses round out the family. Where the permissions on a service's binary are weak, an adversary simply replaces the executable that runs at service start with their own.<sup class="cite"><a href="#r25">25</a></sup> Where the permissions on the service's registry keys are weak, the adversary repoints the service at their own program — and on restart, the attacker's code executes in the account the service runs under, whether that is a local or domain account, SYSTEM, LocalService, or NetworkService.<sup class="cite"><a href="#r26">26</a></sup> The same registry tree offers further leverage: a failure-command key can be set to run in an elevated context whenever the service fails, and a performance key can be made to point at a malicious DLL.<sup class="cite"><a href="#r26">26</a></sup></p>
+
+    <div class="callout machine">
+      <span class="ctag">Why install location is a security control</span>
+      <p>A thick client installed into a world-writable directory and run with elevated rights collapses several of these techniques into one trivial finding. If any user can write to the folder a SYSTEM-level service or an admin-run application loads code from, that user can become SYSTEM. Auditing the application's install path, service configuration, and DLL search behaviour with Process Monitor and an ACL checker is therefore not optional — it is the core of the local-privilege-escalation pass.<sup class="cite"><a href="#r22">22</a></sup></p>
+    </div>
+
+    <p>The tooling here is light and well known: Process Monitor to observe what the application loads and from where, an access-control checker to find writable paths and weak service ACLs, and privilege-enumeration scripts to surface unquoted paths and misconfigured services automatically. The judgement is in recognising that a greyed-out button, a missing DLL, and a writable install folder are not separate curiosities but the rungs of a single escalation.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x06 LICENSE / PROTECTION ============ -->
+<section class="section">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00408D20</span>
+    <span class="glabel">Licensing &amp; anti-tamper<br>Client-side trust review</span>
+    <span class="tick">// trust the server, not the host</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x06</span>License logic &amp; software-protection review</h2>
+    <p class="lede">This is where thick-client testing confronts a structural truth: any check a program makes about itself, on a machine the user controls, is a check the user can rewrite. Assessing license and activation logic is not about defeating a vendor's revenue model; it is about measuring how much trust a product places in the endpoint, and advising where that trust belongs instead.</p>
+
+    <div class="callout legal">
+      <span class="ctag">Scope &amp; legality first</span>
+      <p>Everything in this section presumes explicit written authorisation to test the software in question. Anti-tamper and licensing review is performed against your own product, a client's product under contract, or a target inside an agreed scope — never as a route to piracy. The legal frame is discussed at the close of this section and again under standards in Section 0x09.</p>
+    </div>
+
+    <h3>The anti-pattern: client-side enforcement</h3>
+    <p>The hero of this article is a license check that returns <span class="mono">true</span> when a key equals a constant, evaluated entirely on the client. It is not a strawman. The DVTA project includes, by design, "client-side protection bypasses using reverse engineering" precisely because they are among the most common real-world thick-client weaknesses its author encountered.<sup class="cite"><a href="#r11">11</a></sup> The failure mode generalises: when authentication, entitlement, or feature-gating decisions are made locally — an offline validation routine, a key checked against a locally derived value, a feature flag toggled by a registry entry — an analyst who can decompile the binary can locate the deciding branch and understand exactly how it works.<sup class="cite"><a href="#r3">3</a></sup> A decompiler renders the logic legible; from there the conceptual distance to a bypass is short, which is the entire point a security assessment must make to the developer.</p>
+
+    <p>The remediation is architectural, not cosmetic. Decisions that must not be subverted belong on a server the user does not control, with the client treated as untrusted input. The assessor's deliverable is rarely "your obfuscation is weak"; it is "this entitlement decision is enforced in a place the user owns, and must move server-side." That reframing — from <span class="amberword">client-side trust</span> to <span class="tealword">server-side authority</span> — is the most valuable sentence in many thick-client reports.</p>
+
+    <h3>What protection mechanisms actually buy</h3>
+    <p>Vendors do defend their binaries, and recognising the defences is part of triage: is the binary packed, obfuscated, equipped with anti-debugging checks, or anti-tampering measures? Understanding the protections is the prerequisite to assessing them.<sup class="cite"><a href="#r3">3</a></sup> The techniques form a layered repertoire. <strong>Code obfuscation</strong> renames symbols, reorders blocks, encrypts strings, and inserts junk to frustrate both static and dynamic analysis.<sup class="cite"><a href="#r27">27</a></sup> <strong>Anti-tampering</strong> uses checksums and digital signatures to detect modification, and may detect virtualised or sandboxed execution as a proxy for analysis.<sup class="cite"><a href="#r27">27</a></sup> <strong>Anti-debugging</strong> detects and obstructs debuggers — Windows exposes signals such as the <span class="mono">NtGlobalFlag</span> field that protected code inspects — to make analysis slower and costlier.<sup class="cite"><a href="#r28">28</a></sup> And <strong>packers and protectors</strong> add layers of encryption and anti-analysis on top of the program, with heavyweight commercial protectors such as VMProtect and Themida going further into code virtualisation.<sup class="cite"><a href="#r29">29</a></sup></p>
+
+    <p>The crucial framing for both attacker and defender is that none of this is absolute. The goal of packing and obfuscation is not to make reverse engineering impossible but to make it so time-consuming and expensive that it is not worth the effort, forcing the analyst to peel back layers of protection before understanding can even begin.<sup class="cite"><a href="#r29">29</a></sup> Protection raises cost; it does not change the fundamental fact that code which executes on the user's machine can, with enough effort, be understood and altered. A security assessment quantifies that cost honestly — high enough to deter casual abuse, never high enough to substitute for server-side enforcement of anything that truly matters.</p>
+
+    <h3>The legal boundary every assessor must know</h3>
+    <p>In the United States, the anti-circumvention provisions of the Digital Millennium Copyright Act, codified at Section 1201 of the Copyright Act, prohibit circumventing technological measures that protect access to copyrighted works.<sup class="cite"><a href="#r30">30</a></sup> Critically for security work, Section 1201 contains a set of permanent exemptions — for reverse engineering, encryption research, and good-faith security testing among them — though each applies only within the specific circumstances the statute defines, and a triennial rulemaking can add temporary exemptions.<sup class="cite"><a href="#r31">31</a></sup> The boundary that trips researchers is overlap: good-faith security research that qualifies under Section 1201 may nonetheless incur liability under other laws, including the Computer Fraud and Abuse Act, so qualifying for the DMCA exemption does not, by itself, exempt a researcher from the CFAA or other applicable law.<sup class="cite"><a href="#r32">32</a></sup> The practical rule follows directly: authorisation, scope, and a documented rules-of-engagement are not bureaucratic overhead — they are what keeps lawful security testing lawful.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x07 BINARY EXPLOITATION ============ -->
+<section class="section" style="background:linear-gradient(180deg,var(--ink),var(--ink-2));">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:0040B500</span>
+    <span class="glabel">Binary exploitation<br>Memory corruption</span>
+    <span class="tick">// EIP is a suggestion</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x07</span>Binary exploitation</h2>
+    <p class="lede">Native thick clients are written in memory-unsafe languages, and the deepest class of finding is the one where malformed input does not just confuse the program but seizes its control flow. Memory-corruption review is the most technically demanding part of the discipline, and it is the part automated scanners cannot reach.</p>
+
+    <h3>The bug classes</h3>
+    <p>The family is familiar to anyone who has studied low-level security. The classic <strong>stack-based buffer overflow</strong> overwrites a function's saved return address by writing past a fixed-size buffer, redirecting execution when the function returns.<sup class="cite"><a href="#r33">33</a></sup> Beyond it lie <strong>Structured Exception Handler (SEH) overwrites</strong>, <strong>heap corruption</strong> in its many forms — use-after-free, double-free, type confusion, uninitialised memory — <strong>format-string</strong> defects, and <strong>integer overflows</strong> that lead to undersized allocations. A serious exploit-development curriculum treats exactly this spread: in-depth vulnerability analysis and exploitation in Windows user-mode applications, custom exploit development for stack, heap, and integer overflows as well as format-string and use-after-free vulnerabilities.<sup class="cite"><a href="#r34">34</a></sup></p>
+
+    <h3>The mitigations between a bug and an exploit</h3>
+    <p>Modern operating systems and compilers stack several defensive layers, and understanding them is what separates "the program crashed" from "the program is exploitable." <strong>Stack canaries</strong> place a known value before the saved return address; if a buffer overflow overwrites it, the program detects the change and aborts before returning.<sup class="cite"><a href="#r35">35</a></sup> <strong>Data Execution Prevention (DEP / NX)</strong> marks data regions such as the stack and heap non-executable, so injected shellcode cannot simply run from the buffer it landed in.<sup class="cite"><a href="#r36">36</a></sup> <strong>Address Space Layout Randomization (ASLR)</strong> randomises the base addresses of the stack, heap, libraries, and — with position-independent executables — the binary itself, so attacks that depend on hardcoded addresses fail.<sup class="cite"><a href="#r35">35</a></sup> These are most effective in combination: even if one layer is bypassed, such as a canary defeated through an information leak, the others can still prevent full exploitation.<sup class="cite"><a href="#r35">35</a></sup></p>
+
+    <h3>How exploitation adapts: ROP and information leaks</h3>
+    <p>The defining technique of modern exploitation is the response to DEP. Because injected code cannot execute, attackers turn to <strong>Return-Oriented Programming (ROP)</strong>, a code-reuse method that chains together short instruction sequences — "gadgets," each ending in a <span class="mono">ret</span> — already present in the program's own address space, bypassing the no-execute bit by reusing executable code rather than injecting new code.<sup class="cite"><a href="#r35">35</a></sup> A ROP chain is used precisely to bypass Data Execution Prevention, and where the program lacks the needed instructions in its own image, a return-into-libc variant reuses code from linked libraries instead.<sup class="cite"><a href="#r36">36</a></sup> ASLR raises the difficulty further by randomising where those gadgets live — but a single byte of leaked address information can be enough to defeat it, which is why memory-disclosure primitives are so prized: the modern exploit first leaks an address to unmask the layout, then builds its ROP chain against the now-known target.<sup class="cite"><a href="#r35">35</a></sup></p>
+
+    <p>This is no longer a curiosity of the past. Although buffer overflows were discovered decades ago, they persist in legacy codebases, embedded systems, and performance-critical software where developers disable safety checks, and the bypass techniques have kept pace with the defences.<sup class="cite"><a href="#r33">33</a></sup> A formal study of a vulnerable native binary illustrates the reasoning a tester applies: observing that NX is enabled but ASLR is not, the analyst concludes the overflow is exploitable only via a ROP chain to achieve code execution, and reasons through how an address leak would be required where library randomisation is in force.<sup class="cite"><a href="#r36">36</a></sup> That chain of reasoning — bug, then mitigation inventory, then the specific bypass each mitigation demands — is the core competency.</p>
+
+    <div class="callout machine">
+      <span class="ctag">Mitigation ↔ bypass, at a glance</span>
+      <p><span class="amberword">Stack canary</span> → leak it, or corrupt around it via a non-contiguous write. <span class="amberword">DEP / NX</span> → ROP / return-to-libc, reusing existing executable code. <span class="amberword">ASLR / PIE</span> → an information leak to unmask the base address before building the chain. <span class="amberword">Control-Flow Guard</span> → find an indirect-call path it does not cover. No single mitigation is sufficient alone, and the assessment's value is in identifying which layers a given client actually ships — and which it forgot.<sup class="cite"><a href="#r35">35</a></sup></p>
+    </div>
+
+    <p>This work has a recognised home in the certification landscape, and the toolchain that supports it — the disassembler, the debugger, and the gadget finder — is the subject of the next section. The point worth carrying forward is that a thick-client memory-corruption finding is rarely a one-line crash report; it is a demonstration that input crosses a trust boundary and, through a chain of mitigation bypasses, reaches control of execution.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x08 THE TOOLCHAIN ============ -->
+<section class="section">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:0040D000</span>
+    <span class="glabel">The toolchain<br>Disassemble · debug · instrument</span>
+    <span class="tick">// three views of one binary</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x08</span>The toolchain</h2>
+    <p class="lede">A thick-client assessment is only as good as the analyst's ability to see what the binary is doing — statically, as a frozen listing, and dynamically, as a running process. Three categories of tool provide that sight: the disassembler-decompiler that turns machine code back into something readable, the debugger that stops the program mid-execution to inspect and alter its state, and the instrumentation framework that rewrites behaviour on the fly. The three named in nearly every methodology — Ghidra, IDA Pro, and x64dbg — map exactly onto the first two categories, with Frida covering the third.</p>
+
+    <h3>The decompilers: Ghidra and IDA Pro</h3>
+    <p>The two reference disassemblers sit at opposite ends of the cost spectrum and yet converge on the same workflow. <strong>Ghidra</strong> is the free, open-source software reverse-engineering suite released by the United States National Security Agency in 2019, built in Java with a multi-platform GUI and, crucially, a decompiler that lifts disassembly to readable C-like pseudocode across a wide range of processor architectures.<sup class="cite"><a href="#r12">12</a></sup> Its 2019 public release was a turning point precisely because a capable decompiler — historically the most expensive component of the reverse-engineering toolkit — became available at no cost, and recent versions have folded in an integrated debugger that bridges the long-standing gap between Ghidra's static analysis and the dynamic inspection that previously required a separate tool.<sup class="cite"><a href="#r14">14</a></sup> Its extensibility through Java and Python scripting, and a collaborative multi-user mode, made it a fixture in both training and professional practice almost immediately.<sup class="cite"><a href="#r13">13</a></sup></p>
+    <p><strong>IDA Pro</strong>, from Hex-Rays, is the long-standing commercial standard: an interactive disassembler and debugger supporting more than fifty processor families, paired with the Hex-Rays Decompiler that converts native machine code into a readable C-like representation and dramatically accelerates analysis of large or unfamiliar binaries.<sup class="cite"><a href="#r15">15</a></sup> The decompiler is the feature most analysts pay for, transforming the slow work of reading assembly into the far faster work of reading reconstructed source.<sup class="cite"><a href="#r16">16</a></sup> Around it Hex-Rays has built decades of refinements — FLIRT signatures that automatically recognise and label statically-linked library functions so the analyst is not re-deriving <span class="mono">printf</span> by hand, and more recent additions aimed at seeing through compiler optimisation and obfuscation — which together explain why, despite Ghidra's arrival, IDA Pro retains its place in many shops.<sup class="cite"><a href="#r17">17</a></sup></p>
+
+    <h3>The debugger: x64dbg</h3>
+    <p>Where the decompiler reads the program at rest, the debugger watches it run. <strong>x64dbg</strong> is an open-source x64/x32 debugger for Windows, purpose-built for user-mode binary analysis and distributed under a permissive licence — the project that, more than any other, gave the Windows reversing community a free, modern, actively-developed alternative to the aging commercial debuggers.<sup class="cite"><a href="#r37">37</a></sup> It ships as a unified package: <span class="mono">x32dbg</span> and <span class="mono">x64dbg</span> for 32- and 64-bit targets, launched through the <span class="mono">x96dbg</span> selector, with a familiar multi-pane interface showing disassembly, registers, the stack, and memory simultaneously.<sup class="cite"><a href="#r38">38</a></sup> Its capability comes from the libraries it integrates — a Qt-based interface, the TitanEngine debugging core, the Zydis disassembler engine, Yara for pattern scanning, Scylla for import reconstruction during unpacking, and an analysis engine for control-flow recovery — and it exposes an assembler-like scripting language and a documented plugin API, so the community has built extensions for everything from automated unpacking to deobfuscation.<sup class="cite"><a href="#r37">37</a></sup> For a thick-client tester, x64dbg is where a license check is observed actually executing, where a patched jump is tested live before it is written to disk, and where the value in a register at the moment of a comparison settles a question the static listing left ambiguous.</p>
+
+    <div class="callout meaning">
+      <span class="ctag">Static and dynamic are not rivals — they are two passes</span>
+      <p>The decompiler tells you <span class="tealword">what the program is supposed to do</span>; the debugger tells you <span class="tealword">what it actually does with this input, on this machine, right now</span>. Anti-debugging defeats the second; obfuscation defeats the first; packing defeats both until unpacked. A real engagement moves constantly between Ghidra or IDA Pro open on one monitor and x64dbg paused on a breakpoint on the other — a decompiled hypothesis confirmed or refuted by a live register value, then back again.</p>
+    </div>
+
+    <h3>The instrumentation layer and the supporting cast</h3>
+    <p>Between static and dynamic analysis sits dynamic instrumentation. <strong>Frida</strong> is a dynamic instrumentation toolkit that injects a JavaScript engine into a running native process, letting the tester hook arbitrary functions, read and rewrite arguments and return values, and trace execution without source code or a recompile.<sup class="cite"><a href="#r18">18</a></sup> For thick clients it is the standard answer to certificate pinning and custom cryptography, hooking the validation or encryption routine in memory so traffic can be read or a check neutralised.<sup class="cite"><a href="#r19">19</a></sup> Surrounding these headline tools is a supporting cast no assessment omits: <strong>dnSpy</strong>, <strong>.NET Reflector</strong>, and <strong>JD-GUI</strong> for managed-code decompilation;<sup class="cite"><a href="#r2">2</a></sup> the Sysinternals utilities — <strong>Process Monitor</strong> for file, registry, and process telemetry and <strong>Process Explorer</strong> for live handle and DLL inspection — for runtime reconnaissance and for catching the missing-DLL and weak-permission conditions that drive privilege escalation;<sup class="cite"><a href="#r3">3</a></sup> a triage layer of <strong>CFF Explorer</strong>, <strong>PE-bear</strong>, <strong>Detect It Easy</strong>, and <strong>Strings</strong> for header parsing and packer identification;<sup class="cite"><a href="#r10">10</a></sup> <strong>WinDbg</strong> and <strong>Process Hacker</strong> for deep kernel-aware debugging and memory extraction;<sup class="cite"><a href="#r4">4</a></sup> and the network pair <strong>Burp Suite</strong>, <strong>OWASP ZAP</strong>, and <strong>Wireshark</strong> for the protocol-analysis pass.<sup class="cite"><a href="#r1">1</a></sup></p>
+
+    <div class="tablewrap">
+      <table>
+        <caption style="caption-side:top;text-align:left;padding:12px 14px;color:var(--text-mute);font-family:var(--f-mono);font-size:11px;letter-spacing:.05em;">Core thick-client toolchain by role</caption>
+        <thead><tr><th>Tool</th><th>Role</th><th>Licence</th><th>Strongest at</th></tr></thead>
+        <tbody>
+          <tr><td><span class="dacode">Ghidra</span></td><td>Disassembler + decompiler</td><td>Free / open source</td><td>No-cost pseudocode across many architectures; scripting; now an integrated debugger</td></tr>
+          <tr><td><span class="dacode">IDA Pro</span></td><td>Disassembler + decompiler + debugger</td><td>Commercial</td><td>Breadth of architectures, FLIRT library recognition, mature decompiler</td></tr>
+          <tr><td><span class="dacode">x64dbg</span></td><td>User-mode debugger</td><td>Free / open source</td><td>Live Windows debugging, patching, unpacking (Scylla), scripting and plugins</td></tr>
+          <tr><td><span class="dacode">Frida</span></td><td>Dynamic instrumentation</td><td>Free / open source</td><td>Runtime hooking of crypto and pinning; argument and return-value rewriting</td></tr>
+          <tr><td><span class="dacode">WinDbg</span></td><td>Debugger (user + kernel)</td><td>Free</td><td>Kernel-aware debugging, crash-dump analysis, driver issues</td></tr>
+          <tr><td><span class="dacode">dnSpy / JD-GUI</span></td><td>Managed-code decompiler</td><td>Free</td><td>Near-source recovery of .NET and Java assemblies</td></tr>
+          <tr><td><span class="dacode">Procmon / ProcExp</span></td><td>Runtime telemetry</td><td>Free (Sysinternals)</td><td>File/registry/DLL activity; surfacing LPE preconditions</td></tr>
+          <tr><td><span class="dacode">DIE / CFF Explorer</span></td><td>Triage / PE inspection</td><td>Free</td><td>Packer and compiler identification; header and import parsing</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>One specialised companion deserves its own mention because it sits at the seam between debugging and exploitation: <strong>mona.py</strong>, the exploit-development plugin that automates pattern generation, bad-character analysis, and — most importantly — ROP gadget discovery inside a debugger, turning the gadget-hunting described in the previous section from manual searching into a generated chain.<sup class="cite"><a href="#r34">34</a></sup> Tool selection, in the end, is less a question of allegiance than of layer: a single finding may begin in Detect It Easy, move to Ghidra for structure, cross to x64dbg to watch the suspect routine execute, and finish in Frida or mona.py to prove the impact. The discipline is fluency across the set, not loyalty to one icon.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x09 STANDARDS / FRAMEWORKS / COMPLIANCE ============ -->
+<section class="section" style="background:linear-gradient(180deg,var(--ink),var(--ink-2));">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:0040E800</span>
+    <span class="glabel">Standards &amp; compliance<br>What governs the work</span>
+    <span class="tick">// methodology is defensible</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x09</span>Standards, frameworks &amp; compliance</h2>
+    <p class="lede">Ad-hoc poking does not survive a client's legal review or a regulator's audit. A professional thick-client assessment is anchored to published standards on two axes at once: a subject-matter standard that says what to test in a desktop application, and a process standard that says how a penetration test is structured, evidenced, and reported. Knowing both is what turns a collection of findings into a defensible engagement.</p>
+
+    <h3>The subject-matter standards: OWASP for thick clients</h3>
+    <p>The reference catalogue specific to this work is OWASP's. The <strong>Thick Client Application Security Verification Standard (TASVS)</strong> provides a structured, requirement-by-requirement basis for verifying the security of desktop applications, the direct analogue for thick clients of the more familiar standards OWASP maintains for web and mobile.<sup class="cite"><a href="#r5">5</a></sup> Alongside it, the <strong>OWASP Desktop App Security Top 10</strong> enumerates the most critical risk categories — from injection and broken authentication through sensitive-data exposure, improper cryptography, weak authorization, and insufficient logging — giving an assessment a shared, citable vocabulary for classifying what it finds.<sup class="cite"><a href="#r6">6</a></sup> Used together, TASVS supplies the depth of a verification checklist and the Top 10 supplies the breadth of a risk taxonomy, and a report that maps each finding to both is immediately legible to any security-literate reader.</p>
+
+    <h3>The process standards: how a test is run</h3>
+    <p>The methodology that frames the engagement comes from a small set of widely-recognised standards. The U.S. National Institute of Standards and Technology's <strong>SP 800-115</strong>, the <em>Technical Guide to Information Security Testing and Assessment</em>, structures a security test into four phases — planning, discovery, attack, and reporting — a sequence general enough to govern a thick-client engagement end to end.<sup class="cite"><a href="#r39">39</a></sup> Complementing it, OWASP catalogues the established penetration-testing methodologies the industry recognises — among them the Penetration Testing Execution Standard (PTES), the Open Source Security Testing Methodology Manual (OSSTMM), and the NIST guidance itself — each offering a repeatable structure that makes an assessment auditable rather than improvised.<sup class="cite"><a href="#r40">40</a></sup> The adversary-behaviour layer is supplied by <strong>MITRE ATT&amp;CK</strong>, whose technique taxonomy — the same one that catalogues the Hijack Execution Flow family used in the privilege-escalation section — lets a tester describe what an attacker would do in a vocabulary defenders already use, tying a local finding to a named, documented technique.<sup class="cite"><a href="#r20">20</a></sup></p>
+
+    <h3>Where regulation makes it mandatory</h3>
+    <p>For software handling payment-card data, penetration testing is not advisory but contractual. Under <strong>PCI DSS 4.0</strong>, the penetration-testing requirement was renumbered to Requirement 11.4 — relocated from the previous 11.3 — and its expectations became enforceable for assessments after the standard's transition deadline.<sup class="cite"><a href="#r41">41</a></sup> The standard does not merely require that a test happen; it requires that the test follow a documented methodology grounded in an industry-accepted approach such as NIST SP 800-115, the OWASP guidance, or PTES, and that testing include genuine manual exploitation rather than an unverified automated scan — a bar that a thoroughly reverse-engineered, manually-exploited thick-client finding meets squarely.<sup class="cite"><a href="#r41">41</a></sup> The same requirement is where tester qualification enters: organisations are expected to use suitably skilled testers, and recognised certifications such as OSCP, CREST, GPEN, and others are the customary evidence of that competence.<sup class="cite"><a href="#r41">41</a></sup></p>
+
+    <h3>Scoring and the legal envelope</h3>
+    <p>However the testing is framed, findings are communicated in a common currency of severity. The <strong>Common Vulnerability Scoring System (CVSS)</strong>, in its v3.1 and newer v4.0 revisions, provides the standard numeric basis for rating and prioritising each issue, so that a thick-client report's severities are comparable with those from any other assessment a client receives.<sup class="cite"><a href="#r7">7</a></sup> And enclosing all of it is the legal envelope examined in Section 0x06: the DMCA's Section 1201 anti-circumvention rules with their security-research and reverse-engineering exemptions,<sup class="cite"><a href="#r30">30</a></sup> the permanent and triennial exemption structure that defines exactly when circumvention for good-faith research is permitted,<sup class="cite"><a href="#r31">31</a></sup> and the overlap with the Computer Fraud and Abuse Act that means a documented authorization and rules-of-engagement are the foundation on which every other standard rests.<sup class="cite"><a href="#r32">32</a></sup></p>
+
+    <h3>From findings to a report that drives remediation</h3>
+    <p>Every framework converges on the same final act: the report. In the SP 800-115 structure, reporting is the fourth and closing phase, the stage where raw discovery becomes a documented, prioritised, actionable record rather than a pile of notes.<sup class="cite"><a href="#r39">39</a></sup> For a thick-client engagement that means each finding carries a CVSS severity so the client can triage consistently against everything else on their plate, a reproduction path precise enough that a developer can trigger the issue unaided, the evidence that demonstrates impact, and a concrete remediation mapped to the relevant OWASP category.<sup class="cite"><a href="#r7">7</a></sup> Where the work falls under a regulatory regime, the report must also satisfy that regime's evidentiary bar — a payment-card assessment, for instance, has to show that genuine manual exploitation was performed and that the methodology followed a recognised standard, not merely that a scanner was run.<sup class="cite"><a href="#r41">41</a></sup> A report that ties each finding to a severity, a reproduction, a fix, and the standard or regulation that frames it is what converts a technically impressive engagement into organisational change — which is, in the end, the only outcome that matters.</p>
+
+    <div class="callout legal">
+      <span class="ctag">The compliance stack, bottom to top</span>
+      <p><span class="tealword">Authorization &amp; scope</span> (the legal floor — DMCA 1201 exemptions, CFAA boundaries, signed rules-of-engagement) → <span class="tealword">process methodology</span> (NIST SP 800-115, PTES, OSSTMM) → <span class="tealword">subject-matter standard</span> (OWASP TASVS, Desktop App Security Top 10) → <span class="tealword">adversary mapping</span> (MITRE ATT&amp;CK) → <span class="tealword">severity scoring</span> (CVSS v3.1/v4.0) → <span class="tealword">regulatory driver where applicable</span> (PCI DSS 4.0 Req 11.4). A defensible engagement can point to each layer by name.</p>
+    </div>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ 0x0A BUILDING CAPABILITY ============ -->
+<section class="section">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:0040FC00</span>
+    <span class="glabel">Building capability<br>Certs · training · labs · channels</span>
+    <span class="tick">// the long apprenticeship</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x0A</span>Building capability</h2>
+    <p class="lede">No single course produces a thick-client tester. The competence is assembled from overlapping disciplines — reverse engineering, exploit development, Windows internals, and protocol analysis — each with its own canonical training, certification, and practice ground. What follows is the established path through them, from the certifications that signal the skill to the free channels where the craft is actually taught.</p>
+
+    <h3>Certifications worth the name</h3>
+    <p>The certification that maps most directly onto the deepest part of this work is OffSec's <strong>OSED</strong> — Offensive Security Exploit Developer — earned through the course EXP-301, <em>Windows User Mode Exploit Development</em>. Its exam is a punishing, proctored hands-on assessment: roughly forty-eight hours to solve three exploit-development challenges and produce a professional report, with no multiple-choice in sight.<sup class="cite"><a href="#r42">42</a></sup> OSED is one of the three certifications that compose OffSec's <strong>OSCE³</strong> expert designation, alongside the web-focused OSWE and the penetration-focused OSEP, and unlike many credentials it does not expire — a reflection of the fact that the underlying skill, not a snapshot of current tooling, is what it certifies.<sup class="cite"><a href="#r42">42</a></sup> The curriculum behind it is the same one referenced earlier: in-depth analysis and custom exploitation of stack, heap, integer-overflow, format-string, and use-after-free vulnerabilities in Windows user-mode software.<sup class="cite"><a href="#r34">34</a></sup></p>
+    <p>For the reverse-engineering and malware-analysis dimension — the skills that carry over directly to understanding a hostile or heavily-protected binary — the benchmark is GIAC's <strong>GREM</strong> (GIAC Reverse Engineering Malware). Its exam is hands-on in the most literal sense, incorporating a CyberLive component that requires candidates to perform real analysis tasks in a live environment rather than answer questions about them, and its pass rate reflects the difficulty of that format.<sup class="cite"><a href="#r43">43</a></sup> Underpinning both, and assumed by most employers as the entry ticket to offensive work generally, is OffSec's <strong>OSCP</strong> — not thick-client-specific, but the credential whose presence (alongside CREST, GPEN, and CEH) is the customary proof of tester competence that compliance regimes like PCI DSS expect.<sup class="cite"><a href="#r41">41</a></sup></p>
+
+    <h3>Where the skills are taught</h3>
+    <p>Behind the certifications sit the courses. OffSec's <strong>EXP-301</strong> is the structured route into Windows exploit development, building from disassembly and debugging through the mitigation-bypass techniques — DEP, ASLR, and Control-Flow Guard evasion, SEH-based exploitation, and shellcode creation — that define modern memory-corruption work.<sup class="cite"><a href="#r34">34</a></sup> For reverse engineering and malware analysis, SANS <strong>FOR610</strong>, <em>Reverse-Engineering Malware</em>, is the long-standing reference: a multi-day course built around hands-on labs using a curated toolset including Ghidra, that teaches the systematic examination of a hostile binary's behaviour and internals.<sup class="cite"><a href="#r44">44</a></sup> And the deepest specialist training in exploit development comes from <strong>Corelan</strong>, run by Peter Van Eeckhoutte, whose Bootcamp, Advanced, and heap-exploitation classes are widely regarded as the most thorough available — the same lineage that produced the mona.py plugin and a large body of free, openly-published exploit-development tutorials that have trained a generation of researchers.<sup class="cite"><a href="#r45">45</a></sup> For those building toward these on a smaller budget, more accessible practical-malware and ethical-hacking courses from providers such as TCM Security cover the foundational ground before the specialist material.<sup class="cite"><a href="#r44">44</a></sup></p>
+
+    <h3>Labs: where it is practised</h3>
+    <p>Training without a target is theory. The purpose-built practice application for this exact discipline is the <strong>Damn Vulnerable Thick Client App (DVTA)</strong>, a deliberately insecure two-tier .NET client created to let testers rehearse the full methodology — insecure storage, traffic interception, DLL hijacking, and more — against a safe, legal target.<sup class="cite"><a href="#r11">11</a></sup> Worked end-to-end walkthroughs of DVTA, demonstrating exactly how each class of flaw is found and exploited, are freely available and form the standard first project for anyone entering the field.<sup class="cite"><a href="#r9">9</a></sup> Beyond it, the broader practice grounds are the same ones the offensive community uses for every discipline: <strong>crackmes</strong> for pure reverse-engineering and license-logic puzzles, and platforms such as <strong>Hack The Box</strong>, <strong>TryHackMe</strong>, and <strong>pwn.college</strong> for graded binary-exploitation and reversing challenges that scale from first principles to professional difficulty.<sup class="cite"><a href="#r34">34</a></sup></p>
+
+    <h3>The free curriculum: channels and communities</h3>
+    <p>Much of the best instruction in this field is published free on video. <strong>OALabs</strong> (Open Analysis) maintains an extensive library of practical reverse-engineering and malware-analysis tutorials, walking through real tools and real samples at a level that bridges beginner and professional.<sup class="cite"><a href="#r46">46</a></sup> <strong>LiveOverflow</strong> offers one of the most approachable on-ramps to binary exploitation and reverse engineering, building intuition for memory corruption and CTF-style problem-solving from the ground up.<sup class="cite"><a href="#r47">47</a></sup> And curated roundups of the wider scene point to the rest of the essential channels — stacksmashing, John Hammond, and other reverse-engineering educators — so that a newcomer can assemble a complete self-taught syllabus without spending a dollar before deciding to invest in formal training.<sup class="cite"><a href="#r48">48</a></sup></p>
+
+    <div class="callout meaning">
+      <span class="ctag">A realistic progression</span>
+      <p><span class="tealword">Start free</span>: LiveOverflow and OALabs for intuition, crackmes and DVTA for hands-on reps. <span class="tealword">Build foundations</span>: OSCP for offensive fundamentals, FOR610 or TCM material for reverse engineering. <span class="tealword">Specialise</span>: EXP-301/OSED for Windows exploit development, GREM for malware analysis, Corelan for the deepest exploit work. <span class="tealword">Practise continuously</span>: Hack The Box, TryHackMe, and pwn.college keep the skill from decaying. The discipline rewards patience — it is an apprenticeship measured in years, not a weekend certification.</p>
+    </div>
+
+    <h3>Best practices, for both sides of the table</h3>
+    <p>The assessment's value is realised only in what changes afterward, and the recommendations divide cleanly. For <strong>developers</strong>, the recurring lessons are architectural: never trust the client for a decision that matters, so move licensing, authorization, and entitlement enforcement to a server the user does not control; never embed secrets — credentials, keys, connection strings — in the binary or its configuration, because everything shipped to the user is readable; encrypt sensitive data at rest using platform key stores rather than home-grown schemes; validate all input crossing a trust boundary, including inter-process and local network channels; install into protected directories with correct ACLs, quote service paths, and sign code to close the privilege-escalation and DLL-hijacking avenues; and keep bundled third-party components current. For <strong>testers</strong>, the discipline is method: map the full attack surface before touching exploitation, work the standards in parallel so every finding is classified and scored consistently, treat static and dynamic analysis as two passes of one investigation, prove impact rather than assert it, and — above all — keep authorization and scope documented, because the line between security research and a computer-crime allegation is the paperwork signed before the work began.</p>
+  </div>
+ </div></div>
+</section>
+
+<!-- ============ CLOSING ============ -->
+<section class="section" style="background:linear-gradient(180deg,var(--ink-2),var(--ink));">
+ <div class="wrap"><div class="section-grid">
+  <aside class="gutter">
+    <span class="addr">.text:00410000</span>
+    <span class="glabel">Return<br>The thesis, restated</span>
+    <span class="tick">// ret</span>
+  </aside>
+  <div class="col">
+    <h2><span class="num">0x0B</span>The program is the perimeter</h2>
+    <p class="lede">Every technique in this article reduces to a single inversion of the web tester's assumption. There is no server enforcing the rules at a distance; the logic, the secrets, and the defences are all sitting on a machine the adversary fully owns — and what executes on the user's machine can, with enough effort, be read and rewritten.</p>
+    <p>That is why the work moves between two views of the same binary. There is the <span class="amberword">opaque face</span> — the hex, the opcodes, the packed and obfuscated layers a vendor hopes will hold — and the <span class="tealword">recovered meaning</span> the analyst pulls back out of it with a decompiler, a debugger, and an instrumentation hook. The license check that returns <span class="mono">true</span> on a constant, the FTP password sitting in a button handler, the unquoted service path that yields SYSTEM, the missing DLL planted into a writable directory, the overflow that survives every mitigation but one — each is a place where the gap between those two faces became a finding.</p>
+    <p>The honest conclusion is the one that should reach the client most clearly: client-side protection raises the cost of an attack, and that is worth doing, but it never substitutes for enforcing anything that truly matters in a place the user does not control. The thick-client assessor's most valuable deliverable is rarely a clever exploit. It is the sentence that moves a trust decision off the user's machine and onto the server where it belongs — translated, like everything else in this discipline, from the opaque listing into recovered, actionable meaning.</p>
+  </div>
+ </div></div>
+</section>
+
+</main>
+
+<!-- ============ REFERENCES ============ -->
+<section class="refs">
+  <div class="wrap">
+    <h2 id="references" style="border-left:3px solid var(--amber);padding-left:14px;">References</h2>
+    <p class="sub" style="max-width:var(--readw);margin:0 0 26px;">Numbered in order of first appearance, Vancouver style. Every reference is cited at least once in the body; every in-text marker resolves to an entry below.</p>
+    <ol class="reflist">
+      <li id="r1"><span class="src">Understanding Thick Client Application Penetration Testing.</span> <span class="pub">BreachLock</span>. <a href="https://www.breachlock.com/resources/blog/understanding-thick-client-application-penetration-testing/">https://www.breachlock.com/resources/blog/understanding-thick-client-application-penetration-testing/</a></li>
+      <li id="r2"><span class="src">How to Perform Thick Client Penetration Testing.</span> <span class="pub">AFINE</span>. <a href="https://afine.com/how-to-perform-thick-client-penetration-testing">https://afine.com/how-to-perform-thick-client-penetration-testing</a></li>
+      <li id="r3"><span class="src">Thick Client Penetration Testing Methodology.</span> <span class="pub">CyberArk</span>. <a href="https://www.cyberark.com/resources/threat-research-blog/thick-client-penetration-testing-methodology">https://www.cyberark.com/resources/threat-research-blog/thick-client-penetration-testing-methodology</a></li>
+      <li id="r4"><span class="src">Practical Methodology for Desktop Application Security Testing.</span> <span class="pub">Upadhyay R. Medium</span>. <a href="https://medium.com/@upadhyay.riya1104/practical-methodology-for-desktop-application-security-testing-314d83e8af2a">https://medium.com/@upadhyay.riya1104/practical-methodology-for-desktop-application-security-testing-314d83e8af2a</a></li>
+      <li id="r5"><span class="src">Thick Client Application Security Verification Standard (TASVS).</span> <span class="pub">OWASP</span>. <a href="https://owasp.org/www-project-thick-client-application-security-verification-standard/">https://owasp.org/www-project-thick-client-application-security-verification-standard/</a></li>
+      <li id="r6"><span class="src">Desktop App Security Top 10.</span> <span class="pub">OWASP</span>. <a href="https://github.com/OWASP/www-project-desktop-app-security-top-10/blob/main/index.md">https://github.com/OWASP/www-project-desktop-app-security-top-10/blob/main/index.md</a></li>
+      <li id="r7"><span class="src">Thick Client Penetration Testing Checklist.</span> <span class="pub">Mehta H.</span>. <a href="https://hetmehta.com/resources/thick-client-checklist">https://hetmehta.com/resources/thick-client-checklist</a></li>
+      <li id="r8"><span class="src">Thick-Client-Pentest-Checklist.</span> <span class="pub">Prasaanth H. GitHub</span>. <a href="https://github.com/Hari-prasaanth/Thick-Client-Pentest-Checklist">https://github.com/Hari-prasaanth/Thick-Client-Pentest-Checklist</a></li>
+      <li id="r9"><span class="src">Practical Thick Client Application Penetration Testing using DVTA, Part 1.</span> <span class="pub">Infosec Institute</span>. <a href="https://www.infosecinstitute.com/resources/penetration-testing/practical-thick-client-application-penetration-testing-using-damn-vulnerable-thick-client-app-part-1/">https://www.infosecinstitute.com/resources/penetration-testing/practical-thick-client-application-penetration-testing-using-damn-vulnerable-thick-client-app-part-1/</a></li>
+      <li id="r10"><span class="src">Thick Client Penetration Testing Guide.</span> <span class="pub">AppSecure Security</span>. <a href="https://www.appsecure.security/blog/thick-client-penetration-guide">https://www.appsecure.security/blog/thick-client-penetration-guide</a></li>
+      <li id="r11"><span class="src">DVTA: Damn Vulnerable Thick Client Application.</span> <span class="pub">secvulture. GitHub</span>. <a href="https://github.com/srini0x00/dvta">https://github.com/srini0x00/dvta</a></li>
+      <li id="r12"><span class="src">Ghidra Software Reverse Engineering Framework.</span> <span class="pub">National Security Agency. GitHub</span>. <a href="https://github.com/NationalSecurityAgency/ghidra">https://github.com/NationalSecurityAgency/ghidra</a></li>
+      <li id="r13"><span class="src">Ghidra.</span> <span class="pub">Wikipedia</span>. <a href="https://en.wikipedia.org/wiki/Ghidra">https://en.wikipedia.org/wiki/Ghidra</a></li>
+      <li id="r14"><span class="src">Ghidra: Review and Capabilities.</span> <span class="pub">AppSecSanta</span>. <a href="https://appsecsanta.com/ghidra">https://appsecsanta.com/ghidra</a></li>
+      <li id="r15"><span class="src">IDA Pro.</span> <span class="pub">Hex-Rays</span>. <a href="https://hex-rays.com/ida-pro">https://hex-rays.com/ida-pro</a></li>
+      <li id="r16"><span class="src">Hex-Rays Decompiler.</span> <span class="pub">Hex-Rays</span>. <a href="https://hex-rays.com/decompiler">https://hex-rays.com/decompiler</a></li>
+      <li id="r17"><span class="src">Hex-Rays: Company and Technology.</span> <span class="pub">Hex-Rays</span>. <a href="https://hex-rays.com/">https://hex-rays.com/</a></li>
+      <li id="r18"><span class="src">Frida: Dynamic Instrumentation Toolkit.</span> <span class="pub">Frida</span>. <a href="https://frida.re/">https://frida.re/</a></li>
+      <li id="r19"><span class="src">Frida.</span> <span class="pub">NowSecure</span>. <a href="https://www.nowsecure.com/frida/">https://www.nowsecure.com/frida/</a></li>
+      <li id="r20"><span class="src">T1574: Hijack Execution Flow.</span> <span class="pub">MITRE ATT&amp;CK</span>. <a href="https://attack.mitre.org/techniques/T1574/">https://attack.mitre.org/techniques/T1574/</a></li>
+      <li id="r21"><span class="src">T1574.001: DLL Hijacking.</span> <span class="pub">MITRE ATT&amp;CK</span>. <a href="https://attack.mitre.org/techniques/T1574/001/">https://attack.mitre.org/techniques/T1574/001/</a></li>
+      <li id="r22"><span class="src">Thick Client Penetration Testing on DVTA.</span> <span class="pub">Hacking Articles</span>. <a href="https://www.hackingarticles.in/thick-client-penetration-testing-on-dvta/">https://www.hackingarticles.in/thick-client-penetration-testing-on-dvta/</a></li>
+      <li id="r23"><span class="src">T1574.009: Path Interception by Unquoted Path.</span> <span class="pub">MITRE ATT&amp;CK</span>. <a href="https://attack.mitre.org/techniques/T1574/009/">https://attack.mitre.org/techniques/T1574/009/</a></li>
+      <li id="r24"><span class="src">T1574.009 Atomic Tests.</span> <span class="pub">Red Canary. Atomic Red Team</span>. <a href="https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1574.009/T1574.009.md">https://github.com/redcanaryco/atomic-red-team/blob/master/atomics/T1574.009/T1574.009.md</a></li>
+      <li id="r25"><span class="src">T1574.010: Services File Permissions Weakness.</span> <span class="pub">MITRE ATT&amp;CK</span>. <a href="https://attack.mitre.org/techniques/T1574/010/">https://attack.mitre.org/techniques/T1574/010/</a></li>
+      <li id="r26"><span class="src">T1574.011: Services Registry Permissions Weakness.</span> <span class="pub">MITRE ATT&amp;CK</span>. <a href="https://attack.mitre.org/techniques/T1574/011/">https://attack.mitre.org/techniques/T1574/011/</a></li>
+      <li id="r27"><span class="src">Software Reverse Engineering Protection.</span> <span class="pub">SOFPRO</span>. <a href="https://www.sofpro.com/blog/software-reverse-engineering-protection">https://www.sofpro.com/blog/software-reverse-engineering-protection</a></li>
+      <li id="r28"><span class="src">Anti Reverse-Engineering Protection Techniques to Use Before Releasing Software.</span> <span class="pub">Apriorit</span>. <a href="https://www.apriorit.com/dev-blog/367-anti-reverse-engineering-protection-techniques-to-use-before-releasing-software">https://www.apriorit.com/dev-blog/367-anti-reverse-engineering-protection-techniques-to-use-before-releasing-software</a></li>
+      <li id="r29"><span class="src">Understanding Software Packing and Obfuscation.</span> <span class="pub">Oboe</span>. <a href="https://oboe.com/learn/reverse-engineering-vmprotect-packed-software-nj012e/understanding-software-packing-and-obfuscation-1">https://oboe.com/learn/reverse-engineering-vmprotect-packed-software-nj012e/understanding-software-packing-and-obfuscation-1</a></li>
+      <li id="r30"><span class="src">Unintended Consequences: Fifteen Years under the DMCA.</span> <span class="pub">Electronic Frontier Foundation</span>. <a href="https://www.eff.org/pages/unintended-consequences-fifteen-years-under-dmca">https://www.eff.org/pages/unintended-consequences-fifteen-years-under-dmca</a></li>
+      <li id="r31"><span class="src">Section 1201 Rulemaking.</span> <span class="pub">U.S. Copyright Office</span>. <a href="https://www.copyright.gov/policy/1201/">https://www.copyright.gov/policy/1201/</a></li>
+      <li id="r32"><span class="src">Thawing Out the Chilling Effect of DMCA Section 1201.</span> <span class="pub">Rapid7</span>. <a href="https://www.rapid7.com/blog/post/2021/11/15/thawing-out-the-chilling-effect-of-dmca-section-1201/">https://www.rapid7.com/blog/post/2021/11/15/thawing-out-the-chilling-effect-of-dmca-section-1201/</a></li>
+      <li id="r33"><span class="src">ROP Chaining: Return-Oriented Programming.</span> <span class="pub">ired.team</span>. <a href="https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/rop-chaining-return-oriented-programming">https://www.ired.team/offensive-security/code-injection-process-injection/binary-exploitation/rop-chaining-return-oriented-programming</a></li>
+      <li id="r34"><span class="src">EXP-301: Windows User Mode Exploit Development (OSED).</span> <span class="pub">OffSec</span>. <a href="https://www.offsec.com/courses/exp-301/">https://www.offsec.com/courses/exp-301/</a></li>
+      <li id="r35"><span class="src">A Survey on Buffer Overflow Attacks and Countermeasures.</span> <span class="pub">Applied Sciences (MDPI)</span>. <a href="https://www.mdpi.com/2076-3417/12/13/6702">https://www.mdpi.com/2076-3417/12/13/6702</a></li>
+      <li id="r36"><span class="src">Stack Buffer Overflow: Modern Exploitation Techniques.</span> <span class="pub">Nicula S, et al. Procedia Computer Science</span>. <a href="https://www.sciencedirect.com/science/article/pii/S1877050919316527/pdf">https://www.sciencedirect.com/science/article/pii/S1877050919316527/pdf</a></li>
+      <li id="r37"><span class="src">x64dbg: Open-Source x64/x32 Debugger for Windows.</span> <span class="pub">x64dbg. GitHub</span>. <a href="https://github.com/x64dbg/x64dbg">https://github.com/x64dbg/x64dbg</a></li>
+      <li id="r38"><span class="src">x64dbg.</span> <span class="pub">x64dbg</span>. <a href="https://x64dbg.com/">https://x64dbg.com/</a></li>
+      <li id="r39"><span class="src">SP 800-115: Technical Guide to Information Security Testing and Assessment.</span> <span class="pub">NIST</span>. <a href="https://csrc.nist.gov/pubs/sp/800/115/final">https://csrc.nist.gov/pubs/sp/800/115/final</a></li>
+      <li id="r40"><span class="src">Penetration Testing Methodologies.</span> <span class="pub">OWASP</span>. <a href="https://owasp.org/www-project-web-security-testing-guide/v42/3-The_OWASP_Testing_Framework/1-Penetration_Testing_Methodologies">https://owasp.org/www-project-web-security-testing-guide/v42/3-The_OWASP_Testing_Framework/1-Penetration_Testing_Methodologies</a></li>
+      <li id="r41"><span class="src">PCI DSS Penetration Testing Guide.</span> <span class="pub">Blaze Information Security</span>. <a href="https://www.blazeinfosec.com/post/pci-penetration-testing-guide/">https://www.blazeinfosec.com/post/pci-penetration-testing-guide/</a></li>
+      <li id="r42"><span class="src">EXP-301: Windows User Mode Exploit Development (OSED) Exam Guide.</span> <span class="pub">OffSec</span>. <a href="https://help.offsec.com/hc/en-us/articles/360052977212-EXP-301-Windows-User-Mode-Exploit-Development-OSED-Exam-Guide">https://help.offsec.com/hc/en-us/articles/360052977212-EXP-301-Windows-User-Mode-Exploit-Development-OSED-Exam-Guide</a></li>
+      <li id="r43"><span class="src">GREM: Reverse Engineering Malware Certification.</span> <span class="pub">GIAC</span>. <a href="https://www.giac.org/certifications/reverse-engineering-malware-grem">https://www.giac.org/certifications/reverse-engineering-malware-grem</a></li>
+      <li id="r44"><span class="src">FOR610: Reverse-Engineering Malware.</span> <span class="pub">SANS Institute</span>. <a href="https://www.sans.org/cyber-security-courses/reverse-engineering-malware-malware-analysis-tools-techniques">https://www.sans.org/cyber-security-courses/reverse-engineering-malware-malware-analysis-tools-techniques</a></li>
+      <li id="r45"><span class="src">Corelan Exploit Development Training.</span> <span class="pub">Corelan</span>. <a href="https://www.corelan-training.com/">https://www.corelan-training.com/</a></li>
+      <li id="r46"><span class="src">Open Analysis (OALabs).</span> <span class="pub">Open Analysis</span>. <a href="https://www.openanalysis.net/">https://www.openanalysis.net/</a></li>
+      <li id="r47"><span class="src">Reverse Engineering.</span> <span class="pub">LiveOverflow</span>. <a href="https://liveoverflow.com/topic/reverse-engineering/">https://liveoverflow.com/topic/reverse-engineering/</a></li>
+      <li id="r48"><span class="src">Reverse Engineering Resources.</span> <span class="pub">0xMr-Robot</span>. <a href="https://0xmr-robot.github.io/posts/Reverse-Engineering-Resources/">https://0xmr-robot.github.io/posts/Reverse-Engineering-Resources/</a></li>
+    </ol>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>A technical reference on thick-client / desktop application penetration testing &mdash; reverse engineering, protocol analysis, local privilege escalation, license and anti-tamper review, and binary exploitation, with the standards, tooling, and training that support the discipline. Tool and vendor names are the property of their respective owners; this document is independent and educational. Security testing must be conducted only with explicit, documented authorization.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,9 +1,11 @@
 const blogCategoryLabels = [
   "AI & Machine Learning",
+  "AI Strategy",
   "ASP.NET",
   "Android",
   "Angular",
   "Competitive Programming",
+  "Cosmology",
   "Cyber-Physical Systems",
   "DevSecOps",
   "Differential Equations",
@@ -12,6 +14,7 @@ const blogCategoryLabels = [
   "Earth Sciences",
   "Engineering",
   "Finance",
+  "Hardware",
   "Kubernetes",
   "Learning",
   "Math & Physics",
@@ -26,6 +29,7 @@ const blogCategoryLabels = [
   "Python",
   "Robotics",
   "Security",
+  "Side-Channel Attacks",
   "Society & Civics",
   "Spring",
   "Veganism",
@@ -43,6 +47,102 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/the-big-bang.html",
+    publishedAt: "2026-06-24",
+    summary: "An expert-level history of the Big Bang theory and the scientific, philosophical, and ideological controversy over a universe with a beginning.",
+    title: "The Universe That Refused to Be Eternal — The Big Bang and Its Discontents"
+  },
+  {
+    path: "blog-articles/the-replication-crisis.html",
+    publishedAt: "2026-06-24",
+    summary: "An expert-level technical account of the replication crisis in psychology, medicine, and beyond, covering its history, statistical machinery, large replication projects, fraud cases, and reform movement.",
+    title: "The Decline Effect — A Field Report on the Replication Crisis"
+  },
+  {
+    path: "blog-articles/anthropogenic-climate-change.html",
+    publishedAt: "2026-06-23",
+    summary: "An expert-level account of how human activity warmed the planet, how we came to know it, and why one of the best-supported findings in science became one of the most resisted.",
+    title: "The Anomaly — Anthropogenic Climate Change and the Science the World Did Not Want"
+  },
+  {
+    path: "blog-articles/nonlocality.html",
+    publishedAt: "2026-06-23",
+    summary: "An expert-level history and conceptual analysis of quantum nonlocality, from the EPR paradox and Bell's theorem to CHSH, Aspect, and the loophole-free Bell tests.",
+    title: "Spooky Action at a Distance — Quantum Nonlocality from EPR to the Loophole-Free Tests"
+  },
+  {
+    path: "blog-articles/continental-drift-wegener.html",
+    publishedAt: "2026-06-22",
+    summary: "A history of Wegener's continental-drift hypothesis, the decades-long backlash against it, and the plate-tectonic revolution that finally proved the continents move.",
+    title: "The Ground That Would Not Stay Still — Wegener, Continental Drift, and the Fifty-Year War Over a Moving Earth"
+  },
+  {
+    path: "blog-articles/banach-tarski-paradox.html",
+    publishedAt: "2026-06-22",
+    summary: "An expert account of the Banach-Tarski paradox, the mathematics behind duplicating a ball, and the long controversy surrounding the axiom of choice.",
+    title: "Two From One — The Banach-Tarski Paradox"
+  },
+  {
+    path: "blog-articles/godel-incompleteness.html",
+    publishedAt: "2026-06-21",
+    summary: "An expert account of Godel's incompleteness theorems, covering Hilbert's program, arithmetized syntax, diagonalization, and the philosophical fallout of formal limits.",
+    title: "The Limits of Proof — Godel's Incompleteness Theorems"
+  },
+  {
+    path: "blog-articles/the-integration-imperative.html",
+    publishedAt: "2026-06-21",
+    summary: "A strategy article on enterprise AI agents arguing that integration with identity, permissions, schemas, and existing systems is what determines whether deployments survive.",
+    title: "The Integration Imperative — Enterprise AI Agent Strategy"
+  },
+  {
+    path: "blog-articles/webapp_pentesting.html",
+    publishedAt: "2026-06-20",
+    summary: "A practical field guide to web application penetration testing, covering website and web API attack surfaces, common vulnerability classes, tooling, and assessment workflow.",
+    title: "Web Application Penetration Testing — Websites & Web APIs"
+  },
+  {
+    path: "blog-articles/api-security-testing.html",
+    publishedAt: "2026-06-20",
+    summary: "An expert field manual on API security testing, covering REST and GraphQL, authentication weaknesses, BOLA and IDOR, rate-limit bypass, JWT attacks, OAuth abuse, and the OWASP API Top 10.",
+    title: "API Security Testing — A Field Manual for Modern Backend Services"
+  },
+  {
+    path: "blog-articles/cloud-penetration-testing.html",
+    publishedAt: "2026-06-19",
+    summary: "A field guide to cloud penetration testing focused on attacking the control plane, exposed cloud services, identity paths, and provider-specific assessment constraints.",
+    title: "Cloud Penetration Testing — Attacking the Control Plane"
+  },
+  {
+    path: "blog-articles/wireless-penetration-testing.html",
+    publishedAt: "2026-06-19",
+    summary: "A field manual for wireless penetration testing covering Wi-Fi attack surfaces, radio-layer weaknesses, rogue infrastructure, credential capture, and defensive validation.",
+    title: "The Invisible Perimeter — A Field Manual for Wireless Penetration Testing"
+  },
+  {
+    path: "blog-articles/mobile-app-penetration-testing.html",
+    publishedAt: "2026-06-18",
+    summary: "An expert field manual for testing Android and iOS apps, covering reverse engineering, local storage review, certificate-pinning bypass, runtime instrumentation, and mobile API security.",
+    title: "Mobile Application Penetration Testing — A Field Manual"
+  },
+  {
+    path: "blog-articles/thick-client-testing.html",
+    publishedAt: "2026-06-18",
+    summary: "An expert field guide to assessing installed desktop software, covering reverse engineering, protocol analysis, privilege escalation, license-control review, and binary exploitation.",
+    title: "Thick Client & Desktop Application Penetration Testing — Reverse Engineering, Protocol Analysis, Privilege Escalation & Binary Exploitation"
+  },
+  {
+    path: "blog-articles/social-engineering-assessments.html",
+    publishedAt: "2026-06-17",
+    summary: "An expert field guide to social engineering assessments, covering phishing, vishing, smishing, pretexting, physical intrusion scenarios, defensive controls, and program governance.",
+    title: "The Human Operating System — A Field Guide to Social Engineering Assessments"
+  },
+  {
+    path: "blog-articles/hardware-embedded-pentesting.html",
+    publishedAt: "2026-06-17",
+    summary: "A deep technical field manual on hardware and embedded penetration testing, covering buses, firmware extraction, UART and JTAG access, and hardware reverse engineering workflows.",
+    title: "Hardware & Embedded Pentesting — A Field Manual"
+  },
   {
     path: "blog-articles/chicxulub.html",
     publishedAt: "2026-06-15",
@@ -1355,11 +1455,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/food-agriculture-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/chaos-theory-butterfly-effect.html": ["Math & Physics", "Philosophy"],
   "blog-articles/communications-sector-cybersecurity.html": ["Security", "Networks", "Engineering"],
-  "blog-articles/black-hole-singularities.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/black-hole-singularities.html": ["Math & Physics", "Philosophy", "Cosmology"],
   "blog-articles/defense-industrial-base-cybersecurity.html": ["Security", "Engineering", "Society & Civics"],
   "blog-articles/libet-free-will.html": ["Philosophy"],
   "blog-articles/nuclear-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/dark-energy-accelerating-universe.html": ["Math & Physics"],
+  "blog-articles/dark-energy-accelerating-universe.html": ["Math & Physics", "Cosmology"],
   "blog-articles/hph-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/financial-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering", "Finance"],
   "blog-articles/many-worlds-interpretation.html": ["Math & Physics", "Philosophy"],
@@ -1369,8 +1469,8 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/continuum-hypothesis.html": ["Math & Physics", "Philosophy"],
   "blog-articles/zero-click-attacks.html": ["Security", "Mobile App Development", "Operating Systems"],
   "blog-articles/the-nature-of-the-crime.html": ["Philosophy", "Society & Civics"],
-  "blog-articles/timing-attacks.html": ["Security", "Programming & Software"],
-  "blog-articles/power-analysis-attacks.html": ["Security", "Engineering"],
+  "blog-articles/timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
+  "blog-articles/power-analysis-attacks.html": ["Security", "Engineering", "Side-Channel Attacks"],
   "blog-articles/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
   "blog-articles/windows-legacy-security.html": ["Security", "Operating Systems", "Pentesting", "Cyber-Physical Systems"],
   "blog-articles/cobol.html": ["Programming & Software", "Engineering"],
@@ -1387,10 +1487,10 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/app-vulns.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/curl-reference.html": ["Programming & Software", "Networks"],
   "blog-articles/net_troubleshooting_tools.html": ["Networks", "Security"],
-  "blog-articles/hardware-installation-best-practices.html": ["Engineering"],
-  "blog-articles/storage-devices.html": ["Engineering", "Operating Systems"],
-  "blog-articles/cpu-fundamentals.html": ["Engineering", "Operating Systems"],
-  "blog-articles/ram.html": ["Engineering", "Operating Systems"],
+  "blog-articles/hardware-installation-best-practices.html": ["Engineering", "Hardware"],
+  "blog-articles/storage-devices.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/cpu-fundamentals.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/ram.html": ["Engineering", "Hardware", "Operating Systems"],
   "blog-articles/spring-cache.html": ["Programming & Software", "DevSecOps", "Spring"],
   "blog-articles/complexity-classes.html": ["Math & Physics", "Programming & Software"],
   "blog-articles/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
@@ -1421,7 +1521,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/backend-performance.html": ["Programming & Software", "Engineering", "DevSecOps"],
   "blog-articles/arrays-and-hashing-cp.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/two-pointers.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
-  "blog-articles/trusted-hardware.html": ["Security", "Engineering", "Operating Systems"],
+  "blog-articles/trusted-hardware.html": ["Security", "Engineering", "Hardware", "Operating Systems"],
   "blog-articles/nmap-red-team.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/1d-dynamic-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/angular-performance.html": ["Web & UI", "Programming & Software", "Angular"],
@@ -1457,7 +1557,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
   "blog-articles/data-quality.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
   "blog-articles/efficient-edge-ai.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "Programming & Software", "Security", "DevSecOps"],
+  "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "Security", "DevSecOps"],
   "blog-articles/wireless-networking.html": ["Networks", "Security"],
   "blog-articles/api-authentication.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
@@ -1474,7 +1574,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/swift-programming-language.html": ["Programming & Software", "Mobile App Development"],
   "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
   "blog-articles/red-teamer-infosec.html": ["Security"],
-  "blog-articles/mcp.html": ["AI & Machine Learning", "Programming & Software", "Security"],
+  "blog-articles/mcp.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "Security"],
   "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy"],
   "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software"],
   "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
@@ -1494,7 +1594,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering", "Differential Equations"],
   "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/causal_ai.html": ["AI & Machine Learning"],
-  "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software"],
+  "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
   "blog-articles/hidden-animal-ingredients.html": ["Veganism"],
   "blog-articles/action-model-learning.html": ["AI & Machine Learning", "Programming & Software"],
   "blog-articles/explainable-ai-lime-shap.html": ["AI & Machine Learning"],
@@ -1502,7 +1602,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/automated-planning.html": ["AI & Machine Learning", "Programming & Software"],
   "blog-articles/digital-privacy-levels.html": ["Privacy", "Security"],
   "blog-articles/digital-privacy-l4-l5.html": ["Privacy", "Security"],
-  "blog-articles/grc-enterprise-ai-data-governance.html": ["AI & Machine Learning", "Security", "Society & Civics"],
+  "blog-articles/grc-enterprise-ai-data-governance.html": ["AI & Machine Learning", "AI Strategy", "Security", "Society & Civics"],
   "blog-articles/sdn-ibn-article.html": ["Networks", "Programming & Software"],
   "blog-articles/market-based-vegan-activism.html": ["Veganism", "Society & Civics"],
   "blog-articles/investigations-exposure-article.html": ["Veganism", "Society & Civics"],
@@ -1553,7 +1653,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/halting-problem.html": ["Programming & Software", "Math & Physics", "Philosophy"],
   "blog-articles/authorized-adversary.html": ["Security", "Networks", "Pentesting"],
   "blog-articles/active-directory-pentesting.html": ["Security", "Networks", "Pentesting", "Operating Systems"],
-  "blog-articles/semmelweis-childbed-fever.html": ["Philosophy", "Learning", "Society & Civics"],
+  "blog-articles/semmelweis-childbed-fever.html": ["Philosophy", "Society & Civics"],
   "blog-articles/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
   "blog-articles/it-sector-security.html": ["Security", "Networks", "Engineering", "Society & Civics"],
   "blog-articles/aether.html": ["Math & Physics", "Philosophy"],
@@ -1564,7 +1664,23 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/chemical-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Math & Physics", "Philosophy"],
   "blog-articles/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/cloud-service-models.html": ["Programming & Software", "Networks", "DevSecOps"]
+  "blog-articles/cloud-service-models.html": ["Programming & Software", "Networks", "DevSecOps"],
+  "blog-articles/the-big-bang.html": ["Math & Physics", "Philosophy", "Cosmology"],
+  "blog-articles/the-replication-crisis.html": ["Learning", "Philosophy", "Society & Civics"],
+  "blog-articles/anthropogenic-climate-change.html": ["Earth Sciences", "Society & Civics"],
+  "blog-articles/nonlocality.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/continental-drift-wegener.html": ["Earth Sciences", "Philosophy"],
+  "blog-articles/banach-tarski-paradox.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/godel-incompleteness.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/the-integration-imperative.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "DevSecOps"],
+  "blog-articles/webapp_pentesting.html": ["Security", "Web & UI", "Pentesting"],
+  "blog-articles/api-security-testing.html": ["Security", "Programming & Software", "DevSecOps", "Pentesting"],
+  "blog-articles/cloud-penetration-testing.html": ["Security", "Networks", "DevSecOps", "Pentesting"],
+  "blog-articles/wireless-penetration-testing.html": ["Security", "Networks", "Pentesting"],
+  "blog-articles/mobile-app-penetration-testing.html": ["Security", "Mobile App Development", "Android", "Pentesting"],
+  "blog-articles/thick-client-testing.html": ["Security", "Programming & Software", "Pentesting", "Operating Systems"],
+  "blog-articles/social-engineering-assessments.html": ["Security", "Pentesting", "Society & Civics"],
+  "blog-articles/hardware-embedded-pentesting.html": ["Security", "Engineering", "Cyber-Physical Systems", "Pentesting"]
 };
 
 function formatBlogDate(dateString: string): string {

@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Penetration Testing — Attacking the Control Plane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;700;900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============ RESET / BASE ============ */
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --abyss:      #0B1020;
+  --abyss-2:    #0E1426;
+  --strata:     #141B33;
+  --strata-2:   #1A2240;
+  --panel:      #121A30;
+  --line:       rgba(155,168,206,0.14);
+  --line-2:     rgba(155,168,206,0.26);
+  --mist:       #ECEFF7;
+  --vapor:      #9AA6C4;
+  --vapor-dim:  #6F7B98;
+  --signal:     #FF7A3D;   /* ember — offense / findings */
+  --signal-2:   #FF9560;
+  --signal-soft: rgba(255,122,61,0.13);
+  --arc:        #5CA8FF;   /* sky — links / cloud / defense */
+  --arc-soft:   rgba(92,168,255,0.12);
+  --mint:       #6FE0B0;   /* code / success, sparing */
+  --crit:       #FF5470;
+  --warn:       #FFC24B;
+  --measure:    71ch;
+  --maxw:       1240px;
+}
+
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  background-color: var(--abyss);
+  background-image:
+    radial-gradient(1100px 620px at 78% -8%, rgba(255,122,61,0.10), transparent 60%),
+    radial-gradient(1300px 800px at 8% 2%, rgba(92,168,255,0.10), transparent 55%),
+    linear-gradient(180deg, #0A0F1E 0%, var(--abyss) 30%, var(--abyss) 100%);
+  background-attachment: fixed;
+  color: var(--mist);
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 19px;
+  line-height: 1.78;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* ============ PROGRESS BAR ============ */
+.progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--arc), var(--signal));
+  z-index: 200; transition: width 0.08s linear;
+  box-shadow: 0 0 14px rgba(255,122,61,0.5);
+}
+
+/* ============ TYPE PRIMITIVES ============ */
+h1,h2,h3,h4 { font-family: "Chivo", system-ui, sans-serif; font-weight: 900; line-height: 1.06; letter-spacing: -0.02em; color: #fff; }
+.eyebrow {
+  font-family: "JetBrains Mono", monospace; font-weight: 500; font-size: 0.72rem;
+  letter-spacing: 0.28em; text-transform: uppercase; color: var(--signal);
+}
+a { color: var(--arc); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+strong, b { font-weight: 600; color: #fff; }
+em { font-style: italic; }
+code, .mono { font-family: "JetBrains Mono", monospace; }
+
+/* ============ MASTHEAD ============ */
+.masthead {
+  position: relative;
+  border-bottom: 1px solid var(--line-2);
+  padding: clamp(28px, 5vw, 56px) 24px clamp(40px, 6vw, 72px);
+  overflow: hidden;
+}
+.masthead::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(80% 75% at 50% 22%, #000 30%, transparent 78%);
+  opacity: 0.5; pointer-events: none;
+}
+.mast-inner { max-width: var(--maxw); margin: 0 auto; position: relative; z-index: 2; }
+.mast-top {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 18px; flex-wrap: wrap; margin-bottom: clamp(40px, 8vw, 90px);
+}
+.brand { font-family: "JetBrains Mono", monospace; font-size: 0.78rem; letter-spacing: 0.16em; color: var(--vapor); display: flex; align-items: center; gap: 11px; }
+.brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 12px var(--signal); animation: pulse 2.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.32; } }
+@media (prefers-reduced-motion: reduce) { .brand .dot { animation: none; } }
+.mast-meta { font-family: "JetBrains Mono", monospace; font-size: 0.7rem; letter-spacing: 0.14em; color: var(--vapor-dim); text-align: right; }
+
+.mast-grid { display: grid; grid-template-columns: 1.18fr 0.82fr; gap: clamp(28px, 4vw, 56px); align-items: end; }
+@media (max-width: 880px) { .mast-grid { grid-template-columns: 1fr; gap: 30px; } }
+
+.kicker {
+  font-family: "JetBrains Mono", monospace; font-size: 0.74rem; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--arc); margin-bottom: 22px; display: inline-flex; gap: 10px; align-items: center;
+}
+.kicker .bar { width: 30px; height: 1px; background: var(--arc); }
+h1.title {
+  font-size: clamp(2.5rem, 7vw, 5.1rem); line-height: 0.95; letter-spacing: -0.035em; margin-bottom: 26px;
+}
+h1.title .em { color: var(--signal); }
+.dek {
+  font-size: clamp(1.06rem, 1.7vw, 1.32rem); line-height: 1.55; color: var(--vapor); max-width: 40ch; font-weight: 400;
+}
+.dek .hl { color: var(--mist); font-style: italic; }
+.byline {
+  margin-top: 30px; font-family: "JetBrains Mono", monospace; font-size: 0.72rem; letter-spacing: 0.1em;
+  color: var(--vapor-dim); line-height: 1.9; border-top: 1px solid var(--line); padding-top: 18px; max-width: 44ch;
+}
+.byline b { color: var(--vapor); font-weight: 500; }
+
+/* hero terminal */
+.term {
+  background: linear-gradient(180deg, #0C1224, #0A0F1F);
+  border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden;
+  box-shadow: 0 30px 80px -30px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.04);
+  font-family: "JetBrains Mono", monospace;
+}
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.015); }
+.term-bar .b { width: 11px; height: 11px; border-radius: 50%; }
+.term-bar .b.r { background: #FF5F57; } .term-bar .b.y { background: #FEBC2E; } .term-bar .b.g { background: #28C840; }
+.term-bar .ttl { margin-left: 8px; font-size: 0.68rem; letter-spacing: 0.08em; color: var(--vapor-dim); }
+.term-body { padding: 16px 16px 18px; font-size: 0.79rem; line-height: 1.85; overflow-x: auto; }
+.term-body .ln { white-space: pre; }
+.term .p { color: var(--mint); }   /* prompt */
+.term .c { color: var(--mist); }   /* command */
+.term .o { color: var(--vapor); }  /* output */
+.term .k { color: var(--signal); } /* highlight */
+.term .a { color: var(--arc); }
+.term .d { color: var(--vapor-dim); } /* comment */
+.term .cursor { display: inline-block; width: 8px; height: 1.05em; background: var(--signal); vertical-align: text-bottom; animation: blink 1.15s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .term .cursor { animation: none; } }
+
+/* ============ STAT STRIP ============ */
+.statstrip {
+  max-width: var(--maxw); margin: 0 auto; padding: 0 24px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  transform: translateY(-28px);
+}
+@media (max-width: 760px) { .statstrip { grid-template-columns: repeat(2, 1fr); transform: translateY(-22px); } }
+.stat { background: var(--abyss-2); padding: 20px 18px; }
+.stat .n { font-family: "Chivo", sans-serif; font-weight: 900; font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -0.02em; color: #fff; line-height: 1; }
+.stat .n .u { font-size: 0.62em; color: var(--signal); margin-left: 2px; }
+.stat .l { font-family: "JetBrains Mono", monospace; font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vapor-dim); margin-top: 9px; line-height: 1.5; }
+
+/* ============ SHELL / LAYOUT ============ */
+.shell { max-width: var(--maxw); margin: 0 auto; padding: 8px 24px 100px; display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: clamp(28px, 4vw, 68px); }
+@media (max-width: 1040px) { .shell { grid-template-columns: 1fr; } }
+
+/* ============ TOC ============ */
+.toc { position: sticky; top: 26px; align-self: start; height: max-content; max-height: calc(100vh - 52px); overflow-y: auto; padding-right: 6px; }
+@media (max-width: 1040px) {
+  .toc { position: static; max-height: none; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  .toc-head { padding: 14px 16px; cursor: pointer; }
+  .toc-list { display: none; padding: 0 16px 14px; }
+  .toc.open .toc-list { display: block; }
+}
+.toc-head { font-family: "JetBrains Mono", monospace; font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--vapor-dim); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+.toc-head .chev { display: none; }
+@media (max-width: 1040px) { .toc-head { margin-bottom: 0; } .toc-head .chev { display: inline; } }
+.toc-list { list-style: none; counter-reset: toc; }
+.toc-list li { counter-increment: toc; }
+.toc-list a {
+  display: block; font-family: "JetBrains Mono", monospace; font-size: 0.74rem; line-height: 1.4; color: var(--vapor-dim);
+  padding: 7px 0 7px 30px; position: relative; border-left: 1px solid var(--line); transition: color 0.15s, border-color 0.15s;
+}
+.toc-list a::before { content: counter(toc, decimal-leading-zero); position: absolute; left: 10px; color: var(--line-2); font-size: 0.66rem; top: 8px; }
+.toc-list a:hover { color: var(--vapor); text-decoration: none; }
+.toc-list a.active { color: var(--signal); border-left-color: var(--signal); }
+.toc-list a.active::before { color: var(--signal); }
+
+/* ============ ARTICLE BODY ============ */
+.article { min-width: 0; max-width: var(--measure); }
+.article > section { padding-top: 16px; margin-bottom: 8px; scroll-margin-top: 20px; }
+.sec-mark { font-family: "JetBrains Mono", monospace; font-size: 0.7rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--signal); display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.sec-mark .ln { flex: 1; height: 1px; background: var(--line); }
+h2 { font-size: clamp(1.7rem, 3.6vw, 2.55rem); margin-bottom: 20px; letter-spacing: -0.03em; }
+h3 { font-family: "Chivo", sans-serif; font-weight: 700; font-size: clamp(1.18rem, 2vw, 1.42rem); color: var(--mist); margin: 38px 0 14px; letter-spacing: -0.015em; }
+h4 { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.06em; color: var(--arc); text-transform: none; margin: 26px 0 10px; }
+.article p { margin-bottom: 20px; }
+.article p + p { margin-top: -4px; }
+
+.lead { font-size: 1.18rem; line-height: 1.62; color: #DDE3F2; }
+.lead::first-letter,
+.dropcap::first-letter {
+  float: left; font-family: "Chivo", sans-serif; font-weight: 900; font-size: 4.6rem; line-height: 0.78;
+  padding: 8px 14px 0 0; color: var(--signal); margin-top: 4px;
+}
+
+.article a.ref-link { color: var(--mist); }
+
+/* citations */
+sup.cite { font-family: "JetBrains Mono", monospace; line-height: 0; }
+sup.cite a {
+  color: var(--signal); font-size: 0.62rem; font-weight: 500; padding: 0 1px; text-decoration: none;
+  border-bottom: 1px dotted rgba(255,122,61,0.5);
+}
+sup.cite a:hover { background: var(--signal-soft); text-decoration: none; }
+
+/* lists */
+.article ul, .article ol { margin: 0 0 22px 0; padding-left: 0; list-style: none; }
+.article ul li, .article ol li { position: relative; padding-left: 28px; margin-bottom: 11px; }
+.article ul li::before { content: "▸"; position: absolute; left: 4px; top: 0; color: var(--signal); font-size: 0.85em; }
+.article ol { counter-reset: ol; }
+.article ol li { counter-increment: ol; }
+.article ol li::before { content: counter(ol); position: absolute; left: 0; top: 1px; font-family: "JetBrains Mono", monospace; font-size: 0.74rem; color: var(--arc); font-weight: 700; }
+
+/* ============ CODE BLOCKS ============ */
+.code {
+  background: linear-gradient(180deg, #0C1326, #0A0F20); border: 1px solid var(--line-2); border-radius: 10px;
+  margin: 0 0 24px; overflow: hidden; box-shadow: 0 16px 40px -24px rgba(0,0,0,0.7);
+}
+.code-h { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,0.012); }
+.code-h .t { font-family: "JetBrains Mono", monospace; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--vapor-dim); }
+.code-h .tag { font-family: "JetBrains Mono", monospace; font-size: 0.6rem; letter-spacing: 0.1em; color: var(--arc); padding: 2px 8px; border: 1px solid var(--arc-soft); border-radius: 20px; }
+.code pre { margin: 0; padding: 15px 16px; overflow-x: auto; font-family: "JetBrains Mono", monospace; font-size: 0.78rem; line-height: 1.72; color: #C6CFE6; }
+.code pre .cm { color: var(--vapor-dim); }   /* comment */
+.code pre .pr { color: var(--mint); }         /* prompt */
+.code pre .fl { color: var(--signal); }       /* flag/key */
+.code pre .st { color: var(--arc); }          /* string-ish */
+.code pre .nu { color: #C9A6FF; }
+
+code.ic { font-size: 0.84em; background: rgba(155,168,206,0.1); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--mint); white-space: nowrap; }
+
+/* ============ CALLOUTS / FINDING CARDS ============ */
+.finding {
+  border: 1px solid var(--line-2); border-left: 3px solid var(--signal); border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,122,61,0.05), rgba(255,122,61,0.012));
+  padding: 20px 22px; margin: 0 0 26px;
+}
+.finding-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.sev { font-family: "JetBrains Mono", monospace; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px; border-radius: 5px; }
+.sev.crit { background: rgba(255,84,112,0.16); color: #FF8098; border: 1px solid rgba(255,84,112,0.35); }
+.sev.high { background: var(--signal-soft); color: var(--signal-2); border: 1px solid rgba(255,122,61,0.35); }
+.sev.med  { background: rgba(255,194,75,0.12); color: var(--warn); border: 1px solid rgba(255,194,75,0.3); }
+.sev.info { background: var(--arc-soft); color: var(--arc); border: 1px solid rgba(92,168,255,0.32); }
+.finding-h .id { font-family: "JetBrains Mono", monospace; font-size: 0.66rem; color: var(--vapor-dim); letter-spacing: 0.08em; }
+.finding-h .ttl { font-family: "Chivo", sans-serif; font-weight: 700; font-size: 1.02rem; color: #fff; letter-spacing: -0.01em; flex-basis: 100%; }
+.finding p { margin-bottom: 12px; font-size: 0.95rem; line-height: 1.62; }
+.finding p:last-child { margin-bottom: 0; }
+.finding .meta { font-family: "JetBrains Mono", monospace; font-size: 0.68rem; color: var(--vapor); display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.finding .meta .lab { color: var(--vapor-dim); letter-spacing: 0.06em; }
+
+/* dossier */
+.dossier {
+  border: 1px solid var(--line-2); border-radius: 12px; background: var(--panel);
+  padding: 24px 24px 22px; margin: 6px 0 28px; position: relative; overflow: hidden;
+}
+.dossier::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--crit), var(--signal), transparent); }
+.dossier .dh { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+.dossier .tag { font-family: "JetBrains Mono", monospace; font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--crit); }
+.dossier h3 { margin: 6px 0 14px; font-size: 1.3rem; }
+.dossier p { font-size: 0.95rem; line-height: 1.62; margin-bottom: 13px; }
+.dossier .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; }
+@media (max-width: 560px) { .dossier .grid { grid-template-columns: 1fr; } }
+.dossier .g .v { font-family: "Chivo", sans-serif; font-weight: 900; font-size: 1.35rem; color: var(--signal); line-height: 1; }
+.dossier .g .k { font-family: "JetBrains Mono", monospace; font-size: 0.62rem; color: var(--vapor-dim); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 7px; }
+
+/* note / aside */
+.note {
+  border: 1px solid var(--line); border-left: 3px solid var(--arc); border-radius: 8px; background: var(--arc-soft);
+  padding: 16px 20px; margin: 0 0 24px; font-size: 0.93rem; line-height: 1.6; color: #D4DCF0;
+}
+.note .nh { font-family: "JetBrains Mono", monospace; font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--arc); margin-bottom: 7px; }
+
+/* ============ PULL QUOTE ============ */
+.pq {
+  margin: 36px 0; padding: 6px 0 6px 28px; border-left: 3px solid var(--signal);
+  font-family: "Newsreader", serif; font-style: italic; font-weight: 500; font-size: clamp(1.3rem, 2.6vw, 1.74rem);
+  line-height: 1.36; color: #fff; letter-spacing: -0.01em;
+}
+.pq .src { display: block; font-family: "JetBrains Mono", monospace; font-style: normal; font-weight: 400; font-size: 0.7rem; letter-spacing: 0.1em; color: var(--vapor-dim); margin-top: 14px; text-transform: uppercase; }
+
+/* ============ FIGURES ============ */
+figure { margin: 8px 0 30px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, var(--abyss-2), #0A0F20); overflow: hidden; }
+figure .fig-wrap { padding: 22px 18px 8px; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption { font-family: "JetBrains Mono", monospace; font-size: 0.68rem; line-height: 1.6; letter-spacing: 0.04em; color: var(--vapor-dim); padding: 13px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,0.012); }
+figcaption b { color: var(--vapor); font-weight: 500; }
+
+/* svg helpers */
+.svg-label { font-family: "JetBrains Mono", monospace; font-size: 11px; fill: var(--vapor); }
+.svg-label-sm { font-family: "JetBrains Mono", monospace; font-size: 9.5px; fill: var(--vapor-dim); }
+.svg-title { font-family: "Chivo", sans-serif; font-weight: 700; font-size: 13px; fill: #fff; }
+.svg-num { font-family: "Chivo", sans-serif; font-weight: 900; fill: #fff; }
+
+/* ============ TABLE ============ */
+.tbl-wrap { overflow-x: auto; margin: 0 0 26px; border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 520px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: "JetBrains Mono", monospace; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--arc); background: rgba(92,168,255,0.04); font-weight: 500; }
+td { color: var(--vapor); line-height: 1.5; }
+td:first-child { color: var(--mist); }
+tr:last-child td { border-bottom: none; }
+td code, th code { font-family: "JetBrains Mono", monospace; font-size: 0.82em; color: var(--mint); }
+
+/* ============ REFERENCES ============ */
+.refs { border-top: 1px solid var(--line-2); margin-top: 40px; padding-top: 30px; }
+.refs ol { list-style: none; counter-reset: ref; padding: 0; }
+.refs ol li { counter-increment: ref; position: relative; padding-left: 44px; margin-bottom: 15px; font-size: 0.82rem; line-height: 1.55; color: var(--vapor); padding-top: 2px; }
+.refs ol li::before { content: counter(ref); position: absolute; left: 0; top: 0; font-family: "JetBrains Mono", monospace; font-size: 0.72rem; font-weight: 700; color: var(--signal); background: var(--signal-soft); border: 1px solid rgba(255,122,61,0.25); border-radius: 6px; width: 32px; height: 26px; display: flex; align-items: center; justify-content: center; }
+.refs ol li .auth { color: var(--mist); }
+.refs ol li a { color: var(--arc); word-break: break-word; }
+.refs ol li .backlink { color: var(--vapor-dim); margin-left: 6px; font-family: "JetBrains Mono", monospace; font-size: 0.72rem; }
+.refs ol li .backlink:hover { color: var(--signal); }
+.refs-note { font-family: "JetBrains Mono", monospace; font-size: 0.72rem; line-height: 1.6; color: var(--vapor-dim); letter-spacing: 0.03em; margin: 0 0 22px; max-width: 60ch; }
+
+/* ============ FOOTER ============ */
+.foot { max-width: var(--maxw); margin: 0 auto; padding: 40px 24px 70px; border-top: 1px solid var(--line); }
+.foot .fi { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: center; }
+.foot p { font-family: "JetBrains Mono", monospace; font-size: 0.68rem; letter-spacing: 0.08em; color: var(--vapor-dim); line-height: 1.8; }
+.foot .sig { color: var(--signal); }
+
+/* ============ MISC ============ */
+::selection { background: rgba(255,122,61,0.3); color: #fff; }
+.toc::-webkit-scrollbar { width: 5px; }
+.toc::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+.kbd { font-family: "JetBrains Mono", monospace; font-size: 0.8em; background: var(--strata); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--mist); }
+hr.div { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+.chip { display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 0.66rem; letter-spacing: 0.06em; color: var(--vapor); background: var(--strata); border: 1px solid var(--line-2); border-radius: 20px; padding: 3px 11px; margin: 0 5px 7px 0; }
+.chip .d { color: var(--signal); }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<!-- ============ MASTHEAD ============ -->
+<header class="masthead">
+  <div class="mast-inner">
+    <div class="mast-top">
+      <div class="brand"><span class="dot"></span>OFFENSIVE&nbsp;CLOUD&nbsp;/&nbsp;FIELD&nbsp;MANUAL</div>
+      <div class="mast-meta">CLASSIFICATION: TECHNICAL · AUDIENCE: PRACTITIONER<br>REGIONS: AWS · AZURE · GCP · K8S</div>
+    </div>
+
+    <div class="mast-grid">
+      <div>
+        <div class="kicker"><span class="bar"></span>Penetration Testing &middot; Vol. Cloud</div>
+        <h1 class="title">Attacking the<br><span class="em">Control Plane</span></h1>
+        <p class="dek">An adversary's-eye guide to assessing AWS, Azure, and Google Cloud — where the perimeter is an <span class="hl">identity</span>, the exploit is a <span class="hl">permission</span>, and a single metadata request can become an account takeover.</p>
+        <div class="byline">
+          <b>SCOPE</b> &mdash; IAM &middot; serverless &middot; containers &middot; Kubernetes &middot; storage &middot; privilege escalation<br>
+          <b>TOOLING</b> &mdash; ScoutSuite &middot; Prowler &middot; Pacu &middot; MicroBurst &middot; Az PowerShell &middot; kubectl<br>
+          <b>STANDARDS</b> &mdash; MITRE ATT&amp;CK Cloud &middot; CIS Benchmarks &middot; NIST &middot; CSA CCM
+        </div>
+      </div>
+
+      <div class="term" aria-hidden="true">
+        <div class="term-bar"><span class="b r"></span><span class="b y"></span><span class="b g"></span><span class="ttl">attacker@kali: ~/engagement</span></div>
+        <div class="term-body">
+<div class="ln"><span class="d"># single credential — who are we?</span></div>
+<div class="ln"><span class="p">$</span> <span class="c">aws sts get-caller-identity</span></div>
+<div class="ln"><span class="o">Arn: .../user/<span class="a">ci-deploy-bot</span></span></div>
+<div class="ln">&nbsp;</div>
+<div class="ln"><span class="d"># an app with SSRF, reaching link-local</span></div>
+<div class="ln"><span class="p">$</span> <span class="c">curl http://<span class="k">169.254.169.254</span>/latest/\</span></div>
+<div class="ln"><span class="c">  meta-data/iam/security-credentials/</span></div>
+<div class="ln"><span class="o">AccessKeyId: <span class="k">ASIA…</span></span></div>
+<div class="ln"><span class="o">SecretAccessKey: <span class="k">****</span></span></div>
+<div class="ln"><span class="o">Token: <span class="k">IQoJb3…</span></span></div>
+<div class="ln">&nbsp;</div>
+<div class="ln"><span class="d"># the role can read every bucket.</span></div>
+<div class="ln"><span class="p">$</span> <span class="c">aws s3 ls</span><span class="cursor"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ STAT STRIP ============ -->
+<div class="statstrip">
+  <div class="stat"><div class="n">106<span class="u">M</span></div><div class="l">Records exposed in the Capital&nbsp;One SSRF breach</div></div>
+  <div class="stat"><div class="n">169.254<span class="u">.x</span></div><div class="l">The link-local IP behind most cloud credential theft</div></div>
+  <div class="stat"><div class="n">20<span class="u">+</span></div><div class="l">Documented AWS IAM privilege-escalation paths</div></div>
+  <div class="stat"><div class="n">3</div><div class="l">Hyperscalers, one shared-responsibility boundary</div></div>
+</div>
+
+<!-- ============ SHELL ============ -->
+<div class="shell">
+
+  <!-- TOC -->
+  <aside class="toc" id="toc">
+    <div class="toc-head" id="tocHead">Contents <span class="chev">▾</span></div>
+    <ol class="toc-list" id="tocList">
+      <li><a href="#frontier">The shared-responsibility frontier</a></li>
+      <li><a href="#roe">Rules of engagement</a></li>
+      <li><a href="#method">Methodology &amp; frameworks</a></li>
+      <li><a href="#iam">Identity is the perimeter</a></li>
+      <li><a href="#aws">Amazon Web Services</a></li>
+      <li><a href="#azure">Microsoft Azure</a></li>
+      <li><a href="#gcp">Google Cloud Platform</a></li>
+      <li><a href="#storage">Storage exposure</a></li>
+      <li><a href="#k8s">Containers &amp; Kubernetes</a></li>
+      <li><a href="#serverless">Serverless security</a></li>
+      <li><a href="#toolkit">The offensive toolkit</a></li>
+      <li><a href="#standards">Standards &amp; regulations</a></li>
+      <li><a href="#defense">Defensive hardening</a></li>
+      <li><a href="#learn">Training, labs &amp; certs</a></li>
+      <li><a href="#close">Closing</a></li>
+    </ol>
+  </aside>
+
+  <!-- ARTICLE -->
+  <main class="article">
+
+  <!-- ===== 01 FRONTIER ===== -->
+  <section id="frontier">
+    <div class="sec-mark">01 — Terrain<span class="ln"></span></div>
+    <h2>The shared-responsibility frontier</h2>
+
+    <p class="lead dropcap">Cloud penetration testing is not network penetration testing with a different IP range. The attack surface is not a rack of servers behind a firewall — it is a web of identity policies, service configurations, storage permissions, and trust relationships between managed services, all driven through APIs. An attacker who compromises a single function with an over-permissioned execution role can reach full account takeover without ever touching a virtual machine.<sup class="cite"><a id="cite-1" href="#ref-1">1</a></sup> The skills that find these paths blend cloud-architecture fluency with offensive tradecraft, and the techniques that matter rarely involve a memory-corruption exploit. They involve a misconfiguration that nobody checked.</p>
+
+    <p>The conceptual key to the entire discipline is the <strong>shared responsibility model</strong>. The provider secures the infrastructure it operates — physical hardware, the hypervisor, the internals of managed services. The customer is responsible for everything they configure on top of it: identities, access policies, network rules, and data.<sup class="cite"><a id="cite-2" href="#ref-2">2</a></sup> A cloud penetration test operates almost entirely <em>below that line</em>. You are testing the customer's configuration, not the provider's infrastructure, and the most consequential findings are almost always the customer's to fix. Neither AWS nor Azure nor Google audits your environment for you; an independent assessment is what surfaces the over-privileged role, the public bucket, and the exposed metadata endpoint before an adversary does.<sup class="cite"><a id="cite-3" href="#ref-3">3</a></sup></p>
+
+    <p>That distinction has practical teeth. Because the provider's infrastructure is multi-tenant, testing it is both prohibited and pointless — you would be attacking other customers. Because the customer's surface is API-driven and ephemeral, traditional tooling that scans hosts and ports misses most of it entirely.<sup class="cite"><a id="cite-4" href="#ref-4">4</a></sup> Cloud-native attack paths run through IAM privilege escalation, instance-metadata exploitation, inter-service trust abuse, storage exposure, and lateral movement across managed services — categories a conventional web-application or infrastructure test was never scoped to touch.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 680 268" role="img" aria-label="Shared responsibility model across on-premises, IaaS, PaaS and SaaS">
+          <text x="14" y="22" class="svg-title">Shared responsibility &mdash; where the test boundary sits</text>
+          <!-- legend -->
+          <rect x="392" y="12" width="11" height="11" rx="2" fill="#FF7A3D"/>
+          <text x="409" y="22" class="svg-label-sm">Customer secures (in scope)</text>
+          <rect x="392" y="28" width="11" height="11" rx="2" fill="#22304F"/>
+          <text x="409" y="38" class="svg-label-sm">Provider secures (out of scope)</text>
+
+          <!-- columns -->
+          <!-- layout: 4 columns evenly spaced -->
+          <!-- col width 130, gap 22, start x=20, 9 layers stacked, each 18px tall starting y=64 -->
+          <!-- ON-PREM: all customer -->
+          <g>
+            <text x="85" y="58" text-anchor="middle" class="svg-label">On-prem</text>
+            <rect x="20" y="64" width="130" height="170" rx="4" fill="#FF7A3D" opacity="0.16" stroke="#FF7A3D" stroke-opacity="0.4"/>
+            <text x="85" y="155" text-anchor="middle" class="svg-num" font-size="11" fill="#FF9560">100%</text>
+            <text x="85" y="172" text-anchor="middle" class="svg-label-sm">you own it all</text>
+          </g>
+          <!-- IaaS -->
+          <g>
+            <text x="237" y="58" text-anchor="middle" class="svg-label">IaaS</text>
+            <rect x="172" y="64" width="130" height="120" rx="4" fill="#FF7A3D" opacity="0.16" stroke="#FF7A3D" stroke-opacity="0.4"/>
+            <rect x="172" y="184" width="130" height="50" rx="4" fill="#22304F" stroke="#33425F" stroke-opacity="0.6"/>
+            <text x="237" y="128" text-anchor="middle" class="svg-label-sm" fill="#C6CFE6">OS · runtime · apps</text>
+            <text x="237" y="143" text-anchor="middle" class="svg-label-sm" fill="#C6CFE6">data · IAM · network</text>
+            <text x="237" y="213" text-anchor="middle" class="svg-label-sm">virtualization · HW</text>
+          </g>
+          <!-- PaaS -->
+          <g>
+            <text x="389" y="58" text-anchor="middle" class="svg-label">PaaS</text>
+            <rect x="324" y="64" width="130" height="74" rx="4" fill="#FF7A3D" opacity="0.16" stroke="#FF7A3D" stroke-opacity="0.4"/>
+            <rect x="324" y="138" width="130" height="96" rx="4" fill="#22304F" stroke="#33425F" stroke-opacity="0.6"/>
+            <text x="389" y="98" text-anchor="middle" class="svg-label-sm" fill="#C6CFE6">data · IAM</text>
+            <text x="389" y="113" text-anchor="middle" class="svg-label-sm" fill="#C6CFE6">config · code</text>
+            <text x="389" y="190" text-anchor="middle" class="svg-label-sm">runtime · OS · HW</text>
+          </g>
+          <!-- SaaS -->
+          <g>
+            <text x="541" y="58" text-anchor="middle" class="svg-label">SaaS</text>
+            <rect x="476" y="64" width="130" height="40" rx="4" fill="#FF7A3D" opacity="0.16" stroke="#FF7A3D" stroke-opacity="0.4"/>
+            <rect x="476" y="104" width="130" height="130" rx="4" fill="#22304F" stroke="#33425F" stroke-opacity="0.6"/>
+            <text x="541" y="82" text-anchor="middle" class="svg-label-sm" fill="#C6CFE6">data · access</text>
+            <text x="541" y="96" text-anchor="middle" class="svg-label-sm" fill="#C6CFE6">identity</text>
+            <text x="541" y="172" text-anchor="middle" class="svg-label-sm">app · platform · HW</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption><b>Figure 1.</b> As you move from IaaS toward SaaS, the provider absorbs more of the stack — but identity, access policy, and data configuration remain the customer's responsibility at every tier. That orange band is the penetration tester's scope.</figcaption>
+    </figure>
+
+    <p>This is why "the cloud is secure" is a category error. The platforms are, by and large, robustly engineered. The breaches happen in the orange band — a leaked access key, a role with <code class="ic">AdministratorAccess</code>, a bucket left world-readable, a function trusting unvalidated input. Misconfiguration, not novel vulnerability research, is the dominant cause of cloud compromise, and it is precisely what a competent assessment is built to find.<sup class="cite"><a href="#ref-3">3</a></sup></p>
+  </section>
+
+  <!-- ===== 02 RULES OF ENGAGEMENT ===== -->
+  <section id="roe">
+    <div class="sec-mark">02 — Authorization<span class="ln"></span></div>
+    <h2>Rules of engagement</h2>
+
+    <p>Before a single API call, the engagement needs authorization that is both ethical and contractual. Each hyperscaler publishes its own rules, and they differ enough that "I tested my AWS account the same way I'd test my Azure tenant" is a route to a suspended account. The universal constant: you may test what <em>you</em> own, never the provider's shared infrastructure or another tenant.<sup class="cite"><a id="cite-5" href="#ref-5">5</a></sup></p>
+
+    <h3>Amazon Web Services</h3>
+    <p>AWS permits customers to assess a defined set of services without prior approval. The current <strong>Permitted Services</strong> list spans the obvious compute and edge surface — EC2 instances, Elastic Load Balancers, NAT gateways, the AWS WAF, RDS and Aurora, CloudFront, API Gateway, AppSync, Lambda and Lambda@Edge, Lightsail, Elastic Beanstalk, ECS and Fargate, OpenSearch, FSx, Transit Gateway, and Bedrock AgentCore.<sup class="cite"><a href="#ref-5">5</a></sup> What remains firmly off-limits is anything that degrades the platform for other tenants or impersonates an attack on AWS itself: denial-of-service and its simulations, port, protocol, and request flooding, DNS zone walking, hijacking, or pharming through Route 53, and S3 bucket or subdomain takeover are all prohibited.<sup class="cite"><a href="#ref-5">5</a></sup> Adversarial simulations involving command-and-control, red/blue/purple teaming, malware, or simulated phishing require a separate Simulated Events form submitted for review before testing begins.<sup class="cite"><a href="#ref-5">5</a></sup> AWS dropped its blanket pre-authorization requirement years ago, but the customer remains solely responsible for ensuring tooling does not stray into DoS behavior or another customer's resources.<sup class="cite"><a id="cite-6" href="#ref-6">6</a></sup></p>
+
+    <div class="note">
+      <div class="nh">Scope discipline</div>
+      The single rule that protects you: test your own resources only. If a finding leads toward AWS infrastructure or another tenant — stop, document, and report it through the security disclosure channel rather than pursuing it.<sup class="cite"><a href="#ref-5">5</a></sup>
+    </div>
+
+    <h3>Microsoft Azure</h3>
+    <p>Azure's penetration-testing rules of engagement permit customers to test their own resources without prior notification for most test types. The prohibitions mirror the spirit of AWS's: social engineering against Microsoft employees, physical-security testing of datacenters, and automated scanning of infrastructure outside your own tenant are all out of bounds.<sup class="cite"><a id="cite-7" href="#ref-7">7</a></sup> Because Entra ID (formerly Azure AD) is internet-facing by default, the tenant boundary — not a network perimeter — is the line that must not be crossed.<sup class="cite"><a href="#ref-7">7</a></sup></p>
+
+    <h3>Google Cloud Platform</h3>
+    <p>Google operates the least restrictive policy of the three: it requires no prior approval and has no formal notification process for testing your own resources, provided the activity complies with the Acceptable Use Policy and Terms of Service. The constraint is that testing must stay within your own project and organization.<sup class="cite"><a href="#ref-7">7</a></sup> Across all three providers the practical takeaway is identical — you can test your own cloud, and a reputable engagement scopes every action inside the provider's rules by default.<sup class="cite"><a href="#ref-7">7</a></sup></p>
+
+    <p>Beyond provider policy, every engagement needs the artifacts a mature pentest always carries: written authorization from the account or tenant owner, a defined scope listing exact accounts, subscriptions, projects, and regions, and a rules-of-engagement document fixing source IP ranges, test windows, and emergency contacts.<sup class="cite"><a href="#ref-3">3</a></sup> In cloud work, credentialed grey-box access is strongly preferred over pure black-box testing — supplying the tester a low-privilege identity keeps the assessment strictly in-scope and avoids the risk of mis-attributing an attack to a resource the client does not own.<sup class="cite"><a id="cite-8" href="#ref-8">8</a></sup></p>
+  </section>
+
+  <!-- ===== 03 METHODOLOGY ===== -->
+  <section id="method">
+    <div class="sec-mark">03 — Method<span class="ln"></span></div>
+    <h2>Methodology &amp; frameworks</h2>
+
+    <p>A defensible engagement is built on recognized frameworks rather than ad-hoc curiosity. Mature cloud-testing methodology draws on the Penetration Testing Execution Standard (PTES), the OWASP testing guides, the SANS methodology, and NIST SP 800-115 (<em>Technical Guide to Information Security Testing and Assessment</em>), threaded together by the one map written specifically for this terrain: the MITRE ATT&amp;CK Cloud matrix.<sup class="cite"><a href="#ref-4">4</a></sup> Anchoring findings to a shared taxonomy is what lets a client compare this year's report to last year's, and lets a tester demonstrate coverage rather than anecdote.</p>
+
+    <h3>The MITRE ATT&amp;CK Cloud matrix</h3>
+    <p>ATT&amp;CK's Cloud matrix extends the Enterprise knowledge base with tactics and techniques that map to specific platforms — AWS, Azure, Google Cloud, plus Microsoft 365 and Google Workspace sub-matrices — giving teams targeted insight into how adversaries actually behave in each environment.<sup class="cite"><a id="cite-9" href="#ref-9">9</a></sup> It is living documentation: version 16, released in October 2024, added more than nineteen techniques, including cloud-relevant additions such as conditional-access-policy manipulation (T1556) and cloud service hijacking (T1496.004).<sup class="cite"><a id="cite-10" href="#ref-10">10</a></sup> Security teams operationalize it in four ways — threat modeling to simulate attacks before they happen, gap analysis to expose detection blind spots, adversary emulation to exercise defenses against real tactics, and incident response to accelerate investigation.<sup class="cite"><a id="cite-11" href="#ref-11">11</a></sup> For a red team, the matrix turns "we poked around" into "we exercised eleven techniques across five tactics, and here is where detection failed."</p>
+
+    <h3>The cloud kill chain</h3>
+    <p>Regardless of provider, a cloud assessment moves through a recognizable arc that mirrors a real intrusion: reconnaissance of the external surface, an initial foothold (most often a leaked credential or an application flaw), enumeration of what that identity can see and touch, privilege escalation, lateral movement across services and trust boundaries, and finally impact — exfiltration, persistence, or disruption.<sup class="cite"><a id="cite-12" href="#ref-12">12</a></sup></p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 680 192" role="img" aria-label="The cloud attack kill chain across five stages">
+          <text x="14" y="22" class="svg-title">The cloud attack kill chain</text>
+          <!-- 5 evenly spaced stage boxes: x = 16,150,284,418,552 width 112 -->
+          <!-- stage 1 -->
+          <g>
+            <rect x="16" y="60" width="112" height="86" rx="7" fill="#121A30" stroke="#FF7A3D" stroke-opacity="0.45"/>
+            <text x="28" y="84" class="svg-num" font-size="15" fill="#FF7A3D">01</text>
+            <text x="28" y="106" class="svg-label" fill="#fff" font-size="11">Recon</text>
+            <text x="28" y="124" class="svg-label-sm">enum subdomains,</text>
+            <text x="28" y="136" class="svg-label-sm">public assets</text>
+          </g>
+          <!-- stage 2 -->
+          <g>
+            <rect x="150" y="60" width="112" height="86" rx="7" fill="#121A30" stroke="#5CA8FF" stroke-opacity="0.4"/>
+            <text x="162" y="84" class="svg-num" font-size="15" fill="#5CA8FF">02</text>
+            <text x="162" y="106" class="svg-label" fill="#fff" font-size="11">Foothold</text>
+            <text x="162" y="124" class="svg-label-sm">leaked key, SSRF,</text>
+            <text x="162" y="136" class="svg-label-sm">spray, phish</text>
+          </g>
+          <!-- stage 3 -->
+          <g>
+            <rect x="284" y="60" width="112" height="86" rx="7" fill="#121A30" stroke="#5CA8FF" stroke-opacity="0.4"/>
+            <text x="296" y="84" class="svg-num" font-size="15" fill="#5CA8FF">03</text>
+            <text x="296" y="106" class="svg-label" fill="#fff" font-size="11">Enumerate</text>
+            <text x="296" y="124" class="svg-label-sm">whoami, list IAM,</text>
+            <text x="296" y="136" class="svg-label-sm">map permissions</text>
+          </g>
+          <!-- stage 4 -->
+          <g>
+            <rect x="418" y="60" width="112" height="86" rx="7" fill="#121A30" stroke="#FF7A3D" stroke-opacity="0.55"/>
+            <text x="430" y="84" class="svg-num" font-size="15" fill="#FF7A3D">04</text>
+            <text x="430" y="106" class="svg-label" fill="#fff" font-size="11">Escalate</text>
+            <text x="430" y="124" class="svg-label-sm">privesc + lateral</text>
+            <text x="430" y="136" class="svg-label-sm">across services</text>
+          </g>
+          <!-- stage 5 -->
+          <g>
+            <rect x="552" y="60" width="112" height="86" rx="7" fill="#1A1322" stroke="#FF5470" stroke-opacity="0.55"/>
+            <text x="564" y="84" class="svg-num" font-size="15" fill="#FF5470">05</text>
+            <text x="564" y="106" class="svg-label" fill="#fff" font-size="11">Impact</text>
+            <text x="564" y="124" class="svg-label-sm">exfil, persist,</text>
+            <text x="564" y="136" class="svg-label-sm">disrupt</text>
+          </g>
+          <!-- arrows between (y=103): gaps at x 128-150, 262-284, 396-418, 530-552 -->
+          <g fill="#6F7B98">
+            <path d="M128 103 L146 103" stroke="#52607F" stroke-width="1.4"/><path d="M146 99 L152 103 L146 107 Z" fill="#52607F"/>
+            <path d="M262 103 L280 103" stroke="#52607F" stroke-width="1.4"/><path d="M280 99 L286 103 L280 107 Z" fill="#52607F"/>
+            <path d="M396 103 L414 103" stroke="#52607F" stroke-width="1.4"/><path d="M414 99 L420 103 L414 107 Z" fill="#52607F"/>
+            <path d="M530 103 L548 103" stroke="#52607F" stroke-width="1.4"/><path d="M548 99 L554 103 L548 107 Z" fill="#52607F"/>
+          </g>
+          <text x="16" y="178" class="svg-label-sm">Automated scanners cover stages 01&ndash;03. Stages 04&ndash;05 &mdash; chaining findings into impact &mdash; are where human testers earn their fee.</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 2.</b> The cloud kill chain. Posture scanners enumerate; they do not chain. A bucket that is merely "public" and a role that is merely "over-privileged" are two medium findings until a tester connects them into account takeover.</figcaption>
+    </figure>
+
+    <p>That last point is the methodology's core. Read-only posture tools — covered in detail later — are the right way to start, inventorying resources and flagging misconfigurations without changing anything.<sup class="cite"><a id="cite-13" href="#ref-13">13</a></sup> But their output is a list of weaknesses, not an attack. The value of a penetration test over a configuration scan is the chaining: an exposed storage bucket combined with a credential it contains, combined with a role that credential can assume, becomes a single high-impact narrative that no scanner produces on its own.<sup class="cite"><a href="#ref-13">13</a></sup></p>
+  </section>
+
+  <!-- ===== 04 IAM ===== -->
+  <section id="iam">
+    <div class="sec-mark">04 — Identity<span class="ln"></span></div>
+    <h2>Identity is the perimeter</h2>
+
+    <p>In a datacenter, the perimeter is a firewall. In the cloud, it is an identity. Every provider's access model — AWS IAM, Azure RBAC and Entra ID, Google Cloud IAM — answers one question that dominates every engagement: <em>can a low-privilege principal reach administrator?</em> Privilege escalation is the highest-impact finding category in cloud environments, and it almost never requires a vulnerability in the classical sense.<sup class="cite"><a href="#ref-7">7</a></sup> It requires a permission that looks harmless in isolation.</p>
+
+    <div class="pq">A developer user with <span style="font-style:normal;font-family:'JetBrains Mono',monospace;font-size:0.78em;color:#FF9560;">iam:PassRole</span> and Lambda permissions may have a direct path to administrator that is invisible until you graph it.
+      <span class="src">— Rhino Security Labs, on indirect IAM escalation</span></div>
+
+    <h3>The AWS escalation catalogue</h3>
+    <p>Rhino Security Labs catalogued the canonical AWS privilege-escalation methods — more than twenty distinct paths — and the through-line is that most of them require no CVE; misconfiguration is sufficient.<sup class="cite"><a id="cite-14" href="#ref-14">14</a></sup> The dangerous permissions are specific and frequently granted by accident:</p>
+    <ul>
+      <li><strong><code class="ic">iam:CreatePolicyVersion</code></strong> — create a new version of a policy you can edit, defining arbitrary permissions, using the <code class="ic">--set-as-default</code> flag to activate it without needing <code class="ic">iam:SetDefaultPolicyVersion</code>. Potential impact: full administrator.<sup class="cite"><a href="#ref-14">14</a></sup></li>
+      <li><strong><code class="ic">iam:AttachUserPolicy</code> / <code class="ic">iam:PutUserPolicy</code></strong> — attach a managed admin policy, or write an inline one, directly to your own user. Granting <code class="ic">iam:Put*</code> without action restrictions lets a principal escalate to administrator immediately.<sup class="cite"><a id="cite-15" href="#ref-15">15</a></sup></li>
+      <li><strong><code class="ic">iam:PassRole</code> + <code class="ic">ec2:RunInstances</code></strong> — launch an instance with a privileged role attached, then read that role's credentials from the metadata service.<sup class="cite"><a href="#ref-3">3</a></sup></li>
+      <li><strong><code class="ic">iam:PassRole</code> + <code class="ic">lambda:CreateFunction</code></strong> — the most commonly overlooked path. Create a function with a high-privilege execution role, run code inside it, and act with that role's permissions even without direct IAM write access.<sup class="cite"><a id="cite-16" href="#ref-16">16</a></sup></li>
+      <li><strong><code class="ic">iam:CreateAccessKey</code> / <code class="ic">iam:CreateLoginProfile</code></strong> — mint a second access key, or set a console password, for any other user — taking over a more privileged identity wholesale.<sup class="cite"><a href="#ref-16">16</a></sup></li>
+    </ul>
+
+    <p>None of these is <code class="ic">iam:*</code>. Each looks innocuous in a single policy review, and that is exactly the problem: the escalation path is a property of the <em>graph</em> of identities and trust relationships, not of any one document.<sup class="cite"><a href="#ref-14">14</a></sup> An identity that cannot directly modify IAM may still create a Lambda function with a role more powerful than its own, invoke it, and reach administrator through that indirection in three hops that are invisible when policies are read one at a time.<sup class="cite"><a href="#ref-16">16</a></sup></p>
+
+    <figure>
+      <div class="fig-wrap">
+        <svg viewBox="0 0 680 230" role="img" aria-label="IAM privilege escalation graph from low-privilege user to administrator">
+          <text x="14" y="22" class="svg-title">One identity, two roads to admin</text>
+          <!-- user node -->
+          <circle cx="78" cy="128" r="34" fill="#0E1426" stroke="#5CA8FF" stroke-width="1.5"/>
+          <text x="78" y="124" text-anchor="middle" class="svg-label" fill="#fff" font-size="10.5">dev</text>
+          <text x="78" y="138" text-anchor="middle" class="svg-label-sm">low-priv</text>
+          <!-- lambda role node (top-mid) -->
+          <rect x="300" y="42" width="120" height="56" rx="8" fill="#0E1426" stroke="#FF7A3D" stroke-width="1.4"/>
+          <text x="360" y="66" text-anchor="middle" class="svg-label" fill="#FF9560" font-size="10.5">lambda-exec-role</text>
+          <text x="360" y="82" text-anchor="middle" class="svg-label-sm">elevated perms</text>
+          <!-- admin node -->
+          <circle cx="604" cy="128" r="40" fill="#1A1322" stroke="#FF5470" stroke-width="1.8"/>
+          <text x="604" y="122" text-anchor="middle" class="svg-num" font-size="13" fill="#FF5470">★</text>
+          <text x="604" y="142" text-anchor="middle" class="svg-label" fill="#fff" font-size="10.5">admin</text>
+          <!-- edge: user -> lambda role (indirect path A) -->
+          <path d="M104 108 C 180 60, 250 58, 298 66" fill="none" stroke="#FF7A3D" stroke-width="1.6" stroke-opacity="0.8"/>
+          <path d="M298 66 l -10 -2 l 6 8 Z" fill="#FF7A3D"/>
+          <text x="120" y="57" class="svg-label-sm" fill="#FF9560">iam:PassRole + lambda:CreateFunction</text>
+          <!-- edge: lambda role -> admin -->
+          <path d="M420 78 C 500 96, 540 108, 568 116" fill="none" stroke="#FF7A3D" stroke-width="1.6" stroke-opacity="0.8"/>
+          <path d="M568 116 l -10 -1 l 5 9 Z" fill="#FF7A3D"/>
+          <text x="430" y="74" class="svg-label-sm" fill="#FF9560">role perms ⇒ ★</text>
+          <!-- edge: user -> admin direct (path B) -->
+          <path d="M110 146 C 280 210, 430 210, 566 150" fill="none" stroke="#5CA8FF" stroke-width="1.6" stroke-opacity="0.7" stroke-dasharray="5 4"/>
+          <path d="M566 150 l -4 -10 l -7 6 Z" fill="#5CA8FF"/>
+          <text x="250" y="205" class="svg-label-sm" fill="#5CA8FF">direct: iam:AttachUserPolicy ⇒ ★</text>
+          <!-- caption marks -->
+          <text x="14" y="222" class="svg-label-sm">Path A is indirect (3 hops, invisible per-policy). Path B is a single permission. Both end at administrator.</text>
+        </svg>
+      </div>
+      <figcaption><b>Figure 3.</b> Two escalation roads from the same starting identity. Tools like PMapper graph these relationships across an account; Pacu's <b>iam__privesc_scan</b> module discovers available paths and can exploit them automatically.</figcaption>
+    </figure>
+
+    <p>Because these paths are graph properties, they are found by graph tooling. PMapper builds a directed graph of an account's users, roles, and the cross-service chains between them, surfacing escalation routes in minutes.<sup class="cite"><a href="#ref-13">13</a></sup> Rhino's own Pacu framework includes an <code class="ic">iam__privesc_scan</code> module that identifies available escalation paths from the current identity and, if chosen, executes each one — handing back administrator-level access through whichever misconfiguration it finds.<sup class="cite"><a id="cite-17" href="#ref-17">17</a></sup> Underneath the automation, the failures are mundane: wildcard actions, credentials nobody rotated, stale keys belonging to deprovisioned users, and the recurring catastrophe of a single IAM user holding <code class="ic">AdministratorAccess</code> with a leaked access key — full account compromise, no exploit required.<sup class="cite"><a href="#ref-3">3</a></sup></p>
+
+    <div class="finding">
+      <div class="finding-h">
+        <span class="sev crit">Critical</span>
+        <span class="id">FND-IAM-01 · CVSS 9.1</span>
+        <span class="ttl">Indirect privilege escalation via Lambda execution role</span>
+      </div>
+      <p>A CI deployment user holding <code class="ic">iam:PassRole</code> and <code class="ic">lambda:CreateFunction</code> can attach an unrelated high-privilege execution role to a new function, invoke it, and execute arbitrary AWS API calls as that role — reaching administrative access without any direct IAM-write permission on its own identity.</p>
+      <div class="meta">
+        <span class="lab">VECTOR</span><span>PassRole + CreateFunction → exec-role credential abuse</span>
+        <span class="lab">ATT&amp;CK</span><span>T1078 Valid Accounts · T1098 Account Manipulation</span>
+        <span class="lab">FIX</span><span>Scope PassRole to specific role ARNs; deny role attachment beyond the function's own least-privilege role</span>
+      </div>
+    </div>
+
+    <p>The catalogue extends well past these headline cases. A principal able to call <code class="ic">iam:UpdateLoginProfile</code> can reset the console password of a more-privileged user and authenticate as them; one holding <code class="ic">iam:AddUserToGroup</code> can join a group that carries administrative policies; and the data-plane services each contribute their own <code class="ic">PassRole</code> sinks — Glue development endpoints, CloudFormation stacks, Data Pipeline definitions, and SageMaker notebooks all accept a role to run under, and each becomes an escalation primitive whenever a low-privilege identity can both pass a powerful role and create the resource that assumes it.<sup class="cite"><a href="#ref-16">16</a></sup> What makes these so durable in real estates is that every one of them is a legitimate, documented API working exactly as designed; the vulnerability lives entirely in the policy that grants the permission, never in the service itself.<sup class="cite"><a href="#ref-14">14</a></sup></p>
+
+    <p>Trust policies are the second axis of IAM abuse, and the subtler one. A role's permission to be assumed is governed by its trust relationship, so a principal that can call <code class="ic">iam:UpdateAssumeRolePolicy</code> on a high-privilege role can rewrite that role to trust an attacker-controlled account and then assume it directly — a single API turning a role the attacker could merely see into one they fully control.<sup class="cite"><a href="#ref-16">16</a></sup> Over-broad trust relationships are endemic: roles that trust an entire account rather than a specific principal, third-party integration roles whose external-ID condition is missing, and cross-account roles whose counterpart account has itself been compromised all collapse the boundary the trust policy was meant to enforce. Pacu's privilege-escalation scanner enumerates these paths automatically, which is precisely why the framework is run early in an engagement — it converts a tangle of individually innocuous permissions into a ranked list of concrete routes to administrator.<sup class="cite"><a href="#ref-15">15</a></sup></p>
+
+    <p>The same logic — a low-privilege identity reaching the controls of a higher-privilege one — recurs in Azure through role assignments and managed identities, and in Google Cloud through service-account impersonation. The mechanics differ; the question does not. The remaining provider sections trace how each platform's identity model bends under pressure.</p>
+  </section>
+
+  <!-- ===== 05 AWS ===== -->
+  <section id="aws">
+    <div class="sec-mark">05 — AWS<span class="ln"></span></div>
+    <h2>Amazon Web Services</h2>
+
+    <p>AWS is the most-assessed cloud, and its defining attack technique is older than most cloud-security programs: abuse of the <strong>Instance Metadata Service</strong> (IMDS). Every EC2 instance can reach a link-local HTTP server at <code class="ic">169.254.169.254</code>, accessible only from the instance itself, that returns configuration data, user-data scripts, and — when a role is attached — temporary IAM credentials for that role.<sup class="cite"><a id="cite-18" href="#ref-18">18</a></sup> Those credentials are the keys to whatever the instance's role can do, which is why attackers target the endpoint relentlessly.</p>
+
+    <h3>IMDSv1, SSRF, and credential theft</h3>
+    <p>The original IMDSv1 answers a plain <code class="ic">GET</code> with no authentication. If an application running on the instance contains a server-side request forgery (or XXE) flaw, an attacker can coerce that application into fetching the credentials from the metadata endpoint <em>without ever obtaining code execution on the host</em>.<sup class="cite"><a href="#ref-18">18</a></sup> Mandiant has observed adversaries running automated scans precisely to harvest IAM credentials from internet-facing web applications this way.<sup class="cite"><a href="#ref-18">18</a></sup></p>
+
+    <div class="code">
+      <div class="code-h"><span class="t">imds — v1 vs v2 credential retrieval</span><span class="tag">bash</span></div>
+<pre><span class="cm"># IMDSv1 — a single unauthenticated GET (what SSRF abuses)</span>
+<span class="pr">$</span> curl http://<span class="fl">169.254.169.254</span>/latest/meta-data/iam/security-credentials/
+<span class="cm"># → returns the role name, then its AccessKeyId / SecretAccessKey / Token</span>
+
+<span class="cm"># IMDSv2 — session-oriented: first PUT a token (hop limit blocks proxies)</span>
+<span class="pr">$</span> TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+    -H <span class="st">"X-aws-ec2-metadata-token-ttl-seconds: 21600"</span>)
+<span class="pr">$</span> curl -s -H <span class="st">"X-aws-ec2-metadata-token: $TOKEN"</span> \
+    http://169.254.169.254/latest/meta-data/iam/security-credentials/</pre>
+    </div>
+
+    <p>AWS introduced <strong>IMDSv2</strong> as the mitigation. It requires a session token obtained via a <code class="ic">PUT</code> request, and that request carries a hop limit that, by default, prevents the token call from traversing the proxies that most SSRF attacks rely on.<sup class="cite"><a id="cite-19" href="#ref-19">19</a></sup> The defense is real but partial: SSRF that follows HTTP redirects can still pivot to the metadata IP, and an attacker who already has code execution on the instance can retrieve credentials regardless of which version is enforced.<sup class="cite"><a href="#ref-18">18</a></sup> The hardened posture is <code class="ic">HttpTokens=required</code> with a hop limit of 1 (or 2 for container tasks), which blocks the request-forgery class outright.<sup class="cite"><a href="#ref-19">19</a></sup> Session tokens never persist server-side, and a session is bound to the instance that created it.<sup class="cite"><a href="#ref-2">2</a></sup></p>
+
+    <div class="dossier">
+      <div class="dh"><span class="tag">Incident Dossier · 2019</span></div>
+      <h3>Capital One: one SSRF, 106 million records</h3>
+      <p>The breach that turned IMDS exploitation into a boardroom topic followed the exact chain above. An attacker — a former AWS engineer — found a server-side request forgery flaw in a misconfigured open-source ModSecurity web-application firewall running on an EC2 instance.<sup class="cite"><a id="cite-20" href="#ref-20">20</a></sup> Through it, they queried IMDSv1 and retrieved temporary credentials for the WAF's attached role, named <code class="ic">ISRM-WAF-Role</code>, which carried far more permission than it needed — enough to list and read S3.<sup class="cite"><a href="#ref-20">20</a></sup></p>
+      <p>With those credentials, the attacker enumerated and synced the bank's storage buckets, exfiltrating personal data tied to roughly 100 million applicants in the United States and 6 million in Canada — names, addresses, credit data, Social Security and bank-account numbers.<sup class="cite"><a id="cite-21" href="#ref-21">21</a></sup> The intrusion occurred in March 2019 but was not discovered until July, after a tip-off; the attacker was arrested shortly after public disclosure.<sup class="cite"><a href="#ref-21">21</a></sup> No single exotic vulnerability was involved. It was a chain of two ordinary misconfigurations — an exploitable SSRF and an over-permissioned role — meeting an unprotected metadata endpoint.<sup class="cite"><a href="#ref-21">21</a></sup></p>
+      <div class="grid">
+        <div class="g"><div class="v">106M</div><div class="k">records exposed</div></div>
+        <div class="g"><div class="v">~4 mo</div><div class="k">dwell time before discovery</div></div>
+        <div class="g"><div class="v">IMDSv1</div><div class="k">the version that made it trivial</div></div>
+      </div>
+    </div>
+
+    <h3>Working an AWS account with Pacu</h3>
+    <p>Once a foothold yields credentials, Pacu — Rhino Security Labs' open-source AWS exploitation framework — structures the post-exploitation phase. After importing keys, a tester enumerates with <code class="ic">iam__enum_permissions</code> and the users/roles/policies modules, hunts data with <code class="ic">s3__bucket_finder</code>, scans for escalation with <code class="ic">iam__privesc_scan</code>, and can manipulate CloudTrail logging to study detection gaps.<sup class="cite"><a href="#ref-17">17</a></sup> Pacu's design mirrors a real adversary's workflow: enumeration, privilege escalation, persistence, data exfiltration, and log tampering, all driven through the same APIs an administrator uses.<sup class="cite"><a href="#ref-15">15</a></sup> Beyond IMDS and IAM, the richest AWS targets are the places secrets accumulate — EC2 user-data scripts, the SSM Parameter Store, environment variables, and KMS-encrypted material that an over-broad role can decrypt.</p>
+
+    <h3>Role-chaining and the AWS lateral surface</h3>
+    <p>The Security Token Service is the engine of AWS lateral movement. Once a tester holds any credential, the operative question is which roles it can assume, and an attacker walks the resulting graph by calling <code class="ic">sts:AssumeRole</code> from one identity to the next — role-chaining through trust relationships until they reach an identity with the permissions they want.<sup class="cite"><a href="#ref-6">6</a></sup> Each hop produces fresh temporary credentials and, unless trust policies are tightly scoped, the chain can cross account boundaries inside an organization, which is why mature engagements map the full assume-role graph rather than stopping at the first set of keys.<sup class="cite"><a href="#ref-13">13</a></sup> Enumerating that graph blind is impractical by hand, so testers lean on credential-report and policy-simulation calls to learn what the current identity can reach before spending a single noisy action.<sup class="cite"><a href="#ref-2">2</a></sup></p>
+
+    <p>Systems Manager is the other great AWS pivot. An identity with the right SSM permissions can run commands on any managed instance through <code class="ic">SendCommand</code>, or open an interactive shell via Session Manager — executing code on a host without SSH, without an open inbound port, and without ever touching the network layer the defender is watching.<sup class="cite"><a href="#ref-13">13</a></sup> Because Session Manager activity is mediated entirely by the AWS API, it both blends into legitimate operations traffic and routes around perimeter controls, making it a favoured route from a compromised identity to code execution on production instances. Pacu packages much of this — enumerating SSM-managed hosts, harvesting Parameter Store secrets, and chaining the results back into its escalation modules — so a single imported key can be expanded into account-wide reach through nothing but documented control-plane calls.<sup class="cite"><a href="#ref-17">17</a></sup></p>
+
+    <p>Detection-evasion shapes every step. A practised operator paces API calls to avoid the volumetric patterns GuardDuty flags, prefers read and assume actions that resemble routine automation, and treats CloudTrail as something to study and, where permissions allow, to disrupt — the same logging an investigator depends on after the fact.<sup class="cite"><a href="#ref-6">6</a></sup> The defender's countermeasure is the inverse: organization-wide trails that the workload roles themselves cannot stop, and anomaly detection tuned to the assume-role and Session-Manager sequences that legitimate users rarely produce.<sup class="cite"><a href="#ref-13">13</a></sup></p>
+  </section>
+
+  <!-- ===== 06 AZURE ===== -->
+  <section id="azure">
+    <div class="sec-mark">06 — Azure<span class="ln"></span></div>
+    <h2>Microsoft Azure</h2>
+
+    <p>Azure's identity boundary is the tenant, governed by <strong>Entra ID</strong> (formerly Azure AD). The defining characteristic for an attacker is that Entra is internet-facing by default — meaning the tenant can be probed, enumerated, and in many cases breached with no prior foothold inside the network at all.<sup class="cite"><a href="#ref-12">12</a></sup> The toolkit that has grown up around this surface is PowerShell-first, which is why fluency with the <strong>Az PowerShell</strong> module and Az CLI is non-negotiable for Azure work.</p>
+
+    <h3>Unauthenticated reconnaissance</h3>
+    <p>Several tools map a tenant before any credential exists. AADInternals enumerates tenant metadata — verified domains, authentication and federation type, single-sign-on configuration — from the outside. NetSPI's <strong>MicroBurst</strong>, a PowerShell toolkit for assessing Azure, discovers resources registered under an organization's namespace and identifies publicly accessible Blob containers, while ROADtools collects directory data through the Microsoft Graph API.<sup class="cite"><a id="cite-22" href="#ref-22">22</a></sup> MicroBurst's <code class="ic">Invoke-EnumerateAzureSubDomains</code> reveals storage accounts, web apps, and tenant subdomains, and <code class="ic">Invoke-EnumerateAzureBlobs</code> fuzzes common naming patterns to surface exposed containers — a recurring source of leaked backups, configuration, and tokens.<sup class="cite"><a id="cite-23" href="#ref-23">23</a></sup></p>
+
+    <div class="code">
+      <div class="code-h"><span class="t">azure — recon to managed-identity token theft</span><span class="tag">powershell</span></div>
+<pre><span class="cm"># Unauthenticated tenant recon (no creds needed)</span>
+<span class="pr">PS></span> Invoke-AADIntReconAsOutsider -DomainName <span class="st">"target.com"</span>
+<span class="pr">PS></span> Invoke-EnumerateAzureBlobs -Base <span class="st">"targetcorp"</span> -Verbose
+
+<span class="cm"># Initial access: password spray Microsoft Online endpoints</span>
+<span class="pr">PS></span> Invoke-MSOLSpray -UserList users.txt -Password <span class="st">"Winter2025!"</span> -Verbose
+
+<span class="cm"># With a token — enumerate as the compromised identity (Az CLI)</span>
+<span class="pr">$</span> az account list -o table  <span class="cm"># subscriptions in reach</span>
+<span class="pr">$</span> az resource list -o table
+
+<span class="cm"># Inside a compromised VM/app: steal the managed-identity token</span>
+<span class="pr">$</span> curl -H <span class="st">"Metadata: true"</span> "http://169.254.169.254/metadata/identity/\
+    oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/"</pre>
+    </div>
+
+    <h3>Initial access and token abuse</h3>
+    <p>Password spraying remains one of the most effective entry techniques: because Entra is reachable without a foothold, a tool like MSOLSpray can test one or two common passwords across a curated user list, frequently yielding valid credentials where multi-factor authentication is not uniformly enforced.<sup class="cite"><a href="#ref-12">12</a></sup> A more modern technique is <strong>device-code authentication abuse</strong> — luring a target to activate an attacker-generated device code grants a valid access token for Microsoft Graph and the Azure management APIs without ever touching the user's password.<sup class="cite"><a href="#ref-12">12</a></sup> Legacy authentication protocols, which bypass modern conditional-access policies, give attackers another path around MFA.<sup class="cite"><a href="#ref-22">22</a></sup></p>
+
+    <p>Operator tooling is itself a target. When an administrator uses Az PowerShell or Az CLI and fails to terminate the session cleanly, access tokens and authentication data are left cached in a local file; an attacker who compromises that machine can lift the token and inherit a persistent, MFA-bypassing session.<sup class="cite"><a href="#ref-22">22</a></sup> This is the cloud analogue of credential theft from a workstation, and it is devastating precisely because the stolen artifact is a live, pre-authenticated token rather than a password.</p>
+
+    <h3>Managed identities and escalation</h3>
+    <p>Many Azure services authenticate to other resources using a <strong>managed identity</strong>. If an application carrying one is compromised — through remote code execution, say — the attacker can steal the application's access token and wield its privileges to reach other resources, turning a single application flaw into a much broader compromise.<sup class="cite"><a href="#ref-22">22</a></sup> The token is fetched from Azure's metadata endpoint, which requires a <code class="ic">Metadata: true</code> header and is subject to a hop limit much like AWS IMDSv2.<sup class="cite"><a href="#ref-19">19</a></sup> From there, escalation routes run through over-permissive role assignments (a principal able to run <code class="ic">az role assignment create</code> with the Owner role is, effectively, an owner), Azure Automation accounts and runbooks that execute under highly privileged identities, and hybrid-joined virtual machines that bridge the cloud tenant to an on-premises Active Directory.<sup class="cite"><a href="#ref-22">22</a></sup> The standard Azure red-team toolkit therefore extends well beyond MicroBurst to AADInternals, ROADtools, GraphRunner, PowerZure, AzureHound, and the multi-cloud auditor ScoutSuite.<sup class="cite"><a href="#ref-22">22</a></sup></p>
+
+    <h3>Two control planes, one tenant</h3>
+    <p>An Azure assessment is really an assessment of two distinct planes that a single identity may straddle. Azure Resource Manager governs subscriptions, resource groups, and the infrastructure within them; Entra ID and Microsoft Graph govern the directory itself — users, groups, applications, and the role assignments that bind them.<sup class="cite"><a href="#ref-22">22</a></sup> A compromise often begins in one plane and is only catastrophic once it crosses into the other: a managed identity with Owner over a subscription can dominate its resources, but a principal that gains the Global Administrator or Privileged Role Administrator role in Entra can rewrite the directory's trust fabric for every subscription beneath it. Testers therefore enumerate both — Azure role assignments through ARM, and directory roles and application permissions through Graph — because the most damaging escalation is frequently the quiet ARM-to-Entra crossing that a resource-only review never sees.<sup class="cite"><a href="#ref-12">12</a></sup></p>
+
+    <p>The Primary Refresh Token is Azure's highest-value credential artifact. Issued to a device when it joins Entra ID, the PRT is a long-lived token that brokers single sign-on across the tenant's cloud applications; an attacker who compromises an Entra-joined endpoint and extracts the PRT inherits the user's authenticated sessions wholesale, sidestepping both the password and, in many configurations, the multi-factor prompt that protects it.<sup class="cite"><a href="#ref-22">22</a></sup> This is the cloud-native successor to pass-the-hash: the stolen object is not a password to crack but a live token to replay, and it is exactly why conditional-access policies that bind sessions to compliant, managed devices — rather than to a one-time factor at sign-in — are the control that meaningfully raises the cost of a tenant breach.<sup class="cite"><a href="#ref-12">12</a></sup> Legacy authentication protocols undercut all of it, because a single application that still speaks an old protocol offers a path that conditional access was never able to inspect.<sup class="cite"><a href="#ref-22">22</a></sup></p>
+  </section>
+
+  <!-- ===== 07 GCP ===== -->
+  <section id="gcp">
+    <div class="sec-mark">07 — GCP<span class="ln"></span></div>
+    <h2>Google Cloud Platform</h2>
+
+    <p>Google Cloud's identity model rewards a different instinct than AWS or Azure. Where AWS attackers obsess over policies attached to users and roles, GCP escalation is overwhelmingly a story about <strong>service accounts</strong> — non-human identities that both authenticate workloads and serve as the resources other principals are granted permission to act upon. The pivotal permission is <code class="ic">iam.serviceAccounts.actAs</code>, the GCP analogue of AWS <code class="ic">iam:PassRole</code>: it lets a principal operate as a service account, and any identity that can attach a more-privileged service account to a resource it controls can inherit that account's privileges.<sup class="cite"><a id="cite-24" href="#ref-24">24</a></sup> Granting the Service Account User role at the project level — a common convenience — hands a principal the ability to act as <em>every</em> service account in the project, default accounts included.<sup class="cite"><a href="#ref-24">24</a></sup></p>
+
+    <p>That default matters because Google's legacy default Compute Engine service account is granted the project-wide <strong>Editor</strong> role, and unless an organization has explicitly disabled this behavior, any workload that runs as it — a GCE instance, a Cloud Function, a Cloud Build job — carries broad write access to the entire project.<sup class="cite"><a id="cite-25" href="#ref-25">25</a></sup> Compromise such a workload and you do not need a clever escalation chain; you already hold Editor.</p>
+
+    <h3>The escalation catalogue</h3>
+    <p>Rhino Security Labs and Praetorian have catalogued the standalone permissions that each grant a path to full project control. Several recur in real assessments:</p>
+    <ul>
+      <li><code class="ic">iam.serviceAccountKeys.create</code> — mint a new private key for a more-privileged service account and authenticate directly as it, no further interaction required.<sup class="cite"><a href="#ref-25">25</a></sup></li>
+      <li><code class="ic">iam.serviceAccounts.getAccessToken</code> / <code class="ic">signJwt</code> / <code class="ic">signBlob</code> — generate short-lived tokens or signed assertions for a target service account, impersonating it without ever touching a key file.<sup class="cite"><a href="#ref-24">24</a></sup></li>
+      <li><code class="ic">iam.roles.update</code> — if you can edit a custom role you are already assigned, append arbitrary permissions to it and escalate in place.<sup class="cite"><a href="#ref-25">25</a></sup></li>
+      <li><code class="ic">iam.serviceAccounts.implicitDelegation</code> — chain through one service account to obtain tokens for another, walking a delegation graph toward higher privilege.<sup class="cite"><a href="#ref-24">24</a></sup></li>
+      <li><code class="ic">cloudfunctions.functions.create</code> + <code class="ic">actAs</code> — deploy a function bound to a privileged service account and exfiltrate its token from inside the execution environment, mirroring the AWS Lambda escalation path.<sup class="cite"><a id="cite-26" href="#ref-26">26</a></sup></li>
+    </ul>
+
+    <p>The most elegant GCP-native escalation runs through <strong>Deployment Manager</strong>. The Google APIs service agent that Deployment Manager uses to create resources runs with the Editor role, so a principal with <code class="ic">deploymentmanager.deployments.create</code> — but without direct administrative rights — can submit a deployment that creates resources or binds policy on their behalf, borrowing the agent's Editor privileges to escalate.<sup class="cite"><a href="#ref-24">24</a></sup> It is a textbook confused-deputy problem baked into a first-party service.</p>
+
+    <div class="pq">
+      <p>In GCP the question is rarely &ldquo;what can this identity do?&rdquo; It is &ldquo;which other identity can this one <em>become</em>?&rdquo; — and how short is the walk from there to Editor.</p>
+    </div>
+
+    <h3>Credentialed enumeration</h3>
+    <p>Because GCP rarely exposes pre-authentication attack surface, engagements are predominantly credentialed grey-box exercises that begin from a provided service-account key or user identity and map reachable impersonation paths outward.<sup class="cite"><a href="#ref-8">8</a></sup> The tooling reflects this. ScoutSuite's <code class="ic">gcp</code> provider audits project and organization configuration; Google's own <code class="ic">gcp_scanner</code> walks the resources and permissions reachable from a given credential; and NetSPI's <strong>gcpwn</strong>, alongside the older <strong>gcp_enum</strong> and Hacking the Cloud's privilege-escalation scripts, automates the search for the <code class="ic">actAs</code> edges and over-broad bindings that turn a foothold into project ownership.<sup class="cite"><a href="#ref-8">8</a></sup> Workspace-integrated tenants add a further dimension: domain-wide delegation, where a service account is authorized to impersonate human users across Google Workspace, can convert a cloud compromise into mailbox and document access across the organization.<sup class="cite"><a href="#ref-8">8</a></sup></p>
+
+    <p>Two GCP-specific mechanics reward attention. The first is the interaction between metadata-served tokens and OAuth scopes: a Compute Engine instance obtains its service account's access token from the same metadata endpoint pattern seen elsewhere, but that token is additionally bounded by the scopes configured on the instance, so a tester who pulls a token must check both the underlying IAM grants and the scope ceiling before assuming what it can do.<sup class="cite"><a href="#ref-25">25</a></sup> In practice the default scope on many instances is broad enough that the IAM policy, not the scope, is the real limit — but the two-layer model is a recurring source of confusion that a careful enumeration resolves rather than guesses.<sup class="cite"><a href="#ref-26">26</a></sup> The second is Cloud Build, whose default service account has historically carried expansive project permissions; a principal able to submit a build can run arbitrary steps under that identity, making the CI service itself an escalation path in the same family as AWS Lambda execution-role abuse.<sup class="cite"><a href="#ref-25">25</a></sup></p>
+
+    <p>The defensive counterweight unique to Google Cloud is the <strong>organization policy service</strong>, which applies constraints across an entire resource hierarchy independent of IAM. Constraints that disable service-account key creation, restrict which identities may be granted roles, and forbid default-network creation close off whole categories of the escalation paths catalogued above before any individual project misconfigures itself — and because they are inherited down the folder and project tree, they scale in a way per-project review never can.<sup class="cite"><a href="#ref-8">8</a></sup> For the tester, confirming whether these constraints are set is as informative as any single permission check: their absence is what makes the impersonation graph so reliably traversable in the first place.<sup class="cite"><a href="#ref-26">26</a></sup></p>
+  </section>
+
+  <!-- ===== 08 STORAGE ===== -->
+  <section id="storage">
+    <div class="sec-mark">08 — Storage<span class="ln"></span></div>
+    <h2>Storage exposure</h2>
+
+    <p>Object storage is the most reliably profitable target in cloud security because the failure mode is so simple: a bucket meant for one audience is reachable by another. Amazon S3, Azure Blob Storage, and Google Cloud Storage all expose the same essential risk through different access-control vocabularies, and the testing pattern is identical across them — enumerate candidate names, probe each for anonymous or over-broad access, and characterise what a reachable container leaks.<sup class="cite"><a href="#ref-3">3</a></sup></p>
+
+    <h3>Enumeration and access</h3>
+    <p>Bucket namespaces are global and guessable, which makes them fuzzable. Attackers generate candidate names from the target's brand, products, and environments — <code class="ic">acme-prod-backups</code>, <code class="ic">acme-dev-assets</code> — and test each against the storage endpoint. On Azure this is exactly what MicroBurst's <code class="ic">Invoke-EnumerateAzureBlobs</code> automates, fuzzing common container patterns to surface publicly readable Blobs full of backups, configuration, and tokens.<sup class="cite"><a href="#ref-23">23</a></sup> The misconfigurations that turn a discovered bucket into a breach are well understood: legacy S3 ACLs that grant read or write to <em>AuthenticatedUsers</em> (meaning any AWS account, not your account) or to <em>AllUsers</em> (the anonymous internet), and resource policies whose <code class="ic">Principal</code> is the wildcard <code class="ic">*</code>.<sup class="cite"><a href="#ref-3">3</a></sup> A bucket open for listing leaks an inventory of every object; a bucket open for writing invites tampering and malware seeding; a bucket open for reading exposes whatever sits inside.</p>
+
+    <p>Permissive storage is rarely the whole breach — it is the second act. In the Capital One intrusion, stolen role credentials were used to run a list operation against the bank's S3 buckets and then sync their contents out, converting credential theft into the exfiltration of more than a hundred million records.<sup class="cite"><a href="#ref-20">20</a></sup> The lesson testers carry into every engagement is that storage findings compound with identity findings: the impact of an over-permissive role is bounded by the data the role can reach, and object storage is usually where the data lives.</p>
+
+    <div class="finding">
+      <div class="finding-h">
+        <span class="sev high">High</span>
+        <span class="id">FND-STO-02</span>
+        <span class="ttl">Publicly listable object store with sensitive contents</span>
+      </div>
+      <p>A storage bucket grants list and read access to an over-broad principal — anonymous users, all authenticated cloud accounts, or a wildcard resource policy — exposing object inventories and their contents to unauthorised retrieval.</p>
+      <div class="meta">
+        <span class="lab">ATT&amp;CK</span><span>T1530 Data from Cloud Storage</span>
+        <span class="lab">VECTOR</span><span>AllUsers / AuthenticatedUsers ACL · Principal:* policy</span>
+        <span class="lab">FIX</span><span>Enable account-level public-access blocking; replace wildcard principals with explicit grants; prefer IAM/bucket policy over legacy ACLs; turn on access logging</span>
+      </div>
+    </div>
+
+    <p>Defensively, the controls that close the exposure are blunt and effective. AWS S3 Block Public Access overrides any bucket-level ACL or policy that would otherwise make an object public, and is the single highest-leverage S3 setting an organisation can enable account-wide; Azure and GCP offer equivalent tenant- and project-level switches.<sup class="cite"><a href="#ref-3">3</a></sup> Tellingly, the AWS penetration-testing rules of engagement explicitly prohibit S3 bucket takeover as out of scope — a reminder that the boundary between assessing your own exposed buckets and abusing the shared namespace against others is one testers must respect.<sup class="cite"><a href="#ref-5">5</a></sup></p>
+  </section>
+
+  <!-- ===== 09 KUBERNETES ===== -->
+  <section id="k8s">
+    <div class="sec-mark">09 — Kubernetes<span class="ln"></span></div>
+    <h2>Kubernetes &amp; container attacks</h2>
+
+    <p>Managed Kubernetes — EKS, AKS, GKE — folds container orchestration into the cloud identity plane, and the attacker's objective is almost always the same: escape the boundary of a single pod and pivot toward control of a node, and from there the cluster. The methodology runs from external reconnaissance of exposed control-plane and kubelet endpoints, through in-cluster enumeration of permissions, to container escape and lateral movement toward the master node.<sup class="cite"><a id="cite-27" href="#ref-27">27</a></sup></p>
+
+    <h3>Exposed control-plane surface</h3>
+    <p>A cluster exposes several network services that should never face the internet but frequently do. The kube-apiserver on 6443 (or 8080 in dangerously misconfigured legacy setups) is the front door; the kubelet exposes a read-write API on <strong>10250</strong> and, historically, an unauthenticated read-only port on <strong>10255</strong>; and etcd on 2379, if reachable, hands over the cluster's entire state, secrets and all.<sup class="cite"><a id="cite-28" href="#ref-28">28</a></sup> An exposed kubelet API is particularly dangerous: where it permits anonymous access, an attacker can list pods and invoke the <code class="ic">/exec</code> endpoint to run commands inside running containers directly, bypassing the API server's authorization entirely.<sup class="cite"><a id="cite-29" href="#ref-29">29</a></sup> Tools such as kube-hunter probe for these exposures from outside and within, while kube-bench measures a cluster against the CIS Kubernetes Benchmark.<sup class="cite"><a href="#ref-28">28</a></sup></p>
+
+    <h3>Service-account tokens and RBAC</h3>
+    <p>Every pod, by default, mounts a service-account token at a well-known path inside the container, and that token is a valid credential for the Kubernetes API. An attacker who achieves code execution in a pod immediately reads the token and queries the API to learn what it can do — the in-cluster equivalent of <code class="ic">whoami</code> being answered by <code class="ic">kubectl auth can-i --list</code>.<sup class="cite"><a href="#ref-29">29</a></sup> Over-permissive Role-Based Access Control is what turns that token into a cluster takeover: a service account bound to rights it does not need — the ability to create pods, read secrets cluster-wide, or worst of all the <code class="ic">cluster-admin</code> role — lets an attacker escalate from a single compromised container to the entire cluster.<sup class="cite"><a id="cite-30" href="#ref-30">30</a></sup> A service account that can create pods, for instance, can schedule a malicious pod that mounts a privileged configuration and seizes the node it lands on.<sup class="cite"><a href="#ref-30">30</a></sup></p>
+
+    <p>Kubernetes hardened this default in v1.24, which stopped auto-generating non-expiring secret-based tokens for service accounts in favour of the short-lived, audience-bound tokens issued by the TokenRequest API — narrowing the window during which a stolen token is useful.<sup class="cite"><a href="#ref-28">28</a></sup> Setting <code class="ic">automountServiceAccountToken: false</code> on pods that do not call the API removes the credential from the blast radius entirely.<sup class="cite"><a href="#ref-29">29</a></sup></p>
+
+    <h3>Container escape</h3>
+    <p>The decisive move is breaking out of the container onto the host. Three misconfigurations make this routine. A container run with the <code class="ic">--privileged</code> flag (or an equivalently permissive securityContext) is granted host-level capabilities that let a process manipulate the node's devices and kernel namespaces to reach the host filesystem. A <code class="ic">hostPath</code> volume mounting the node's root directory at <code class="ic">/</code> into the pod exposes the host's filesystem — including the kubelet's own credentials — directly to container processes. And <code class="ic">hostNetwork</code> or <code class="ic">hostPID</code> sharing collapses the isolation between container and node.<sup class="cite"><a href="#ref-28">28</a></sup> Any one of these can be parlayed into code execution on the node; combined with a privileged service-account token, node compromise becomes cluster compromise.<sup class="cite"><a href="#ref-30">30</a></sup></p>
+
+    <div class="dossier">
+      <div class="dh"><span class="tag">Attack Chain · Kubernetes</span></div>
+      <h3>From application pod to cluster-admin</h3>
+      <p>The canonical cluster takeover chains five ordinary weaknesses. A vulnerable web workload yields remote code execution inside a pod; the attacker reads the mounted service-account token and runs <code class="ic">kubectl auth can-i --list</code> to inventory its rights; a <code class="ic">--privileged</code> or <code class="ic">hostPath</code> pod mounts the node's root filesystem to escape onto the host; the kubelet's credentials are stolen and used to schedule a malicious pod on every node; and an over-broad RBAC binding finally grants <code class="ic">cluster-admin</code> — at which point cluster-wide secret theft, workload tampering, and durable persistence are all in reach.</p>
+      <div class="grid">
+        <div class="g"><div class="v">10250</div><div class="k">kubelet read-write API port</div></div>
+        <div class="g"><div class="v">2379</div><div class="k">etcd — full cluster state &amp; secrets</div></div>
+        <div class="g"><div class="v">v1.24</div><div class="k">release that ended non-expiring SA tokens</div></div>
+      </div>
+    </div>
+
+    <p>Throughout, <code class="ic">kubectl</code> is the tester's primary instrument — authenticating with a discovered kubeconfig or token, enumerating permissions, inspecting secrets, and launching the pods that effect escape and lateral movement. In managed clusters the final twist is that the node's identity is itself a cloud principal: a compromised EKS node carries an IAM role, an AKS node a managed identity, so cluster escape flows straight back into the cloud-IAM attack surface the rest of this analysis has mapped.<sup class="cite"><a href="#ref-27">27</a></sup></p>
+  </section>
+
+  <!-- ===== 10 SERVERLESS ===== -->
+  <section id="serverless">
+    <div class="sec-mark">10 — Serverless<span class="ln"></span></div>
+    <h2>Serverless security</h2>
+
+    <p>Functions-as-a-Service — AWS Lambda, Azure Functions, Google Cloud Functions — dissolve the server the defender used to patch and monitor, leaving the code, its event sources, and its execution-role permissions as the entire attack surface. The OWASP community codified the resulting risk shift in its <strong>Serverless Top 10</strong>, which re-maps familiar web weaknesses onto an architecture where every function is triggered by events drawn from a wide variety of sources.<sup class="cite"><a id="cite-31" href="#ref-31">31</a></sup> That diversity of triggers is the crux: a function may be invoked not only by an HTTP request but by an object landing in a bucket, a message on a queue, a database stream, or an email — and each of those event sources is a potential injection vector that conventional input validation, tuned for HTTP, may never inspect.<sup class="cite"><a id="cite-32" href="#ref-32">32</a></sup></p>
+
+    <h3>Event injection and untrusted input</h3>
+    <p>Event-data injection is the signature serverless flaw. Because event payloads arrive in many formats from many services, developers frequently trust them implicitly, passing fields straight into shell commands, database queries, or deserialization routines; an attacker who can influence any upstream event source can smuggle a payload that the function executes.<sup class="cite"><a id="cite-33" href="#ref-33">33</a></sup> The defensive instinct — treat every element of every event as untrusted, regardless of which service delivered it — is harder to apply than in a monolith precisely because the entry points are so numerous and so well disguised as internal plumbing.<sup class="cite"><a href="#ref-32">32</a></sup></p>
+
+    <h3>Over-privileged execution roles</h3>
+    <p>The second dominant risk is the function's own identity. Every Lambda runs with an execution role, and the path of least resistance during development is to attach a broad managed policy and move on. When such a function is compromised, its role becomes the attacker's role — and the credentials are trivially available, because the runtime injects them into the environment as the <code class="ic">AWS_ACCESS_KEY_ID</code>, <code class="ic">AWS_SECRET_ACCESS_KEY</code>, and mandatory <code class="ic">AWS_SESSION_TOKEN</code> variables that any code execution inside the function can read.<sup class="cite"><a href="#ref-33">33</a></sup> Granting each function only the specific permissions it needs is the controlling mitigation, because it bounds what a successful injection can ultimately reach.<sup class="cite"><a id="cite-34" href="#ref-34">34</a></sup> This over-privilege is also what makes Lambda a privilege-escalation pivot from the IAM direction: a principal able to pass a privileged role and create or update a function can run arbitrary code under that role's identity, exactly the escalation path catalogued earlier.<sup class="cite"><a href="#ref-14">14</a></sup></p>
+
+    <p>Three further properties shape serverless testing. Execution environments are reused across invocations, so the writable <code class="ic">/tmp</code> directory and process memory can retain data — or an attacker's implant — between calls, and sensitive material left behind by one invocation may be readable by the next.<sup class="cite"><a href="#ref-34">34</a></sup> Per-function billing introduces <em>denial-of-wallet</em>: rather than knocking a service offline, an attacker drives up invocation volume to inflict runaway cost.<sup class="cite"><a href="#ref-32">32</a></sup> And the ecosystem provides deliberately vulnerable applications — OWASP's ServerlessGoat and the Damn Vulnerable Serverless Application — for practising these techniques against Lambda in a controlled account.<sup class="cite"><a href="#ref-31">31</a></sup></p>
+
+    <div class="note">
+      <div class="nh">Practitioner note</div>
+      Map the trigger graph first. For each function, enumerate every event source that can invoke it and every resource its execution role can reach; the product of those two sets is the function's true blast radius, and it is almost always larger than the team that wrote the function believes.
+    </div>
+  </section>
+
+  <!-- ===== 11 TOOLKIT ===== -->
+  <section id="toolkit">
+    <div class="sec-mark">11 — Toolkit<span class="ln"></span></div>
+    <h2>The cloud pentester's toolkit</h2>
+
+    <p>Cloud assessment tooling divides cleanly into two families: <strong>auditors</strong> that read configuration to surface misconfiguration at breadth, and <strong>exploitation frameworks</strong> that act on a foothold to demonstrate impact. A disciplined engagement runs the auditors first to build a map, then reaches for the offensive tools to prove which findings are exploitable.<sup class="cite"><a href="#ref-13">13</a></sup></p>
+
+    <h3>Auditors and posture scanners</h3>
+    <p><strong>ScoutSuite</strong>, maintained by NCC Group, is the canonical multi-cloud auditor. Pointed at AWS, Azure, GCP, or others through read-only credentials, it queries the provider's configuration APIs and emits a static HTML report ranking misconfigurations by risk — a fast, non-intrusive first pass that needs only an account with a read-only posture-audit policy (on AWS, the managed <code class="ic">SecurityAudit</code> policy) to run.<sup class="cite"><a id="cite-35" href="#ref-35">35</a></sup> <strong>Prowler</strong> occupies the same niche with a compliance emphasis: an open-source tool covering AWS, Azure, GCP, and Kubernetes, it ships hundreds of checks mapped to dozens of frameworks — CIS, PCI DSS, HIPAA, GDPR, NIST and more — and integrates with AWS Security Hub for continuous monitoring.<sup class="cite"><a id="cite-36" href="#ref-36">36</a></sup> Created by Toni de la Fuente, Prowler is frequently the tool that translates a pile of raw findings into the language of an audit an organisation actually has to pass.<sup class="cite"><a href="#ref-36">36</a></sup></p>
+
+    <p>For identity specifically, <strong>PMapper</strong> (Principal Mapper) models an account's IAM as a directed graph and computes who can reach administrative privilege through the escalation edges that manual review misses, complementing the auditors' breadth with a focused answer to the question that matters most.<sup class="cite"><a href="#ref-13">13</a></sup></p>
+
+    <h3>Exploitation frameworks</h3>
+    <p><strong>Pacu</strong>, from Rhino Security Labs, is to AWS what Metasploit is to a network: a modular post-exploitation framework whose modules enumerate permissions, scan for and execute privilege escalation, hunt and exfiltrate data, establish persistence, and tamper with CloudTrail logging — all driven through the same APIs an administrator uses, so the activity blends into normal control-plane traffic.<sup class="cite"><a href="#ref-17">17</a></sup> On the Azure side, NetSPI's <strong>MicroBurst</strong> is the PowerShell-first counterpart for enumeration and exploitation, discovering namespace resources, fuzzing for exposed Blob containers, and dumping automation-account credentials, with <strong>Az PowerShell</strong> and the Az CLI underpinning all interactive work against a tenant.<sup class="cite"><a href="#ref-23">23</a></sup> For Kubernetes, <code class="ic">kubectl</code> remains the primary exploitation instrument, paired with kube-hunter for discovery and kube-bench for benchmark measurement, and the picture is complete: a read-only auditor for breadth, a graph tool for identity, and a provider-native exploitation framework to convert findings into demonstrated, reportable risk.<sup class="cite"><a href="#ref-13">13</a></sup></p>
+
+    <figure>
+      <div class="fig-wrap">
+      <svg viewBox="0 0 720 230" role="img" aria-label="A workflow diagram showing four stages: posture audit, identity graphing, exploitation, and reporting, with named tools at each stage.">
+        <defs>
+          <marker id="ah4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 Z" fill="#5CA8FF"></path>
+          </marker>
+        </defs>
+        <text x="14" y="22" class="svg-title">Tooling workflow &mdash; read-only audit to demonstrated impact</text>
+        <!-- stage 1 -->
+        <rect x="14" y="60" width="150" height="92" rx="10" fill="#141B33" stroke="#23304F"></rect>
+        <text x="89" y="86" text-anchor="middle" fill="#5CA8FF" font-family="Chivo, sans-serif" font-size="13" font-weight="700">AUDIT</text>
+        <text x="89" y="110" text-anchor="middle" fill="#ECEFF7" font-family="JetBrains Mono, monospace" font-size="11">ScoutSuite</text>
+        <text x="89" y="128" text-anchor="middle" fill="#9AA6C4" font-family="JetBrains Mono, monospace" font-size="11">Prowler</text>
+        <!-- stage 2 -->
+        <rect x="190" y="60" width="150" height="92" rx="10" fill="#141B33" stroke="#23304F"></rect>
+        <text x="265" y="86" text-anchor="middle" fill="#5CA8FF" font-family="Chivo, sans-serif" font-size="13" font-weight="700">IDENTITY</text>
+        <text x="265" y="110" text-anchor="middle" fill="#ECEFF7" font-family="JetBrains Mono, monospace" font-size="11">PMapper</text>
+        <text x="265" y="128" text-anchor="middle" fill="#9AA6C4" font-family="JetBrains Mono, monospace" font-size="11">pmapper graph</text>
+        <!-- stage 3 -->
+        <rect x="366" y="60" width="150" height="92" rx="10" fill="#1A1322" stroke="#3A2230"></rect>
+        <text x="441" y="86" text-anchor="middle" fill="#FF7A3D" font-family="Chivo, sans-serif" font-size="13" font-weight="700">EXPLOIT</text>
+        <text x="441" y="110" text-anchor="middle" fill="#ECEFF7" font-family="JetBrains Mono, monospace" font-size="11">Pacu &#183; MicroBurst</text>
+        <text x="441" y="128" text-anchor="middle" fill="#9AA6C4" font-family="JetBrains Mono, monospace" font-size="11">kubectl</text>
+        <!-- stage 4 -->
+        <rect x="542" y="60" width="164" height="92" rx="10" fill="#141B33" stroke="#23304F"></rect>
+        <text x="624" y="86" text-anchor="middle" fill="#6FE0B0" font-family="Chivo, sans-serif" font-size="13" font-weight="700">REPORT</text>
+        <text x="624" y="110" text-anchor="middle" fill="#ECEFF7" font-family="JetBrains Mono, monospace" font-size="11">Evidence</text>
+        <text x="624" y="128" text-anchor="middle" fill="#9AA6C4" font-family="JetBrains Mono, monospace" font-size="11">CVSS &#183; ATT&amp;CK</text>
+        <!-- arrows -->
+        <line x1="164" y1="106" x2="186" y2="106" stroke="#5CA8FF" stroke-width="2" marker-end="url(#ah4)"></line>
+        <line x1="340" y1="106" x2="362" y2="106" stroke="#5CA8FF" stroke-width="2" marker-end="url(#ah4)"></line>
+        <line x1="516" y1="106" x2="538" y2="106" stroke="#5CA8FF" stroke-width="2" marker-end="url(#ah4)"></line>
+        <line x1="89" y1="176" x2="624" y2="176" stroke="#23304F" stroke-width="1" stroke-dasharray="3 4"></line>
+        <text x="89" y="200" text-anchor="middle" fill="#6F7B98" font-family="JetBrains Mono, monospace" font-size="10">non-intrusive</text>
+        <text x="441" y="200" text-anchor="middle" fill="#6F7B98" font-family="JetBrains Mono, monospace" font-size="10">scoped &amp; logged</text>
+        <text x="624" y="200" text-anchor="middle" fill="#6F7B98" font-family="JetBrains Mono, monospace" font-size="10">deliverable</text>
+      </svg>
+      </div>
+      <figcaption><b>Figure 4.</b> A disciplined engagement flows left to right: read-only auditors map the estate, a graph tool isolates the identity escalation paths, provider-native frameworks prove exploitability, and every confirmed path is translated into evidence scored against CVSS and mapped to MITRE ATT&amp;CK.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ===== 12 STANDARDS ===== -->
+  <section id="standards">
+    <div class="sec-mark">12 — Standards<span class="ln"></span></div>
+    <h2>Standards, benchmarks &amp; regulation</h2>
+
+    <p>A cloud penetration test exists inside a lattice of standards that tell the tester what "secure" is supposed to mean and tell the client which boxes a clean report lets them tick. The most operationally useful of these are the <strong>CIS Benchmarks</strong> — consensus-developed, prescriptive configuration baselines maintained by the Center for Internet Security for virtually every cloud platform and service in common use.<sup class="cite"><a id="cite-37" href="#ref-37">37</a></sup> There are Foundations Benchmarks for AWS, Azure, and GCP, plus dedicated benchmarks for Kubernetes and managed offerings such as Amazon EKS, and each control is graded as Level 1 (a baseline every organisation should meet without breaking functionality) or Level 2 (defence-in-depth for high-security environments at some cost to convenience).<sup class="cite"><a href="#ref-36">36</a></sup> Because tools like Prowler and kube-bench check directly against these benchmarks, CIS is where abstract policy meets a concrete pass/fail an assessor can run.<sup class="cite"><a href="#ref-36">36</a></sup></p>
+
+    <p>The CIS AWS Foundations Benchmark illustrates the texture: its controls span identity and access management, logging, monitoring, and networking, and AWS Security Hub operationalises them as automated checks reported against the standard.<sup class="cite"><a id="cite-38" href="#ref-38">38</a></sup> An organisation that passes the relevant Level 1 controls has closed most of the misconfigurations that the earlier sections of this analysis showed an attacker exploiting first — public buckets, unrotated keys, absent logging, over-broad security groups.<sup class="cite"><a href="#ref-38">38</a></sup></p>
+
+    <h3>Frameworks and regulation</h3>
+    <p>Above the benchmarks sit the broader frameworks and the regulations that compel them. <strong>NIST</strong> contributes the control catalogue SP 800-53 and the cloud-relevant testing guidance SP 800-115, while the <strong>Cloud Security Alliance</strong> maintains the Cloud Controls Matrix — a cloud-specific control framework — and the STAR registry through which providers attest their posture against it.<sup class="cite"><a id="cite-39" href="#ref-39">39</a></sup> The <strong>ISO/IEC 27000</strong> family extends the general 27001 information-security management system into the cloud through 27017 (cloud security controls) and 27018 (protection of personal data in public clouds).<sup class="cite"><a id="cite-40" href="#ref-40">40</a></sup> Layered on top are the compliance regimes a finding can implicate directly: <strong>PCI DSS</strong> for payment-card data, <strong>HIPAA</strong> for health information, <strong>SOC 2</strong> for service-organisation controls, and <strong>GDPR</strong> for the personal data of EU residents.<sup class="cite"><a href="#ref-40">40</a></sup> These regimes are why a single exposed bucket is rarely "just" a technical finding — depending on what it holds, it can constitute a reportable breach under one or more legal frameworks, and the penetration-test report becomes evidence in that determination.<sup class="cite"><a href="#ref-39">39</a></sup></p>
+
+    <p>The synthesising layer most clients invoke is the cloud provider's own <strong>Well-Architected Framework</strong>, whose security pillar restates much of the above as actionable architectural guidance. For the tester, the practical value of this lattice is shared vocabulary: a finding expressed as a failed CIS control, mapped to a MITRE ATT&CK technique and a CVSS score, lands with both the engineers who must fix it and the auditors and regulators who must sign off on it.<sup class="cite"><a href="#ref-39">39</a></sup></p>
+
+    <div class="statstrip">
+      <div class="stat"><div class="n">5</div><div class="l">CIS Foundations &amp; service benchmarks across AWS / Azure / GCP / K8s / EKS</div></div>
+      <div class="stat"><div class="n">L1<span class="u">/L2</span></div><div class="l">Baseline vs defence-in-depth control profiles</div></div>
+      <div class="stat"><div class="n">800-53</div><div class="l">NIST control catalogue underpinning federal baselines</div></div>
+      <div class="stat"><div class="n">27017</div><div class="l">ISO/IEC cloud-specific security control set</div></div>
+    </div>
+  </section>
+
+  <!-- ===== 13 DEFENSE ===== -->
+  <section id="defense">
+    <div class="sec-mark">13 — Defense<span class="ln"></span></div>
+    <h2>Best practices &amp; defensive hardening</h2>
+
+    <p>The value of an offensive engagement is the defensive program it informs. Every attack path mapped in this analysis terminates in a control that would have broken it, and the highest-leverage controls cluster around three themes: shrink identity privilege, lock the metadata service, and make activity visible.<sup class="cite"><a id="cite-41" href="#ref-41">41</a></sup></p>
+
+    <h3>Identity is the new perimeter</h3>
+    <p>The recurring lesson of cloud breaches is that compromise rarely begins with a kernel exploit; it begins with an over-permissive identity. <strong>Least privilege</strong>, rigorously applied, is therefore the master control — grant each principal only the permissions it demonstrably needs, prefer narrowly scoped policies over managed administrative ones, and eliminate the standing wildcards (<code class="ic">Action: *</code>, <code class="ic">Resource: *</code>, <code class="ic">Principal: *</code>) that convert any foothold into a catastrophe.<sup class="cite"><a href="#ref-14">14</a></sup> Enforce multi-factor authentication universally, because the password spray that opens an Azure tenant fails the moment a second factor is required; rotate and, better, eliminate long-lived access keys in favour of short-lived role credentials; and use organisation-wide guardrails — AWS Service Control Policies and their Azure and GCP equivalents — to set hard ceilings that no individual account can exceed.<sup class="cite"><a href="#ref-41">41</a></sup> On the GCP side specifically, disabling the default Editor grant on the Compute Engine service account removes one of the most common escalation shortcuts before it can ever be used.<sup class="cite"><a href="#ref-14">14</a></sup></p>
+
+    <h3>Close the metadata and storage gaps</h3>
+    <p>Because the metadata endpoint is the hinge of so many cloud intrusions, enforcing <strong>IMDSv2</strong> — requiring session tokens, setting a hop limit of one, and disabling IMDSv1 outright — is among the single most effective hardening steps an AWS estate can take, neutralising the SSRF-to-credential-theft chain that defined the Capital One breach.<sup class="cite"><a href="#ref-19">19</a></sup> In parallel, enabling account-wide public-access blocking on object storage closes the exposure class that leaks data most often, overriding any errant bucket policy an engineer might introduce later.<sup class="cite"><a href="#ref-41">41</a></sup></p>
+
+    <div class="finding">
+      <div class="finding-h">
+        <span class="sev info">Control</span>
+        <span class="id">DEF-IMDS-01</span>
+        <span class="ttl">Enforce IMDSv2 and a hop limit of one</span>
+      </div>
+      <p>Require token-backed metadata requests, set the response hop limit to 1 so a containerised or proxied SSRF cannot reach the endpoint, and disable IMDSv1 across the fleet — converting the most reliable cloud credential-theft primitive into a dead end.</p>
+      <div class="meta">
+        <span class="lab">MITIGATES</span><span>T1552.005 Cloud Instance Metadata API</span>
+        <span class="lab">CONFIG</span><span>HttpTokens=required &#183; HttpPutResponseHopLimit=1</span>
+        <span class="lab">VERIFY</span><span>Audit the fleet for the settings above; alert on any instance still permitting IMDSv1</span>
+      </div>
+    </div>
+
+    <h3>Make the invisible visible</h3>
+    <p>An attacker operating through legitimate APIs is invisible only if no one is watching the control plane. Comprehensive, tamper-resistant logging — AWS CloudTrail across all regions, Azure Activity and sign-in logs, GCP Cloud Audit Logs — is the substrate on which every detection depends, which is precisely why Pacu includes modules to disrupt it.<sup class="cite"><a href="#ref-41">41</a></sup> Layered on top, behavioural threat-detection services such as Amazon GuardDuty surface the anomalies that signature rules miss: credentials used from an unfamiliar location, reconnaissance API patterns, the tell-tale call sequence of an escalation attempt.<sup class="cite"><a href="#ref-41">41</a></sup> The defensive end-state is a feedback loop — least privilege shrinks what an attacker can do, a hardened metadata service and storage posture removes the easy primitives, and pervasive logging plus anomaly detection ensures that whatever remains is seen and answered.<sup class="cite"><a href="#ref-41">41</a></sup></p>
+  </section>
+
+  <!-- ===== 14 LEARN ===== -->
+  <section id="learn">
+    <div class="sec-mark">14 — Learn<span class="ln"></span></div>
+    <h2>Certifications, labs &amp; training</h2>
+
+    <p>Cloud penetration testing is learned in vulnerable accounts, not slide decks, but a structured path through certifications, hands-on ranges, and community resources accelerates the climb from competent network tester to credible cloud specialist.<sup class="cite"><a id="cite-42" href="#ref-42">42</a></sup></p>
+
+    <h3>Certifications</h3>
+    <p>The vendor-neutral offensive credential most associated with the discipline is GIAC's <strong>GCPN</strong> (GIAC Cloud Penetration Tester), paired with SANS course <strong>SEC588</strong>; the exam spans assessment of both AWS and Azure environments and the cloud-native services, identity systems, and microservice architectures that define them.<sup class="cite"><a id="cite-43" href="#ref-43">43</a></sup> SANS positions SEC588 as its dedicated cloud penetration-testing course, covering the techniques for attacking cloud infrastructure, Kubernetes, and the modern application stack.<sup class="cite"><a id="cite-44" href="#ref-44">44</a></sup> Beyond it, a well-trodden ladder runs through Altered Security's <strong>CARTP</strong> (Certified Azure Red Team Professional) for Azure depth, the HackTricks training certifications (ARTE for AWS, AzRTE for Azure, GRTE for GCP), CyberWarFare Labs and the SecOps Group's certified cloud-pentest tracks, and the defensive-leaning vendor exams — AWS Certified Security Specialty and Microsoft's AZ-500 — that teach the controls from the inside.<sup class="cite"><a href="#ref-42">42</a></sup> For breadth, ISC2's <strong>CCSP</strong> and EC-Council's <strong>CEH</strong> round out a résumé, though neither is a substitute for demonstrated offensive skill.<sup class="cite"><a id="cite-45" href="#ref-45">45</a></sup></p>
+
+    <h3>Hands-on ranges</h3>
+    <p>The deliberately vulnerable lab is the heart of cloud-security practice, and the canonical environments are open source and free to deploy in a sandbox account:</p>
+    <ul>
+      <li><strong>CloudGoat</strong> — Rhino Security Labs' "vulnerable by design" AWS deployment tool, which provisions scenario-based environments each centred on a specific escalation or exploitation path.<sup class="cite"><a id="cite-46" href="#ref-46">46</a></sup></li>
+      <li><strong>AWSGoat</strong> and <strong>CloudFoxable</strong> — scenario ranges that chain web, IAM, and service misconfigurations into realistic AWS attack paths.<sup class="cite"><a id="cite-47" href="#ref-47">47</a></sup></li>
+      <li><strong>IAM Vulnerable</strong> — a Terraform project from Bishop Fox that stands up an account riddled with the privilege-escalation paths catalogued by the research community, the ideal range for practising Pacu's <code class="ic">iam__privesc_scan</code> against live targets.<sup class="cite"><a href="#ref-47">47</a></sup></li>
+      <li><strong>flaws.cloud</strong> and <strong>flaws2.cloud</strong> — Scott Piper's browser-based, progressively harder AWS challenges that introduce IMDS, S3, and IAM mistakes one lesson at a time.<sup class="cite"><a href="#ref-47">47</a></sup></li>
+      <li><strong>ServerlessGoat</strong> and the <strong>Damn Vulnerable Serverless Application</strong> — Lambda-focused ranges for the event-injection and over-privileged-role techniques of serverless testing.<sup class="cite"><a href="#ref-31">31</a></sup></li>
+    </ul>
+
+    <h3>Community and continuous learning</h3>
+    <p>The fast-moving knowledge lives in community references and platforms. <strong>HackTricks Cloud</strong> is the field's most comprehensive open reference, with provider-by-provider methodology and a deep catalogue of GCP, AWS, and Azure escalation techniques; Hacking the Cloud collects exploitation write-ups; and Pwned Labs and CloudBreach offer guided, hands-on cloud-attack training.<sup class="cite"><a href="#ref-42">42</a></sup> Bug-bounty platforms — HackerOne and Bugcrowd — provide legal targets and a feedback loop against real production environments for those ready to test live systems within a defined scope.<sup class="cite"><a href="#ref-45">45</a></sup> For ongoing study, practitioners follow the research output and conference talks of the firms whose tools and findings recur throughout this field — Rhino Security Labs, NCC Group, NetSPI, Bishop Fox, and Wiz among them — whose blogs, GitHub repositories, and recorded presentations are where each season's new techniques first appear.<sup class="cite"><a href="#ref-47">47</a></sup></p>
+
+    <div class="note">
+      <div class="nh">A suggested path</div>
+      Start in flaws.cloud and CloudGoat to internalise the core AWS primitives, graduate to IAM Vulnerable with Pacu to drill privilege escalation, add Azure through CARTP and a MicroBurst-driven lab, then validate with GCPN/SEC588 — and keep a live bug-bounty scope open throughout to stay honest against production reality.
+    </div>
+  </section>
+
+  <!-- ===== 15 CLOSE ===== -->
+  <section id="close">
+    <div class="sec-mark">15 — Closing<span class="ln"></span></div>
+    <h2>The control plane is the battlefield</h2>
+
+    <p>What unites every technique in this analysis is a single shift in where the fight happens. The on-premises attacker fought for packets and processes; the cloud attacker fights for <strong>API calls</strong>. Credentials harvested from a metadata endpoint, a service account impersonated through a single permission, a managed identity lifted from a compromised function, a service-account token read from a pod — each is a key to the control plane, and the control plane is where data lives, moves, and leaks. This is why identity, not the network, is the perimeter that matters, and why the most consequential findings on a cloud engagement are almost never memory-corruption bugs but configuration and permission mistakes that let legitimate APIs be turned against their owner.</p>
+
+    <p>For the practitioner, the discipline that follows is twofold. First, operate within the boundary: honour the provider's rules of engagement, stay inside the agreed scope, and remember that the same namespace you assess is shared with tenants you may not touch. Second, translate relentlessly — a finding is only as valuable as the fix it provokes, so every exploited path should leave the client with a least-privilege policy to write, a metadata service to harden, a bucket to lock, or a logging gap to close. The Capital One breach, which recurs throughout this analysis, was not the work of a novel exploit; it was an SSRF reaching an over-permissive role through a metadata service that a single configuration flag would have protected. The cloud's attack surface is vast, but its defensive levers are precise. Pull them in the right order, and the control plane stops being the adversary's battlefield and becomes the defender's.</p>
+  </section>
+
+  <!-- ===== REFERENCES ===== -->
+  <section id="refs" class="refs">
+    <div class="sec-mark">Ref — Sources<span class="ln"></span></div>
+    <h2>References</h2>
+    <p class="refs-note">Citations follow the Vancouver system, numbered by order of first appearance. Each entry links back to its first in-text anchor.</p>
+        <ol class="ref-list">
+      <li id="ref-1">CyberneticsPlus. Cloud penetration testing: AWS, Azure &amp; GCP [Internet]. [cited 2026 Jun 21]. Available from: https://cyberneticsplus.com/blog/cloud-penetration-testing-aws-azure-gcp/ <a class="backlink" href="#cite-1" aria-label="back to citation 1">&#8617;</a></li>
+      <li id="ref-2">AppSecEngineer. The AWS shared responsibility model: the Capital One breach case study [Internet]. [cited 2026 Jun 21]. Available from: https://www.appsecengineer.com/blog/aws-shared-responsibility-model-capital-one-breach-case-study <a class="backlink" href="#cite-2" aria-label="back to citation 2">&#8617;</a></li>
+      <li id="ref-3">Pentest Testing Corp. Cloud penetration testing guide [Internet]. [cited 2026 Jun 21]. Available from: https://www.pentesttesting.com/cloud-penetration-testing-guide/ <a class="backlink" href="#cite-3" aria-label="back to citation 3">&#8617;</a></li>
+      <li id="ref-4">Packetlabs. A guide to cloud penetration testing [Internet]. [cited 2026 Jun 21]. Available from: https://www.packetlabs.net/posts/guide-to-cloud-penetration-testing/ <a class="backlink" href="#cite-4" aria-label="back to citation 4">&#8617;</a></li>
+      <li id="ref-5">Amazon Web Services. Penetration testing &mdash; customer support policy for penetration testing [Internet]. [cited 2026 Jun 21]. Available from: https://aws.amazon.com/security/penetration-testing/ <a class="backlink" href="#cite-5" aria-label="back to citation 5">&#8617;</a></li>
+      <li id="ref-6">Manticore. AWS penetration testing [Internet]. [cited 2026 Jun 21]. Available from: https://manticore.ai/blog/aws-penetration-testing <a class="backlink" href="#cite-6" aria-label="back to citation 6">&#8617;</a></li>
+      <li id="ref-7">SecurityWall. Cloud penetration testing for AWS, Azure &amp; GCP: a 2026 guide [Internet]. [cited 2026 Jun 21]. Available from: https://securitywall.co/blog/cloud-penetration-testing-aws-azure-gcp-guide-2026 <a class="backlink" href="#cite-7" aria-label="back to citation 7">&#8617;</a></li>
+      <li id="ref-8">Lemit R. Cloud pentesting GCP: common test cases in a GCP / Google Workspace pentest engagement [Internet]. Medium; [cited 2026 Jun 21]. Available from: https://rodelllemit.medium.com/cloud-pentesting-gcp-common-test-cases-in-a-gcp-google-workspace-pentest-engagement-4317df9cf8dd <a class="backlink" href="#cite-8" aria-label="back to citation 8">&#8617;</a></li>
+      <li id="ref-9">Exabeam. MITRE ATT&amp;CK cloud matrix: use cases, tactics and sub-matrices [Internet]. [cited 2026 Jun 21]. Available from: https://www.exabeam.com/explainers/mitre-attck/mitre-attck-cloud-matrix-use-cases-tactics-and-sub-matrices/ <a class="backlink" href="#cite-9" aria-label="back to citation 9">&#8617;</a></li>
+      <li id="ref-10">Mitigant. The MITRE ATT&amp;CK cloud matrix v16: new techniques and why you should care (part I) [Internet]. [cited 2026 Jun 21]. Available from: https://mitigant.io/en/blog/mitre-att-ck-cloud-matrix-v-16-new-techniques-why-you-should-care-part-i <a class="backlink" href="#cite-10" aria-label="back to citation 10">&#8617;</a></li>
+      <li id="ref-11">Wiz. The MITRE ATT&amp;CK framework [Internet]. Wiz Academy; [cited 2026 Jun 21]. Available from: https://www.wiz.io/academy/detection-and-response/mitre-attack-framework <a class="backlink" href="#cite-11" aria-label="back to citation 11">&#8617;</a></li>
+      <li id="ref-12">Redfox Security. Azure pentesting: methodology and mindset [Internet]. [cited 2026 Jun 21]. Available from: https://www.redfoxsec.com/blog/azure-pentesting-methodology-and-mindset <a class="backlink" href="#cite-12" aria-label="back to citation 12">&#8617;</a></li>
+      <li id="ref-13">Deepstrike. Best tools for cloud penetration testing in 2025 [Internet]. [cited 2026 Jun 21]. Available from: https://deepstrike.io/blog/best-tools-for-cloud-penetration-testing-in-2025 <a class="backlink" href="#cite-13" aria-label="back to citation 13">&#8617;</a></li>
+      <li id="ref-14">Rhino Security Labs. AWS IAM privilege escalation: methods and mitigation (part 1) [Internet]. [cited 2026 Jun 21]. Available from: https://rhinosecuritylabs.com/aws/aws-privilege-escalation-methods-mitigation/ <a class="backlink" href="#cite-14" aria-label="back to citation 14">&#8617;</a></li>
+      <li id="ref-15">Pwned Labs. A beginner&rsquo;s guide to hunting for AWS IAM privilege escalations with Pacu [Internet]. [cited 2026 Jun 21]. Available from: https://blog.pwnedlabs.io/beginners-guide-to-hunting-for-aws-iam-privilege-escalations-with-pacu <a class="backlink" href="#cite-15" aria-label="back to citation 15">&#8617;</a></li>
+      <li id="ref-16">Rhino Security Labs. AWS IAM privilege escalation: methods and mitigation (part 2) [Internet]. [cited 2026 Jun 21]. Available from: https://rhinosecuritylabs.com/aws/aws-privilege-escalation-methods-mitigation-part-2/ <a class="backlink" href="#cite-16" aria-label="back to citation 16">&#8617;</a></li>
+      <li id="ref-17">Rhino Security Labs. Pacu: the AWS exploitation framework [Internet]. GitHub; [cited 2026 Jun 21]. Available from: https://github.com/RhinoSecurityLabs/pacu <a class="backlink" href="#cite-17" aria-label="back to citation 17">&#8617;</a></li>
+      <li id="ref-18">Hacking the Cloud. EC2 metadata SSRF [Internet]. [cited 2026 Jun 21]. Available from: https://hackingthe.cloud/aws/exploitation/ec2-metadata-ssrf/ <a class="backlink" href="#cite-18" aria-label="back to citation 18">&#8617;</a></li>
+      <li id="ref-19">Wiz. Server-side request forgery (SSRF) [Internet]. Wiz Academy; [cited 2026 Jun 21]. Available from: https://www.wiz.io/academy/application-security/server-side-request-forgery <a class="backlink" href="#cite-19" aria-label="back to citation 19">&#8617;</a></li>
+      <li id="ref-20">Appsecco. An SSRF, privileged AWS keys and the Capital One breach [Internet]. [cited 2026 Jun 21]. Available from: https://blog.appsecco.com/an-ssrf-privileged-aws-keys-and-the-capital-one-breach-4c3c2cded3af <a class="backlink" href="#cite-20" aria-label="back to citation 20">&#8617;</a></li>
+      <li id="ref-21">Huntress. Capital One data breach [Internet]. Threat library; [cited 2026 Jun 21]. Available from: https://www.huntress.com/threat-library/data-breach/capital-one-data-breach <a class="backlink" href="#cite-21" aria-label="back to citation 21">&#8617;</a></li>
+      <li id="ref-22">Cobalt. Microsoft Entra ID pentesting: a comprehensive guide to the Azure environment [Internet]. [cited 2026 Jun 21]. Available from: https://www.cobalt.io/learning-center/microsoft-entra-id-pentesting-comprehensive-guide-azure-environment <a class="backlink" href="#cite-22" aria-label="back to citation 22">&#8617;</a></li>
+      <li id="ref-23">NetSPI. MicroBurst: a PowerShell toolkit for attacking Azure [Internet]. GitHub; [cited 2026 Jun 21]. Available from: https://github.com/NetSPI/MicroBurst <a class="backlink" href="#cite-23" aria-label="back to citation 23">&#8617;</a></li>
+      <li id="ref-24">Praetorian. Google Cloud Platform (GCP) service account-based privilege escalation paths [Internet]. [cited 2026 Jun 21]. Available from: https://www.praetorian.com/blog/google-cloud-platform-gcp-service-account-based-privilege-escalation-paths/ <a class="backlink" href="#cite-24" aria-label="back to citation 24">&#8617;</a></li>
+      <li id="ref-25">Rhino Security Labs. Privilege escalation in Google Cloud Platform (part 1) [Internet]. [cited 2026 Jun 21]. Available from: https://rhinosecuritylabs.com/gcp/privilege-escalation-google-cloud-platform-part-1/ <a class="backlink" href="#cite-25" aria-label="back to citation 25">&#8617;</a></li>
+      <li id="ref-26">HackTricks Cloud. GCP IAM privilege escalation [Internet]. [cited 2026 Jun 21]. Available from: https://cloud.hacktricks.xyz/pentesting-cloud/gcp-security/gcp-privilege-escalation/gcp-iam-privesc <a class="backlink" href="#cite-26" aria-label="back to citation 26">&#8617;</a></li>
+      <li id="ref-27">Kanywst. Kubernetes pentest methodology: cluster security from an attacker&rsquo;s perspective [Internet]. DEV Community; [cited 2026 Jun 21]. Available from: https://dev.to/kanywst/kubernetes-pentest-methodology-cluster-security-from-an-attackers-perspective-1fek <a class="backlink" href="#cite-27" aria-label="back to citation 27">&#8617;</a></li>
+      <li id="ref-28">Deepstrike. Kubernetes penetration testing: methodology and guide [Internet]. [cited 2026 Jun 21]. Available from: https://deepstrike.io/blog/kubernetes-penetration-testing-methodology-and-guide <a class="backlink" href="#cite-28" aria-label="back to citation 28">&#8617;</a></li>
+      <li id="ref-29">CyberArk. Kubernetes pentest methodology (part 3) [Internet]. Threat research blog; [cited 2026 Jun 21]. Available from: https://www.cyberark.com/resources/threat-research-blog/kubernetes-pentest-methodology-part-3 <a class="backlink" href="#cite-29" aria-label="back to citation 29">&#8617;</a></li>
+      <li id="ref-30">RBT Security. Kubernetes penetration testing part four: exploiting RBAC misconfigurations for master node compromise [Internet]. [cited 2026 Jun 21]. Available from: https://www.rbtsec.com/blog/kubernetes-penetration-testing-part-four-exploiting-rbac-misconfigurations-for-master-node-compromise/ <a class="backlink" href="#cite-30" aria-label="back to citation 30">&#8617;</a></li>
+      <li id="ref-31">PureSec. Serverless architectures security top 10 (SAS) [Internet]. GitHub; [cited 2026 Jun 21]. Available from: https://github.com/puresec/sas-top-10 <a class="backlink" href="#cite-31" aria-label="back to citation 31">&#8617;</a></li>
+      <li id="ref-32">OWASP. Serverless / FaaS security cheat sheet [Internet]. OWASP Cheat Sheet Series; [cited 2026 Jun 21]. Available from: https://cheatsheetseries.owasp.org/cheatsheets/Serverless_FaaS_Security_Cheat_Sheet.html <a class="backlink" href="#cite-32" aria-label="back to citation 32">&#8617;</a></li>
+      <li id="ref-33">JSMon. AWS Lambda security: exploiting event injection and credential theft [Internet]. [cited 2026 Jun 21]. Available from: https://blogs.jsmon.sh/aws-lambda-security-exploiting-event-injection-and-credential-theft/ <a class="backlink" href="#cite-33" aria-label="back to citation 33">&#8617;</a></li>
+      <li id="ref-34">Trend Micro. Security for AWS Lambda serverless applications [Internet]. [cited 2026 Jun 21]. Available from: https://www.trendmicro.com/en_sg/devops/21/g/security-for-aws-lambda-serverless-applications.html <a class="backlink" href="#cite-34" aria-label="back to citation 34">&#8617;</a></li>
+      <li id="ref-35">NCC Group. ScoutSuite: multi-cloud security auditing tool [Internet]. GitHub; [cited 2026 Jun 21]. Available from: https://github.com/nccgroup/ScoutSuite <a class="backlink" href="#cite-35" aria-label="back to citation 35">&#8617;</a></li>
+      <li id="ref-36">Prowler. What is a CIS benchmark? [Internet]. Cloud security glossary; [cited 2026 Jun 21]. Available from: https://prowler.com/cloud-security-glossary/what-is-a-cis-benchmark <a class="backlink" href="#cite-36" aria-label="back to citation 36">&#8617;</a></li>
+      <li id="ref-37">Center for Internet Security. CIS benchmarks [Internet]. [cited 2026 Jun 21]. Available from: https://www.cisecurity.org/cis-benchmarks <a class="backlink" href="#cite-37" aria-label="back to citation 37">&#8617;</a></li>
+      <li id="ref-38">Amazon Web Services. CIS AWS Foundations Benchmark [Internet]. AWS Security Hub user guide; [cited 2026 Jun 21]. Available from: https://docs.aws.amazon.com/securityhub/latest/userguide/cis-aws-foundations-benchmark.html <a class="backlink" href="#cite-38" aria-label="back to citation 38">&#8617;</a></li>
+      <li id="ref-39">Wiz. Cloud security standards [Internet]. Wiz Academy; [cited 2026 Jun 21]. Available from: https://www.wiz.io/academy/compliance/cloud-security-standards <a class="backlink" href="#cite-39" aria-label="back to citation 39">&#8617;</a></li>
+      <li id="ref-40">Upwind. Cloud security standards and frameworks [Internet]. Glossary; [cited 2026 Jun 21]. Available from: https://www.upwind.io/glossary/cloud-security-standards-frameworks <a class="backlink" href="#cite-40" aria-label="back to citation 40">&#8617;</a></li>
+      <li id="ref-41">Qualys. AWS cloud security best practices guide [Internet]. [cited 2026 Jun 21]. Available from: https://blog.qualys.com/product-tech/2026/04/09/1aws-cloud-security-best-practices-guide <a class="backlink" href="#cite-41" aria-label="back to citation 41">&#8617;</a></li>
+      <li id="ref-42">Sasovets I. A learning path for cloud security specialists [Internet]. Medium; [cited 2026 Jun 21]. Available from: https://medium.com/@ihor.sasovets/learning-path-for-cloud-security-specialists-73a09bc1db3b <a class="backlink" href="#cite-42" aria-label="back to citation 42">&#8617;</a></li>
+      <li id="ref-43">GIAC. GIAC Cloud Penetration Tester (GCPN) [Internet]. [cited 2026 Jun 21]. Available from: https://www.giac.org/certifications/cloud-penetration-tester-gcpn <a class="backlink" href="#cite-43" aria-label="back to citation 43">&#8617;</a></li>
+      <li id="ref-44">SANS Institute. SEC588: cloud penetration testing [Internet]. [cited 2026 Jun 21]. Available from: https://www.sans.org/cyber-security-courses/cloud-penetration-testing <a class="backlink" href="#cite-44" aria-label="back to citation 44">&#8617;</a></li>
+      <li id="ref-45">Infosec Institute. Cloud pentesting certification boot camp: the ultimate guide [Internet]. [cited 2026 Jun 21]. Available from: https://www.infosecinstitute.com/resources/cloud/cloud-pentesting-certification-boot-camp-ultimate-guide/ <a class="backlink" href="#cite-45" aria-label="back to citation 45">&#8617;</a></li>
+      <li id="ref-46">Rhino Security Labs. CloudGoat: the &ldquo;vulnerable by design&rdquo; AWS deployment tool [Internet]. GitHub; [cited 2026 Jun 21]. Available from: https://github.com/RhinoSecurityLabs/cloudgoat <a class="backlink" href="#cite-46" aria-label="back to citation 46">&#8617;</a></li>
+      <li id="ref-47">Redsky Cyber Security. AWS security &amp; pentesting resources [Internet]. GitHub; [cited 2026 Jun 21]. Available from: https://github.com/redskycyber/Cloud-Security/blob/main/AWS-Security-Pentesting-Resources.md <a class="backlink" href="#cite-47" aria-label="back to citation 47">&#8617;</a></li>
+    </ol>
+  </section>
+
+  </main>
+</div>
+
+<!-- ============ FOOTER ============ -->
+<footer class="foot">
+  <div class="fi">
+    <p>Cloud Penetration Testing &mdash; The Control Plane is the Battlefield<br>An expert technical brief on offensive cloud security across AWS, Azure &amp; GCP.</p>
+    <p class="sig">// end of transmission<br>scope &middot; authorise &middot; exploit &middot; report</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- reading progress bar ----
+  var bar = document.getElementById("progress");
+  var ticking = false;
+  function updateProgress() {
+    var h = document.documentElement;
+    var scrolled = h.scrollTop;
+    var height = h.scrollHeight - h.clientHeight;
+    var pct = height > 0 ? (scrolled / height) * 100 : 0;
+    if (bar) { bar.style.width = pct.toFixed(2) + "%"; }
+    ticking = false;
+  }
+  function onScroll() {
+    if (!ticking) {
+      window.requestAnimationFrame(updateProgress);
+      ticking = true;
+    }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll, { passive: true });
+  updateProgress();
+
+  // ---- scroll-spy TOC ----
+  var tocLinks = Array.prototype.slice.call(
+    document.querySelectorAll("#tocList a")
+  );
+  var idToLink = {};
+  tocLinks.forEach(function (a) {
+    var href = a.getAttribute("href") || "";
+    if (href.charAt(0) === "#") { idToLink[href.slice(1)] = a; }
+  });
+  var sections = tocLinks
+    .map(function (a) {
+      var href = a.getAttribute("href") || "";
+      return href.charAt(0) === "#" ? document.getElementById(href.slice(1)) : null;
+    })
+    .filter(Boolean);
+
+  function clearActive() {
+    tocLinks.forEach(function (a) { a.classList.remove("active"); });
+  }
+
+  if ("IntersectionObserver" in window && sections.length) {
+    var inView = {};
+    function setActive() {
+      // the active section is the first one, in document order, whose top
+      // band is currently crossing the near-top trigger line
+      var chosen = null;
+      for (var i = 0; i < sections.length; i++) {
+        if (inView[sections[i].id]) { chosen = sections[i].id; break; }
+      }
+      // if nothing is in the trigger band (scrolled into a gap), fall back to
+      // the last section whose top has already passed above the line
+      if (!chosen) {
+        for (var j = sections.length - 1; j >= 0; j--) {
+          if (sections[j].getBoundingClientRect().top < 120) { chosen = sections[j].id; break; }
+        }
+      }
+      if (chosen && idToLink[chosen]) {
+        clearActive();
+        idToLink[chosen].classList.add("active");
+      }
+    }
+    var obs = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (en) {
+          inView[en.target.id] = en.isIntersecting;
+        });
+        setActive();
+      },
+      // a thin strip ~12% down the viewport acts as the single trigger line
+      { rootMargin: "-12% 0px -83% 0px", threshold: 0 }
+    );
+    sections.forEach(function (sec) { obs.observe(sec); });
+  }
+
+  // ---- mobile TOC toggle ----
+  var toc = document.getElementById("toc");
+  var tocHead = document.getElementById("tocHead");
+  if (toc && tocHead) {
+    tocHead.addEventListener("click", function () {
+      toc.classList.toggle("open");
+    });
+    // collapse after choosing a destination on narrow screens
+    tocLinks.forEach(function (a) {
+      a.addEventListener("click", function () {
+        if (window.matchMedia("(max-width: 1040px)").matches) {
+          toc.classList.remove("open");
+        }
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
