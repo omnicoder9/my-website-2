@@ -1,10 +1,12 @@
 const blogCategoryLabels = [
   "AI & Machine Learning",
+  "AI Agents",
   "AI Strategy",
   "ASP.NET",
   "Android",
   "Angular",
   "Competitive Programming",
+  "Control Theory & Engineering",
   "Cosmology",
   "Cyber-Physical Systems",
   "DevSecOps",
@@ -31,6 +33,7 @@ const blogCategoryLabels = [
   "Security",
   "Side-Channel Attacks",
   "Society & Civics",
+  "Software Design & Architecture",
   "Spring",
   "Veganism",
   "Web & UI"
@@ -47,6 +50,108 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/agno-framework.html",
+    publishedAt: "2026-07-05",
+    summary: "A technical briefing on Agno as an AI-agent framework, focused on its runtime model, performance claims, production posture, and fit against competing orchestration stacks.",
+    title: "Agno: An Agent Framework Rebuilt as a Production Runtime"
+  },
+  {
+    path: "blog-articles/enterprise-ai-agent-roadmap.html",
+    publishedAt: "2026-07-04",
+    summary: "A phased roadmap for moving enterprise AI agents from pilot work to production, covering governance, architecture, risk control, and scaling decisions.",
+    title: "From Pilot Purgatory to Production — An Enterprise AI-Agent Implementation Roadmap"
+  },
+  {
+    path: "blog-articles/chainlit.html",
+    publishedAt: "2026-07-03",
+    summary: "A field guide to Chainlit covering its decorator-driven Python model, conversational UI patterns, integrations, deployment tradeoffs, and where it fits in the AI tooling landscape.",
+    title: "Chainlit: The Decorator-Driven Framework for Conversational AI — A Technical Field Guide"
+  },
+  {
+    path: "blog-articles/software-architecture-frameworks.html",
+    publishedAt: "2026-07-02",
+    summary: "A guide to architecture-description frameworks and viewpoints, focused on how teams document systems clearly without turning architecture into diagram theater.",
+    title: "Drawing the System · A Field Guide to Architecture Description Frameworks"
+  },
+  {
+    path: "blog-articles/unified-modeling-language.html",
+    publishedAt: "2026-07-01",
+    summary: "A reference-grade guide to UML covering its history, core diagram types, practical uses, common failure modes, and where the notation still earns its keep.",
+    title: "The Unified Modeling Language: A Field Guide to Software's Lingua Franca"
+  },
+  {
+    path: "blog-articles/software-requirements-specification.html",
+    publishedAt: "2026-06-30",
+    summary: "A long-form guide to the software requirements specification, from functional and non-functional requirements to standards, tooling, and disciplined scope definition.",
+    title: "The Software Requirements Specification — What the System Must Do"
+  },
+  {
+    path: "blog-articles/public-key-infrastructure.html",
+    publishedAt: "2026-06-29",
+    summary: "A technical field guide to PKI covering certificate authorities, X.509, trust chains, revocation, validation, and the operational architecture of digital trust.",
+    title: "Public Key Infrastructure — The Architecture of Digital Trust"
+  },
+  {
+    path: "blog-articles/telecommunications-attacks.html",
+    publishedAt: "2026-06-28",
+    summary: "A field reference on telecom attacks spanning SS7, Diameter, IMSI catchers, SIM swapping, baseband exploitation, VoIP abuse, and modern defensive considerations.",
+    title: "Telecommunications Attacks: Signaling, Spectrum, and the Interconnect"
+  },
+  {
+    path: "blog-articles/cybersecurity-civic-responsibility.html",
+    publishedAt: "2026-06-27",
+    summary: "An argument that cybersecurity has become civic infrastructure, connecting everyday digital exposure to collective responsibility, institutional weakness, and public resilience.",
+    title: "Everyone's Perimeter — Cybersecurity as Civic Infrastructure"
+  },
+  {
+    path: "blog-articles/control-engineering-implementation.html",
+    publishedAt: "2026-06-26",
+    summary: "A practitioner's guide to implementing control systems in the real world, covering toolchains, real-time constraints, embedded deployment, and the hard problems theory leaves out.",
+    title: "Control Engineering in Practice: Tools, Real-Time Implementation, and the Hard Problems"
+  },
+  {
+    path: "blog-articles/hardware-troubleshooting.html",
+    publishedAt: "2026-06-25",
+    summary: "A practical diagnostic guide to computer hardware troubleshooting, organized around systematic fault isolation for boot failures, performance problems, and component faults.",
+    title: "Field Service: A Working Guide to Computer Hardware Troubleshooting"
+  },
+  {
+    path: "blog-articles/heat-death-of-the-universe.html",
+    publishedAt: "2026-06-16",
+    summary: "A long-form history of the heat-death idea, tracing thermodynamics, cosmology, entropy, and the philosophical resistance to a universe with a terminal state.",
+    title: "The Heat Death of the Universe — Thermodynamic Destiny and Its Discontents"
+  },
+  {
+    path: "blog-articles/uncertainty-principle.html",
+    publishedAt: "2026-06-14",
+    summary: "A technical and historical account of the uncertainty principle, from matrix mechanics and wave theory to the interpretive fight over what quantum limits really mean.",
+    title: "The Uncertainty Principle: Physics and the Fight Over What Nature Allows Us to Know"
+  },
+  {
+    path: "blog-articles/the-irrationality-of-sqrt2.html",
+    publishedAt: "2026-06-11",
+    summary: "A history of the proof that the square root of two is irrational and the conceptual damage it did to ancient assumptions about number, ratio, and cosmic order.",
+    title: "The Diagonal That Broke the Cosmos — The Irrationality of √2"
+  },
+  {
+    path: "blog-articles/Cantors-Paradise.html",
+    publishedAt: "2026-06-10",
+    summary: "A history of Cantor's transfinite numbers, the backlash against actual infinity, and the road from countability to the continuum hypothesis and undecidability.",
+    title: "Cantor's Paradise, Cantor's Disease — The Transfinite Numbers and the War Over Infinity"
+  },
+  {
+    path: "blog-articles/deep-time.html",
+    publishedAt: "2026-06-09",
+    summary: "A history of how geology established deep time, shattered compressed chronologies of the Earth, and forced science to reckon with planetary age at a different scale.",
+    title: "Deep Time: How Geology Broke the Biblical Clock"
+  },
+  {
+    path: "blog-articles/descent-with-modification.html",
+    publishedAt: "2026-06-08",
+    summary: "A history of evolution by natural selection, from Darwin's argument for descent with modification to the social, scientific, and philosophical struggle that followed.",
+    title: "Descent With Modification — Evolution by Natural Selection and the Long Reckoning"
+  },
   {
     path: "blog-articles/the-big-bang.html",
     publishedAt: "2026-06-24",
@@ -1497,9 +1602,9 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
   "blog-articles/system-reliability-patterns.html": ["Engineering", "DevSecOps", "Programming & Software"],
   "blog-articles/spring-cloud-devops.html": ["Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
-  "blog-articles/secure-architecture.html": ["Security", "Engineering", "DevSecOps"],
+  "blog-articles/secure-architecture.html": ["Security", "Engineering", "DevSecOps", "Software Design & Architecture"],
   "blog-articles/rust-programming-language.html": ["Programming & Software", "Operating Systems", "Security"],
-  "blog-articles/rlc-circuit-equation.html": ["Math & Physics", "Engineering", "Differential Equations"],
+  "blog-articles/rlc-circuit-equation.html": ["Math & Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
   "blog-articles/ot-ics-scada-pentesting.html": ["Security", "Cyber-Physical Systems", "Networks", "Pentesting"],
   "blog-articles/interval-problems-playbook.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/greedy-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
@@ -1547,7 +1652,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/anonymous_comm.html": ["Privacy", "Security", "Networks"],
   "blog-articles/aspnet-dependency-injection.html": ["ASP.NET", "Programming & Software"],
   "blog-articles/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
-  "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
+  "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
   "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "DevSecOps"],
   "blog-articles/go-language.html": ["Programming & Software"],
   "blog-articles/kubernetes-deployment-patterns.html": ["Programming & Software", "Engineering", "Networks", "Kubernetes", "DevSecOps"],
@@ -1566,7 +1671,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
   "blog-articles/purple-teamer-role.html": ["Security"],
   "blog-articles/service-mesh.html": ["Networks", "Programming & Software", "Kubernetes", "DevSecOps"],
-  "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering"],
+  "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
   "blog-articles/lua-programming-language.html": ["Programming & Software"],
   "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
   "blog-articles/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
@@ -1574,13 +1679,13 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/swift-programming-language.html": ["Programming & Software", "Mobile App Development"],
   "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
   "blog-articles/red-teamer-infosec.html": ["Security"],
-  "blog-articles/mcp.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "Security"],
+  "blog-articles/mcp.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "Security"],
   "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy"],
   "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software"],
   "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
   "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
   "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker", "Spring"],
-  "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
   "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],
   "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/java-build-tools.html": ["Programming & Software"],
@@ -1614,7 +1719,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/vegan_business_models.html": ["Veganism", "Society & Civics"],
   "blog-articles/learning-modalities.html": ["Learning", "Society & Civics"],
   "blog-articles/corporate-vegan-pressure.html": ["Veganism", "Society & Civics"],
-  "blog-articles/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
+  "blog-articles/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "Control Theory & Engineering"],
   "blog-articles/vegan-activism-incentives.html": ["Veganism", "Society & Civics"],
   "blog-articles/industrial-protocol-design.html": ["Cyber-Physical Systems", "Networks", "Security"],
   "blog-articles/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
@@ -1633,7 +1738,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/why-digital-privacy-is-important.html": ["Privacy", "Security"],
   "blog-articles/event-driven-networks.html": ["Networks", "Programming & Software"],
   "blog-articles/networks-performance-reliability.html": ["Networks", "Engineering"],
-  "blog-articles/ui-structure-concepts.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/ui-structure-concepts.html": ["Web & UI", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/vegan-activism-frmwrk.html": ["Veganism", "Society & Civics"],
   "blog-articles/vegan-education.html": ["Veganism", "Learning", "Society & Civics"],
   "blog-articles/vegan-infrastructure.html": ["Veganism", "Programming & Software", "Society & Civics"],
@@ -1641,10 +1746,10 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/network_topologies.html": ["Networks"],
   "blog-articles/cloud-microservices-networking.html": ["Networks", "Programming & Software"],
   "blog-articles/mass-media-vegan-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/protocol-oriented-design.html": ["Networks", "Programming & Software"],
+  "blog-articles/protocol-oriented-design.html": ["Networks", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/vegan-advocacy-interpersonal.html": ["Veganism", "Society & Civics"],
   "blog-articles/vegan-community.html": ["Veganism", "Society & Civics"],
-  "blog-articles/ui-components-article.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/ui-components-article.html": ["Web & UI", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/privacy.html": ["Privacy", "Security"],
   "blog-articles/distributed-systems-networks.html": ["Networks", "Programming & Software"],
   "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy"],
@@ -1654,7 +1759,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/authorized-adversary.html": ["Security", "Networks", "Pentesting"],
   "blog-articles/active-directory-pentesting.html": ["Security", "Networks", "Pentesting", "Operating Systems"],
   "blog-articles/semmelweis-childbed-fever.html": ["Philosophy", "Society & Civics"],
-  "blog-articles/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks"],
+  "blog-articles/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
   "blog-articles/it-sector-security.html": ["Security", "Networks", "Engineering", "Society & Civics"],
   "blog-articles/aether.html": ["Math & Physics", "Philosophy"],
   "blog-articles/government-services-facilities-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
@@ -1672,7 +1777,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/continental-drift-wegener.html": ["Earth Sciences", "Philosophy"],
   "blog-articles/banach-tarski-paradox.html": ["Math & Physics", "Philosophy"],
   "blog-articles/godel-incompleteness.html": ["Math & Physics", "Philosophy"],
-  "blog-articles/the-integration-imperative.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "DevSecOps"],
+  "blog-articles/the-integration-imperative.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "DevSecOps"],
   "blog-articles/webapp_pentesting.html": ["Security", "Web & UI", "Pentesting"],
   "blog-articles/api-security-testing.html": ["Security", "Programming & Software", "DevSecOps", "Pentesting"],
   "blog-articles/cloud-penetration-testing.html": ["Security", "Networks", "DevSecOps", "Pentesting"],
@@ -1680,7 +1785,24 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/mobile-app-penetration-testing.html": ["Security", "Mobile App Development", "Android", "Pentesting"],
   "blog-articles/thick-client-testing.html": ["Security", "Programming & Software", "Pentesting", "Operating Systems"],
   "blog-articles/social-engineering-assessments.html": ["Security", "Pentesting", "Society & Civics"],
-  "blog-articles/hardware-embedded-pentesting.html": ["Security", "Engineering", "Cyber-Physical Systems", "Pentesting"]
+  "blog-articles/hardware-embedded-pentesting.html": ["Security", "Engineering", "Cyber-Physical Systems", "Pentesting"],
+  "blog-articles/agno-framework.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software"],
+  "blog-articles/Cantors-Paradise.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/chainlit.html": ["AI & Machine Learning", "AI Agents", "Programming & Software", "Python"],
+  "blog-articles/control-engineering-implementation.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
+  "blog-articles/cybersecurity-civic-responsibility.html": ["Security", "Society & Civics"],
+  "blog-articles/deep-time.html": ["Earth Sciences", "Philosophy"],
+  "blog-articles/descent-with-modification.html": ["Philosophy", "Learning"],
+  "blog-articles/enterprise-ai-agent-roadmap.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "DevSecOps"],
+  "blog-articles/hardware-troubleshooting.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/heat-death-of-the-universe.html": ["Math & Physics", "Philosophy", "Cosmology"],
+  "blog-articles/public-key-infrastructure.html": ["Security", "Networks", "Programming & Software"],
+  "blog-articles/software-architecture-frameworks.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/software-requirements-specification.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/telecommunications-attacks.html": ["Security", "Networks"],
+  "blog-articles/the-irrationality-of-sqrt2.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/uncertainty-principle.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/unified-modeling-language.html": ["Programming & Software", "Engineering", "Software Design & Architecture"]
 };
 
 function formatBlogDate(dateString: string): string {
