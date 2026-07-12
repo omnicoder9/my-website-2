@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Dockerfile: A Manifest for Machines</title>
+<meta name="description" content="A technical deep dive into the Dockerfile: its history, the layered image model, BuildKit internals, every core instruction, multi-stage builds, caching, and hardening practices.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EAEEF2; --paper-2:#E0E6EC; --panel:#F4F7F9; --panel-2:#EDF2F5;
+  --ink:#13212B; --ink-soft:#3F5361; --ink-faint:#6C7E8B;
+  --petrol:#0E2C3B; --petrol-2:#0A2230; --petrol-line:#22475B; --petrol-hi:#1B5A76;
+  --teal:#0C8E85; --teal-deep:#0A6A63;
+  --amber:#F2801E; --amber-deep:#C96710; --amber-soft:#F9E2CB;
+  --rule:#C6D0D8; --rule-soft:#D6DEE4;
+  --code-bg:#0E2C3B; --code-fg:#D7E4EB; --code-dim:#8BA4B1; --code-line:#1C4457;
+  --good:#1C8E69; --bad:#C4562A;
+  --maxw:1240px; --col:44rem;
+  --rail:19rem;
+  --shadow:0 1px 2px rgba(19,33,43,.06),0 8px 26px rgba(19,33,43,.07);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  font-size:17px; line-height:1.68; font-weight:400;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+img,svg{max-width:100%;display:block}
+a{color:var(--petrol-hi);text-decoration:none}
+a:hover{color:var(--amber-deep)}
+::selection{background:var(--amber-soft);color:var(--ink)}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px;border-radius:2px}
+
+/* ---------- scroll progress (mobile/top) ---------- */
+.progress{position:fixed;top:0;left:0;height:3px;width:0%;background:var(--amber);z-index:60;transition:width .12s linear}
+
+/* ---------- shell ---------- */
+.shell{max-width:var(--maxw);margin:0 auto;display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:0}
+.rail{position:sticky;top:0;align-self:start;height:100vh;padding:2.4rem 1.4rem 2rem 1.6rem;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1.1rem;overflow:auto}
+.doc{min-width:0;padding:0 clamp(1.1rem,4vw,3.4rem) 6rem}
+
+/* ---------- rail brand + nav ---------- */
+.brand{display:flex;gap:.65rem;align-items:flex-start;padding-bottom:.2rem}
+.brand .mark{flex:0 0 auto;margin-top:2px}
+.brand b{font-family:"Saira Condensed",sans-serif;font-weight:800;font-size:1.02rem;letter-spacing:.06em;text-transform:uppercase;line-height:1.05;color:var(--ink)}
+.brand span{display:block;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-faint);margin-top:.28rem}
+.raillabel{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-faint);border-top:1px solid var(--rule);padding-top:.9rem}
+.toc{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.toc li{margin:0}
+.toc a{display:grid;grid-template-columns:1.9rem 1fr;gap:.55rem;align-items:baseline;padding:.34rem 0;color:var(--ink-soft);font-size:.92rem;line-height:1.25;border-left:2px solid transparent;padding-left:.7rem;margin-left:-.7rem;transition:color .15s,border-color .15s}
+.toc a .n{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--ink-faint);letter-spacing:.02em}
+.toc a:hover{color:var(--ink)}
+.toc a.active{color:var(--ink);border-left-color:var(--amber);font-weight:600}
+.toc a.active .n{color:var(--amber-deep)}
+.railfoot{margin-top:auto;border-top:1px solid var(--rule);padding-top:.9rem;font-size:.72rem;color:var(--ink-faint);line-height:1.5}
+
+/* ---------- mobile contents ---------- */
+.m-contents{display:none}
+
+/* ---------- hero ---------- */
+.hero{margin:0 clamp(-1.1rem,-4vw,-3.4rem) 3.2rem;padding:3.4rem clamp(1.1rem,4vw,3.4rem) 2.9rem;background:
+   radial-gradient(120% 140% at 88% -20%,rgba(242,128,30,.16),transparent 46%),
+   radial-gradient(120% 120% at 0% 120%,rgba(12,142,133,.16),transparent 50%),
+   var(--petrol);
+  color:#EAF1F5;position:relative;overflow:hidden;border-bottom:1px solid var(--petrol-line)}
+.hero .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.28em;text-transform:uppercase;color:var(--amber);margin:0 0 1.1rem;display:flex;align-items:center;gap:.7rem}
+.hero .eyebrow::before{content:"";width:26px;height:2px;background:var(--amber);display:inline-block}
+.hero h1{font-family:"Saira Condensed",sans-serif;font-weight:800;letter-spacing:-.005em;line-height:.94;margin:0;font-size:clamp(2.9rem,7.4vw,5.6rem);text-transform:uppercase;color:#F3F8FA}
+.hero h1 em{font-style:normal;color:var(--amber)}
+.hero .dek{max-width:36rem;margin:1.35rem 0 0;font-size:1.12rem;line-height:1.6;color:#C4D4DD}
+.hero .runline{margin:1.7rem 0 0;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:.82rem;color:#9FB6C1}
+.hero .runline b{color:#EAF1F5;font-weight:600}
+.hero .runline .sep{color:var(--petrol-line)}
+.hero .chip{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.06em;color:#CFE0E7;border:1px solid var(--petrol-line);border-radius:999px;padding:.18rem .6rem}
+
+/* signature cutaway */
+.cutaway{margin:2.6rem 0 0;border:1px solid var(--petrol-line);border-radius:10px;background:rgba(6,20,28,.42);padding:1.1rem 1.1rem .8rem;position:relative}
+.cutaway .cap{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:#8FA8B4;display:flex;justify-content:space-between;gap:1rem;margin:.5rem .1rem 0}
+
+/* ---------- article typography ---------- */
+.sec{padding-top:2.2rem;margin-top:1.4rem;max-width:100%}
+.sec+.sec{border-top:1px solid var(--rule-soft)}
+.sec-head{display:flex;gap:.9rem;align-items:baseline;margin:0 0 1.15rem}
+.sec-head .idx{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--amber-deep);font-weight:600;letter-spacing:.04em;flex:0 0 auto;padding-top:.35rem}
+.sec h2{font-family:"Saira Condensed",sans-serif;font-weight:700;font-size:clamp(1.85rem,4vw,2.7rem);line-height:1.02;letter-spacing:.002em;margin:0;text-transform:uppercase;color:var(--ink)}
+.wrap{max-width:var(--col)}
+.sec h3{font-family:"IBM Plex Sans",sans-serif;font-weight:600;font-size:1.22rem;line-height:1.3;letter-spacing:-.005em;margin:2.2rem 0 .5rem;color:var(--ink)}
+.sec h3 .kw{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--petrol-hi);font-size:1.02rem}
+.sec h4{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:.82rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin:1.7rem 0 .4rem}
+.wrap p{margin:0 0 1.02rem}
+.wrap ul,.wrap ol{margin:0 0 1.1rem;padding-left:1.25rem}
+.wrap li{margin:.36rem 0}
+.wrap li::marker{color:var(--teal-deep)}
+.lead{font-size:1.16rem;line-height:1.62;color:var(--ink-soft)}
+.lead strong{color:var(--ink)}
+strong{font-weight:600;color:var(--ink)}
+abbr{text-decoration:none;border-bottom:1px dotted var(--ink-faint);cursor:help}
+
+/* inline code */
+code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--panel-2);color:var(--petrol);border:1px solid var(--rule-soft);border-radius:5px;padding:.06em .38em}
+
+/* code blocks */
+.code{margin:1.35rem 0;border-radius:10px;overflow:hidden;border:1px solid var(--code-line);box-shadow:var(--shadow)}
+.code .bar{display:flex;align-items:center;gap:.6rem;background:#0B2431;border-bottom:1px solid var(--code-line);padding:.5rem .85rem;font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--code-dim)}
+.code .bar .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);flex:0 0 auto;box-shadow:14px 0 0 var(--teal),28px 0 0 #3d5c6b}
+.code .bar .fn{margin-left:auto;color:#9FB6C1;letter-spacing:.06em;text-transform:none}
+.code pre{margin:0;background:var(--code-bg);color:var(--code-fg);padding:1rem 1.05rem;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:.83rem;line-height:1.62}
+.code pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.tok-i{color:#F2A25C;font-weight:600}      /* instruction keyword */
+.tok-c{color:#6E8A98;font-style:italic}    /* comment */
+.tok-s{color:#8FD3C6}                        /* string / path */
+.tok-f{color:#E7C46B}                        /* flag */
+.tok-v{color:#C9A6E6}                        /* variable */
+.tok-p{color:#7FB0C6}                        /* prompt / shell */
+.tok-o{color:#9FB6C1}                        /* dim */
+
+/* callouts */
+.note{margin:1.35rem 0;border-radius:9px;padding:.95rem 1.05rem .95rem 1.15rem;background:var(--panel);border:1px solid var(--rule-soft);border-left:3px solid var(--teal);font-size:.96rem}
+.note.warn{border-left-color:var(--amber)}
+.note .tag{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--teal-deep);font-weight:600;display:block;margin-bottom:.28rem}
+.note.warn .tag{color:var(--amber-deep)}
+.note p{margin:0}
+.note p+p{margin-top:.6rem}
+
+/* figures */
+figure{margin:1.9rem 0;padding:0}
+.fig-svg{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:1.5rem 1.3rem;box-shadow:var(--shadow)}
+figcaption{margin:.7rem .15rem 0;font-size:.85rem;color:var(--ink-faint);line-height:1.5}
+figcaption b{color:var(--ink-soft);font-weight:600}
+
+/* tables */
+.tbl{margin:1.5rem 0;overflow-x:auto;border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;background:var(--panel)}
+th,td{text-align:left;padding:.62rem .8rem;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{background:#0B2431;color:#D7E4EB;font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600;border-bottom:0;position:sticky;top:0}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:nth-child(even){background:var(--panel-2)}
+td code{white-space:nowrap}
+.yes{color:var(--good);font-weight:600}
+.no{color:var(--bad);font-weight:600}
+
+/* timeline */
+.timeline{margin:1.7rem 0;display:grid;gap:0}
+.tl-row{display:grid;grid-template-columns:5.4rem 1fr;gap:1rem;padding:.55rem 0;border-top:1px solid var(--rule-soft);align-items:start}
+.tl-row:first-child{border-top:0}
+.tl-year{font-family:"Saira Condensed",sans-serif;font-weight:700;font-size:1.25rem;color:var(--amber-deep);letter-spacing:.01em}
+.tl-body b{color:var(--ink);font-weight:600}
+.tl-body{color:var(--ink-soft);font-size:.94rem}
+
+/* citations */
+sup.cite{font-family:"IBM Plex Mono",monospace;font-size:.62em;line-height:0;font-weight:600;white-space:nowrap}
+sup.cite a{color:var(--teal-deep);padding:0 .04em}
+sup.cite a:hover{color:var(--amber-deep)}
+
+/* references */
+.refs{counter-reset:none;font-size:.86rem;line-height:1.55;color:var(--ink-soft);padding-left:0;list-style:none;margin:1.3rem 0 0}
+.refs li{display:grid;grid-template-columns:2.1rem 1fr;gap:.5rem;padding:.5rem 0;border-top:1px solid var(--rule-soft)}
+.refs li:first-child{border-top:0}
+.refs .rn{font-family:"IBM Plex Mono",monospace;color:var(--amber-deep);font-weight:600}
+.refs a.src{color:var(--petrol-hi);word-break:break-word}
+.refs a.back{color:var(--ink-faint);font-family:"IBM Plex Mono",monospace;text-decoration:none}
+.refs cite{font-style:normal}
+
+/* footer */
+.foot{margin-top:3.4rem;border-top:1px solid var(--rule);padding-top:1.4rem;font-size:.82rem;color:var(--ink-faint);line-height:1.6}
+.foot b{color:var(--ink-soft)}
+
+/* ---------- responsive ---------- */
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr}
+  .rail{display:none}
+  .m-contents{display:block;position:sticky;top:0;z-index:40;background:var(--paper);border-bottom:1px solid var(--rule);margin:0 clamp(-1.1rem,-4vw,-3.4rem);padding:0}
+  .m-contents summary{list-style:none;cursor:pointer;padding:.85rem clamp(1.1rem,4vw,3.4rem);font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);display:flex;align-items:center;gap:.6rem}
+  .m-contents summary::-webkit-details-marker{display:none}
+  .m-contents summary b{color:var(--ink);font-weight:700}
+  .m-contents .toc{padding:.2rem clamp(1.1rem,4vw,3.4rem) 1rem}
+  .m-contents .toc a{border-left:0;margin-left:0;padding-left:0}
+  .doc{padding-top:0}
+}
+@media (max-width:620px){
+  body{font-size:16px}
+  .hero{padding-top:2.5rem}
+  .tl-row{grid-template-columns:4.2rem 1fr}
+}
+
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion:no-preference){
+  .hero h1,.hero .dek,.hero .eyebrow,.hero .runline{opacity:0;transform:translateY(10px);animation:rise .7s cubic-bezier(.2,.7,.2,1) forwards}
+  .hero .eyebrow{animation-delay:.02s}
+  .hero h1{animation-delay:.08s}
+  .hero .dek{animation-delay:.2s}
+  .hero .runline{animation-delay:.3s}
+  .cutaway{opacity:0;animation:rise .7s cubic-bezier(.2,.7,.2,1) .38s forwards}
+  .stratum{opacity:0;transform:translateY(6px);animation:rise .5s ease forwards}
+}
+@keyframes rise{to{opacity:1;transform:none}}
+</style>
+</head>
+<body class="blog-article-page">
+<div id="site-header"></div>
+<div class="progress" id="progress" aria-hidden="true"></div>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg width="26" height="30" viewBox="0 0 26 30" fill="none">
+          <rect x="1" y="20.5" width="24" height="6" rx="1.4" fill="#F2801E"></rect>
+          <rect x="1" y="12.5" width="24" height="6" rx="1.4" fill="#0C8E85"></rect>
+          <rect x="1" y="4.5" width="24" height="6" rx="1.4" fill="#1B5A76"></rect>
+          <rect x="4.5" y="0.6" width="17" height="3.1" rx="1" fill="#13212B"></rect>
+        </svg>
+      </span>
+      <div>
+        <b>The Dockerfile</b>
+        <span>A manifest for machines</span>
+      </div>
+    </div>
+    <div class="raillabel">&#9635; The stack</div>
+    <ul class="toc" id="toc">
+      <li><a href="#manifest"><span class="n">01</span><span>The manifest</span></a></li>
+      <li><a href="#lineage"><span class="n">02</span><span>Lineage of the box</span></a></li>
+      <li><a href="#image"><span class="n">03</span><span>The layered image</span></a></li>
+      <li><a href="#build"><span class="n">04</span><span>The build engine</span></a></li>
+      <li><a href="#instructions"><span class="n">05</span><span>The instruction set</span></a></li>
+      <li><a href="#cache"><span class="n">06</span><span>The cache</span></a></li>
+      <li><a href="#multistage"><span class="n">07</span><span>Multi-stage builds</span></a></li>
+      <li><a href="#practice"><span class="n">08</span><span>Hardening &amp; practice</span></a></li>
+      <li><a href="#tools"><span class="n">09</span><span>The toolchain</span></a></li>
+      <li><a href="#close"><span class="n">10</span><span>Everything, a manifest</span></a></li>
+      <li><a href="#refs"><span class="n">&#8214;</span><span>References</span></a></li>
+    </ul>
+    <div class="railfoot">Reproducible builds are read top to bottom, like the file itself. Each instruction settles as a layer.</div>
+  </aside>
+
+  <main class="doc">
+    <details class="m-contents">
+      <summary>&#9635;&nbsp; <b>Contents</b> &#8212; the stack</summary>
+      <ul class="toc">
+        <li><a href="#manifest"><span class="n">01</span><span>The manifest</span></a></li>
+        <li><a href="#lineage"><span class="n">02</span><span>Lineage of the box</span></a></li>
+        <li><a href="#image"><span class="n">03</span><span>The layered image</span></a></li>
+        <li><a href="#build"><span class="n">04</span><span>The build engine</span></a></li>
+        <li><a href="#instructions"><span class="n">05</span><span>The instruction set</span></a></li>
+        <li><a href="#cache"><span class="n">06</span><span>The cache</span></a></li>
+        <li><a href="#multistage"><span class="n">07</span><span>Multi-stage builds</span></a></li>
+        <li><a href="#practice"><span class="n">08</span><span>Hardening &amp; practice</span></a></li>
+        <li><a href="#tools"><span class="n">09</span><span>The toolchain</span></a></li>
+        <li><a href="#close"><span class="n">10</span><span>Everything, a manifest</span></a></li>
+        <li><a href="#refs"><span class="n">&#8214;</span><span>References</span></a></li>
+      </ul>
+    </details>
+
+    <header class="hero">
+      <p class="eyebrow">Infrastructure as code &#183; the build recipe</p>
+      <h1>The <em>Dockerfile</em><br>a manifest for machines</h1>
+      <p class="dek">A Dockerfile is a plain-text recipe that a builder reads, line by line, to assemble a container image. It turns the messy, undocumented ritual of &#8220;setting up a server&#8221; into a versioned artifact you can diff, review, and rebuild identically anywhere.</p>
+      <div class="runline">
+        <span class="chip">FROM</span><span class="chip">RUN</span><span class="chip">COPY</span><span class="chip">CMD</span>
+        <span class="sep">&#47;&#47;</span> <b>build</b> &#8594; <b>ship</b> &#8594; <b>run</b>
+      </div>
+      <div class="cutaway">
+        <svg viewBox="0 0 700 300" role="img" aria-labelledby="t7008" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"><title>Cutaway of a container image</title><desc>A vertical stack of layers: read-only image layers at the bottom and a writable container layer on top, wrapped by the merged view.</desc><rect x="82" y="18" width="422" height="252" rx="10" fill="none" stroke="#9DB6C2" stroke-width="1.4" stroke-dasharray="4 4"/><text x="82" y="12" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="400" fill="#9DB6C2" text-anchor="start">merged view &#183; what the process sees</text><g class="stratum"><rect x="92" y="26" width="402" height="40" rx="6" fill="#F2801E"/><rect x="102" y="35" width="22" height="22" rx="5" fill="rgba(255,255,255,.14)"/><text x="113" y="50" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#13212B" text-anchor="middle">RW</text><text x="136" y="44" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="600" fill="#13212B" text-anchor="start">writable container layer</text><text x="136" y="59" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#13212B" text-anchor="start">created at run &#183; upperdir</text></g><g class="stratum"><rect x="92" y="75" width="402" height="40" rx="6" fill="#255C77"/><rect x="102" y="84" width="22" height="22" rx="5" fill="rgba(255,255,255,.14)"/><text x="113" y="99" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#EAF1F5" text-anchor="middle">3</text><text x="136" y="93" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="600" fill="#EAF1F5" text-anchor="start">COPY . .</text><text x="136" y="108" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="start">application source</text><text x="482" y="100" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="end">sha256:&#8230;</text></g><g class="stratum"><rect x="92" y="124" width="402" height="40" rx="6" fill="#17435A"/><rect x="102" y="133" width="22" height="22" rx="5" fill="rgba(255,255,255,.14)"/><text x="113" y="148" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#EAF1F5" text-anchor="middle">2</text><text x="136" y="142" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="600" fill="#EAF1F5" text-anchor="start">COPY requirements.txt</text><text x="136" y="157" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="start">dependency manifest</text><text x="482" y="149" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="end">sha256:&#8230;</text></g><g class="stratum"><rect x="92" y="173" width="402" height="40" rx="6" fill="#255C77"/><rect x="102" y="182" width="22" height="22" rx="5" fill="rgba(255,255,255,.14)"/><text x="113" y="197" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#EAF1F5" text-anchor="middle">1</text><text x="136" y="191" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="600" fill="#EAF1F5" text-anchor="start">RUN pip install ...</text><text x="136" y="206" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="start">installed packages</text><text x="482" y="198" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="end">sha256:&#8230;</text></g><g class="stratum"><rect x="92" y="222" width="402" height="40" rx="6" fill="#17435A"/><rect x="102" y="231" width="22" height="22" rx="5" fill="rgba(255,255,255,.14)"/><text x="113" y="246" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#EAF1F5" text-anchor="middle">0</text><text x="136" y="240" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" font-weight="600" fill="#EAF1F5" text-anchor="start">FROM python:3.12-slim</text><text x="136" y="255" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="start">base OS + interpreter</text><text x="482" y="247" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="end">sha256:&#8230;</text></g><line x1="510" y1="29" x2="510" y2="63" stroke="#F2801E" stroke-width="2"/><line x1="510" y1="29" x2="504" y2="29" stroke="#F2801E" stroke-width="2"/><line x1="510" y1="63" x2="504" y2="63" stroke="#F2801E" stroke-width="2"/><text x="522" y="44" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="11.5" font-weight="700" fill="#F6B37A" text-anchor="start">writable</text><text x="522" y="59" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="start">upperdir</text><line x1="510" y1="78" x2="510" y2="259" stroke="#9DB6C2" stroke-width="2"/><line x1="510" y1="78" x2="504" y2="78" stroke="#9DB6C2" stroke-width="2"/><line x1="510" y1="259" x2="504" y2="259" stroke="#9DB6C2" stroke-width="2"/><text x="522" y="164.5" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="11.5" font-weight="700" fill="#CFE0E7" text-anchor="start">read-only image</text><text x="522" y="179.5" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#9DB6C2" text-anchor="start">OCI layers &#183; lowerdirs</text><line x1="62" y1="256" x2="62.0" y2="41.0" stroke="#9DB6C2" stroke-width="2"/><polygon points="62.0,34.0 66.3,41.0 57.7,41.0" fill="#9DB6C2"/><text x="54" y="152.0" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" fill="#9DB6C2" text-anchor="middle" transform="rotate(-90 54 146)">stack grows up</text></svg>
+        <div class="cap"><span>Fig. 0 &#8212; cutaway of an image</span><span>read bottom &#8594; top</span></div>
+      </div>
+    </header>
+
+    <article>
+<section class="sec" id="manifest">
+  <div class="sec-head"><span class="idx">01</span><h2>The manifest</h2></div>
+  <div class="wrap">
+    <p class="lead">A <strong>Dockerfile</strong> is a text document that contains every command you might otherwise type by hand to assemble an image. You point <code>docker build</code> at it, and the builder executes those instructions in succession to produce a container image automatically.<sup class="cite"><a id="c-1" href="#ref-1">1</a></sup> There is nothing exotic in the file itself &#8212; it is closer to a shell script than a programming language &#8212; but the discipline it imposes is the whole point.</p>
+
+    <p>Before Dockerfiles, &#8220;setting up the server&#8221; was an oral tradition: a wiki page that drifted out of date, a senior engineer's memory, a shell history no one could reconstruct. A Dockerfile replaces that ritual with an artifact. It lives in version control next to the code it serves; it can be diffed, reviewed in a pull request, and rebuilt to produce the same image on a laptop, in CI, and on a production node. This is the core claim of <strong>infrastructure as code</strong>: the recipe <em>is</em> the environment, and the environment is only ever as trustworthy as the recipe that produced it.</p>
+
+    <p>By packaging an application together with its dependencies in a single standardized, open format, Docker sharply lowered the friction between the people who write software and the people who operate it &#8212; developers could concentrate on what runs inside the container while operators concentrated on what surrounds it, and the phrase that stuck was <strong>build, ship, run</strong>.<sup class="cite"><a id="c-2" href="#ref-2">2</a></sup> The Dockerfile is the &#8220;build&#8221; half of that promise: the deterministic front end that every later stage depends on.</p>
+
+    <p>Here is a complete, unremarkable Dockerfile for a Python web service. Read it top to bottom; the builder does exactly that.</p>
+
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">./Dockerfile</span></div>
+<pre><code><span class="tok-c"># syntax=docker/dockerfile:1</span>
+<span class="tok-i">FROM</span> <span class="tok-s">python:3.12-slim</span>          <span class="tok-c"># a known, pinned starting point</span>
+<span class="tok-i">WORKDIR</span> <span class="tok-s">/app</span>                    <span class="tok-c"># all later paths are relative to here</span>
+
+<span class="tok-c"># copy the dependency manifest first, on its own, for cache reuse</span>
+<span class="tok-i">COPY</span> requirements.txt <span class="tok-s">./</span>
+<span class="tok-i">RUN</span> pip install --no-cache-dir -r requirements.txt
+
+<span class="tok-c"># then the source, which changes far more often</span>
+<span class="tok-i">COPY</span> . <span class="tok-s">./</span>
+
+<span class="tok-i">EXPOSE</span> <span class="tok-f">8000</span>                       <span class="tok-c"># documentation of the listening port</span>
+<span class="tok-i">USER</span> <span class="tok-s">nobody</span>                       <span class="tok-c"># drop out of root before running</span>
+<span class="tok-i">CMD</span> [<span class="tok-s">"gunicorn"</span>, <span class="tok-s">"-b"</span>, <span class="tok-s">"0.0.0.0:8000"</span>, <span class="tok-s">"app:app"</span>]</code></pre>
+    </div>
+
+    <p>Every idea in this article is already latent in those ten lines: a pinned base image, a working directory, an ordering chosen for the build cache, the difference between build-time and run-time, the decision to run as a non-root user, and a default command expressed as a list rather than a string. The rest of the piece pulls each of those apart &#8212; but first, where the box itself came from.</p>
+  </div>
+</section>
+
+<section class="sec" id="lineage">
+  <div class="sec-head"><span class="idx">02</span><h2>Lineage of the box</h2></div>
+  <div class="wrap">
+    <h3>Isolation, older than the cloud</h3>
+    <p>Containers did not begin with Docker, and neither did the ideas in a Dockerfile. The oldest thread reaches back to <strong>1979</strong>, when the <code>chroot</code> system call arrived during development of the Seventh Edition of Unix. It let a process be handed a new apparent root directory, narrowing its view of the filesystem; a few years later, in 1982, it was folded into BSD.<sup class="cite"><a id="c-3" href="#ref-3">3</a></sup> <code>chroot</code> could move the floor under a process, but it did not stop that process from seeing the rest of the system's users, network, or processes.</p>
+
+    <p>Those walls were built later. In 2000 FreeBSD extended the concept into <strong>jails</strong>, partitioning a host into independent mini-systems each with its own filesystem, users, and network interface. Solaris answered in 2004 with <strong>Zones</strong>, virtualizing the operating system while sharing a single kernel, and in 2006 engineers at Google shipped &#8220;process containers&#8221; to cap and account for the resource use of a group of processes. That feature was renamed <strong>control groups</strong> &#8212; <code>cgroups</code> &#8212; a year later, and merged into the Linux kernel in release 2.6.24 in 2008.<sup class="cite"><a id="c-4" href="#ref-4">4</a></sup></p>
+
+    <p>Cgroups answered the question of <em>how much</em> a process could consume. The companion mechanism, <strong>namespaces</strong>, answered <em>what</em> a process could see, arriving incrementally from the early 2000s &#8212; mount namespaces landed in Linux 2.4.19 &#8212; and later rewritten, so that a second generation, cgroups v2, appeared in Linux 4.5.<sup class="cite"><a id="c-5" href="#ref-5">5</a></sup> With both primitives in the mainline kernel, a user-space manager could finally knit them together. <strong>LXC</strong>, released in the summer of 2008, was the first reasonably complete Linux container manager: a library and set of tools wrapping namespaces and cgroups without kernel patches. It would become Docker's original engine.<sup class="cite"><a id="c-6" href="#ref-6">6</a></sup></p>
+
+    <h3>The lightning talk</h3>
+    <p>On <strong>15 March 2013</strong>, Solomon Hykes stepped onto a lightning-talk stage at PyCon in Santa Clara and demonstrated Docker publicly for the first time, compressing the problem it solved into five words: <em>shipping to the server is hard</em>.<sup class="cite"><a id="c-7" href="#ref-7">7</a></sup> The five-minute slot landed far harder than anyone expected. For many developers in the room it was a first encounter with cgroups and namespaces at all, and Docker's genuine contribution was less a new kernel feature than an act of <strong>democratization</strong> &#8212; using those primitives no longer demanded a systems-administration background.<sup class="cite"><a id="c-8" href="#ref-8">8</a></sup></p>
+
+    <p>Docker had grown out of dotCloud, a platform-as-a-service company Hykes co-founded in the 2010 Y Combinator batch. The team had already been running many LXC containers in production, each backed by a layered filesystem image, and had written an internal tool to smooth over LXC's rough and unstable edges; that tool quietly became the container runtime the whole company pivoted toward.<sup class="cite"><a id="c-9" href="#ref-9">9</a></sup> Weeks after the talk, Docker was released as open source under the Apache 2.0 license. At first it used LXC as its execution environment, but with version 0.9 in 2014 it swapped LXC for its own component, <code>libcontainer</code>, written in Go, and in 2017 Docker spun its open-source core out into the <strong>Moby</strong> project.<sup class="cite"><a id="c-10" href="#ref-10">10</a></sup></p>
+
+    <h3>Standardizing the box</h3>
+    <p>Explosive adoption created a fresh risk: fragmentation. If every vendor shipped its own image format and runtime, &#8220;run anywhere&#8221; would quietly fracture. In June 2015, Docker and a coalition of industry players established the <strong>Open Container Initiative</strong> (OCI) under the Linux Foundation, and Docker donated its runtime, <code>runC</code>, as the reference implementation. The OCI today maintains three specifications &#8212; the runtime, image, and distribution specs &#8212; that let a compliant image be produced by one toolchain and executed by any compliant runtime.<sup class="cite"><a id="c-11" href="#ref-11">11</a></sup> <code>runC</code> first appeared as version 0.0.1 in July 2015 and reached 1.0.0 in June 2021; the image-format work split into its own specification in March 2016.<sup class="cite"><a id="c-12" href="#ref-12">12</a></sup></p>
+
+    <p>The image and runtime specifications both reached <strong>1.0 in July 2017</strong>, a little over two years after the group formed. That was the moment a container image stopped being a Docker feature and became an industry standard.<sup class="cite"><a id="c-13" href="#ref-13">13</a></sup> The practical consequence for this article is quiet but total: the artifact a Dockerfile produces is not a proprietary blob but an <em>OCI image</em>, and the file you write is one particular &#8212; and very popular &#8212; way of describing one.</p>
+    <h3>1979 to 1.0, in one column</h3>
+    <p>The same milestones, arranged as the sequence they actually were &#8212; each one a layer under the next.</p>
+    <div class="timeline">
+      <div class="tl-row"><div class="tl-year">1979</div><div class="tl-body"><b>chroot</b> arrives in Seventh Edition Unix. A process can be given a new apparent root: the first crude filesystem isolation.<sup class="cite"><a href="#ref-3">3</a></sup></div></div>
+      <div class="tl-row"><div class="tl-year">2000</div><div class="tl-body"><b>FreeBSD jails</b> add process, user, and network partitioning on top of chroot.<sup class="cite"><a href="#ref-4">4</a></sup></div></div>
+      <div class="tl-row"><div class="tl-year">2004</div><div class="tl-body"><b>Solaris Zones</b> virtualize the operating system while sharing a single kernel.<sup class="cite"><a href="#ref-4">4</a></sup></div></div>
+      <div class="tl-row"><div class="tl-year">2008</div><div class="tl-body"><b>cgroups</b> merge into Linux 2.6.24; <b>LXC</b> ships that summer as the first complete Linux container manager.<sup class="cite"><a href="#ref-5">5</a></sup></div></div>
+      <div class="tl-row"><div class="tl-year">2013</div><div class="tl-body"><b>Docker</b> is demoed at PyCon and open-sourced weeks later, using LXC as its first execution engine.<sup class="cite"><a href="#ref-7">7</a></sup></div></div>
+      <div class="tl-row"><div class="tl-year">2015</div><div class="tl-body">The <b>Open Container Initiative</b> forms; Docker donates runC as the reference runtime.<sup class="cite"><a href="#ref-11">11</a></sup></div></div>
+      <div class="tl-row"><div class="tl-year">2017</div><div class="tl-body">OCI image and runtime specs reach <b>1.0</b>; the container image becomes an industry standard.<sup class="cite"><a href="#ref-13">13</a></sup></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="image">
+  <div class="sec-head"><span class="idx">03</span><h2>The layered image</h2></div>
+  <div class="wrap">
+    <p class="lead">To understand why a Dockerfile is written the way it is, you have to understand the thing it builds. An image is not a disk snapshot. It is a <strong>stack of read-only layers</strong>, and almost every instruction in the file adds one.</p>
+
+    <h3>A stack of diffs, unified at read time</h3>
+    <p>The mechanism that stacks the layers is a <strong>union filesystem</strong>. Docker's default storage driver, <code>overlay2</code>, uses the Linux kernel's OverlayFS to present several directories as one. The image's layers become read-only <em>lower</em> directories; when you start a container the runtime adds a single writable <em>upper</em> directory on top, and the unified view the process actually sees is the <em>merged</em> directory. The <code>overlay2</code> driver natively supports up to 128 stacked lower layers and requires a reasonably modern kernel.<sup class="cite"><a id="c-14" href="#ref-14">14</a></sup></p>
+
+    <p>Because the lower layers are read-only and shared, editing a file that lives in one of them does not rewrite it in place. OverlayFS copies the file up into the writable layer on first write &#8212; <strong>copy-on-write</strong> &#8212; and modifies the copy, leaving the original untouched beneath it. This has a consequence that surprises newcomers and shapes half of Dockerfile best practice: <em>deleting a large file in a later layer does not shrink the image.</em> The bytes still sit in the lower layer, hidden behind a whiteout marker, and they still ship.<sup class="cite"><a href="#ref-14">14</a></sup></p>
+
+    <p>Concretely, each layer is a directory holding a <strong>diff</strong> &#8212; the exact set of filesystem changes that layer introduces &#8212; identified by a content hash. Two layers with identical content are stored only once on disk and shared across every image that references them, which is why your fifth image built on the same base pulls almost instantly: the shared base layers are already present.<sup class="cite"><a id="c-15" href="#ref-15">15</a></sup> The base image supplied by <code>FROM</code> is simply the first layer in the stack, and each subsequent filesystem-changing instruction lays another on top.<sup class="cite"><a href="#ref-15">15</a></sup></p>
+
+    <figure>
+      <div class="fig-svg"><svg viewBox="0 0 640 150" role="img" aria-labelledby="t6992" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"><title>Layer legend</title><desc>A compact legend of image layers, writable layer, and merged view.</desc><rect x="16" y="22" width="166" height="110" rx="8" fill="none" stroke="#C6D0D8" stroke-width="1.3" stroke-dasharray="4 4"/><rect x="24" y="30" width="150" height="26" rx="5" fill="#F2801E"/><text x="192" y="47" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">writable layer (upperdir)</text><text x="192" y="47" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="400" fill="#13212B" text-anchor="start"></text><rect x="24" y="64" width="150" height="26" rx="5" fill="#255C77"/><text x="192" y="81" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">image layer (lowerdir)</text><text x="192" y="81" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="400" fill="#13212B" text-anchor="start"></text><rect x="24" y="98" width="150" height="26" rx="5" fill="#17435A"/><text x="192" y="115" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">image layer (lowerdir)</text><text x="192" y="115" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="400" fill="#13212B" text-anchor="start"></text><text x="430" y="124" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#13212B" text-anchor="start"></text><text x="192" y="130" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="400" fill="#6C7E8B" text-anchor="start">dashed box = merged view the process sees</text></svg></div>
+      <figcaption>The cutaway in the header shows this directly: petrol bands are read-only image layers (the OverlayFS <b>lowerdirs</b>), the amber band is the container's writable layer (the <b>upperdir</b>), and the outline around them is the merged view the process sees.</figcaption>
+    </figure>
+
+    <h3>Image, container, tag, digest</h3>
+    <p>Four words get used loosely and are worth pinning down. An <strong>image</strong> is an immutable, content-addressed template &#8212; identified by the SHA-256 digest of its contents.<sup class="cite"><a href="#ref-11">11</a></sup> A <strong>container</strong> is a running or stopped instance of that image, distinguished only by its thin writable layer and some runtime configuration; delete it and the underlying image is unharmed. A <strong>tag</strong> such as <code>python:3.12-slim</code> is a mutable, human-friendly pointer that today references one digest and tomorrow may reference another when the maintainers rebuild it. A <strong>digest</strong> such as <code>sha256:9b2f&#8230;</code> is that immutable content hash. The distinction matters because a Dockerfile that pins only a tag is not fully reproducible: the same file, built next month, can resolve to a different base.</p>
+
+    <h3>The build context</h3>
+    <p>When you run <code>docker build .</code>, the trailing dot is not decoration &#8212; it is the <strong>build context</strong>. The client packages that directory and hands it to the builder, and <code>COPY</code> and <code>ADD</code> can only reach files that live inside it. A bloated context (a stray <code>node_modules</code>, a <code>.git</code> directory, a multi-gigabyte dataset) is slow to transfer and easy to leak into an image by accident, so a <code>.dockerignore</code> file is used to exclude paths from the context before it is ever sent.<sup class="cite"><a href="#ref-1">1</a></sup> Treat the context as an explicit input to the build, not as &#8220;whatever happens to be in the folder.&#8221;</p>
+  </div>
+</section>
+<section class="sec" id="build">
+  <div class="sec-head"><span class="idx">04</span><h2>The build engine</h2></div>
+  <div class="wrap">
+    <p class="lead">A Dockerfile is a description, not a program that runs itself. Something has to read it, decide what work is needed, do that work in isolation, and package the result. Since Docker Engine 23.0 that something is <strong>BuildKit</strong>, and knowing how it thinks explains most of what a Dockerfile author can and cannot do.</p>
+
+    <h3>From instructions to a graph</h3>
+    <p>On modern engines, <code>docker build</code> is executed by BuildKit by default; Docker Desktop adopted it earlier, and on older engines you opted in with the <code>DOCKER_BUILDKIT=1</code> environment variable.<sup class="cite"><a id="c-16" href="#ref-16">16</a></sup> At its heart is a binary intermediate representation called <strong>LLB</strong> (low-level build), and the design analogy is explicit and useful: <em>LLB is to a Dockerfile what LLVM IR is to C.</em> A component called a <strong>frontend</strong> parses a human-readable build definition &#8212; the Dockerfile frontend is named <code>dockerfile.v0</code> &#8212; and lowers it into LLB, a content-addressable dependency graph of build operations.<sup class="cite"><a href="#ref-16">16</a></sup></p>
+
+    <p>Representing a build as a graph rather than a linear script is what unlocks BuildKit's speed. It can detect and skip build stages whose output is never used, build independent stages in parallel, transfer only the changed files of your build context between successive builds, and drive an entirely rewritten cache that tracks checksums of the build graph and mounted content instead of guessing from image history.<sup class="cite"><a id="c-17" href="#ref-17">17</a></sup> The legacy builder ran instructions one after another and compared images with heuristics; BuildKit reasons about dependencies directly.</p>
+
+    <h3>Client, daemon, and the solver</h3>
+    <p>The word <em>frontend</em> is borrowed from compiler theory, and the borrowing runs deep. When you type <code>docker build</code>, the CLI is only a client: it sends the request over gRPC to a daemon, and your Dockerfile together with its build context travels to a BuildKit instance that may be embedded in the engine or running on another machine entirely. BuildKit has been embeddable in the Docker Engine since v18.09 and became the default in v23; it was deliberately split out of the engine's codebase so it could evolve on its own release cadence, and alternative builders such as <strong>kaniko</strong> and <strong>buildah</strong> exist for environments where running the Docker daemon is unwelcome.<sup class="cite"><a id="c-18" href="#ref-18">18</a></sup></p>
+
+    <p>Inside BuildKit, the frontend turns each instruction into nodes of a <strong>directed acyclic graph</strong> &#8212; <em>source</em> operations that fetch a base image or context, <em>exec</em> operations that run a command, and <em>file</em> operations that copy or move files &#8212; and a solver walks that graph, running each step in a throwaway container (by default through <code>runc</code>, or the containerd runtime) and caching the result by its content hash.<sup class="cite"><a id="c-19" href="#ref-19">19</a></sup> Two instructions that do not depend on each other can therefore run at the same time, and any node whose inputs are unchanged is served straight from cache.</p>
+
+    <figure>
+      <div class="fig-svg"><svg viewBox="0 0 720 300" role="img" aria-labelledby="t5365" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"><title>How BuildKit builds an image</title><desc>A pipeline from Dockerfile to OCI image through a frontend, an LLB dependency graph, a solver, and an exporter.</desc><rect x="20" y="40" width="104" height="64" rx="9" fill="#F4F7F9" stroke="#C6D0D8" stroke-width="1.4"/><rect x="20" y="40" width="5" height="64" rx="0" fill="#17435A"/><rect x="20" y="40" width="104" height="64" rx="9" fill="none" stroke="#C6D0D8" stroke-width="1.4"/><text x="72.0" y="67" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13" font-weight="700" fill="#13212B" text-anchor="middle">Dockerfile</text><text x="72.0" y="85" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#6C7E8B" text-anchor="middle">text recipe</text><line x1="130" y1="72.0" x2="151.0" y2="72.0" stroke="#3F5361" stroke-width="2"/><polygon points="158.0,72.0 151.0,76.3 151.0,67.7" fill="#3F5361"/><rect x="164" y="40" width="104" height="64" rx="9" fill="#F4F7F9" stroke="#C6D0D8" stroke-width="1.4"/><rect x="164" y="40" width="5" height="64" rx="0" fill="#0C8E85"/><rect x="164" y="40" width="104" height="64" rx="9" fill="none" stroke="#C6D0D8" stroke-width="1.4"/><text x="216.0" y="67" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13" font-weight="700" fill="#13212B" text-anchor="middle">frontend</text><text x="216.0" y="85" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#6C7E8B" text-anchor="middle">dockerfile.v0</text><line x1="274" y1="72.0" x2="295.0" y2="72.0" stroke="#3F5361" stroke-width="2"/><polygon points="302.0,72.0 295.0,76.3 295.0,67.7" fill="#3F5361"/><rect x="308" y="40" width="104" height="64" rx="9" fill="#0E2C3B" stroke="#C6D0D8" stroke-width="1.4"/><rect x="308" y="40" width="5" height="64" rx="0" fill="#0E2C3B"/><rect x="308" y="40" width="104" height="64" rx="9" fill="none" stroke="#C6D0D8" stroke-width="1.4"/><text x="360.0" y="67" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13" font-weight="700" fill="#EAF1F5" text-anchor="middle">LLB graph</text><text x="360.0" y="85" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#9DB6C2" text-anchor="middle">content-addressed</text><line x1="418" y1="72.0" x2="439.0" y2="72.0" stroke="#3F5361" stroke-width="2"/><polygon points="446.0,72.0 439.0,76.3 439.0,67.7" fill="#3F5361"/><rect x="452" y="40" width="104" height="64" rx="9" fill="#F4F7F9" stroke="#C6D0D8" stroke-width="1.4"/><rect x="452" y="40" width="5" height="64" rx="0" fill="#F2801E"/><rect x="452" y="40" width="104" height="64" rx="9" fill="none" stroke="#C6D0D8" stroke-width="1.4"/><text x="504.0" y="67" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13" font-weight="700" fill="#13212B" text-anchor="middle">solver</text><text x="504.0" y="85" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#6C7E8B" text-anchor="middle">runc / containerd</text><line x1="562" y1="72.0" x2="583.0" y2="72.0" stroke="#3F5361" stroke-width="2"/><polygon points="590.0,72.0 583.0,76.3 583.0,67.7" fill="#3F5361"/><rect x="596" y="40" width="104" height="64" rx="9" fill="#F4F7F9" stroke="#C6D0D8" stroke-width="1.4"/><rect x="596" y="40" width="5" height="64" rx="0" fill="#17435A"/><rect x="596" y="40" width="104" height="64" rx="9" fill="none" stroke="#C6D0D8" stroke-width="1.4"/><text x="648.0" y="67" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13" font-weight="700" fill="#13212B" text-anchor="middle">OCI image</text><text x="648.0" y="85" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#6C7E8B" text-anchor="middle">layers + config</text><text x="20" y="24" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" fill="#6C7E8B" text-anchor="start">docker build .</text><text x="700" y="24" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#1C8E69" text-anchor="end">cache hit &#8594; reuse</text><rect x="200" y="140" width="360" height="118" rx="10" fill="#E9EFF3" stroke="#C6D0D8" stroke-width="1.2"/><text x="220" y="158" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="10.5" font-weight="600" fill="#3F5361" text-anchor="start">LLB: a dependency graph &#8212; independent nodes run in parallel</text><rect x="204" y="179" width="92" height="26" rx="13" fill="#FFFFFF" stroke="#0C8E85" stroke-width="1.6"/><text x="250" y="196" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="600" fill="#13212B" text-anchor="middle">src: base</text><rect x="204" y="219" width="92" height="26" rx="13" fill="#FFFFFF" stroke="#0C8E85" stroke-width="1.6"/><text x="250" y="236" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="600" fill="#13212B" text-anchor="middle">src: context</text><rect x="354" y="199" width="92" height="26" rx="13" fill="#FFFFFF" stroke="#F2801E" stroke-width="1.6"/><text x="400" y="216" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="600" fill="#13212B" text-anchor="middle">exec: build</text><rect x="469" y="199" width="92" height="26" rx="13" fill="#FFFFFF" stroke="#17435A" stroke-width="1.6"/><text x="515" y="216" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="600" fill="#13212B" text-anchor="middle">export</text><line x1="296" y1="192" x2="348.32776211024236" y2="210.04405590008358" stroke="#3F5361" stroke-width="1.8"/><polygon points="354.0,212.0 347.1,213.6 349.5,206.5" fill="#3F5361"/><line x1="296" y1="232" x2="348.32776211024236" y2="213.95594409991642" stroke="#3F5361" stroke-width="1.8"/><polygon points="354.0,212.0 349.5,217.5 347.1,210.4" fill="#3F5361"/><line x1="446" y1="212" x2="463.0" y2="212.0" stroke="#3F5361" stroke-width="1.8"/><polygon points="469.0,212.0 463.0,215.7 463.0,208.3" fill="#3F5361"/></svg></div>
+      <figcaption><b>How BuildKit turns a Dockerfile into an image.</b> The frontend lowers instructions into an LLB graph; the solver executes independent branches concurrently and caches each node by content; the exporter serializes the result as an OCI image.</figcaption>
+    </figure>
+
+    <div class="note">
+      <span class="tag">The syntax directive</span>
+      <p>Because frontends are distributed as ordinary images, the first line of a modern Dockerfile can pin which frontend interprets the rest of the file: <code>&#35; syntax=docker/dockerfile:1</code>. This decouples the Dockerfile language from the engine version, so features like heredocs and cache mounts become available without upgrading Docker itself.<sup class="cite"><a href="#ref-16">16</a></sup> It looks like a comment, and to a naive parser it is; to BuildKit it is a version contract.</p>
+    </div>
+  </div>
+</section>
+<section class="sec" id="instructions">
+  <div class="sec-head"><span class="idx">05</span><h2>The instruction set</h2></div>
+  <div class="wrap">
+    <p class="lead">Dockerfile instructions fall into two families. Some <strong>build the filesystem</strong> and therefore create layers &#8212; <code>FROM</code>, <code>RUN</code>, <code>COPY</code>, <code>ADD</code>. Others only <strong>write metadata</strong> into the image's configuration &#8212; <code>ENV</code>, <code>EXPOSE</code>, <code>CMD</code>, <code>ENTRYPOINT</code>, <code>LABEL</code>, and friends &#8212; and add no layer of their own. Keeping that distinction in mind is the single fastest way to reason about image size and cache behavior.</p>
+
+    <h3><span class="kw">FROM</span> &#8212; the base</h3>
+    <p><code>FROM</code> sets the base image and begins a build stage; on its own it is almost always the first instruction in the file, and its argument becomes the first layer of the image.<sup class="cite"><a href="#ref-1">1</a></sup> The choice of base is the most consequential line in the whole Dockerfile: it dictates the operating-system libraries you inherit, the size floor, and the vulnerability surface you start from.</p>
+    <p>Pin it. A bare <code>FROM python</code> silently tracks whatever <code>latest</code> resolves to; a tag such as <code>python:3.12-slim</code> is better, and pinning the exact content with a digest is best for true reproducibility. The special image <code>scratch</code> is an explicitly empty base for statically linked binaries, and <code>FROM base AS name</code> gives a stage a name so a later stage can copy from it.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">FROM variants</span></div>
+<pre><code><span class="tok-c"># pin to an immutable digest -- the same bytes, forever</span>
+<span class="tok-i">FROM</span> <span class="tok-s">python:3.12-slim@sha256:9b2f...e4a1</span>
+
+<span class="tok-c"># an empty base: nothing but what you add</span>
+<span class="tok-i">FROM</span> <span class="tok-s">scratch</span>
+
+<span class="tok-c"># a parameterized, named stage (see multi-stage builds)</span>
+<span class="tok-i">ARG</span> <span class="tok-v">GO_VERSION</span>=<span class="tok-s">1.22</span>
+<span class="tok-i">FROM</span> <span class="tok-s">golang:${GO_VERSION}</span> <span class="tok-i">AS</span> <span class="tok-s">build</span></code></pre>
+    </div>
+
+    <h3><span class="kw">WORKDIR</span> &#8212; the cursor</h3>
+    <p><code>WORKDIR</code> sets the working directory for every <code>RUN</code>, <code>CMD</code>, <code>ENTRYPOINT</code>, <code>COPY</code>, and <code>ADD</code> that follows. If the directory does not exist it is created, relative paths compound across multiple <code>WORKDIR</code> lines, and it is the correct tool for changing directory &#8212; a <code>RUN cd /app</code> affects only that one instruction's shell and is forgotten immediately after.<sup class="cite"><a href="#ref-1">1</a></sup> Always give it an absolute path.</p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">WORKDIR</span></div>
+<pre><code><span class="tok-i">WORKDIR</span> <span class="tok-s">/app</span>          <span class="tok-c"># now /app</span>
+<span class="tok-i">COPY</span> . <span class="tok-s">.</span>            <span class="tok-c"># copies context into /app</span>
+<span class="tok-i">RUN</span> pwd              <span class="tok-c"># prints /app, not the build root</span></code></pre>
+    </div>
+
+    <h3><span class="kw">COPY</span> and <span class="kw">ADD</span> &#8212; getting files in</h3>
+    <p>Both instructions copy files from the build context into the image, and both create a layer. <code>COPY</code> is the plain, predictable one: it copies files and directories, and nothing else. <code>ADD</code> has two extra powers &#8212; it can automatically extract a local tar archive into the destination, and it can fetch a file from a remote URL. Precisely <em>because</em> it does more and its behavior is less obvious, the standing guidance is to reach for <code>COPY</code> by default and use <code>ADD</code> only when you specifically want tar extraction or a remote fetch.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="tbl"><table>
+      <thead><tr><th>Capability</th><th>COPY</th><th>ADD</th></tr></thead>
+      <tbody>
+        <tr><td>Copy local files and directories from the build context</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+        <tr><td>Auto-extract a local tar archive into the image</td><td class="no">no</td><td class="yes">yes</td></tr>
+        <tr><td>Fetch a file from a remote URL</td><td class="no">no</td><td class="yes">yes</td></tr>
+        <tr><td>Pull from another stage or image with <code>--from</code></td><td class="yes">yes</td><td class="yes">yes</td></tr>
+        <tr><td>Recommended default</td><td class="yes">preferred</td><td>only for extraction / fetch</td></tr>
+      </tbody>
+    </table></div>
+    <p>Both accept flags worth knowing: <code>--from=build</code> copies out of a named stage instead of the context, <code>--chown=uid:gid</code> sets ownership as it copies, and <code>--chmod</code> sets permissions &#8212; each avoiding an extra <code>RUN chown</code> layer.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">COPY</span></div>
+<pre><code><span class="tok-i">COPY</span> --chown=<span class="tok-s">app:app</span> src/ <span class="tok-s">/app/src/</span>
+<span class="tok-i">COPY</span> --from=<span class="tok-s">build</span> /out/server <span class="tok-s">/usr/local/bin/server</span></code></pre>
+    </div>
+
+    <h3><span class="kw">RUN</span> &#8212; doing work at build time</h3>
+    <p><code>RUN</code> executes a command in a new layer on top of the current image and commits the result. This is where packages are installed, source is compiled, and directories are created &#8212; anything that must happen <em>while building</em>. It is the instruction most often confused with <code>CMD</code>: <code>RUN</code> actually runs a command and commits it at build time, whereas <code>CMD</code> only records the command to run later, at container start.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <p>Because every <code>RUN</code> is its own layer and layers are copy-on-write, cleanup must happen <em>inside the same</em> <code>RUN</code> that created the mess. Splitting <code>apt-get install</code> and <code>rm -rf /var/lib/apt/lists/*</code> into two instructions leaves the package lists sitting in the earlier layer, shipping forever beneath a whiteout. Chain related steps with <code>&amp;&amp;</code> and clean up in one shot:</p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">RUN &#183; the apt pattern</span></div>
+<pre><code><span class="tok-i">RUN</span> apt-get update <span class="tok-o">&amp;&amp;</span> apt-get install -y --no-install-recommends <span class="tok-o">\</span>
+      ca-certificates curl <span class="tok-o">\</span>
+    <span class="tok-o">&amp;&amp;</span> rm -rf /var/lib/apt/lists/*</code></pre>
+    </div>
+    <p>Under BuildKit, <code>RUN</code> gains mounts that never enter the image: a <code>cache</code> mount persists a package or compiler cache across builds, and a <code>secret</code> mount exposes a credential to a single command without baking it into a layer.<sup class="cite"><a href="#ref-17">17</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">RUN --mount</span></div>
+<pre><code><span class="tok-c"># reuse pip's download cache between builds; nothing is committed</span>
+<span class="tok-i">RUN</span> --mount=type=cache,target=/root/.cache/pip <span class="tok-o">\</span>
+    pip install -r requirements.txt
+
+<span class="tok-c"># a build-time secret, mounted at a path, never stored in the image</span>
+<span class="tok-i">RUN</span> --mount=type=secret,id=npmrc,target=/root/.npmrc <span class="tok-o">\</span>
+    npm ci</code></pre>
+    </div>
+
+    <h3><span class="kw">ENV</span> and <span class="kw">ARG</span> &#8212; variables, two kinds</h3>
+    <p>The two look similar and behave very differently. <code>ARG</code> defines a <strong>build-time</strong> variable, set on the command line with <code>--build-arg</code>; it exists only during the build and only from the line that declares it to the end of that stage. An <code>ARG</code> written before the first <code>FROM</code> is special-cased: it can be used in <code>FROM</code> lines but must be redeclared after <code>FROM</code> to be visible inside the stage.<sup class="cite"><a href="#ref-1">1</a></sup> <code>ENV</code> defines an <strong>environment variable</strong> that is written into the image's configuration and is therefore present at <em>run</em> time, visible to your application and to every later instruction.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <p>Two consequences follow. First, build arguments are not a secure way to pass secrets &#8212; they can surface in the image's build history and logs, which is exactly why the <code>secret</code> mount above exists.<sup class="cite"><a href="#ref-1">1</a></sup> Second, substitution is textual and scoped: <code>${VAR}</code> expands, <code>${VAR:-default}</code> supplies a fallback, a leading backslash escapes it, and a variable holds the <em>same</em> value throughout a single instruction &#8212; so in <code>ENV a=hello</code> then <code>ENV a=bye b=$a</code>, the value of <code>b</code> becomes <code>hello</code>, not <code>bye</code>.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">ARG vs ENV</span></div>
+<pre><code><span class="tok-i">ARG</span> <span class="tok-v">NODE_VERSION</span>=<span class="tok-s">20</span>          <span class="tok-c"># build-time only</span>
+<span class="tok-i">FROM</span> <span class="tok-s">node:${NODE_VERSION}-slim</span>
+
+<span class="tok-i">ARG</span> <span class="tok-v">NODE_VERSION</span>                 <span class="tok-c"># redeclare to use inside the stage</span>
+<span class="tok-i">ENV</span> <span class="tok-v">APP_ENV</span>=<span class="tok-s">production</span>       <span class="tok-c"># persists into the running container</span>
+<span class="tok-i">ENV</span> <span class="tok-v">PATH</span>=<span class="tok-s">/app/node_modules/.bin:$PATH</span></code></pre>
+    </div>
+
+    <h3><span class="kw">EXPOSE</span> &#8212; documentation, not a firewall</h3>
+    <p><code>EXPOSE</code> declares which ports the containerized application listens on, and it is <strong>metadata only</strong>. It does not publish anything; it does not open a port on the host. To actually reach the service you still pass <code>-p 8080:8080</code> to <code>docker run</code> (or a <code>ports</code> mapping in Compose).<sup class="cite"><a href="#ref-1">1</a></sup> Think of it as a signed note to the next human: &#8220;this image intends to serve on 8080.&#8221;</p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">EXPOSE</span></div>
+<pre><code><span class="tok-i">EXPOSE</span> <span class="tok-f">8080/tcp</span>        <span class="tok-c"># declaration; publishing happens at run time</span></code></pre>
+    </div>
+    <h3><span class="kw">CMD</span> vs <span class="kw">ENTRYPOINT</span> &#8212; what runs, and who wins</h3>
+    <p>This is the pair everyone trips over, and the confusion is really about two separate axes: <em>form</em> (exec vs shell) and <em>role</em> (default vs fixed). Get both straight and the behavior becomes mechanical.</p>
+
+    <h4>Form: exec vs shell</h4>
+    <p><code>RUN</code>, <code>CMD</code>, and <code>ENTRYPOINT</code> each accept two forms. The <strong>exec form</strong> is a JSON array &#8212; <code>["executable", "arg1"]</code>, double quotes required &#8212; and it does <em>not</em> start a shell; the executable becomes PID&nbsp;1 and receives signals directly, but there is no variable substitution. The <strong>shell form</strong> &#8212; <code>executable arg1</code> &#8212; is wrapped in <code>/bin/sh -c</code>, which gives you shell features like <code>$VAR</code> expansion and pipes at the cost of an intervening shell process.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">two forms</span></div>
+<pre><code><span class="tok-i">CMD</span> [<span class="tok-s">"nginx"</span>, <span class="tok-s">"-g"</span>, <span class="tok-s">"daemon off;"</span>]   <span class="tok-c"># exec: nginx is PID 1</span>
+<span class="tok-i">CMD</span> nginx -g <span class="tok-s">"daemon off;"</span>             <span class="tok-c"># shell: runs /bin/sh -c '...'</span></code></pre>
+    </div>
+
+    <h4>Role: default vs fixed</h4>
+    <p><code>CMD</code> supplies <strong>defaults</strong> for the container. There can be only one <code>CMD</code> &#8212; if you write several, only the last takes effect &#8212; and any arguments the user passes to <code>docker run</code> <em>override</em> it entirely.<sup class="cite"><a href="#ref-1">1</a></sup> <code>ENTRYPOINT</code> declares the command that <strong>always</strong> runs; arguments from <code>docker run</code> are <em>appended</em> to it rather than replacing it. The idiomatic combination is an exec-form <code>ENTRYPOINT</code> naming the fixed executable and an exec-form <code>CMD</code> supplying default, overridable arguments &#8212; and when they are paired this way, both should be in exec form.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">the idiomatic pair</span></div>
+<pre><code><span class="tok-i">ENTRYPOINT</span> [<span class="tok-s">"python"</span>, <span class="tok-s">"app.py"</span>]     <span class="tok-c"># always: python app.py</span>
+<span class="tok-i">CMD</span> [<span class="tok-s">"--port"</span>, <span class="tok-s">"8000"</span>]            <span class="tok-c"># default, overridable arg</span>
+<span class="tok-c"># docker run img              -&gt; python app.py --port 8000</span>
+<span class="tok-c"># docker run img --port 9000  -&gt; python app.py --port 9000</span></code></pre>
+    </div>
+
+    <h4>The interaction, exhaustively</h4>
+    <p>Every combination resolves deterministically. Read the table as &#8220;what becomes PID&nbsp;1&#8221;; <code>ep</code> is the ENTRYPOINT executable and <code>p1</code> the CMD argument.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>ENTRYPOINT &#8595; &#160;&#47;&#160; CMD &#8594;</th><th>(no CMD)</th><th>CMD ["p1"] &#183; exec</th><th>CMD p1 &#183; shell</th></tr></thead>
+      <tbody>
+        <tr><td><b>(no ENTRYPOINT)</b></td><td>error &#8212; nothing to run</td><td><code>p1</code></td><td><code>/bin/sh -c p1</code></td></tr>
+        <tr><td><b>["ep"] &#183; exec</b></td><td><code>ep</code></td><td><code>ep p1</code></td><td class="no"><code>ep /bin/sh -c p1</code></td></tr>
+        <tr><td><b>ep &#183; shell</b></td><td><code>/bin/sh -c ep</code></td><td><code>/bin/sh -c ep</code></td><td><code>/bin/sh -c ep</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>Two rows of that table are traps. The red cell is the classic mistake: a shell-form <code>CMD</code> underneath an exec-form <code>ENTRYPOINT</code> is wrapped in <code>/bin/sh -c</code> and handed to the entrypoint as a single argument, so <code>ENTRYPOINT&nbsp;["python"]</code> with <code>CMD&nbsp;app.py</code> tries to run <code>python /bin/sh -c app.py</code> and fails; both must be exec form.<sup class="cite"><a href="#ref-1">1</a></sup> The whole bottom row is the other trap: a shell-form <code>ENTRYPOINT</code> runs as a child of <code>/bin/sh -c</code>, so it is not PID&nbsp;1, it does not receive signals, and it silently ignores <code>CMD</code> and any run-time arguments.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">wrong vs right</span></div>
+<pre><code><span class="tok-c"># WRONG: shell-form CMD under exec-form ENTRYPOINT</span>
+<span class="tok-i">ENTRYPOINT</span> [<span class="tok-s">"python"</span>]
+<span class="tok-i">CMD</span> app.py            <span class="tok-c"># -&gt; python /bin/sh -c app.py  (broken)</span>
+
+<span class="tok-c"># RIGHT: both exec form</span>
+<span class="tok-i">ENTRYPOINT</span> [<span class="tok-s">"python"</span>]
+<span class="tok-i">CMD</span> [<span class="tok-s">"app.py"</span>]         <span class="tok-c"># -&gt; python app.py</span></code></pre>
+    </div>
+
+    <h4>The entrypoint-script pattern</h4>
+    <p>A common production shape is an entrypoint script that performs setup &#8212; waiting on a database, running migrations, fixing permissions &#8212; and then hands control to whatever <code>CMD</code> requested. The critical last line is <code>exec "$@"</code>: <code>exec</code> replaces the shell with the target process so <em>it</em> becomes PID&nbsp;1 and receives <code>SIGTERM</code> for a graceful shutdown, and <code>"$@"</code> forwards the container's arguments (the <code>CMD</code>).</p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile + entrypoint.sh<span class="fn">handoff</span></div>
+<pre><code><span class="tok-i">ENTRYPOINT</span> [<span class="tok-s">"/docker-entrypoint.sh"</span>]
+<span class="tok-i">CMD</span> [<span class="tok-s">"node"</span>, <span class="tok-s">"server.js"</span>]
+
+<span class="tok-c"># --- docker-entrypoint.sh ---</span>
+<span class="tok-p">#!/bin/sh</span>
+<span class="tok-p">set -e</span>
+<span class="tok-p">./wait-for-db.sh</span>
+<span class="tok-p">exec "$@"</span>          <span class="tok-c"># become PID 1; run the CMD (node server.js)</span></code></pre>
+    </div>
+    <div class="note warn">
+      <span class="tag">PID 1 and signals</span>
+      <p>Prefer exec form for the process you actually want running. In shell form your app is a child of <code>/bin/sh</code>, which may not forward <code>SIGTERM</code>, so <code>docker stop</code> waits out its grace period and then kills the container hard &#8212; connections dropped, work lost.<sup class="cite"><a href="#ref-1">1</a></sup> Exec form (or <code>exec "$@"</code>) makes your process PID&nbsp;1 so it can shut down cleanly.</p>
+    </div>
+
+    <h3>The rest of the vocabulary</h3>
+    <p>The remaining instructions write metadata or set defaults. None of them add a filesystem layer of their own.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+    <div class="tbl"><table>
+      <thead><tr><th>Instruction</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>LABEL</code></td><td>Attaches key/value metadata to the image &#8212; commonly the standard OCI annotations such as <code>org.opencontainers.image.source</code> pointing at the repository.</td></tr>
+        <tr><td><code>USER</code></td><td>Sets the user (and optionally group) for subsequent <code>RUN</code>, <code>CMD</code>, and <code>ENTRYPOINT</code>. The tool for dropping out of root.</td></tr>
+        <tr><td><code>VOLUME</code></td><td>Declares a mount point for externally supplied volumes. Note that changes written into the path <em>after</em> it is declared are discarded.</td></tr>
+        <tr><td><code>HEALTHCHECK</code></td><td>Defines a command the runtime runs periodically to decide whether the container is healthy.</td></tr>
+        <tr><td><code>ONBUILD</code></td><td>Registers an instruction to be triggered later, when this image is itself used as a base in a downstream build.</td></tr>
+        <tr><td><code>SHELL</code></td><td>Overrides the default shell (<code>/bin/sh -c</code>) used for shell-form <code>RUN</code>, <code>CMD</code>, and <code>ENTRYPOINT</code> &#8212; useful for PowerShell on Windows.</td></tr>
+        <tr><td><code>STOPSIGNAL</code></td><td>Sets the system call signal sent to the container to request it stop.</td></tr>
+        <tr><td><code>MAINTAINER</code></td><td>Deprecated. Use a <code>LABEL</code> instead.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">metadata &amp; liveness</span></div>
+<pre><code><span class="tok-i">LABEL</span> org.opencontainers.image.source=<span class="tok-s">"https://example.com/repo"</span>
+<span class="tok-i">USER</span> <span class="tok-s">app</span>
+<span class="tok-i">STOPSIGNAL</span> <span class="tok-s">SIGTERM</span>
+<span class="tok-i">HEALTHCHECK</span> --interval=30s --timeout=3s <span class="tok-o">\</span>
+    CMD curl -f http://localhost:8000/health || exit 1</code></pre>
+    </div>
+  </div>
+</section>
+<section class="sec" id="cache">
+  <div class="sec-head"><span class="idx">06</span><h2>The cache</h2></div>
+  <div class="wrap">
+    <p class="lead">The build cache is why the <em>order</em> of instructions is a design decision, not a matter of taste. Every layer is keyed by its inputs; when those inputs are unchanged, BuildKit reuses the cached layer instead of rebuilding it, and it keeps reusing until it hits the first instruction whose inputs have changed.<sup class="cite"><a href="#ref-17">17</a></sup> That instruction &#8212; and every instruction below it &#8212; is rebuilt.</p>
+
+    <p>The practical rule follows directly: <strong>order instructions from least to most frequently changing.</strong> A base image and system packages change rarely; application source changes constantly. If a frequently changing instruction sits high in the file, it invalidates the expensive layers beneath it on every build.</p>
+
+    <p>The textbook mistake is copying the whole source tree in before installing dependencies. Any edit to any file changes the copied layer, so the slow <code>npm install</code> or <code>pip install</code> below it re-runs every single time. The fix is to copy the dependency manifest <em>alone</em> first, install against it, and only then copy the rest of the source &#8212; so that editing a source file invalidates just the final, cheap copy.<sup class="cite"><a href="#ref-1">1</a></sup></p>
+
+    <figure>
+      <div class="fig-svg"><svg viewBox="0 0 720 368" role="img" aria-labelledby="t9886" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"><title>How COPY order changes build time</title><desc>Two instruction stacks after a source edit: reused cached layers in green, rebuilt layers in amber.</desc><text x="30" y="34" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13.5" font-weight="700" fill="#13212B" text-anchor="start">Naive order</text><rect x="30" y="56" width="300" height="40" rx="7" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><rect x="30" y="56" width="4" height="40" rx="0" fill="#1C8E69"/><rect x="30" y="56" width="300" height="40" rx="7" fill="none" stroke="#1C8E69" stroke-width="1.4"/><text x="46" y="74" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">FROM node:20-slim</text><text x="318" y="74" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#1C8E69" text-anchor="end">reused</text><rect x="30" y="104" width="300" height="40" rx="7" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><rect x="30" y="104" width="4" height="40" rx="0" fill="#1C8E69"/><rect x="30" y="104" width="300" height="40" rx="7" fill="none" stroke="#1C8E69" stroke-width="1.4"/><text x="46" y="122" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">WORKDIR /app</text><text x="318" y="122" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#1C8E69" text-anchor="end">reused</text><rect x="30" y="152" width="300" height="40" rx="7" fill="#FBE7D5" stroke="#F2801E" stroke-width="1.4"/><rect x="30" y="152" width="4" height="40" rx="0" fill="#F2801E"/><rect x="30" y="152" width="300" height="40" rx="7" fill="none" stroke="#F2801E" stroke-width="1.4"/><text x="46" y="170" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">COPY . .</text><text x="318" y="170" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#F2801E" text-anchor="end">rebuilt</text><text x="46" y="185" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9" font-weight="400" fill="#6C7E8B" text-anchor="start">edit lands here</text><rect x="30" y="200" width="300" height="40" rx="7" fill="#FBE7D5" stroke="#F2801E" stroke-width="1.4"/><rect x="30" y="200" width="4" height="40" rx="0" fill="#F2801E"/><rect x="30" y="200" width="300" height="40" rx="7" fill="none" stroke="#F2801E" stroke-width="1.4"/><text x="46" y="218" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">RUN npm install</text><text x="318" y="218" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#F2801E" text-anchor="end">rebuilt</text><text x="46" y="233" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9" font-weight="400" fill="#6C7E8B" text-anchor="start">expensive re-run</text><rect x="30" y="248" width="300" height="40" rx="7" fill="#FBE7D5" stroke="#F2801E" stroke-width="1.4"/><rect x="30" y="248" width="4" height="40" rx="0" fill="#F2801E"/><rect x="30" y="248" width="300" height="40" rx="7" fill="none" stroke="#F2801E" stroke-width="1.4"/><text x="46" y="266" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">CMD ["node","x"]</text><text x="318" y="266" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#F2801E" text-anchor="end">rebuilt</text><text x="390" y="34" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="13.5" font-weight="700" fill="#13212B" text-anchor="start">Cache-friendly order</text><rect x="390" y="56" width="300" height="40" rx="7" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><rect x="390" y="56" width="4" height="40" rx="0" fill="#1C8E69"/><rect x="390" y="56" width="300" height="40" rx="7" fill="none" stroke="#1C8E69" stroke-width="1.4"/><text x="406" y="74" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">FROM node:20-slim</text><text x="678" y="74" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#1C8E69" text-anchor="end">reused</text><rect x="390" y="104" width="300" height="40" rx="7" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><rect x="390" y="104" width="4" height="40" rx="0" fill="#1C8E69"/><rect x="390" y="104" width="300" height="40" rx="7" fill="none" stroke="#1C8E69" stroke-width="1.4"/><text x="406" y="122" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">WORKDIR /app</text><text x="678" y="122" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#1C8E69" text-anchor="end">reused</text><rect x="390" y="152" width="300" height="40" rx="7" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><rect x="390" y="152" width="4" height="40" rx="0" fill="#1C8E69"/><rect x="390" y="152" width="300" height="40" rx="7" fill="none" stroke="#1C8E69" stroke-width="1.4"/><text x="406" y="170" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">COPY package.json .</text><text x="678" y="170" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#1C8E69" text-anchor="end">reused</text><rect x="390" y="200" width="300" height="40" rx="7" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><rect x="390" y="200" width="4" height="40" rx="0" fill="#1C8E69"/><rect x="390" y="200" width="300" height="40" rx="7" fill="none" stroke="#1C8E69" stroke-width="1.4"/><text x="406" y="218" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">RUN npm install</text><text x="678" y="218" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#1C8E69" text-anchor="end">reused</text><text x="406" y="233" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9" font-weight="400" fill="#6C7E8B" text-anchor="start">stays cached</text><rect x="390" y="248" width="300" height="40" rx="7" fill="#FBE7D5" stroke="#F2801E" stroke-width="1.4"/><rect x="390" y="248" width="4" height="40" rx="0" fill="#F2801E"/><rect x="390" y="248" width="300" height="40" rx="7" fill="none" stroke="#F2801E" stroke-width="1.4"/><text x="406" y="266" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">COPY . .</text><text x="678" y="266" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#F2801E" text-anchor="end">rebuilt</text><text x="406" y="281" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9" font-weight="400" fill="#6C7E8B" text-anchor="start">edit lands here</text><rect x="390" y="296" width="300" height="40" rx="7" fill="#FBE7D5" stroke="#F2801E" stroke-width="1.4"/><rect x="390" y="296" width="4" height="40" rx="0" fill="#F2801E"/><rect x="390" y="296" width="300" height="40" rx="7" fill="none" stroke="#F2801E" stroke-width="1.4"/><text x="406" y="314" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="12" font-weight="600" fill="#13212B" text-anchor="start">CMD ["node","x"]</text><text x="678" y="314" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="700" fill="#F2801E" text-anchor="end">rebuilt</text><rect x="30" y="350" width="14" height="14" rx="4" fill="#E4F3EC" stroke="#1C8E69" stroke-width="1.4"/><text x="50" y="362" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="10.5" font-weight="400" fill="#3F5361" text-anchor="start">reused from cache</text><rect x="190" y="350" width="14" height="14" rx="4" fill="#FBE7D5" stroke="#F2801E" stroke-width="1.4"/><text x="210" y="362" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="10.5" font-weight="400" fill="#3F5361" text-anchor="start">rebuilt after edit</text></svg></div>
+      <figcaption><b>Why <code>COPY</code> order changes build time.</b> Green layers are reused from cache; amber layers are rebuilt after a source edit. On the left, copying source before installing busts the dependency layer and everything below it. On the right, isolating the manifest keeps the expensive install cached.</figcaption>
+    </figure>
+
+    <p>Two sharp edges are worth internalizing. First, for <code>RUN</code> the cache key is the literal command string &#8212; BuildKit does not look at what the command actually does &#8212; so a standalone <code>RUN apt-get update</code> can be served from a stale cache while the world moves on; always chain <code>update</code> with the <code>install</code> that depends on it. Second, keep churn out of the build context entirely: a <code>.dockerignore</code> that excludes <code>.git</code>, logs, and local build output stops incidental file changes from invalidating a <code>COPY .</code>.<sup class="cite"><a href="#ref-1">1</a></sup> For caches that <em>should</em> survive a cache miss &#8212; a package download directory, a compiler cache &#8212; the BuildKit <code>--mount=type=cache</code> from the previous section persists them across builds without committing them to a layer.<sup class="cite"><a href="#ref-17">17</a></sup></p>
+  </div>
+</section>
+
+<section class="sec" id="multistage">
+  <div class="sec-head"><span class="idx">07</span><h2>Multi-stage builds</h2></div>
+  <div class="wrap">
+    <p class="lead">The heaviest tension in a Dockerfile is that <strong>building</strong> software and <strong>running</strong> it need different tools. Compiling needs a full toolchain &#8212; compilers, headers, package managers, hundreds of megabytes of it. Running needs almost none of that. Multi-stage builds resolve the tension inside a single file.</p>
+
+    <p>They arrived in <strong>Docker 17.05, on 4 May 2017</strong>, in the same release that let you use an <code>ARG</code> in a <code>FROM</code> line and added a <code>--target</code> flag to build one chosen stage.<sup class="cite"><a id="c-20" href="#ref-20">20</a></sup> Before them, teams achieved the same result with the awkward &#8220;builder pattern&#8221;: one Dockerfile to compile, a second to package, and a shell script to shuttle the artifact between them. Multi-stage folds all of that into one file with more than one <code>FROM</code>.</p>
+
+    <p>The mechanism is simple and strict. Each <code>FROM</code> begins a new stage; you do the heavy work in an early stage, and in the final stage you <code>COPY --from</code> only the finished artifact across. Everything else in the build stage &#8212; the compiler, the intermediate objects, the source itself &#8212; is left behind and never ships. This is precisely the standard way to land on a minimal or distroless final image: build in a fat stage, then copy just the binary into a base that has no shell and no package manager.<sup class="cite"><a id="c-21" href="#ref-21">21</a></sup></p>
+
+    <div class="code">
+      <div class="bar"><span class="dot"></span>Dockerfile<span class="fn">Go &#8594; distroless</span></div>
+<pre><code><span class="tok-c"># syntax=docker/dockerfile:1</span>
+
+<span class="tok-c"># ---- build stage: heavy, holds the full Go toolchain ----</span>
+<span class="tok-i">FROM</span> <span class="tok-s">golang:1.22</span> <span class="tok-i">AS</span> <span class="tok-s">build</span>
+<span class="tok-i">WORKDIR</span> <span class="tok-s">/src</span>
+<span class="tok-i">COPY</span> go.mod go.sum <span class="tok-s">./</span>
+<span class="tok-i">RUN</span> go mod download
+<span class="tok-i">COPY</span> . <span class="tok-s">.</span>
+<span class="tok-i">RUN</span> CGO_ENABLED=0 go build -ldflags=<span class="tok-s">"-s -w"</span> -o /out/server ./cmd/server
+
+<span class="tok-c"># ---- final stage: tiny, holds only the binary ----</span>
+<span class="tok-i">FROM</span> <span class="tok-s">gcr.io/distroless/static-debian12:nonroot</span>
+<span class="tok-i">COPY</span> --from=<span class="tok-s">build</span> /out/server <span class="tok-s">/server</span>
+<span class="tok-i">EXPOSE</span> <span class="tok-f">8080</span>
+<span class="tok-i">ENTRYPOINT</span> [<span class="tok-s">"/server"</span>]</code></pre>
+    </div>
+
+    <p>The <code>CGO_ENABLED=0</code> produces a statically linked binary that needs no system libc, which is what lets the final stage be something as spare as <code>distroless/static</code> or even <code>scratch</code>. The size difference between the two stages is routinely an order of magnitude or more, and the diagram makes the flow concrete: only the arrow crosses.</p>
+
+    <figure>
+      <div class="fig-svg"><svg viewBox="0 0 720 320" role="img" aria-labelledby="t3134" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg"><title>A multi-stage build</title><desc>A heavy build stage on the left; only the compiled binary is copied into a small final stage on the right.</desc><rect x="30" y="44" width="300" height="244" rx="12" fill="#E9EFF3" stroke="#C6D0D8" stroke-width="1.4"/><rect x="30" y="44" width="300" height="30" rx="12" fill="#0E2C3B"/><rect x="30" y="62" width="300" height="12" rx="0" fill="#0E2C3B"/><text x="46" y="64" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11.5" font-weight="700" fill="#EAF1F5" text-anchor="start">stage: build &#183; golang:1.22</text><rect x="46" y="92" width="268" height="34" rx="7" fill="#EDF0F3" stroke="#C9D2DA" stroke-width="1.3" stroke-dasharray="4 3"/><text x="58" y="113" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" fill="#6C7E8B" text-anchor="start">go toolchain / compiler</text><text x="302" y="113" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="15" font-weight="700" fill="#B24F27" text-anchor="end">&#215;</text><rect x="46" y="134" width="268" height="34" rx="7" fill="#EDF0F3" stroke="#C9D2DA" stroke-width="1.3" stroke-dasharray="4 3"/><text x="58" y="155" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" fill="#6C7E8B" text-anchor="start">source tree</text><text x="302" y="155" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="15" font-weight="700" fill="#B24F27" text-anchor="end">&#215;</text><rect x="46" y="176" width="268" height="34" rx="7" fill="#EDF0F3" stroke="#C9D2DA" stroke-width="1.3" stroke-dasharray="4 3"/><text x="58" y="197" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="400" fill="#6C7E8B" text-anchor="start">downloaded modules</text><text x="302" y="197" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="15" font-weight="700" fill="#B24F27" text-anchor="end">&#215;</text><rect x="46" y="218" width="268" height="34" rx="7" fill="#E4F3EC" stroke="#0C8E85" stroke-width="1.3"/><text x="58" y="239" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="600" fill="#13212B" text-anchor="start">compiled: /out/server</text><text x="180.0" y="274" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="11" font-weight="700" fill="#C96710" text-anchor="middle">typical size &#8776; 1 GB</text><rect x="470" y="116" width="220" height="120" rx="12" fill="#E9EFF3" stroke="#C6D0D8" stroke-width="1.4"/><rect x="470" y="116" width="220" height="30" rx="12" fill="#0A6A63"/><rect x="470" y="134" width="220" height="12" rx="0" fill="#0A6A63"/><text x="484" y="136" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11.5" font-weight="700" fill="#EAF1F5" text-anchor="start">stage: final</text><rect x="484" y="158" width="192" height="34" rx="7" fill="#E4F3EC" stroke="#0C8E85" stroke-width="1.4"/><text x="494" y="179" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10.5" font-weight="600" fill="#13212B" text-anchor="start">server (static binary)</text><text x="484" y="212" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="9.5" font-weight="400" fill="#6C7E8B" text-anchor="start">no shell &#183; no package manager</text><text x="580.0" y="226" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="11" font-weight="700" fill="#1C8E69" text-anchor="middle">size &#8776; 10 MB</text><path d="M 314 235 C 392.0 235, 392.0 175, 462 175" fill="none" stroke="#F2801E" stroke-width="2.6"/><line x1="460" y1="175" x2="460.0" y2="175.0" stroke="#F2801E" stroke-width="2.6"/><polygon points="468.0,175.0 460.0,180.0 460.0,170.0" fill="#F2801E"/><text x="392.0" y="193" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="11" font-weight="700" fill="#C96710" text-anchor="middle">COPY --from=build</text><text x="392.0" y="208" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="10" font-weight="400" fill="#6C7E8B" text-anchor="middle">/out/server</text><rect x="30" y="298" width="14" height="14" rx="3" fill="#EDF0F3" stroke="#C9D2DA" stroke-width="1.3" stroke-dasharray="4 3"/><text x="50" y="310" font-family="'IBM Plex Sans', system-ui, sans-serif" font-size="10.5" font-weight="400" fill="#3F5361" text-anchor="start">greyed = never shipped in the final image</text></svg></div>
+      <figcaption><b>One artifact crosses; the rest is discarded.</b> The build stage carries the compiler and source (typical size on the order of a gigabyte). A single <code>COPY --from=build</code> lifts just the compiled binary into a minimal final stage (a few megabytes). Everything greyed out never reaches the shipped image.</figcaption>
+    </figure>
+
+    <p>Stages are also useful beyond size. You can <code>COPY --from=nginx:latest</code> to lift a file straight out of another published image, and you can build to an intermediate stage for debugging with <code>docker build --target build .</code> &#8212; running the fat stage interactively when something in compilation goes wrong.<sup class="cite"><a href="#ref-20">20</a></sup></p>
+  </div>
+</section>
+<section class="sec" id="practice">
+  <div class="sec-head"><span class="idx">08</span><h2>Hardening &amp; practice</h2></div>
+  <div class="wrap">
+    <p class="lead">Almost every Dockerfile best practice reduces to three moves: <strong>ship less</strong>, <strong>run with less privilege</strong>, and <strong>pin what you depend on</strong>. Each one improves size, security, and reproducibility at the same time.</p>
+
+    <h3>Ship less: minimal base images</h3>
+    <p>The base image sets both the size floor and the vulnerability floor of everything above it. A full distribution &#8212; or a language image's default tag &#8212; carries a shell, a package manager, and hundreds of utilities your application never runs, and every one of them is attack surface and something a scanner can flag. The most effective single change most Dockerfiles can make is to choose a smaller base.</p>
+    <p><strong>Distroless</strong> images take this to its logical end: pioneered by Google's distroless project and assembled with the Bazel build tool, they contain only your application and its runtime dependencies &#8212; no shell, no package manager, nothing else. Size, in this framing, is mostly a proxy for the number of components in the image, and fewer components means less that can go wrong or be targeted. A completely empty base, <code>scratch</code>, is the floor: a statically linked binary can live there alone, and the resulting images are startlingly small &#8212; a Go &#8220;hello world&#8221; around two megabytes, an equivalent C program only a few hundred bytes.<sup class="cite"><a id="c-22" href="#ref-22">22</a></sup></p>
+    <p>Distroless is not literally nothing, though. The widely used <code>gcr.io/distroless/static</code> image is roughly two megabytes and still ships CA certificates, timezone data, and an <code>/etc/passwd</code> entry, so most applications simply work without you assembling those pieces by hand.<sup class="cite"><a id="c-23" href="#ref-23">23</a></sup> The choice between <code>scratch</code> and distroless is a real trade-off: <code>scratch</code> is smaller but you own every file in it, including certificates you must keep current; distroless is a hair larger, but its maintainers rebuild and patch it, and its &#8220;nonroot&#8221; variants run as an unprivileged user by default. Statically compiled Go and Rust binaries (built with <code>CGO_ENABLED=0</code> or the musl target) fit <code>scratch</code>; anything that still needs libc wants a distroless base or a minimal distribution like Alpine.<sup class="cite"><a id="c-24" href="#ref-24">24</a></sup></p>
+
+    <h3>Run with less privilege: drop root</h3>
+    <p>By default the process inside a container runs as root, and that root is not cosmetic &#8212; it maps to real capabilities on the host kernel. A <code>USER</code> instruction that switches to an unprivileged account before <code>CMD</code> sharply limits the blast radius of a compromise, which is exactly why distroless nonroot variants and hardened base images ship running as a non-root uid already.<sup class="cite"><a href="#ref-24">24</a></sup> Removing the shell compounds the benefit: with no <code>/bin/sh</code> in the image, an attacker who achieves code execution cannot simply drop into a terminal to explore the filesystem, install tooling, or pivot.<sup class="cite"><a href="#ref-21">21</a></sup> It does not make exploitation impossible, but it removes the easy path.</p>
+
+    <h3>Pin what you depend on</h3>
+    <p>Pin base images by tag and, where reproducibility matters, by digest, so the image you tested is byte-for-byte the image you ship and <em>you</em> decide when to take an upstream update.<sup class="cite"><a href="#ref-1">1</a></sup> Pin package versions where it is practical, and never rely on <code>latest</code>. The counterweight to pinning is a cadence: a pinned image that is never rebuilt slowly rots as new vulnerabilities are discovered beneath it, so pair pinning with regular rebuilds and scans &#8212; the maintainers of good base images do exactly this on your behalf, which is part of what you are buying when you choose one.<sup class="cite"><a href="#ref-24">24</a></sup></p>
+
+    <div class="note">
+      <span class="tag">The short version</span>
+      <p>Pick the smallest base that runs your app. Build in one stage, ship from a minimal one. Copy the dependency manifest before the source. Clean up in the same <code>RUN</code>. Switch to a non-root <code>USER</code>. Pin the base, and rebuild on a schedule. Keep a <code>.dockerignore</code>. Prefer exec-form <code>ENTRYPOINT</code> so your process is PID&nbsp;1.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="tools">
+  <div class="sec-head"><span class="idx">09</span><h2>The toolchain</h2></div>
+  <div class="wrap">
+    <p class="lead">You do not have to hold all of this in your head. A small toolchain will <strong>lint</strong> the file, <strong>x-ray</strong> the image, and <strong>scan</strong> it for known vulnerabilities &#8212; ideally in CI, on every change.</p>
+
+    <h3>Lint the file: hadolint</h3>
+    <p><strong>hadolint</strong> parses a Dockerfile into an abstract syntax tree and checks it against a body of rules &#8212; each prefixed <code>DL</code> &#8212; covering security, efficiency, and style, and it embeds <strong>ShellCheck</strong> to lint the bash inside your <code>RUN</code> instructions as well. Its rules encode much of this article as machine checks: pin versions, clean up apt lists, use an absolute <code>WORKDIR</code>, and &#8212; pointedly &#8212; the last <code>USER</code> should not be root. It runs as a standalone binary, a container, an editor plugin, a pre-commit hook, or a CI step.<sup class="cite"><a id="c-25" href="#ref-25">25</a></sup></p>
+    <div class="code">
+      <div class="bar"><span class="dot"></span>shell<span class="fn">hadolint</span></div>
+<pre><code><span class="tok-p">$</span> docker run --rm -i hadolint/hadolint &lt; Dockerfile
+<span class="tok-o">DL3007</span> warning: Using latest is prone to errors; pin an explicit tag
+<span class="tok-o">DL4000</span> error:   MAINTAINER is deprecated
+<span class="tok-o">DL3009</span> info:    Delete the apt-get lists after installing
+<span class="tok-o">DL3059</span> info:    Multiple consecutive RUN instructions; consider merging</code></pre>
+    </div>
+
+    <h3>X-ray the image: dive</h3>
+    <p><strong>dive</strong> is an interactive terminal UI that walks a built image layer by layer, showing precisely what each layer added and flagging wasted space, so you can see the stray files, forgotten caches, and accidental copies that inflate an image before you ship it.<sup class="cite"><a id="c-26" href="#ref-26">26</a></sup> It turns the abstract layer model from earlier into something you can scroll through.</p>
+
+    <h3>Scan for vulnerabilities: Trivy and Docker Scout</h3>
+    <p><strong>Trivy</strong> scans an image for known vulnerabilities in both OS packages and language dependencies and drops cleanly into a CI pipeline; <strong>Docker Scout</strong> offers similar CVE analysis integrated with the Docker tooling (<code>docker scout cves</code>).<sup class="cite"><a href="#ref-24">24</a>,<a href="#ref-26">26</a></sup> This is where minimalism pays off in the most measurable way: fewer packages means fewer findings to triage. The cost of neglect is measurable too &#8212; an analysis of Dockerfiles across more than eleven thousand open-source repositories found recurring inefficiencies, half-jokingly called &#8220;Docker smells,&#8221; that added on average about 4.6% to image size and, in some cases, more than ten percent.<sup class="cite"><a href="#ref-26">26</a></sup></p>
+
+    <p>Finally, the builder itself is pluggable. Where running the Docker daemon is undesirable &#8212; unprivileged CI, Kubernetes-native pipelines &#8212; <strong>kaniko</strong> and <strong>buildah</strong> build OCI images without it,<sup class="cite"><a href="#ref-18">18</a></sup> and tools such as <strong>DockerSlim</strong> take an existing image and strip it down by removing the parts your application never touches.<sup class="cite"><a href="#ref-26">26</a></sup></p>
+  </div>
+</section>
+
+<section class="sec" id="close">
+  <div class="sec-head"><span class="idx">10</span><h2>Everything, a manifest</h2></div>
+  <div class="wrap">
+    <p class="lead">A container is, in the end, an ordinary process wearing a set of kernel features that let it pretend to be a machine. The Dockerfile is what makes the pretense <strong>reproducible</strong> &#8212; the written record that turns a one-off act of setup into an artifact anyone can rebuild.</p>
+    <p>Read back through the file with the layered image in mind and every rule falls out of one fact: each instruction that touches the filesystem settles as a layer, layers are read-only and copy-on-write, and only what you explicitly keep gets shipped. That is why you clean up inside the <code>RUN</code> that made the mess, why you copy the dependency manifest before the source, why you build in a fat stage and ship from a spare one, and why the smallest, least privileged base is almost always the right default.</p>
+    <p>None of it is magic, and that is the point. A good Dockerfile is small, pinned, unprivileged, ordered for the cache, and split into stages. It reads top to bottom, exactly like the sediment it deposits &#8212; a legible stack of decisions that rebuilds into the same strata on a laptop, in a pipeline, or on a production node. <strong>Build, ship, run</strong> begins with a file you can read.<sup class="cite"><a href="#ref-2">2</a></sup></p>
+  </div>
+</section>
+
+<section class="sec" id="refs">
+  <div class="sec-head"><span class="idx">&#8214;</span><h2>References</h2></div>
+  <div class="wrap">
+    <p style="font-size:.92rem;color:var(--ink-soft)">Sources are numbered in order of first appearance and listed in the Vancouver style. Each entry links to the cited material; the hook returns to its first use in the text.</p>
+    <ol class="refs"><li id="ref-1"><span class="rn">1</span><div><cite>Docker Inc. Dockerfile reference [Internet]. Docker Docs; [cited 2026 Jul 8]. Available from: <a class="src" href="https://docs.docker.com/reference/dockerfile/">https://docs.docker.com/reference/dockerfile/</a></cite> <a class="back" href="#c-1" title="Return to text">&#8617;</a></div></li>
+<li id="ref-2"><span class="rn">2</span><div><cite>Docker Inc. 11 years of Docker: shaping the next decade of development [Internet]. Docker Blog; 2024 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.docker.com/blog/docker-11-year-anniversary/">https://www.docker.com/blog/docker-11-year-anniversary/</a></cite> <a class="back" href="#c-2" title="Return to text">&#8617;</a></div></li>
+<li id="ref-3"><span class="rn">3</span><div><cite>The Linux Foundation. A brief look at the roots of Linux containers [Internet]. Linux Foundation Blog; 2018 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.linuxfoundation.org/blog/blog/a-brief-look-at-the-roots-of-linux-containers">https://www.linuxfoundation.org/blog/blog/a-brief-look-at-the-roots-of-linux-containers</a></cite> <a class="back" href="#c-3" title="Return to text">&#8617;</a></div></li>
+<li id="ref-4"><span class="rn">4</span><div><cite>Pluralsight. The history of container technology [Internet]. Pluralsight Resources; [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.pluralsight.com/resources/blog/cloud/history-of-container-technology">https://www.pluralsight.com/resources/blog/cloud/history-of-container-technology</a></cite> <a class="back" href="#c-4" title="Return to text">&#8617;</a></div></li>
+<li id="ref-5"><span class="rn">5</span><div><cite>VMware Open Source Program Office. The story of containers [Internet]. VMware Open Source Blog; 2018 [cited 2026 Jul 8]. Available from: <a class="src" href="https://blogs.vmware.com/opensource/2018/02/27/the-story-of-containers/">https://blogs.vmware.com/opensource/2018/02/27/the-story-of-containers/</a></cite> <a class="back" href="#c-5" title="Return to text">&#8617;</a></div></li>
+<li id="ref-6"><span class="rn">6</span><div><cite>Aqua Security. A brief history of containers: from the 1970s till now [Internet]. Aqua Blog; [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.aquasec.com/blog/a-brief-history-of-containers-from-1970s-chroot-to-docker-2016/">https://www.aquasec.com/blog/a-brief-history-of-containers-from-1970s-chroot-to-docker-2016/</a></cite> <a class="back" href="#c-6" title="Return to text">&#8617;</a></div></li>
+<li id="ref-7"><span class="rn">7</span><div><cite>Docker Inc. Docker: nine years young [Internet]. Docker Blog; 2022 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.docker.com/blog/docker-nine-years-young/">https://www.docker.com/blog/docker-nine-years-young/</a></cite> <a class="back" href="#c-7" title="Return to text">&#8617;</a></div></li>
+<li id="ref-8"><span class="rn">8</span><div><cite>Snyk. The Docker project turns 10! Looking back at a decade of containers [Internet]. Snyk Blog; 2023 [cited 2026 Jul 8]. Available from: <a class="src" href="https://snyk.io/blog/the-docker-project-turns-10/">https://snyk.io/blog/the-docker-project-turns-10/</a></cite> <a class="back" href="#c-8" title="Return to text">&#8617;</a></div></li>
+<li id="ref-9"><span class="rn">9</span><div><cite>Heavybit. The Kubelist Podcast, Ep. 36: the Docker story with Solomon Hykes [Internet]. Heavybit Library; 2023 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.heavybit.com/library/podcasts/the-kubelist-podcast/ep-36-the-docker-story-with-solomon-hykes">https://www.heavybit.com/library/podcasts/the-kubelist-podcast/ep-36-the-docker-story-with-solomon-hykes</a></cite> <a class="back" href="#c-9" title="Return to text">&#8617;</a></div></li>
+<li id="ref-10"><span class="rn">10</span><div><cite>Wikipedia contributors. Docker (software) [Internet]. Wikipedia; [cited 2026 Jul 8]. Available from: <a class="src" href="https://en.wikipedia.org/wiki/Docker_(software)">https://en.wikipedia.org/wiki/Docker_(software)</a></cite> <a class="back" href="#c-10" title="Return to text">&#8617;</a></div></li>
+<li id="ref-11"><span class="rn">11</span><div><cite>Open Container Initiative. About the Open Container Initiative [Internet]. opencontainers.org; [cited 2026 Jul 8]. Available from: <a class="src" href="https://opencontainers.org/about/overview/">https://opencontainers.org/about/overview/</a></cite> <a class="back" href="#c-11" title="Return to text">&#8617;</a></div></li>
+<li id="ref-12"><span class="rn">12</span><div><cite>Wikipedia contributors. Open Container Initiative [Internet]. Wikipedia; [cited 2026 Jul 8]. Available from: <a class="src" href="https://en.wikipedia.org/wiki/Open_Container_Initiative">https://en.wikipedia.org/wiki/Open_Container_Initiative</a></cite> <a class="back" href="#c-12" title="Return to text">&#8617;</a></div></li>
+<li id="ref-13"><span class="rn">13</span><div><cite>Brockmeier J. Open Container Initiative specifications reach 1.0 [Internet]. Red Hat Blog; 2017 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.redhat.com/en/blog/open-container-initiative-specifications-reach-10">https://www.redhat.com/en/blog/open-container-initiative-specifications-reach-10</a></cite> <a class="back" href="#c-13" title="Return to text">&#8617;</a></div></li>
+<li id="ref-14"><span class="rn">14</span><div><cite>Docker Inc. OverlayFS storage driver [Internet]. Docker Docs; [cited 2026 Jul 8]. Available from: <a class="src" href="https://docs.docker.com/engine/storage/drivers/overlayfs-driver/">https://docs.docker.com/engine/storage/drivers/overlayfs-driver/</a></cite> <a class="back" href="#c-14" title="Return to text">&#8617;</a></div></li>
+<li id="ref-15"><span class="rn">15</span><div><cite>Depot. What are Docker layers anyway? [Internet]. Depot Blog; 2024 [cited 2026 Jul 8]. Available from: <a class="src" href="https://depot.dev/blog/what-are-docker-layers">https://depot.dev/blog/what-are-docker-layers</a></cite> <a class="back" href="#c-15" title="Return to text">&#8617;</a></div></li>
+<li id="ref-16"><span class="rn">16</span><div><cite>Moby Project. BuildKit: concurrent, cache-efficient, and Dockerfile-agnostic builder toolkit [Internet]. GitHub; [cited 2026 Jul 8]. Available from: <a class="src" href="https://github.com/moby/buildkit">https://github.com/moby/buildkit</a></cite> <a class="back" href="#c-16" title="Return to text">&#8617;</a></div></li>
+<li id="ref-17"><span class="rn">17</span><div><cite>Docker Inc. BuildKit [Internet]. Docker Docs; [cited 2026 Jul 8]. Available from: <a class="src" href="https://docs.docker.com/build/buildkit/">https://docs.docker.com/build/buildkit/</a></cite> <a class="back" href="#c-17" title="Return to text">&#8617;</a></div></li>
+<li id="ref-18"><span class="rn">18</span><div><cite>augmentedmind.de. Docker and BuildKit: how building images really works [Internet]. 2023 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.augmentedmind.de/2023/10/29/docker-and-buildkit-3-approaches/">https://www.augmentedmind.de/2023/10/29/docker-and-buildkit-3-approaches/</a></cite> <a class="back" href="#c-18" title="Return to text">&#8617;</a></div></li>
+<li id="ref-19"><span class="rn">19</span><div><cite>Depot. BuildKit in depth: Docker's build engine explained [Internet]. Depot Blog; 2025 [cited 2026 Jul 8]. Available from: <a class="src" href="https://depot.dev/blog/buildkit-in-depth">https://depot.dev/blog/buildkit-in-depth</a></cite> <a class="back" href="#c-19" title="Return to text">&#8617;</a></div></li>
+<li id="ref-20"><span class="rn">20</span><div><cite>Docker Inc. Docker Engine 17.05 release notes [Internet]. Docker Docs; 2017 [cited 2026 Jul 8]. Available from: <a class="src" href="https://docs.docker.com/engine/release-notes/17.05/">https://docs.docker.com/engine/release-notes/17.05/</a></cite> <a class="back" href="#c-20" title="Return to text">&#8617;</a></div></li>
+<li id="ref-21"><span class="rn">21</span><div><cite>Chainguard. Getting started with distroless container images [Internet]. Chainguard Academy; [cited 2026 Jul 8]. Available from: <a class="src" href="https://edu.chainguard.dev/chainguard/chainguard-images/about/getting-started-distroless/">https://edu.chainguard.dev/chainguard/chainguard-images/about/getting-started-distroless/</a></cite> <a class="back" href="#c-21" title="Return to text">&#8617;</a></div></li>
+<li id="ref-22"><span class="rn">22</span><div><cite>Chainguard. Minimal container images: towards a more secure future [Internet]. Chainguard Blog; 2022 [cited 2026 Jul 8]. Available from: <a class="src" href="https://www.chainguard.dev/unchained/minimal-container-images-towards-a-more-secure-future">https://www.chainguard.dev/unchained/minimal-container-images-towards-a-more-secure-future</a></cite> <a class="back" href="#c-22" title="Return to text">&#8617;</a></div></li>
+<li id="ref-23"><span class="rn">23</span><div><cite>iximiuz Labs. What's inside distroless container images: taking a closer look [Internet]. [cited 2026 Jul 8]. Available from: <a class="src" href="https://labs.iximiuz.com/tutorials/gcr-distroless-container-images">https://labs.iximiuz.com/tutorials/gcr-distroless-container-images</a></cite> <a class="back" href="#c-23" title="Return to text">&#8617;</a></div></li>
+<li id="ref-24"><span class="rn">24</span><div><cite>OneUptime. How to choose between scratch and distroless base images [Internet]. OneUptime Blog; 2026 [cited 2026 Jul 8]. Available from: <a class="src" href="https://oneuptime.com/blog/post/2026-02-08-how-to-choose-between-scratch-and-distroless-base-images/">https://oneuptime.com/blog/post/2026-02-08-how-to-choose-between-scratch-and-distroless-base-images/</a></cite> <a class="back" href="#c-24" title="Return to text">&#8617;</a></div></li>
+<li id="ref-25"><span class="rn">25</span><div><cite>hadolint. hadolint: Dockerfile linter, validate inline bash, written in Haskell [Internet]. GitHub; [cited 2026 Jul 8]. Available from: <a class="src" href="https://github.com/hadolint/hadolint">https://github.com/hadolint/hadolint</a></cite> <a class="back" href="#c-25" title="Return to text">&#8617;</a></div></li>
+<li id="ref-26"><span class="rn">26</span><div><cite>Patel A. Smarter containers: how to optimize your Dockerfiles for speed, size and security [Internet]. Cloud Native Now; 2025 [cited 2026 Jul 8]. Available from: <a class="src" href="https://cloudnativenow.com/topics/cloudnativedevelopment/docker/smarter-containers-how-to-optimize-your-dockerfiles-for-speed-size-and-security/">https://cloudnativenow.com/topics/cloudnativedevelopment/docker/smarter-containers-how-to-optimize-your-dockerfiles-for-speed-size-and-security/</a></cite> <a class="back" href="#c-26" title="Return to text">&#8617;</a></div></li></ol>
+  </div>
+</section>
+    </article>
+
+    <footer class="foot">
+      <p><b>The Dockerfile: a manifest for machines.</b> A technical reference spanning the file's history, the layered OCI image model, the BuildKit engine, the complete instruction set, multi-stage builds, layer caching, and hardening practice. Diagrams are generated programmatically; citations follow the Vancouver system and every factual claim carries an inline reference.</p>
+      <p>Written as a standalone HTML document, 2026. Verify version-specific details against the current Docker and OCI documentation, which continue to evolve.</p>
+    </footer>
+  </main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var links = Array.prototype.slice.call(document.querySelectorAll(".toc a"));
+  var byId = {};
+  links.forEach(function(a){
+    var id = a.getAttribute("href").slice(1);
+    (byId[id] = byId[id] || []).push(a);
+  });
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.sec"));
+
+  function setActive(id){
+    links.forEach(function(a){ a.classList.remove("active"); });
+    (byId[id] || []).forEach(function(a){ a.classList.add("active"); });
+  }
+
+  if ("IntersectionObserver" in window){
+    var seen = {};
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ seen[e.target.id] = e.isIntersecting; });
+      // pick the first section currently in the trigger band
+      for (var i = 0; i < sections.length; i++){
+        if (seen[sections[i].id]){ setActive(sections[i].id); break; }
+      }
+    }, { rootMargin: "-42% 0px -52% 0px", threshold: 0 });
+    sections.forEach(function(s){ io.observe(s); });
+  }
+
+  var bar = document.getElementById("progress");
+  var ticking = false;
+  function update(){
+    var doc = document.documentElement;
+    var st = window.scrollY || doc.scrollTop;
+    var h = doc.scrollHeight - doc.clientHeight;
+    bar.style.width = (h > 0 ? (st / h) * 100 : 0).toFixed(2) + "%";
+    ticking = false;
+  }
+  window.addEventListener("scroll", function(){
+    if (!ticking){ window.requestAnimationFrame(update); ticking = true; }
+  }, { passive: true });
+  update();
+
+  var m = document.querySelector(".m-contents");
+  if (m){
+    Array.prototype.slice.call(m.querySelectorAll(".toc a")).forEach(function(a){
+      a.addEventListener("click", function(){ m.removeAttribute("open"); });
+    });
+  }
+
+  // stagger the header cutaway strata as they rise in
+  Array.prototype.slice.call(document.querySelectorAll(".stratum")).forEach(function(el, i){
+    el.style.animationDelay = (0.5 + i * 0.06) + "s";
+  });
+})();
+</script>
+<script src="../dist/js/header.js"></script>
+</body>
+</html>

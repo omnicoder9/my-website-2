@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Managing Docker Containers &#8212; An Operator&#8217;s Field Guide</title>
+<meta name="description" content="An expert field guide to operating Docker containers through their lifecycle from the command line: the state machine, the engine that enforces it, and the practices that keep containers safe in production. Vancouver-cited.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,380;8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+/* ============================ tokens ============================ */
+:root{
+  --concrete:#e8eaed;   --concrete-2:#dfe2e6;
+  --paper:#fdfdfe;      --paper-2:#f4f6f8;
+  --graphite:#14181e;   --graphite-2:#1b212a;  --graphite-3:#232b34;
+  --ink:#181c22;        --ink-2:#565c64;        --ink-3:#7c848d;
+  --rule:#d3d7dc;       --rule-2:#c4c9cf;       --rule-d:#2b323b;
+  --run:#137a53;        --run-bright:#35c08c;   --run-tint:#e5f0eb;
+  --pause:#b9820f;      --pause-bright:#e3a93a; --pause-tint:#f6efdd;
+  --halt:#a63e30;       --halt-bright:#d3705e;  --halt-tint:#f4e2dd;
+  --steel:#576673;      --steel-tint:#e6eaee;
+  --dead:#7c2417;
+  --link:#116048;
+  --maxw:1180px;        --measure:70ch;
+  --rail:236px;
+  --shadow:0 1px 2px rgba(20,24,30,.05), 0 8px 24px -14px rgba(20,24,30,.22);
+  --shadow-lg:0 24px 60px -28px rgba(20,24,30,.5);
+}
+/* ============================ base ============================ */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0;background:var(--concrete);color:var(--ink);
+  font-family:"Source Serif 4",Georgia,serif;font-size:19px;line-height:1.72;
+  font-weight:400;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+h1,h2,h3,h4,.mono,.eyebrow,.rail,.term,.matrix,.tag,.pill{font-family:"Archivo",-apple-system,system-ui,sans-serif}
+.mono,.term,code,kbd,.tag,.pill,.rail-code{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+a{color:var(--link);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+::selection{background:#c9e7db;color:#0d2c22}
+:focus-visible{outline:3px solid var(--run-bright);outline-offset:2px;border-radius:3px}
+img,svg{max-width:100%}
+
+.skip{position:absolute;left:-9999px;top:0;background:var(--graphite);color:#fff;padding:10px 16px;z-index:100;border-radius:0 0 8px 0}
+.skip:focus{left:0}
+
+/* ============================ hero ============================ */
+.hero{
+  background:
+    radial-gradient(120% 130% at 88% -10%, #1f2731 0%, rgba(31,39,49,0) 55%),
+    radial-gradient(90% 120% at 0% 120%, #10342a 0%, rgba(16,52,42,0) 42%),
+    var(--graphite);
+  color:#e9edf1;border-bottom:1px solid #000;position:relative;overflow:hidden;
+}
+.hero::before{ /* faint container-yard grid */
+  content:"";position:absolute;inset:0;opacity:.5;pointer-events:none;
+  background-image:linear-gradient(#ffffff0d 1px,transparent 1px),linear-gradient(90deg,#ffffff0a 1px,transparent 1px);
+  background-size:44px 44px;mask-image:linear-gradient(180deg,#000 0,transparent 78%);
+}
+.hero-inner{max-width:var(--maxw);margin:0 auto;padding:30px 30px 40px;position:relative}
+.masthead{max-width:920px}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:12px;font-size:12.5px;font-weight:700;
+  letter-spacing:.28em;text-transform:uppercase;color:#9fb0bd;margin:6px 0 22px;
+}
+.eyebrow .bar{height:11px;width:26px;background:linear-gradient(90deg,var(--run-bright),var(--pause-bright) 55%,var(--halt-bright));border-radius:2px}
+h1.title{
+  font-size:clamp(2.7rem,7.2vw,5.2rem);line-height:.94;font-weight:900;letter-spacing:-.028em;
+  margin:0 0 22px;color:#f6f8fa;
+}
+h1.title .thin{display:block;font-weight:500;letter-spacing:-.01em;font-size:.42em;color:#aebac5;margin-top:.5em}
+.deck{font-size:clamp(1.06rem,2.1vw,1.32rem);line-height:1.55;color:#cdd6de;max-width:44ch;font-weight:380}
+.deck b{color:#eef2f5;font-weight:600}
+.metastrip{
+  display:flex;flex-wrap:wrap;gap:0;margin-top:30px;border:1px solid var(--rule-d);border-radius:10px;
+  overflow:hidden;background:#0f141a;width:fit-content;max-width:100%;
+}
+.metastrip div{padding:11px 18px;border-right:1px solid var(--rule-d);font-family:"JetBrains Mono",monospace;font-size:12px;color:#aeb8c1}
+.metastrip div:last-child{border-right:0}
+.metastrip b{display:block;color:#e9edf1;font-size:16px;font-weight:700;letter-spacing:.01em;margin-bottom:1px}
+.metastrip .accent{color:var(--run-bright)}
+
+/* hero diagram */
+.hero-figure{margin:40px 0 6px}
+.hero-figure .frame{
+  background:linear-gradient(180deg,#12171d,#0f1319);border:1px solid var(--rule-d);border-radius:16px;
+  padding:26px 22px 14px;box-shadow:var(--shadow-lg);
+}
+.figtag{
+  display:flex;align-items:center;gap:10px;margin-bottom:6px;font-family:"JetBrains Mono",monospace;
+  font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:#8794a0;
+}
+.figtag .dot{width:8px;height:8px;border-radius:50%;background:var(--run-bright);box-shadow:0 0 0 4px #35c08c22}
+.hero-figure svg{display:block;width:100%;height:auto}
+.legend{
+  display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;padding-top:14px;border-top:1px solid var(--rule-d);
+  font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#aab4bd;
+}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:12px;height:12px;border-radius:3px;border:1.5px solid}
+.figcap{color:#8a96a1;font-size:13.5px;font-family:"JetBrains Mono",monospace;margin:12px 2px 0;line-height:1.5}
+
+/* ============================ shell / grid ============================ */
+.shell{max-width:var(--maxw);margin:0 auto;padding:0 30px;
+  display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:52px;align-items:start}
+.rail{position:sticky;top:0;align-self:start;padding:34px 0 40px;max-height:100vh;overflow:auto}
+.rail h4{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;font-weight:700}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail li{margin:0}
+.rail a{
+  display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:baseline;
+  padding:7px 10px 7px 8px;border-left:2px solid var(--rule);color:var(--ink-2);
+  font-family:"Source Serif 4",serif;font-size:15px;line-height:1.3;transition:all .15s ease;
+}
+.rail a:hover{color:var(--ink);background:#00000008;text-decoration:none;border-left-color:var(--steel)}
+.rail a.active{color:var(--ink);border-left-color:var(--run);background:linear-gradient(90deg,#137a530f,transparent)}
+.rail .rail-code{font-size:10.5px;font-weight:600;letter-spacing:.02em;color:var(--ink-3);text-transform:uppercase}
+.rail a.active .rail-code{color:var(--run)}
+.rail-foot{margin-top:22px;padding:14px 10px;border-top:1px solid var(--rule);font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-3);line-height:1.6}
+
+.content{min-width:0;padding:8px 0 90px;max-width:var(--measure)}
+.content.wide{max-width:none}
+
+/* ============================ prose ============================ */
+section{padding-top:26px;scroll-margin-top:14px}
+.sec-head{margin:26px 0 22px}
+.sec-head .code{
+  display:inline-block;font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;
+  letter-spacing:.08em;color:var(--run);background:var(--run-tint);border:1px solid #137a5333;
+  padding:4px 10px;border-radius:6px;margin-bottom:14px;
+}
+h2{font-size:clamp(1.7rem,3.6vw,2.5rem);line-height:1.06;font-weight:800;letter-spacing:-.02em;margin:0 0 8px}
+h3{font-size:1.32rem;line-height:1.2;font-weight:700;letter-spacing:-.01em;margin:38px 0 6px;color:#0f1319}
+h4.sub{font-size:1.02rem;font-weight:700;font-family:"Archivo",sans-serif;margin:26px 0 4px;color:#22282f;letter-spacing:.01em}
+.content p{margin:14px 0}
+.lede{font-size:1.16rem;line-height:1.62;color:#2c333b}
+.lede::first-letter{
+  float:left;font-family:"Archivo",sans-serif;font-weight:900;font-size:3.5rem;line-height:.82;
+  padding:6px 12px 0 0;color:var(--run);
+}
+.content a{border-bottom:1px solid #11604833;color:var(--link)}
+.content a:hover{border-bottom-color:var(--link)}
+strong{font-weight:700;color:#12171d}
+em{font-style:italic}
+hr.div{border:0;border-top:1px solid var(--rule);margin:44px 0}
+
+/* inline monospace + state pills */
+code:not(.term code){background:#00000009;border:1px solid var(--rule);border-radius:5px;padding:.06em .38em;font-size:.84em;color:#232b34;white-space:nowrap}
+.pill{display:inline-block;font-size:.74em;font-weight:600;letter-spacing:.02em;padding:.12em .5em;border-radius:5px;border:1px solid;vertical-align:baseline;white-space:nowrap}
+.pill.run{color:var(--run);background:var(--run-tint);border-color:#137a5340}
+.pill.pause{color:var(--pause);background:var(--pause-tint);border-color:#b9820f40}
+.pill.halt{color:var(--halt);background:var(--halt-tint);border-color:#a63e3040}
+.pill.steel{color:var(--steel);background:var(--steel-tint);border-color:#57667340}
+
+/* superscript citations */
+sup.cite{font-family:"JetBrains Mono",monospace;font-size:.62em;font-weight:600;line-height:0;vertical-align:super}
+sup.cite a{color:var(--run);border:0;padding:0 1px}
+sup.cite a:hover{text-decoration:underline}
+
+/* ============================ terminal / code ============================ */
+.term{margin:22px 0;border-radius:11px;overflow:hidden;border:1px solid var(--graphite-3);background:var(--graphite);box-shadow:var(--shadow)}
+.term-head{
+  display:flex;align-items:center;gap:10px;padding:9px 14px;background:#10151b;border-bottom:1px solid var(--rule-d);
+  font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.06em;color:#8a96a1;
+}
+.term-head .sd{width:9px;height:9px;border-radius:50%;flex:none}
+.term-head .sd.life{background:var(--run-bright);box-shadow:0 0 0 3px #35c08c22}
+.term-head .sd.obs{background:var(--pause-bright);box-shadow:0 0 0 3px #e3a93a22}
+.term-head .sd.warn{background:var(--halt-bright);box-shadow:0 0 0 3px #d3705e22}
+.term-head .label{color:#c3ccd4;font-weight:600}
+.term-head .spacer{flex:1}
+.term-head .copy{
+  cursor:pointer;background:#1c232c;border:1px solid var(--rule-d);color:#9fb0bd;border-radius:6px;
+  padding:3px 9px;font-family:"JetBrains Mono",monospace;font-size:10.5px;letter-spacing:.04em;transition:all .15s
+}
+.term-head .copy:hover{background:#26303a;color:#e9edf1}
+.term-head .copy.ok{color:var(--run-bright);border-color:#137a5366}
+.term pre{margin:0;padding:16px 16px;overflow-x:auto;font-size:13.6px;line-height:1.66;color:#dfe6ec;font-family:"JetBrains Mono",monospace;-webkit-font-smoothing:auto}
+.term pre::-webkit-scrollbar{height:9px}
+.term pre::-webkit-scrollbar-thumb{background:#333d47;border-radius:5px}
+.term .p{color:var(--run-bright)}     /* prompt $ */
+.term .c{color:#6b7783;font-style:italic}  /* comment */
+.term .o{color:#93a0ab}               /* output */
+.term .k{color:#e3a93a}               /* keyword/flag emphasis */
+.term .s{color:#9cd1b7}               /* string */
+.term .id{color:#d3a08e}              /* ids/values */
+.term .hl{color:#f6f8fa;font-weight:600}
+
+/* ============================ tables ============================ */
+.tbl-wrap{overflow-x:auto;margin:24px 0;border:1px solid var(--rule);border-radius:11px;background:var(--paper)}
+table.matrix{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+table.matrix caption{caption-side:top;text-align:left;padding:12px 16px 0;font-family:"JetBrains Mono",monospace;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+table.matrix th,table.matrix td{padding:11px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+table.matrix thead th{background:var(--graphite);color:#e4e9ee;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;border-bottom:0}
+table.matrix tbody tr:last-child td{border-bottom:0}
+table.matrix tbody tr:nth-child(even){background:#00000004}
+table.matrix td.cmd,table.matrix td .m{font-family:"JetBrains Mono",monospace;font-size:12.6px;color:#232b34;white-space:nowrap}
+table.matrix td .m{background:#0000000a;border:1px solid var(--rule);border-radius:4px;padding:1px 5px}
+.state-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:baseline}
+
+/* ============================ callouts ============================ */
+.note{
+  margin:24px 0;padding:16px 20px;border-radius:11px;border:1px solid var(--rule);
+  background:var(--paper);border-left:4px solid var(--steel);font-size:16.5px;line-height:1.6
+}
+.note.grd{border-left-color:var(--run);background:linear-gradient(90deg,#137a5308,var(--paper) 40%)}
+.note.warn{border-left-color:var(--halt);background:linear-gradient(90deg,#a63e3008,var(--paper) 40%)}
+.note .nh{font-family:"Archivo",sans-serif;font-weight:700;font-size:13px;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-2);display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.note.grd .nh{color:var(--run)} .note.warn .nh{color:var(--halt)}
+.note p{margin:6px 0 0}
+
+/* inline diagram figure inside content */
+.diagram{margin:30px 0;background:linear-gradient(180deg,#12171d,#0f1319);border:1px solid var(--graphite-3);border-radius:16px;padding:24px 20px 12px;box-shadow:var(--shadow)}
+.diagram svg{display:block;width:100%;height:auto}
+.diagram figcaption{color:#8a96a1;font-size:13px;font-family:"JetBrains Mono",monospace;margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-d);line-height:1.55}
+
+/* definition-ish inline grid used sparingly */
+.keyrow{display:grid;grid-template-columns:150px 1fr;gap:6px 18px;margin:18px 0;font-size:16.5px}
+.keyrow dt{font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:600;color:var(--halt);padding-top:2px}
+.keyrow dd{margin:0;color:#2c333b}
+
+/* ============================ references / footer ============================ */
+.refs-sec{background:var(--graphite);color:#c8d0d8;margin-top:60px;border-top:1px solid #000}
+.refs-inner{max-width:var(--maxw);margin:0 auto;padding:48px 30px 40px}
+.refs-inner h2{color:#f2f5f7;margin-bottom:6px}
+.refs-inner .code{color:var(--run-bright);background:#137a5320;border-color:#137a5344}
+.refs-lead{color:#94a0aa;font-family:"JetBrains Mono",monospace;font-size:12.5px;margin:0 0 26px;max-width:70ch}
+ol.refs{margin:0;padding:0;list-style:none;counter-reset:r;
+  columns:2;column-gap:44px;column-rule:1px solid var(--rule-d)}
+ol.refs li{counter-increment:r;break-inside:avoid;position:relative;padding:0 0 16px 42px;font-size:13.3px;line-height:1.5;color:#aeb8c1;font-family:"Source Serif 4",serif}
+ol.refs li::before{content:"[" counter(r) "]";position:absolute;left:0;top:0;font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--run-bright)}
+ol.refs li a{color:#8fb7ab;border:0;word-break:break-word}
+ol.refs cite{font-style:italic;color:#cbd3db}
+.foot{max-width:var(--maxw);margin:0 auto;padding:26px 30px 60px;color:var(--ink-3);font-family:"JetBrains Mono",monospace;font-size:11.5px;line-height:1.7}
+.foot .rule{height:1px;background:var(--rule);margin-bottom:20px}
+.backtop{color:var(--link)}
+
+/* ============================ responsive ============================ */
+@media (max-width:940px){
+  .shell{grid-template-columns:1fr;gap:0}
+  .rail{position:static;max-height:none;border:1px solid var(--rule);border-radius:12px;background:var(--paper);
+    padding:16px 14px;margin:22px 0 6px}
+  .rail ol{columns:2;column-gap:20px}
+  .rail li{break-inside:avoid}
+  .rail-foot{display:none}
+  ol.refs{columns:1}
+  .content{max-width:none}
+}
+@media (max-width:600px){
+  body{font-size:18px}
+  .hero-inner,.shell,.refs-inner,.foot{padding-left:20px;padding-right:20px}
+  .rail ol{columns:1}
+  .metastrip{width:100%}
+  .metastrip div{flex:1 1 40%}
+  .keyrow{grid-template-columns:1fr;gap:2px}
+  .keyrow dt{padding-top:10px}
+  .lede::first-letter{font-size:2.9rem}
+}
+</style>
+</head>
+<body class="blog-article-page">
+<div id="site-header"></div>
+<a class="skip" href="#intro">Skip to content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="masthead">
+      <div class="eyebrow"><span class="bar"></span>Operator&#8217;s Field Guide &#183; Container Operations</div>
+      <h1 class="title">Managing Docker Containers<span class="thin">Driving a process through its lifecycle from the command line</span></h1>
+      <p class="deck">A container is an ordinary Linux process wearing a costume of isolation. <b>Managing</b> one means moving it through a small, well-defined set of states &#8212; and knowing exactly which command causes each transition. This guide maps those states, the engine that enforces them, and the discipline that keeps them safe in production.</p>
+      <div class="metastrip">
+        <div><b class="accent">7</b>states</div>
+        <div><b>9k</b>words</div>
+        <div><b>39</b>min read</div>
+        <div><b>8</b>sections</div>
+        <div><b>Vancouver</b>cited</div>
+      </div>
+    </div>
+
+    <figure class="hero-figure">
+      <div class="frame">
+        <div class="figtag"><span class="dot"></span>Figure 1 &#183; The container lifecycle &#183; states &amp; the verbs that move between them</div>
+<svg viewBox="0 0 1160 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Docker container lifecycle state machine: image to created to running, running to paused and back, running to exited, exited to removed, with restarting and dead states." font-family="JetBrains Mono, monospace">
+<defs>
+<marker id="mA" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#8A96A3"/></marker>
+<marker id="mG" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#35C08C"/></marker>
+<marker id="mAm" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#E3A93A"/></marker>
+<marker id="mF" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#6E5A52"/></marker>
+<marker id="mS" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#8FA0AE"/></marker>
+<marker id="mE" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#6C7783"/></marker>
+</defs>
+<line x1="228.0" y1="316.0" x2="314.0" y2="316.0" stroke="#8FA0AE" stroke-width="2.2" marker-end="url(#mS)"/>
+<line x1="470.0" y1="316.0" x2="558.0" y2="316.0" stroke="#35C08C" stroke-width="2.2" marker-end="url(#mG)"/>
+<line x1="738.0" y1="316.0" x2="824.0" y2="316.0" stroke="#D3705E" stroke-width="2.2" marker-end="url(#mE)"/>
+<line x1="980.0" y1="316.0" x2="1000.0" y2="316.0" stroke="#6C7783" stroke-width="2.2" marker-end="url(#mE)"/>
+<path d="M 224 294 C 280 222, 488 222, 576 278" fill="none" stroke="#35C08C" stroke-width="3.0" marker-end="url(#mG)"/>
+<line x1="624.0" y1="276.0" x2="624.0" y2="180.0" stroke="#E3A93A" stroke-width="2.2" marker-end="url(#mAm)"/>
+<line x1="672.0" y1="180.0" x2="672.0" y2="276.0" stroke="#35C08C" stroke-width="2.2" marker-end="url(#mG)"/>
+<path d="M 872 347 C 868 420, 875 444, 859 462" fill="none" stroke="#35C08C" stroke-width="2.4" marker-end="url(#mG)"/>
+<path d="M 699 462 C 659 448, 768 400, 722 352" fill="none" stroke="#35C08C" stroke-width="2.4" marker-end="url(#mG)"/>
+<line x1="576.0" y1="346.0" x2="488.0" y2="486.0" stroke="#6E5A52" stroke-width="2.2" stroke-dasharray="6 6" marker-end="url(#mF)"/>
+<rect x="213.3" y="284.9" width="115.4" height="20.2" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="271.0" y="300.4" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13" letter-spacing="0.4" fill="#E8EDF1">docker create</text>
+<rect x="466.2" y="284.9" width="107.6" height="20.2" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="520.0" y="300.4" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13" letter-spacing="0.4" fill="#E7F4EE">docker start</text>
+<rect x="701.7" y="284.9" width="146.6" height="20.2" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="775.0" y="300.4" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13" letter-spacing="0.4" fill="#F6E1DA">stop &amp;#8226; kill</text>
+<rect x="966.2" y="284.9" width="29.6" height="20.2" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="981.0" y="300.4" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13" letter-spacing="0.4" fill="#B9C0C8">rm</text>
+<rect x="232.1" y="196.9" width="333.8" height="20.2" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="399.0" y="212.4" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13" letter-spacing="0.4" fill="#E7F4EE">docker run   &amp;#61;   create &amp;#8226; start</text>
+<rect x="515.0" y="225.8" width="50.0" height="18.6" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="540.0" y="240.1" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="12" letter-spacing="0.4" fill="#F6ECD6">pause</text>
+<rect x="723.8" y="225.8" width="64.4" height="18.6" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="756.0" y="240.1" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="12" letter-spacing="0.4" fill="#E7F4EE">unpause</text>
+<rect x="698.4" y="397.8" width="165.2" height="18.6" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="781.0" y="412.1" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="12" letter-spacing="0.4" fill="#E7F4EE">start &amp;#8226; restart</text>
+<rect x="482.7" y="442.6" width="86.6" height="17.1" rx="6" fill="#11151B" stroke="#2B323B" stroke-width="1"/>
+<text x="526.0" y="455.7" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="11" letter-spacing="0.4" fill="#C89C8E">fault / OOM</text>
+<rect x="75.0" y="285.0" width="150.0" height="62.0" rx="9" fill="#1B212A" stroke="#6C7783" stroke-width="2.0" stroke-dasharray="5 5"/>
+<text x="150.0" y="315.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="17" letter-spacing="0.5" fill="#B9C0C8">image</text>
+<text x="150.0" y="332.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">local / registry</text>
+<rect x="317.0" y="285.0" width="150.0" height="62.0" rx="9" fill="#222933" stroke="#8FA0AE" stroke-width="2.0"/>
+<circle cx="332.0" cy="316.0" r="4.5" fill="#8FA0AE"/>
+<text x="400.0" y="315.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="17" letter-spacing="0.5" fill="#E8EDF1">created</text>
+<text x="400.0" y="332.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">writable layer ready</text>
+<rect x="560.0" y="277.0" width="176.0" height="78.0" rx="9" fill="#123027" stroke="#35C08C" stroke-width="2.0"/>
+<circle cx="575.0" cy="316.0" r="4.5" fill="#35C08C"/>
+<text x="656.0" y="315.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="20" letter-spacing="0.5" fill="#E7F4EE">running</text>
+<text x="656.0" y="332.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">PID 1 alive</text>
+<rect x="827.0" y="285.0" width="150.0" height="62.0" rx="9" fill="#311611" stroke="#D3705E" stroke-width="2.0"/>
+<circle cx="842.0" cy="316.0" r="4.5" fill="#D3705E"/>
+<text x="910.0" y="315.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="17" letter-spacing="0.5" fill="#F6E1DA">exited</text>
+<text x="910.0" y="332.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">stopped, kept</text>
+<rect x="1002.0" y="285.0" width="116.0" height="62.0" rx="9" fill="#14181E" stroke="#6C7783" stroke-width="2.0" stroke-dasharray="5 5"/>
+<text x="1060.0" y="315.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="17" letter-spacing="0.5" fill="#B9C0C8">removed</text>
+<text x="1060.0" y="332.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">terminal</text>
+<rect x="569.0" y="118.0" width="158.0" height="60.0" rx="9" fill="#312607" stroke="#E3A93A" stroke-width="2.0"/>
+<circle cx="584.0" cy="148.0" r="4.5" fill="#E3A93A"/>
+<text x="656.0" y="147.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="17" letter-spacing="0.5" fill="#F6ECD6">paused</text>
+<text x="656.0" y="164.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">frozen (cgroup freezer)</text>
+<rect x="703.0" y="443.0" width="152.0" height="54.0" rx="9" fill="#312607" stroke="#E3A93A" stroke-width="2.0"/>
+<circle cx="718.0" cy="470.0" r="4.5" fill="#E3A93A"/>
+<text x="787.0" y="469.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="14" letter-spacing="0.5" fill="#F6ECD6">restarting</text>
+<text x="787.0" y="486.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">auto / on-boot</text>
+<rect x="364.0" y="484.0" width="132.0" height="56.0" rx="9" fill="#2A100A" stroke="#B5563F" stroke-width="2.0"/>
+<circle cx="379.0" cy="512.0" r="4.5" fill="#B5563F"/>
+<text x="438.0" y="511.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="15" letter-spacing="0.5" fill="#F0D8CF">dead</text>
+<text x="438.0" y="528.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">unrecoverable</text>
+</svg>        <div class="legend">
+          <span><i style="border-color:#8fa0ae;background:#8fa0ae22"></i>created</span>
+          <span><i style="border-color:#35c08c;background:#35c08c22"></i>running</span>
+          <span><i style="border-color:#e3a93a;background:#e3a93a22"></i>paused / restarting</span>
+          <span><i style="border-color:#d3705e;background:#d3705e22"></i>exited</span>
+          <span><i style="border-color:#b5563f;background:#b5563f22"></i>dead</span>
+          <span><i style="border-color:#6c7783;background:transparent"></i>image / removed (endpoints)</span>
+        </div>
+      </div>
+      <figcaption class="figcap">Solid arrows are commands you issue; the dashed loop is the daemon acting on a <span style="color:#e3a93a">--restart</span> policy. Every command in this guide is, at bottom, a request for one of these transitions.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ================= control rail ================= -->
+  <nav class="rail" aria-label="Table of contents">
+    <h4>Manifest</h4>
+    <ol id="toc">
+      <li><a href="#intro"><span class="rail-code">00</span><span>Why management is its own skill</span></a></li>
+      <li><a href="#history"><span class="rail-code">Hist</span><span>A five-minute lightning talk</span></a></li>
+      <li><a href="#engine"><span class="rail-code">Arch</span><span>What a command actually does</span></a></li>
+      <li><a href="#lifecycle"><span class="rail-code">Life</span><span>The lifecycle &amp; its commands</span></a></li>
+      <li><a href="#observe"><span class="rail-code">Obs</span><span>Monitoring &amp; debugging</span></a></li>
+      <li><a href="#practice"><span class="rail-code">Ops</span><span>Operating safely in production</span></a></li>
+      <li><a href="#tools"><span class="rail-code">Tool</span><span>The surrounding ecosystem</span></a></li>
+      <li><a href="#close"><span class="rail-code">End</span><span>The shape of the whole thing</span></a></li>
+      <li><a href="#references"><span class="rail-code">Ref</span><span>References</span></a></li>
+    </ol>
+    <div class="rail-foot">docker&#8201;=&#8201;client<br>dockerd&#8201;=&#8201;daemon<br>containerd&#8201;+&#8201;runc&#8201;=&#8201;runtime<br><br>state &#8594; verb &#8594; state</div>
+  </nav>
+
+  <!-- ================= content ================= -->
+  <main class="content">
+  <section id="intro">
+    <p class="lede">Building an image is a one-time act of authorship; running the container that comes out of it is an ongoing act of operation, and the two demand different instincts. A well-crafted <code>Dockerfile</code> produces an artifact that is finished and immutable. The container launched from it is anything but: it starts, serves, is inspected, is paused, crashes, is restarted, leaks memory, is killed, and is finally swept away. That arc &#8212; not the image &#8212; is where uptime is won or lost, where a single mis-set flag becomes a 3 a.m. incident, and where the difference between a hobby project and a production system actually lives.</p>
+
+    <p>The good news is that the arc is small and knowable. Underneath the sprawling surface of the Docker command-line interface sits a compact finite-state machine with roughly seven states, and almost every management command you will ever type is a request to move a container from one of those states to another. <span class="pill steel">created</span> becomes <span class="pill run">running</span> becomes <span class="pill halt">exited</span> becomes gone. Once you can see that machine clearly &#8212; the states, the legal transitions, and the verb attached to each edge &#8212; the CLI stops being a grab-bag of memorized incantations and becomes a control surface you can reason about.</p>
+
+    <p>This guide is organized around that machine. It begins with a short history, because the odd shape of today&#8217;s tooling (a client that talks to a daemon that talks to a second daemon that talks to a third program) is a fossil record of real engineering decisions. It then traces what actually happens inside the engine when you press <kbd>Enter</kbd>, so that later, when a container is wedged in <span class="pill pause">restarting</span> or refuses to stop, you know which layer to interrogate. From there it works through the lifecycle commands and the observation commands in the order you meet them in real operations, and closes with the practices and the tooling that turn &#8220;it runs on my laptop&#8221; into &#8220;it runs, safely, on a hundred hosts.&#8221; Every factual claim is cited; sources are collected at the end in Vancouver order.</p>
+
+    <div class="note grd">
+      <div class="nh"><span>&#9670;</span>How to read the command blocks</div>
+      <p>Terminal blocks show the prompt as <span style="color:#137a53;font-family:'JetBrains Mono',monospace">$</span>, comments in muted italic, and command output indented beneath. A green dot in the block header marks a <b>lifecycle</b> command (it changes state); an amber dot marks an <b>observation</b> command (it reads state without changing it). That single distinction &#8212; mutate versus read &#8212; is the most useful mental model you can bring to container operations.</p>
+    </div>
+  </section>
+
+  <section id="history">
+    <div class="sec-head">
+      <span class="code">HIST &#183; ORIGINS</span>
+      <h2>A five-minute lightning talk</h2>
+    </div>
+    <p>On 15 March 2013, at PyCon in Santa Clara, a founder named Solomon Hykes was given a five-minute lightning-talk slot and used it to demonstrate a small internal tool his company had built. The company was dotCloud, a platform-as-a-service competing with Heroku; the tool was a way to package an application and its dependencies so that, in his framing, the perennial problem that &#8220;shipping code to the server is hard&#8221; might finally get easier.<sup class="cite"><a href="#r1">1</a></sup> Lightning talks at PyCon happen on the main stage, which Hykes reportedly did not know; the demo was recorded, leaked to Hacker News, and went viral. Within the year dotCloud had renamed itself Docker and abandoned its original business to pursue the side project full-time.<sup class="cite"><a href="#r1">1</a></sup></p>
+
+    <p>What made the tool land was not novelty of mechanism &#8212; Linux had shipped process-isolation primitives for years &#8212; but novelty of ergonomics. Docker was, as its creators later put it, built on the shoulders of giants: the isolation and resource-control features of the Linux kernel, copy-on-write filesystems, and a set of Git-like semantics for versioning and sharing images.<sup class="cite"><a href="#r2">2</a></sup> Its contribution was to wrap those pieces in a single command-line tool and an image format so approachable that a developer with no background in kernel namespaces could isolate an application in one line. Dirk Merkel&#8217;s early and widely-cited write-up captured the appeal precisely: the promise of packaging applications and their dependencies into lightweight containers that move easily between distributions, start quickly, and stay isolated from one another.<sup class="cite"><a href="#r3">3</a></sup> The wider arc of the field &#8212; from the low-level Linux Containers (LXC) project, through Docker&#8217;s popularization, to cluster orchestrators &#8212; was mapped contemporaneously by David Bernstein, who saw early that the interesting action would move from the single container to the management of many.<sup class="cite"><a href="#r4">4</a></sup></p>
+
+    <h3>From a monolith to a layered stack</h3>
+    <p>The earliest Docker was a single monolithic daemon that did everything, and it drove containers by shelling out to LXC. Neither of those facts survived. The execution machinery was extracted into a dedicated, reusable library, and in 2015 the resulting low-level runtime, <code>runc</code>, was donated to a new, vendor-neutral standards body: the Open Container Initiative (OCI), formed in June 2015 by Docker, CoreOS, and other industry participants under the Linux Foundation.<sup class="cite"><a href="#r5">5</a></sup> The OCI produced the specifications the whole ecosystem now shares &#8212; a Runtime Specification describing how to execute an unpacked &#8220;filesystem bundle,&#8221; an Image Specification describing the on-disk format, and a Distribution Specification for moving images around.<sup class="cite"><a href="#r5">5</a></sup> Around the same time the libcontainer code was contributed and <code>runc</code> was born as the reference implementation, giving anyone building a runtime a well-defined target to hit.<sup class="cite"><a href="#r6">6</a></sup></p>
+
+    <p>Why break a working monolith into a client, two daemons, and a runtime? The split solved concrete operational problems. Extracting the low-level runtime behind a specification meant the piece that touches the kernel could be audited, replaced, or hardened independently of everything above it.<sup class="cite"><a href="#r6">6</a></sup> Separating the high-level lifecycle manager from the user-facing daemon meant the long-lived supervision of running containers no longer shared a fate with the front-end process; combined with the per-container shim, that is what lets the Docker daemon be upgraded &#8212; or even crash &#8212; without taking every running container down with it.<sup class="cite"><a href="#r7">7</a></sup> The layering that can look like incidental complexity is largely the residue of making the system operable, upgradable, and hardenable at scale.</p>
+
+    <p>The high-level lifecycle logic became a separate project too. <b>containerd</b> &#8212; an industry-standard, high-level runtime that manages the complete container lifecycle on a host, from image pull and storage through supervision and networking &#8212; graduated to become a top-level project of the Cloud Native Computing Foundation and is used today by both Docker and Kubernetes.<sup class="cite"><a href="#r7">7</a></sup> The practical upshot for anyone managing containers is that when you type <code>docker</code>, you are standing at the top of a deliberately layered tower. Understanding that tower is the difference between treating the engine as magic and engineering with it, so the next section walks down it, rung by rung.</p>
+  </section>
+  <section id="engine">
+    <div class="sec-head">
+      <span class="code">ARCH &#183; THE ENGINE</span>
+      <h2>What a command actually does</h2>
+    </div>
+    <p>Docker uses a client&#8211;server architecture. The thing you type into &#8212; the <code>docker</code> command &#8212; is a thin client that holds almost no logic of its own; it turns your instruction into an HTTP request and sends it to a long-running background daemon called <code>dockerd</code>, which does the heavy lifting of building, running, and distributing containers.<sup class="cite"><a href="#r8">8</a></sup> The two communicate over a REST API carried on a UNIX socket or a network interface, which is why the client and daemon need not even run on the same machine.<sup class="cite"><a href="#r8">8</a></sup> On Linux that socket is, by default, a UNIX domain socket at <code>/var/run/docker.sock</code>, accessible only to root or to members of the <code>docker</code> group &#8212; a detail that will matter a great deal when we discuss security.<sup class="cite"><a href="#r9">9</a></sup></p>
+
+    <p>A useful consequence of this design is that the <code>docker</code> command enjoys no special status: it is simply one client of the Engine API, and anything that speaks that API is an equal peer. Docker Compose, the Portainer web UI, a CI pipeline, and the observability tools in the ecosystem section all drive the same daemon through the same interface you do.<sup class="cite"><a href="#r8">8</a></sup> When you automate container management, then, you are not really scripting the CLI so much as talking to the daemon &#8212; which is why the mental model of &#8220;issue a request, cause a transition&#8221; carries over unchanged from a single typed command to a whole orchestration platform.</p>
+
+    <p>But <code>dockerd</code> does not itself create containers. When it receives a request to run one, it delegates to <b>containerd</b>, which manages the container&#8217;s lifecycle and, for each container, generates an OCI bundle and invokes the low-level runtime. That runtime is <code>runc</code>, the OCI reference implementation, whose single job is to talk to the Linux kernel: it creates the namespaces, configures the control groups, mounts the root filesystem, applies the security profiles, and executes your process &#8212; and then exits, leaving a small <code>containerd-shim</code> as the container&#8217;s parent.<sup class="cite"><a href="#r5">5</a></sup><sup class="cite"><a href="#r7">7</a></sup> That shim is what keeps the container alive and its output collected even if <code>dockerd</code> or <code>containerd</code> is restarted, and it is why you can upgrade the Docker daemon without killing every running container on the host.<sup class="cite"><a href="#r7">7</a></sup></p>
+
+    <p>It is worth being concrete about what <code>runc</code> actually receives, because doing so demystifies the entire descent. The OCI runtime specification defines a <em>filesystem bundle</em>: a directory holding the container&#8217;s unpacked root filesystem alongside a single <code>config.json</code> that declares everything about how the process is to run &#8212; which namespaces to create, which control-group limits to apply, which Linux capabilities to retain, which mounts and devices to set up, the user to run as, and the command to execute.<sup class="cite"><a href="#r5">5</a></sup> <code>containerd</code> is what assembles that bundle, translating your chosen image and the flags you passed to <code>run</code> into that declarative document; <code>runc</code> then does nothing more than enact it faithfully and step aside. Seen from this angle the abstractions line up with startling neatness: every flag on your <code>docker run</code> line is ultimately a field in that <code>config.json</code>, the writable layer is the top of the bundle&#8217;s root filesystem, and the whole multi-daemon engine is one long pipeline for turning the words &#8220;<code>docker run</code>&#8221; into a bundle the kernel can be asked to instantiate. Nothing magical remains &#8212; only translation, layer by layer, from your intent down to a system call.</p>
+
+    <figure class="diagram">
+<svg viewBox="0 0 1160 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Docker engine chain: docker CLI to dockerd over REST, dockerd to containerd over gRPC, containerd to shim to runc, runc to the Linux kernel namespaces and cgroups, producing the container." font-family="JetBrains Mono, monospace">
+<defs>
+<marker id="aA" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 L3,5 z" fill="#8A96A3"/></marker>
+</defs>
+<rect x="70.0" y="40.0" width="300.0" height="52.0" rx="8" fill="#222933" stroke="#8FA0AE" stroke-width="2.0"/>
+<circle cx="85.0" cy="66.0" r="4.5" fill="#8FA0AE"/>
+<text x="228.0" y="65.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="16" letter-spacing="0.5" fill="#E8EDF1">docker (CLI)</text>
+<text x="228.0" y="82.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">client &amp;#8226; builds request</text>
+<line x1="220.0" y1="92.0" x2="220.0" y2="114.0" stroke="#8A96A3" stroke-width="2.2" marker-end="url(#aA)"/>
+<text x="234.0" y="107.0" text-anchor="start" font-family="JetBrains Mono, monospace" font-size="11" fill="#CBD3DC">REST  /var/run/docker.sock</text>
+<rect x="70.0" y="114.0" width="300.0" height="52.0" rx="8" fill="#123027" stroke="#35C08C" stroke-width="2.0"/>
+<circle cx="85.0" cy="140.0" r="4.5" fill="#35C08C"/>
+<text x="228.0" y="139.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="16" letter-spacing="0.5" fill="#E7F4EE">dockerd</text>
+<text x="228.0" y="156.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">daemon &amp;#8226; API, images, networks</text>
+<line x1="220.0" y1="166.0" x2="220.0" y2="188.0" stroke="#8A96A3" stroke-width="2.2" marker-end="url(#aA)"/>
+<text x="234.0" y="181.0" text-anchor="start" font-family="JetBrains Mono, monospace" font-size="11" fill="#CBD3DC">gRPC</text>
+<rect x="70.0" y="188.0" width="300.0" height="52.0" rx="8" fill="#312607" stroke="#E3A93A" stroke-width="2.0"/>
+<circle cx="85.0" cy="214.0" r="4.5" fill="#E3A93A"/>
+<text x="228.0" y="213.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="16" letter-spacing="0.5" fill="#F6ECD6">containerd</text>
+<text x="228.0" y="230.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">high-level runtime &amp;#8226; lifecycle</text>
+<line x1="220.0" y1="240.0" x2="220.0" y2="262.0" stroke="#8A96A3" stroke-width="2.2" marker-end="url(#aA)"/>
+<text x="234.0" y="255.0" text-anchor="start" font-family="JetBrains Mono, monospace" font-size="11" fill="#CBD3DC">exec</text>
+<rect x="70.0" y="262.0" width="300.0" height="52.0" rx="8" fill="#222933" stroke="#8FA0AE" stroke-width="2.0"/>
+<circle cx="85.0" cy="288.0" r="4.5" fill="#8FA0AE"/>
+<text x="228.0" y="287.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="16" letter-spacing="0.5" fill="#E8EDF1">containerd-shim</text>
+<text x="228.0" y="304.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">keeps container alive &amp;#8226; I/O</text>
+<line x1="220.0" y1="314.0" x2="220.0" y2="336.0" stroke="#8A96A3" stroke-width="2.2" marker-end="url(#aA)"/>
+<text x="234.0" y="329.0" text-anchor="start" font-family="JetBrains Mono, monospace" font-size="11" fill="#CBD3DC">create &amp;#8226; start</text>
+<rect x="70.0" y="336.0" width="300.0" height="52.0" rx="8" fill="#311611" stroke="#D3705E" stroke-width="2.0"/>
+<circle cx="85.0" cy="362.0" r="4.5" fill="#D3705E"/>
+<text x="228.0" y="361.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="16" letter-spacing="0.5" fill="#F6E1DA">runc</text>
+<text x="228.0" y="378.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="400" font-size="10.5" letter-spacing="0.3" fill="#B9C0C8">OCI low-level runtime &amp;#8226; exits</text>
+<rect x="70" y="416" width="300" height="58" rx="8" fill="#0F1319" stroke="#2B323B" stroke-width="1.5"/>
+<text x="220" y="440" text-anchor="middle" font-family="Archivo, sans-serif" font-weight="800" font-size="15" letter-spacing="1" fill="#DCE2E8">LINUX KERNEL</text>
+<text x="220" y="459" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#B9C0C8">namespaces &#8226; cgroups &#8226; seccomp &#8226; caps</text>
+<line x1="220.0" y1="388.0" x2="220.0" y2="416.0" stroke="#8A96A3" stroke-width="2.2" marker-end="url(#aA)"/>
+<rect x="520" y="40" width="560" height="434" rx="12" fill="#0F1319" stroke="#35C08C" stroke-width="1.6"/>
+<text x="544" y="74" font-family="Archivo, sans-serif" font-weight="800" font-size="17" letter-spacing="0.6" fill="#E7F4EE">THE CONTAINER</text>
+<text x="544" y="96" font-family="JetBrains Mono, monospace" font-size="12" fill="#B9C0C8">an ordinary Linux process, fenced in</text>
+<circle cx="550" cy="124" r="4.5" fill="#35C08C"/>
+<text x="568" y="128" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13.5" fill="#E7ECF1">PID namespace</text>
+<text x="568" y="146" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#CBD3DC">its own process tree; app runs as PID 1</text>
+<circle cx="550" cy="174" r="4.5" fill="#35C08C"/>
+<text x="568" y="178" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13.5" fill="#E7ECF1">net / mnt / uts</text>
+<text x="568" y="196" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#CBD3DC">private interfaces, root filesystem, hostname</text>
+<circle cx="550" cy="224" r="4.5" fill="#35C08C"/>
+<text x="568" y="228" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13.5" fill="#E7ECF1">ipc / user</text>
+<text x="568" y="246" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#CBD3DC">isolated shared memory; UID remapping</text>
+<circle cx="550" cy="274" r="4.5" fill="#35C08C"/>
+<text x="568" y="278" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13.5" fill="#E7ECF1">cgroups v2</text>
+<text x="568" y="296" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#CBD3DC">hard caps on CPU, memory, PIDs, I/O</text>
+<circle cx="550" cy="324" r="4.5" fill="#35C08C"/>
+<text x="568" y="328" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13.5" fill="#E7ECF1">seccomp / caps</text>
+<text x="568" y="346" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#CBD3DC">syscalls filtered; capabilities dropped</text>
+<path d="M 376 445 C 460 445, 460 257, 514 257" fill="none" stroke="#35C08C" stroke-width="2.4" marker-end="url(#aA)"/>
+</svg>      <figcaption>Figure 2 &#183; One <span style="color:#35c08c">docker run</span> descends a tower of user-space programs and bottoms out in the kernel. Each layer is independently replaceable because the interfaces between them (the Engine API, the containerd gRPC API, the OCI runtime spec) are standardized.</figcaption>
+    </figure>
+
+    <h3>The two kernel primitives everything rests on</h3>
+    <p>Strip away the daemons and a container reduces to a normal process that the kernel has been told to lie to and to fence in. The lying is done by <b>namespaces</b>, which give a process its own private view of some global resource; the Linux manual page enumerates the kinds &#8212; among them the mount, PID, network, IPC, UTS, user, and cgroup namespaces &#8212; each isolating a different facet so that, for instance, the process inside sees itself as PID&#160;1 with its own process table, its own network interfaces, and its own hostname.<sup class="cite"><a href="#r10">10</a></sup> The fencing is done by <b>control groups</b> (cgroups), a kernel mechanism that organizes processes into hierarchical groups and enforces limits and accounting on the resources they may consume &#8212; CPU time, memory, process counts, block I/O.<sup class="cite"><a href="#r11">11</a></sup> Modern distributions and current Docker releases default to the unified cgroup v2 hierarchy, in which all controllers live under a single tree rather than the parallel hierarchies of v1.<sup class="cite"><a href="#r11">11</a></sup></p>
+
+    <p>This is the physical meaning behind the abstractions we are about to manipulate. When you later cap a container&#8217;s memory with <code>--memory=512m</code>, you are writing a value into that container&#8217;s cgroup; when you <code>pause</code> it, you are freezing its cgroup; when you <code>exec</code> into it, you are launching a new process and joining it to the container&#8217;s existing namespaces. The commands are ergonomic names for kernel operations. Keeping that in mind turns most container mysteries into ordinary systems questions with ordinary answers.</p>
+
+    <h3>Images, layers, and the writable layer</h3>
+    <p>One more concept makes the lifecycle commands legible: the relationship between an image and the container that runs it. A Docker image is not a single opaque blob but a stack of read-only layers, each the filesystem delta of one build step, sharing the copy-on-write and Git-like versioning semantics the engine was built on.<sup class="cite"><a href="#r2">2</a></sup> Because those layers are immutable and content-addressed, many containers and many images can share the same underlying layers on disk, which is a large part of why containers are so cheap to create and so fast to start &#8212; launching a container copies no files; it merely stacks one thin new layer on top of layers that already exist.</p>
+    <p>That thin new layer is the container&#8217;s <em>writable layer</em>, and it is the physical thing the lifecycle commands allocate and reclaim. <code>docker create</code> adds it; every file the running process writes that is not on a mounted volume lands in it; <code>docker rm</code> deletes it. This is why a stopped container still consumes disk (its writable layer persists), why <code>docker diff</code> can enumerate exactly what changed relative to the image, and why the operations section insists that durable state belong in volumes: anything written only to the writable layer dies with the container.<sup class="cite"><a href="#r8">8</a></sup></p>
+
+    <div class="note">
+      <div class="nh"><span>&#9673;</span>Why the isolation is not a security boundary by itself</div>
+      <p>Because a container is a kernel-fenced process rather than a virtual machine, it shares the host kernel. That sharing is what makes containers start in milliseconds and run at near-native speed &#8212; measured comparisons find container overhead close to bare metal and generally lower than a hypervisor&#8217;s<sup class="cite"><a href="#r12">12</a></sup> &#8212; but it also means the isolation is only as strong as the kernel surface exposed to the container. This is the seed of every hardening practice in the <a href="#practice">operations</a> section.</p>
+    </div>
+  </section>
+  <section id="lifecycle">
+    <div class="sec-head">
+      <span class="code">LIFE &#183; THE STATE MACHINE</span>
+      <h2>The lifecycle and its commands</h2>
+    </div>
+    <p>A container is always in exactly one state, and you can always read that state directly: <code>docker inspect</code> reports it as the <code>.State.Status</code> field, whose value is one of a small, fixed vocabulary &#8212; <code>created</code>, <code>running</code>, <code>paused</code>, <code>restarting</code>, <code>removing</code>, <code>exited</code>, or <code>dead</code>.<sup class="cite"><a href="#r13">13</a></sup> Figure&#160;1 drew the legal moves between them; the table below is the same information in reference form. Commit the states to memory and the commands arrange themselves naturally, because each command exists to cause one transition.</p>
+
+    <div class="tbl-wrap">
+      <table class="matrix">
+        <caption>The container states (docker inspect .State.Status)</caption>
+        <thead><tr><th>State</th><th>Meaning</th><th>How it is entered</th><th>What is consuming resources</th></tr></thead>
+        <tbody>
+          <tr><td class="cmd"><span class="state-dot" style="background:#576673"></span>created</td><td>The writable layer and configuration exist, but nothing is executing yet.</td><td class="cmd">docker create</td><td>Disk only</td></tr>
+          <tr><td class="cmd"><span class="state-dot" style="background:#137a53"></span>running</td><td>The main process (PID&#160;1 inside the container) is alive and scheduled.</td><td class="cmd">docker start &#183; run</td><td>CPU, memory, I/O</td></tr>
+          <tr><td class="cmd"><span class="state-dot" style="background:#b9820f"></span>paused</td><td>Every process is frozen in place via the cgroup freezer; memory is retained.</td><td class="cmd">docker pause</td><td>Memory (frozen)</td></tr>
+          <tr><td class="cmd"><span class="state-dot" style="background:#b9820f"></span>restarting</td><td>Transient: the daemon is bringing the container back up under a restart policy.</td><td class="cmd">--restart policy</td><td>Briefly, on each attempt</td></tr>
+          <tr><td class="cmd"><span class="state-dot" style="background:#a63e30"></span>exited</td><td>The main process has terminated; the stopped container and its filesystem remain for inspection.</td><td class="cmd">docker stop &#183; kill</td><td>Disk only</td></tr>
+          <tr><td class="cmd"><span class="state-dot" style="background:#576673"></span>removing</td><td>Transient: the container is being torn down.</td><td class="cmd">docker rm</td><td>&#8212;</td></tr>
+          <tr><td class="cmd"><span class="state-dot" style="background:#7c2417"></span>dead</td><td>Removal failed or the container is otherwise unrecoverable; it cannot be started.</td><td class="cmd">(fault)</td><td>Disk only</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Two of these deserve emphasis up front because they trip up newcomers. First, <span class="pill halt">exited</span> is not the same as removed: by default a container&#8217;s filesystem survives its own death, which is exactly what makes post-mortem debugging possible &#8212; you can inspect the final state and read the logs of something that crashed hours ago.<sup class="cite"><a href="#r13">13</a></sup> Second, the top-level commands you already know (<code>docker run</code>, <code>docker ps</code>, <code>docker logs</code>&#8230;) are convenience aliases for their <code>docker container</code> equivalents (<code>docker container run</code>, <code>docker container ls</code>&#8230;); the longer forms are grouped under a single management command that is worth skimming once to see the full inventory.<sup class="cite"><a href="#r14">14</a></sup></p>
+
+    <h3>create, start, and run: bringing a container to life</h3>
+    <p>The clearest way to understand <code>docker run</code> is to see it as a composite. <code>docker create</code> takes an image and produces a container in the <span class="pill steel">created</span> state &#8212; it allocates the writable layer and records the configuration, but starts nothing. <code>docker start</code> then takes that created (or previously stopped) container and executes its process, moving it to <span class="pill run">running</span>. <code>docker run</code> simply does both at once, pulling the image first if it is not present locally.<sup class="cite"><a href="#r15">15</a></sup> The equivalence is worth internalizing because it explains a great deal of behavior: anything you can configure at <code>run</code> time is really being configured at <code>create</code> time and is therefore fixed for the container&#8217;s life; to change most settings you must create a new container, not reconfigure a running one.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">run &#8801; create + start</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># These two lines are equivalent to the single `docker run` beneath them:</span>
+<span class="p">$</span> docker <span class="hl">create</span> --name web -p 8080:80 nginx:1.27-alpine
+<span class="id">3f2a1c9e...b7</span>
+<span class="p">$</span> docker <span class="hl">start</span> web
+web
+
+<span class="c"># One step. -d detaches (runs in the background); the daemon prints the full id.</span>
+<span class="p">$</span> docker <span class="hl">run</span> <span class="k">-d</span> --name web <span class="k">-p</span> 8080:80 nginx:1.27-alpine
+<span class="id">4bed76d3ad428b889c56c1ecc2bf2ed95cb08256db22dc5ef5863e1d03252a19</span></pre>
+    </div>
+
+    <p>Three families of flags account for most of what you will pass to <code>run</code> in practice. The first controls how you attach to the process: <code>-d</code> / <code>--detach</code> runs it in the background, while <code>-it</code> (the combination of <code>--interactive</code> and <code>--tty</code>) gives you a live terminal into it, which is how you get an interactive shell.<sup class="cite"><a href="#r15">15</a></sup> The second controls the container&#8217;s connections to the outside world: <code>--name</code> assigns a stable identifier so you need not paste hashes, <code>-p</code> publishes a container port to the host, <code>-v</code> or <code>--mount</code> attaches storage, and <code>-e</code> sets environment variables.<sup class="cite"><a href="#r15">15</a></sup> The third, which we return to at length later, governs lifetime and limits: <code>--rm</code>, <code>--restart</code>, <code>--memory</code>, <code>--cpus</code>, and their kin.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">an interactive, self-cleaning container</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># --rm removes the container (and its anonymous volumes) the moment it exits,</span>
+<span class="c"># so throwaway debugging shells never accumulate as clutter.</span>
+<span class="p">$</span> docker run <span class="k">--rm</span> <span class="k">-it</span> alpine:3.20 sh
+/ # cat /etc/os-release | head -1
+<span class="o">NAME="Alpine Linux"</span>
+/ # exit
+<span class="c"># ...container is already gone. Verify with `docker ps -a` &#8212; nothing left behind.</span></pre>
+    </div>
+    <p>The <code>--rm</code> flag is one of the highest-leverage habits in day-to-day use: it removes the container, and any anonymous volumes created with it, as soon as the process exits, which keeps a workstation from silting up with hundreds of dead one-off containers.<sup class="cite"><a href="#r15">15</a></sup> Combining it with a restart policy is an error, for the obvious reason that a container cannot both be automatically restarted and automatically deleted.<sup class="cite"><a href="#r15">15</a></sup></p>
+
+    <h4 class="sub">Foreground, detached, and attaching</h4>
+    <p>By default <code>docker run</code> runs in the foreground: your terminal is attached to the container&#8217;s process, its output streams to your screen, and pressing <kbd>Ctrl-C</kbd> sends <code>SIGINT</code> to that process, which usually stops it. Adding <code>-d</code> detaches instead, returning your prompt and leaving the container running in the background.<sup class="cite"><a href="#r15">15</a></sup> The two are bridged by <code>docker attach</code>, which reconnects your terminal to a running container&#8217;s main process &#8212; its standard input, output, and error &#8212; as though you had never left.<sup class="cite"><a href="#r14">14</a></sup> The catch that surprises people is that <code>attach</code> connects you to PID&#160;1 itself, so a reflexive <kbd>Ctrl-C</kbd> while attached will signal and likely stop the container; to leave without killing it, use the detach sequence <kbd>Ctrl-P</kbd> <kbd>Ctrl-Q</kbd>. This is exactly the distinction from <code>exec</code>: <code>attach</code> rejoins the existing main process, whereas <code>exec</code> starts a separate one, which is why <code>exec</code> is the safer way to poke at a container you care about.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">attaching without accidentally stopping it</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># Reconnect to a detached container's live streams:</span>
+<span class="p">$</span> docker attach web
+<span class="c"># ...to leave WITHOUT stopping it, press:  Ctrl-P Ctrl-Q   (never Ctrl-C)</span>
+
+<span class="c"># Block until a container exits, then surface its exit code (handy in scripts):</span>
+<span class="p">$</span> docker wait batch-job
+<span class="o">0</span></pre>
+    </div>
+
+    <h3>stop, kill, and restart: ending and cycling</h3>
+    <p>Stopping a container is a negotiation, not an execution. <code>docker stop</code> sends the container&#8217;s main process a <code>SIGTERM</code> and waits &#8212; ten seconds by default &#8212; for it to shut down gracefully; only if the grace period elapses does the daemon follow up with an unignorable <code>SIGKILL</code>.<sup class="cite"><a href="#r14">14</a></sup> That grace window is precisely where an application flushes buffers, finishes in-flight requests, and closes connections, which is why a well-behaved server installs a <code>SIGTERM</code> handler and why stateful workloads that need longer should be given a longer timeout. <code>docker kill</code>, by contrast, skips the negotiation: it delivers <code>SIGKILL</code> (or a signal of your choosing with <code>-s</code>) immediately.<sup class="cite"><a href="#r14">14</a></sup> Reach for <code>kill</code> only when a container is genuinely wedged; reach for <code>stop</code> everywhere else.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">graceful vs. forceful termination</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># Ask nicely, but only wait 30s before SIGKILL (good for a slow, stateful app):</span>
+<span class="p">$</span> docker stop <span class="k">-t</span> 30 db
+db
+
+<span class="c"># Send a specific signal without stopping &#8212; e.g. tell nginx to reopen its logs:</span>
+<span class="p">$</span> docker kill <span class="k">-s</span> HUP web
+web
+
+<span class="c"># restart = stop (with the same grace period) followed by start:</span>
+<span class="p">$</span> docker restart <span class="k">-t</span> 20 web
+web</pre>
+    </div>
+
+    <p>A subtlety hides in <code>restart</code>: because it is a stop followed by a start, it passes through the transient <span class="pill pause">restarting</span> state and honors the same grace period, so a container with a long-running graceful shutdown will take just as long to cycle as it does to stop. If a container is already exited, <code>start</code> and <code>restart</code> both simply bring it back; the difference only matters when it is currently running.</p>
+
+    <h4 class="sub">pause and unpause: freezing without stopping</h4>
+    <p>Occasionally you want a container to stop consuming CPU without losing its in-memory state &#8212; to quiesce it during a host maintenance window, say, or to take a consistent snapshot. <code>docker pause</code> freezes every process in the container using the kernel&#8217;s cgroup freezer, which the processes cannot intercept or refuse, and <code>docker unpause</code> thaws them.<sup class="cite"><a href="#r14">14</a></sup> A paused container still holds its memory; it simply is not scheduled. This is distinct from stopping: nothing is signaled, nothing shuts down, and no restart policy fires.</p>
+
+    <h3>rm and pruning: reclaiming what is finished</h3>
+    <p>A stopped container is inert but not free &#8212; it still occupies its writable layer on disk. <code>docker rm</code> deletes a container; by default it refuses to remove one that is still running, a guard rail you can override with <code>-f</code> (which kills the process first) and extend with <code>-v</code> to also drop the container&#8217;s anonymous volumes.<sup class="cite"><a href="#r14">14</a></sup> Because dead containers accumulate quietly, Docker also provides bulk reclamation through the <code>prune</code> family, and the idiom below &#8212; listing stopped-container ids and feeding them to <code>rm</code> &#8212; is worth knowing even though <code>docker container prune</code> now does the same thing more safely.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">removing and reclaiming</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># Remove one stopped container:</span>
+<span class="p">$</span> docker rm web
+
+<span class="c"># Force-remove a running one (SIGKILL, then delete) and its anonymous volumes:</span>
+<span class="p">$</span> docker rm <span class="k">-f</span> <span class="k">-v</span> stuck-worker
+
+<span class="c"># Reclaim every stopped container at once:</span>
+<span class="p">$</span> docker container prune <span class="k">-f</span>
+<span class="o">Deleted Containers:</span>
+<span class="o">a1b2c3... 9f8e7d...</span>
+<span class="o">Total reclaimed space: 214.6MB</span></pre>
+    </div>
+
+    <h3>Restart policies: automatic recovery</h3>
+    <p>Everything so far has been manual: you issue a verb, the container obeys. Restart policies delegate one class of transition &#8212; exit back to running &#8212; to the daemon itself, so a container that dies is brought back without a human in the loop. You attach a policy at creation with <code>--restart</code>, and there are exactly four, each with a precise contract.<sup class="cite"><a href="#r16">16</a></sup></p>
+
+    <div class="tbl-wrap">
+      <table class="matrix">
+        <caption>The four restart policies (--restart)</caption>
+        <thead><tr><th>Policy</th><th>Restarts when&#8230;</th><th>Survives a daemon restart / reboot?</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr><td class="cmd"><span class="m">no</span></td><td>Never (this is the default).</td><td>No</td><td>One-off jobs, migrations, debug containers.</td></tr>
+          <tr><td class="cmd"><span class="m">on-failure[:N]</span></td><td>The process exits non-zero; optionally capped at N attempts.</td><td>Only if it had failed and not exhausted N</td><td>Batch workers where a clean exit means &#8220;done.&#8221;</td></tr>
+          <tr><td class="cmd"><span class="m">always</span></td><td>The process exits for any reason, including a clean exit.</td><td>Yes &#8212; even if you had manually stopped it</td><td>Rarely the right choice; see below.</td></tr>
+          <tr><td class="cmd"><span class="m">unless-stopped</span></td><td>Any exit, but not if you deliberately stopped it.</td><td>Yes, unless you stopped it first</td><td>The default choice for long-running services.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The distinction between <code>always</code> and <code>unless-stopped</code> is the one that bites: both bring a container back after a crash and after the host reboots, but <code>always</code> will resurrect a container you intentionally stopped the next time the daemon starts, whereas <code>unless-stopped</code> remembers your intent and leaves it down.<sup class="cite"><a href="#r16">16</a></sup> For most production services, <code>unless-stopped</code> is the right balance of automatic recovery and manual control.</p>
+
+    <p>Crucially, a restart policy is a safety net, not a fix. To keep a broken container from thrashing the host, Docker inserts an exponential back-off between attempts: the delay starts at 100&#160;milliseconds and doubles on each retry, up to a ceiling of one minute, and it resets only after the container has stayed up for at least ten seconds.<sup class="cite"><a href="#r16">16</a></sup> The operational consequence is easy to miss: a container stuck in a crash loop will, after enough failures, appear in <code>docker ps</code> as <span class="pill pause">restarting</span> yet sit idle for up to a minute between attempts &#8212; it looks alive but serves nothing. A climbing restart count is therefore always a signal to investigate the root cause, never evidence that the policy is &#8220;working,&#8221; and you can read that count straight from the container&#8217;s metadata.<sup class="cite"><a href="#r13">13</a></sup></p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">is this policy actually healthy, or looping?</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># A high RestartCount is a red flag, not a green light:</span>
+<span class="p">$</span> docker inspect <span class="k">--format</span> '{{.Name}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' api
+<span class="o">/api restarts=<span class="hl">37</span> exit=1</span>
+
+<span class="c"># Pause a policy without recreating the container, to break the loop and debug:</span>
+<span class="p">$</span> docker update <span class="k">--restart</span> no api
+<span class="p">$</span> docker logs <span class="k">--tail</span> 50 api   <span class="c"># now read why it keeps dying</span></pre>
+    </div>
+
+    <h3>Watching a full lifecycle</h3>
+    <p>It is worth seeing the whole machine turn over once. The session below runs a container and drives it through create&#8594;running, a pause and unpause, a graceful stop, and a final removal, while a second terminal follows <code>docker events</code> so you can watch the daemon narrate each transition as it happens.<sup class="cite"><a href="#r14">14</a></sup> Every line of the event stream corresponds to exactly one edge in Figure&#160;1.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">one container, from birth to reclamation</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># Terminal 2 &#8212; follow the daemon narrating this container's transitions:</span>
+<span class="p">$</span> docker events <span class="k">--filter</span> container=demo <span class="k">--format</span> '{{.Status}}'
+
+<span class="c"># Terminal 1 &#8212; drive the container through its states:</span>
+<span class="p">$</span> docker run <span class="k">-d</span> --name demo nginx:1.27-alpine   <span class="c"># create + start</span>
+<span class="id">9c1f2e...</span>
+<span class="p">$</span> docker pause demo
+demo
+<span class="p">$</span> docker unpause demo
+demo
+<span class="p">$</span> docker stop demo                             <span class="c"># SIGTERM, then reap</span>
+demo
+<span class="p">$</span> docker rm demo
+demo
+
+<span class="c"># ...meanwhile Terminal 2 has printed, in order &#8212; one line per edge:</span>
+<span class="o">create</span>
+<span class="o">start</span>
+<span class="o">pause</span>
+<span class="o">unpause</span>
+<span class="o">kill</span>      <span class="c"># the SIGTERM that `stop` delivers</span>
+<span class="o">die</span>
+<span class="o">stop</span>
+<span class="o">destroy</span>  <span class="c"># the writable layer is gone</span></pre>
+    </div>
+    <p>Read that event log next to the diagram and the abstraction becomes concrete: <code>run</code> produced a <code>create</code> and a <code>start</code>; <code>stop</code> expanded into a <code>kill</code> (the signal), a <code>die</code> (the process ending), and a <code>stop</code> (the state settling); and <code>rm</code> ended in a <code>destroy</code>. Nothing the daemon does to a container falls outside this vocabulary, which is why <code>docker events</code> is the definitive way to answer &#8220;what just happened to my container?&#8221;</p>
+  </section>
+  <section id="observe">
+    <div class="sec-head">
+      <span class="code">OBS &#183; SEEING INSIDE</span>
+      <h2>Monitoring and debugging</h2>
+    </div>
+    <p>If the lifecycle commands are how you <em>change</em> a container&#8217;s state, the observation commands are how you <em>read</em> it &#8212; and in an incident you will spend far more time reading than changing. The five that follow answer five different questions, and knowing which tool answers which question is most of the skill. What is running? <code>ps</code>. What did it say? <code>logs</code>. What is it doing right now, from the inside? <code>exec</code>. What is it consuming? <code>stats</code>. How, exactly, is it configured? <code>inspect</code>.</p>
+
+    <h3>ps and ls: what is running</h3>
+    <p><code>docker ps</code> lists running containers, one per line, with their id, image, command, status, published ports, and name; adding <code>-a</code> widens the view to include stopped and created containers, which is indispensable when something has crashed and vanished from the default list.<sup class="cite"><a href="#r17">17</a></sup> Two refinements turn it from a human-readable list into a scripting primitive: <code>-q</code> prints bare ids (ideal for piping into another command), and <code>--filter</code> plus <code>--format</code> let you select and shape the output with Go templates rather than parsing columns by eye.<sup class="cite"><a href="#r17">17</a></sup></p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">listing, filtering, shaping</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="p">$</span> docker ps
+<span class="o">CONTAINER ID   IMAGE               STATUS          PORTS                  NAMES</span>
+<span class="o"><span class="id">4bed76d3ad42</span>   nginx:1.27-alpine   Up 3 minutes    0.0.0.0:8080-&gt;80/tcp   web</span>
+
+<span class="c"># All containers, including the dead &#8212; note the Exited status and code:</span>
+<span class="p">$</span> docker ps <span class="k">-a</span> <span class="k">--filter</span> status=exited
+<span class="o"><span class="id">9f8e7d6c5b4a</span>   my-api:2.3          Exited (1) 6 min ago                          api</span>
+
+<span class="c"># Just the ids of every container, to feed another command:</span>
+<span class="p">$</span> docker ps <span class="k">-aq</span>
+<span class="o">4bed76d3ad42</span>
+<span class="o">9f8e7d6c5b4a</span></pre>
+    </div>
+
+    <h3>logs: what it said</h3>
+    <p>A container&#8217;s logs are simply whatever its main process wrote to standard output and standard error. <code>docker logs</code> retrieves that stream in a batch, and its flags make it a real debugging instrument: <code>-f</code> / <code>--follow</code> tails new output as it is produced, <code>--tail N</code> shows only the last N lines, <code>--since</code> and <code>--until</code> bound the window in time, and <code>--timestamps</code> prefixes each line with a precise RFC&#160;3339 timestamp so you can correlate events across services.<sup class="cite"><a href="#r18">18</a></sup> The one caveat that surprises people is that <code>docker logs</code> reads from Docker&#8217;s own logging mechanism, so it works with the default <code>json-file</code> (and <code>journald</code>) drivers but not with drivers that ship logs elsewhere &#8212; if you have pointed a container at a remote log sink, the local command will tell you it cannot read them.<sup class="cite"><a href="#r18">18</a></sup></p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">following a live log with timestamps</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># Last 20 lines, then follow, each line timestamped:</span>
+<span class="p">$</span> docker logs <span class="k">--tail</span> 20 <span class="k">-f</span> <span class="k">--timestamps</span> web
+<span class="o">2026-07-09T14:22:07.114Z 172.18.0.1 - GET /health 200</span>
+<span class="o">2026-07-09T14:22:08.501Z 172.18.0.1 - GET /api/users 200</span>
+<span class="c"># ^C to stop following. Bound a past window instead of following:</span>
+<span class="p">$</span> docker logs <span class="k">--since</span> 2026-07-09T14:00:00 <span class="k">--until</span> 2026-07-09T14:05:00 api</pre>
+    </div>
+
+    <h3>exec: what it is doing, from the inside</h3>
+    <p>Sometimes reading output is not enough and you need to be <em>in</em> the container. <code>docker exec</code> starts a brand-new process and joins it to the running container&#8217;s namespaces, so the process you launch sees the container&#8217;s filesystem, network, and process table exactly as the main process does.<sup class="cite"><a href="#r19">19</a></sup> Combined with <code>-it</code>, this is the canonical &#8220;get me a shell in there&#8221; move; on its own it is a way to run a single diagnostic command &#8212; check environment variables, list processes, test a health endpoint from inside the network namespace &#8212; without disturbing the main process. Two limits are worth stating plainly: <code>exec</code> only works on a container that is <span class="pill run">running</span> (there is no process tree to join in a stopped one), and it can only run tools that actually exist inside the image, which is why minimal images sometimes lack even a shell.</p>
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">a shell, and a one-shot diagnostic</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># Interactive shell inside the running container:</span>
+<span class="p">$</span> docker exec <span class="k">-it</span> web sh
+/ # nginx -t
+<span class="o">nginx: configuration file /etc/nginx/nginx.conf test is successful</span>
+/ # exit
+
+<span class="c"># One command, no shell &#8212; confirm what the process actually sees:</span>
+<span class="p">$</span> docker exec web ps -o pid,comm
+<span class="o">  PID COMMAND</span>
+<span class="o">    1 nginx</span>
+<span class="o">   31 nginx</span>
+<span class="p">$</span> docker exec <span class="k">-e</span> DEBUG=1 web env | grep DEBUG
+<span class="o">DEBUG=1</span></pre>
+    </div>
+
+    <h3>stats: what it is consuming</h3>
+    <p><code>docker stats</code> attaches to one or more containers and prints a live, continuously updating stream of resource usage: CPU percentage, memory usage against its limit, network and block I/O totals, and the number of processes.<sup class="cite"><a href="#r20">20</a></sup> Those numbers come straight from the cgroup accounting the kernel is already keeping, which is why they are cheap and accurate.<sup class="cite"><a href="#r11">11</a></sup> By default the display refreshes in place like <code>top</code>; passing <code>--no-stream</code> prints a single snapshot and exits, which is what you want in a script or a one-off check.<sup class="cite"><a href="#r20">20</a></sup></p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">a one-shot resource snapshot</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="p">$</span> docker stats <span class="k">--no-stream</span>
+<span class="o">CONTAINER   NAME   CPU %   MEM USAGE / LIMIT     MEM %   NET I/O         PIDS</span>
+<span class="o"><span class="id">4bed76d3</span>    web    0.04%   6.1MiB / 512MiB       1.19%   1.2MB / 900kB   3</span>
+<span class="o"><span class="id">7a1c9e2b</span>    api    17.8%   402MiB / <span class="hl">512MiB</span>      78.5%   40MB / 55MB     44</span>
+<span class="c"># api is at 78% of its memory cap &#8212; a candidate to raise --memory or fix a leak.</span></pre>
+    </div>
+    <h3>inspect: how it is configured, exactly</h3>
+    <p>When you need ground truth &#8212; not a summary but the complete configuration and state the daemon holds &#8212; <code>docker inspect</code> returns it as a low-level JSON document.<sup class="cite"><a href="#r13">13</a></sup> That document is exhaustive: the resolved command and entrypoint, every mount and network, the environment, the restart policy, and the full <code>State</code> object with the status, the process id on the host, the exit code, and the start and finish timestamps. Dumping the whole blob is rarely useful; the power is in the <code>--format</code> flag, which evaluates a Go template against the structure so you can extract exactly the field you need for a script or a one-line answer.<sup class="cite"><a href="#r13">13</a></sup></p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd obs"></span><span class="label">extracting single facts with --format</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="c"># The exact state, and the host PID of the container's process:</span>
+<span class="p">$</span> docker inspect <span class="k">--format</span> '{{.State.Status}} pid={{.State.Pid}}' web
+<span class="o">running pid=<span class="hl">28841</span></span>
+
+<span class="c"># Why did it stop? Exit code and finish time, no JSON spelunking required:</span>
+<span class="p">$</span> docker inspect <span class="k">--format</span> '{{.State.ExitCode}} @ {{.State.FinishedAt}}' api
+<span class="o">1 @ 2026-07-09T14:16:41.6Z</span>
+
+<span class="c"># Resolve a container's IP on its network:</span>
+<span class="p">$</span> docker inspect <span class="k">--format</span> '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' web
+<span class="o">172.18.0.2</span></pre>
+    </div>
+
+    <h3>The rest of the toolkit</h3>
+    <p>Five commands cover the overwhelming majority of operational work, but a handful more are worth knowing when the usual five come up short, and all of them live under the same <code>docker container</code> group.<sup class="cite"><a href="#r14">14</a></sup> <code>docker top</code> shows the processes running inside a container using the host&#8217;s process table, which is handy when a container runs more than one process. <code>docker diff</code> reports every file that has been added, changed, or deleted relative to the image &#8212; a fast way to see what a running container has written. <code>docker cp</code> copies files in and out, useful for extracting a core dump or a log a process wrote to a file rather than to stdout. <code>docker port</code> prints the published-port mappings for a container. And <code>docker events</code> streams the daemon&#8217;s real-time event feed &#8212; creates, starts, health-status changes, out-of-memory kills, dies &#8212; which is the single best way to watch what is actually happening to your containers over time rather than polling their state.<sup class="cite"><a href="#r14">14</a></sup></p>
+
+    <p>Assembled into a routine, these five commands form a fast triage path. The table below maps a symptom you observe to the command that most quickly reveals its cause &#8212; a compressed version of the reasoning an experienced operator runs almost without thinking.</p>
+
+    <div class="tbl-wrap">
+      <table class="matrix">
+        <caption>Field triage: symptom &#8594; first command</caption>
+        <thead><tr><th>Symptom</th><th>Most likely cause</th><th>Command to confirm</th></tr></thead>
+        <tbody>
+          <tr><td>Container missing from <span class="m">docker ps</span></td><td>It exited, or never started.</td><td><span class="m">docker ps -a</span> &#8212; read status + exit code</td></tr>
+          <tr><td>Exited instantly, code 137</td><td>OOM-killed against its memory cap.</td><td><span class="m">docker inspect --format '{{.State.OOMKilled}}'</span></td></tr>
+          <tr><td>Stuck in <span class="pill pause">restarting</span></td><td>Crash loop under a restart policy.</td><td><span class="m">docker logs --tail 50</span> + check <span class="m">RestartCount</span></td></tr>
+          <tr><td><span class="m">exec</span> fails: &#8220;not found&#8221;</td><td>Minimal image lacks that shell/tool.</td><td>Try <span class="m">sh</span> not <span class="m">bash</span>; check the entrypoint</td></tr>
+          <tr><td>Host sluggish, one container hot</td><td>A container running without limits.</td><td><span class="m">docker stats --no-stream</span></td></tr>
+          <tr><td>Service unreachable on its port</td><td>Port unpublished or wrong network.</td><td><span class="m">docker port &lt;c&gt;</span> + inspect its Networks</td></tr>
+          <tr><td><span class="m">logs</span> returns nothing</td><td>Non-<span class="m">json-file</span> driver, or app logs to a file.</td><td>Inspect <span class="m">.HostConfig.LogConfig.Type</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="nh"><span>&#9650;</span>Debug the container, not just the process</div>
+      <p>A recurring trap is to treat a container purely as its main process and forget the fence around it. A service that &#8220;can&#8217;t reach the database&#8221; may be perfectly healthy but sealed in the wrong network namespace; a process being &#8220;randomly killed&#8221; is often the kernel&#8217;s OOM killer enforcing a <code>--memory</code> cap you forgot you set, visible instantly in <code>docker inspect</code> as an <code>OOMKilled</code> flag and exit code 137. When behavior is baffling, check the fence &#8212; the namespaces and cgroups from the <a href="#engine">architecture</a> section &#8212; before you suspect the code.</p>
+    </div>
+  </section>
+  <section id="practice">
+    <div class="sec-head">
+      <span class="code">OPS &#183; PRODUCTION</span>
+      <h2>Operating safely in production</h2>
+    </div>
+    <p>The commands so far are value-neutral: they will just as happily run a hardened service as a root-privileged foothold for an attacker. What separates the two is a set of operational defaults, and the most authoritative catalogue of them is the U.S. National Institute of Standards and Technology&#8217;s <cite>Application Container Security Guide</cite> (SP&#160;800-190), which analyzes the risks specific to the container model and prescribes countermeasures.<sup class="cite"><a href="#r21">21</a></sup> The practices below distill that guidance, and the Docker documentation that implements it, into the flags and habits you actually apply when launching containers.</p>
+
+    <h3>Least privilege: assume the container will be breached</h3>
+    <p>Because a container shares the host kernel, the guiding assumption should be that a compromised process inside it will try to reach the host, and every default should narrow what that process can do. Four measures do most of the work. Run as a non-root user, either with <code>USER</code> in the image or <code>-u</code> at launch, so that even a full application compromise does not start as UID&#160;0. Drop all Linux capabilities and add back only the few a service genuinely needs, rather than shipping the permissive default set. Mount the root filesystem read-only with <code>--read-only</code>, granting writable <code>tmpfs</code> mounts only where the app truly must write. And forbid privilege escalation so a process cannot gain more rights than it started with. NIST states the principle plainly &#8212; containers should run with the least privilege required, dropping unneeded capabilities and never running as root where it can be avoided &#8212; and Docker warns in the same breath that <code>--privileged</code>, which switches all of this off, does not produce a securely sandboxed process and should be treated as a last resort.<sup class="cite"><a href="#r21">21</a></sup><sup class="cite"><a href="#r15">15</a></sup></p>
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">a least-privilege launch</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="p">$</span> docker run <span class="k">-d</span> --name web \
+    <span class="k">--user</span> 10001:10001 \            <span class="c"># not root inside the container</span>
+    <span class="k">--read-only</span> \                    <span class="c"># immutable root filesystem</span>
+    <span class="k">--tmpfs</span> /tmp:rw,size=64m \        <span class="c"># the one place it may write</span>
+    <span class="k">--cap-drop</span> ALL \                  <span class="c"># start from zero capabilities</span>
+    <span class="k">--cap-add</span> NET_BIND_SERVICE \      <span class="c"># add back only what is needed</span>
+    <span class="k">--security-opt</span> no-new-privileges \ <span class="c"># no setuid escalation</span>
+    nginx:1.27-alpine</pre>
+    </div>
+
+    <h3>Resource limits: contain the blast radius</h3>
+    <p>An unbounded container is a denial-of-service waiting to happen: a memory leak, a fork bomb, or a runaway loop in one container can starve every other container on the host and the host itself. The cgroup machinery from the <a href="#engine">architecture</a> section exists precisely to prevent this, and three flags expose it. <code>--memory</code> caps the container&#8217;s memory, after which the kernel&#8217;s OOM killer terminates the offending process rather than the whole host sliding into swap. <code>--cpus</code> limits how many CPU cores the container may consume. And <code>--pids-limit</code> caps the number of processes it may spawn, which neutralizes fork bombs.<sup class="cite"><a href="#r15">15</a></sup><sup class="cite"><a href="#r11">11</a></sup> NIST frames resource controls as a core mitigation, since without them a single container can exhaust host resources and degrade every neighbor.<sup class="cite"><a href="#r21">21</a></sup></p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">bounded resources</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="p">$</span> docker run <span class="k">-d</span> --name api \
+    <span class="k">--memory</span> 512m <span class="k">--memory-swap</span> 512m \  <span class="c"># hard RAM cap, no swap escape</span>
+    <span class="k">--cpus</span> 1.5 \                        <span class="c"># at most 1.5 cores</span>
+    <span class="k">--pids-limit</span> 200 \                  <span class="c"># fork-bomb ceiling</span>
+    my-api:2.3</pre>
+    </div>
+    <h3>One concern per container</h3>
+    <p>A recurring source of operational pain is the container that tries to be a whole host &#8212; running an app, a database, a cron daemon, and an SSH server behind a homegrown init script. The model assumes the opposite: a container is a runnable instance of a single application, and keeping it to one primary concern is what makes every other practice work.<sup class="cite"><a href="#r8">8</a></sup> With one process, the lifecycle is unambiguous (the container is up exactly when that process is up), <code>SIGTERM</code> reaches the thing that matters, the logs are that process&#8217;s output rather than an interleaved jumble, resource limits bound one workload rather than several competing ones, and scaling means running more copies of a small unit instead of duplicating a monolith. When several processes genuinely must cooperate, the container-native answer is several containers composed together &#8212; the subject of the ecosystem section &#8212; not several processes crammed into one.</p>
+
+    <h3>Trust what you run</h3>
+    <p>Least privilege limits the damage a compromised container can do; image provenance limits the odds that it is compromised to begin with. A container is only as trustworthy as the image beneath it, so NIST treats the image supply chain as a first-class control: prefer minimal base images to shrink the attack surface, obtain images only from trusted sources, scan them for known vulnerabilities before deployment, and pin them to an immutable digest rather than a mutable tag so that a reference like <code>my-api:2.3</code> cannot be silently repointed to different bytes under you.<sup class="cite"><a href="#r21">21</a></sup> Pinning by digest has a second payoff that is squarely a management concern: it makes deployments reproducible, because the same reference always resolves to the identical image &#8212; the container-operations equivalent of a locked dependency file.</p>
+
+    <h3>Recovery and health: make &#8220;up&#8221; mean &#8220;working&#8221;</h3>
+    <p>A long-running service should carry a restart policy so that a crash or a host reboot brings it back automatically; as established earlier, <code>--restart unless-stopped</code> is the sensible default for services.<sup class="cite"><a href="#r16">16</a></sup> But a restart policy only knows whether the process is <em>alive</em>, not whether it is <em>working</em> &#8212; a server can be running while wedged, deadlocked, or returning errors. That gap is what a health check closes: a <code>HEALTHCHECK</code> baked into the image (or its equivalent in an orchestrator) runs a command on an interval and marks the container healthy or unhealthy, and that status shows up in <code>docker ps</code> and the event stream so both humans and schedulers can act on real readiness rather than mere liveness.<sup class="cite"><a href="#r14">14</a></sup> Pairing the two &#8212; restart for liveness, health check for correctness &#8212; is what makes automated recovery trustworthy.</p>
+
+    <h3>Graceful shutdown: respect the SIGTERM</h3>
+    <p>Recall that <code>docker stop</code> sends <code>SIGTERM</code> and waits before escalating to <code>SIGKILL</code>. Whether that window is used well is a property of the image, and it is the source of a surprising number of production bugs. The application&#8217;s main process must actually receive and handle <code>SIGTERM</code>, which fails silently when the process is wrapped in a shell &#8212; a shell-form <code>ENTRYPOINT</code> or <code>CMD</code> runs the program as a child of <code>/bin/sh</code>, which does not forward signals, so the app never learns it is being asked to stop and is hard-killed ten seconds later.<sup class="cite"><a href="#r15">15</a></sup> Using the exec form keeps your process as PID&#160;1 where it receives signals directly. For slow, stateful shutdowns, extend the grace window with <code>--stop-timeout</code>, and when your PID&#160;1 is not designed to reap orphaned children, add a minimal init such as the one Docker bundles behind <code>--init</code>, which forwards signals and reaps zombies on the container&#8217;s behalf.<sup class="cite"><a href="#r9">9</a></sup></p>
+    <h3>Logging, ephemerality, and the daemon socket</h3>
+    <p>Three more habits round out safe operation. First, control your logs: with the default <code>json-file</code> driver, a chatty container will grow its log file until it fills the disk, so cap it with <code>--log-opt max-size</code> and <code>--log-opt max-file</code> to enable rotation, and ship logs to a central system for anything beyond a single host.<sup class="cite"><a href="#r18">18</a></sup> Second, treat containers as ephemeral and immutable. A container is a runnable instance you can create, start, stop, and delete at will, and it is meant to be disposable: persistent state belongs in volumes or external stores, not in the container&#8217;s writable layer, and the correct response to a needed change is to build a new image and replace the container, not to <code>exec</code> in and mutate a running one.<sup class="cite"><a href="#r8">8</a></sup><sup class="cite"><a href="#r21">21</a></sup> Reserving <code>docker exec</code> for read-only investigation keeps your running fleet identical to what your images describe. Third, guard the daemon socket. Access to <code>/var/run/docker.sock</code> is effectively root on the host &#8212; anyone who can reach it can launch a privileged container that mounts the host filesystem &#8212; which is why membership in the <code>docker</code> group is equivalent to root, why the socket must never be exposed over an unencrypted network, and why mounting it into a container is a decision to make with great care.<sup class="cite"><a href="#r9">9</a></sup></p>
+
+    <div class="note warn">
+      <div class="nh"><span>&#9650;</span>The one-line summary of container security</div>
+      <p>Minimize what runs (one concern per container, least privilege, drop capabilities), bound what it can consume (memory, CPU, PIDs), verify that it works rather than merely runs (health checks, not just restart policies), and never forget that the daemon socket is the keys to the host. Every item here is an application of a single idea: the isolation is real but shallow, so you deepen it deliberately.</p>
+    </div>
+  </section>
+  <section id="tools">
+    <div class="sec-head">
+      <span class="code">TOOL &#183; THE ECOSYSTEM</span>
+      <h2>The surrounding ecosystem</h2>
+    </div>
+    <p>The raw CLI manages one container at a time, which is the right altitude for learning and for debugging but the wrong one for real systems, where applications are several cooperating containers and fleets span many hosts. A layered ecosystem picks up where <code>docker run</code> leaves off, and the useful move is to see each tool as automating one of the manual acts from the previous sections.</p>
+
+    <h3>Docker Compose: many containers, one file</h3>
+    <p>The moment an application is more than one container &#8212; a web service, a database, a cache &#8212; passing long <code>run</code> commands by hand becomes error-prone. <b>Docker Compose</b> replaces them with a single declarative YAML file that defines the services, their images, ports, volumes, environment, and dependencies; <code>docker compose up</code> then creates and starts the whole application, and <code>docker compose down</code> tears it down, as one unit.<sup class="cite"><a href="#r22">22</a></sup> The same lifecycle and observation verbs you already know apply to the group, so the mental model carries over intact.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="sd life"></span><span class="label">compose.yaml &#183; a service with its datastore</span><span class="spacer"></span><button class="copy" type="button">copy</button></div>
+<pre><span class="k">services</span>:
+  <span class="k">web</span>:
+    image: my-api:2.3
+    ports: [<span class="s">"8080:80"</span>]
+    restart: unless-stopped
+    depends_on: [db]
+    deploy:
+      resources:
+        limits: { memory: 512m, cpus: <span class="s">"1.5"</span> }
+  <span class="k">db</span>:
+    image: postgres:16-alpine
+    volumes: [<span class="s">"pgdata:/var/lib/postgresql/data"</span>]  <span class="c"># state lives in a volume</span>
+    restart: unless-stopped
+<span class="k">volumes</span>:
+  pgdata:</pre>
+    </div>
+    <p>Notice that everything hard-won from the operations section &#8212; a restart policy, resource limits, state kept in a named volume rather than the writable layer &#8212; is expressed declaratively here, which is exactly why teams graduate from ad-hoc commands to a checked-in Compose file: the file becomes the reviewable, reproducible record of how the application is meant to run.</p>
+    <h3>Observability beyond the built-ins</h3>
+    <p>The <code>stats</code>, <code>logs</code>, and <code>events</code> commands are enough to diagnose a handful of containers, but watching many of them over time calls for purpose-built tooling. Terminal dashboards such as <em>ctop</em> and <em>lazydocker</em> present a live, sortable overview of every container&#8217;s resource use and logs; <em>Portainer</em> offers the same as a web UI for teams. For metrics that feed a monitoring stack, Google&#8217;s <b>cAdvisor</b> discovers running containers automatically and exports their per-container CPU, memory, filesystem, and network usage, most commonly scraped by Prometheus and graphed in Grafana &#8212; turning the momentary snapshot of <code>docker stats</code> into a historical record you can alert on.<sup class="cite"><a href="#r23">23</a></sup> The image-inspection tool <em>dive</em> rounds out the set by letting you explore an image layer by layer to find wasted space. None of these replaces the CLI; they scale it.</p>
+
+    <h3>Alternative runtimes: swapping the bottom of the stack</h3>
+    <p>Because the interface between the daemon and the low-level runtime is the standardized OCI runtime specification, the reference <code>runc</code> is replaceable, and you can select an alternative per container with <code>--runtime</code>.<sup class="cite"><a href="#r5">5</a></sup><sup class="cite"><a href="#r15">15</a></sup> The choices reflect a spectrum of trade-offs between isolation and overhead. <em>crun</em> is a lighter, faster C implementation that is otherwise a drop-in for <code>runc</code>. For workloads where the shared-kernel caveat from the architecture section is unacceptable, <em>gVisor</em> interposes a user-space kernel that intercepts the container&#8217;s system calls, and <em>Kata Containers</em> goes further, wrapping each container in a lightweight virtual machine with its own kernel &#8212; buying much stronger isolation at some cost in speed and density. The point is that the same <code>docker run</code> you have used throughout can, with one flag, sit atop a very different enforcement mechanism.</p>
+    <h3>Rootless mode and orchestration</h3>
+    <p>Two directions extend the model outward. Downward, in privilege: <em>rootless</em> Docker runs the daemon and its containers as an unprivileged user by leaning on user namespaces, so that even a daemon compromise does not hand an attacker root on the host &#8212; the strongest available answer to the socket-is-root hazard from the operations section.<sup class="cite"><a href="#r9">9</a></sup> Outward, in scale: once an application must span many hosts, single-host management gives way to an orchestrator that schedules containers across a cluster, restarts them on failure, and handles rollout and service discovery. Docker&#8217;s own <em>Swarm</em> mode is the gentlest step up; <b>Kubernetes</b> is the industry standard and, fittingly, drives its nodes through the very same <code>containerd</code> that sits inside Docker; <em>Nomad</em> is a lighter-weight scheduler. The trajectory from LXC to Docker to cluster orchestration was exactly the arc observed in the field&#8217;s early years, and understanding the single-container lifecycle is the prerequisite for all of it, because an orchestrator is in the end an automated operator issuing the same transitions you now know by hand.<sup class="cite"><a href="#r4">4</a></sup> It is worth noting, finally, that the ecosystem is genuinely standards-based rather than single-vendor: because the OCI defines the image and runtime formats, tools such as <em>Podman</em> can run the same images with a compatible, daemonless CLI.<sup class="cite"><a href="#r5">5</a></sup></p>
+  </section>
+  <section id="close">
+    <div class="sec-head">
+      <span class="code">END &#183; SYNTHESIS</span>
+      <h2>The shape of the whole thing</h2>
+    </div>
+    <p>Step back and the sprawl collapses into three ideas. First, a container is a state machine: it is always in exactly one of a small set of states, and every management command &#8212; <code>create</code>, <code>start</code>, <code>run</code>, <code>stop</code>, <code>kill</code>, <code>restart</code>, <code>pause</code>, <code>rm</code> &#8212; exists to move it along one labeled edge, while <code>ps</code>, <code>logs</code>, <code>exec</code>, <code>stats</code>, and <code>inspect</code> read where it is without moving it. Hold Figure&#160;1 in your head and the CLI is no longer a list to memorize but a map to navigate.</p>
+
+    <p>Second, that machine is enforced by a layered, standards-based engine. Your <code>docker</code> client speaks to <code>dockerd</code>, which delegates to <code>containerd</code>, which drives <code>runc</code>, which asks the Linux kernel for namespaces and cgroups. Each layer is swappable because the seams between them are open specifications, and knowing the layers tells you which one to interrogate when something goes wrong &#8212; and reminds you that the isolation, being kernel-shared, is real but shallow.</p>
+
+    <p>Third, safe operation is the deliberate deepening of that shallow isolation. Run as non-root, drop capabilities, mount read-only, and forbid escalation; bound memory, CPU, and process counts; recover with a restart policy but verify with a health check; respect the <code>SIGTERM</code>; keep state in volumes and rebuild rather than mutate; and guard the daemon socket as the root-equivalent that it is. Every one of those practices is the same lesson applied: the container will be treated as hostile, so give it as little as it needs and watch what it does. Master the small machine, respect the shallow fence, and the largest fleet is only the smallest unit, managed at scale.</p>
+  </section>
+  </main>
+</div>
+<section id="references" class="refs-sec">
+  <div class="refs-inner">
+    <span class="code">REF &#183; SOURCES</span>
+    <h2>References</h2>
+    <p class="refs-lead">Cited in order of first appearance (Vancouver). Documentation URLs point to the current Docker, OCI, CNCF, and Linux manual references; standards and papers are cited by their canonical identifiers.</p>
+    <ol class="refs">
+      <li id="r1">Docker Inc. Docker: nine years young [Internet]. Docker Blog; 2022 [cited 2026 Jul 9]. Available from: <a href="https://www.docker.com/blog/docker-nine-years-young/">docker.com/blog/docker-nine-years-young</a></li>
+      <li id="r2">Docker Inc. 11 years of Docker: shaping the next decade of development [Internet]. Docker Blog; 2024 [cited 2026 Jul 9]. Available from: <a href="https://www.docker.com/blog/docker-11-year-anniversary/">docker.com/blog/docker-11-year-anniversary</a></li>
+      <li id="r3">Merkel D. Docker: lightweight Linux containers for consistent development and deployment. <cite>Linux J</cite>. 2014;2014(239):2.</li>
+      <li id="r4">Bernstein D. Containers and cloud: from LXC to Docker to Kubernetes. <cite>IEEE Cloud Comput</cite>. 2014;1(3):81&#8211;4. doi:10.1109/MCC.2014.51</li>
+      <li id="r5">Open Container Initiative. About the Open Container Initiative [Internet]. The Linux Foundation; [cited 2026 Jul 9]. Available from: <a href="https://opencontainers.org/about/overview/">opencontainers.org/about/overview</a></li>
+      <li id="r6">Cloud Native Computing Foundation. Demystifying containers &#8211; part II: container runtimes [Internet]. CNCF Blog; 2019 [cited 2026 Jul 9]. Available from: <a href="https://www.cncf.io/blog/2019/07/15/demystifying-containers-part-ii-container-runtimes/">cncf.io/blog/2019/07/15/demystifying-containers-part-ii</a></li>
+      <li id="r7">The containerd Authors. containerd: an industry-standard container runtime [Internet]. Cloud Native Computing Foundation; [cited 2026 Jul 9]. Available from: <a href="https://containerd.io/">containerd.io</a></li>
+      <li id="r8">Docker Inc. Docker overview [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/get-started/docker-overview/">docs.docker.com/get-started/docker-overview</a></li>
+      <li id="r9">Docker Inc. dockerd [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/dockerd/">docs.docker.com/reference/cli/dockerd</a></li>
+      <li id="r10">Kerrisk M. namespaces(7) &#8212; overview of Linux namespaces [Internet]. Linux manual pages; [cited 2026 Jul 9]. Available from: <a href="https://man7.org/linux/man-pages/man7/namespaces.7.html">man7.org/linux/man-pages/man7/namespaces.7</a></li>
+      <li id="r11">Kerrisk M. cgroups(7) &#8212; Linux control groups [Internet]. Linux manual pages; [cited 2026 Jul 9]. Available from: <a href="https://man7.org/linux/man-pages/man7/cgroups.7.html">man7.org/linux/man-pages/man7/cgroups.7</a></li>
+      <li id="r12">Felter W, Ferreira A, Rajamony R, Rubio J. An updated performance comparison of virtual machines and Linux containers. In: 2015 IEEE International Symposium on Performance Analysis of Systems and Software (ISPASS); 2015. p. 171&#8211;2. doi:10.1109/ISPASS.2015.7095802</li>
+      <li id="r13">Docker Inc. docker container inspect [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/inspect/">docs.docker.com/reference/cli/docker/container/inspect</a></li>
+      <li id="r14">Docker Inc. docker container [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/">docs.docker.com/reference/cli/docker/container</a></li>
+      <li id="r15">Docker Inc. docker container run [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/run/">docs.docker.com/reference/cli/docker/container/run</a></li>
+      <li id="r16">Docker Inc. Start containers automatically [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/engine/containers/start-containers-automatically/">docs.docker.com/engine/containers/start-containers-automatically</a></li>
+      <li id="r17">Docker Inc. docker container ls [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/ls/">docs.docker.com/reference/cli/docker/container/ls</a></li>
+      <li id="r18">Docker Inc. docker container logs [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/logs/">docs.docker.com/reference/cli/docker/container/logs</a></li>
+      <li id="r19">Docker Inc. docker container exec [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/exec/">docs.docker.com/reference/cli/docker/container/exec</a></li>
+      <li id="r20">Docker Inc. docker container stats [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/reference/cli/docker/container/stats/">docs.docker.com/reference/cli/docker/container/stats</a></li>
+      <li id="r21">Souppaya M, Morello J, Scarfone K. Application container security guide. Gaithersburg (MD): National Institute of Standards and Technology; 2017. Report No.: NIST SP 800-190. doi:10.6028/NIST.SP.800-190</li>
+      <li id="r22">Docker Inc. Docker Compose overview [Internet]. Docker Documentation; [cited 2026 Jul 9]. Available from: <a href="https://docs.docker.com/compose/">docs.docker.com/compose</a></li>
+      <li id="r23">Google. cAdvisor (Container Advisor) [Internet]. GitHub; [cited 2026 Jul 9]. Available from: <a href="https://github.com/google/cadvisor">github.com/google/cadvisor</a></li>
+    </ol>
+  </div>
+</section>
+<footer class="foot">
+  <div class="rule"></div>
+  <p>Managing Docker Containers &#8212; an operator&#8217;s field guide. Command behavior reflects current Docker Engine, OCI, CNCF, and Linux kernel documentation as cited; the container state vocabulary and the CLI verbs are stable across recent releases.</p>
+  <p>Diagrams are generated as vector SVG. No tracking and no external scripts beyond the web-font stylesheet. &#160;&#183;&#160; <a class="backtop" href="#" id="backtop">Back to top &#8593;</a></p>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  /* ---------- copy-to-clipboard (no storage) ---------- */
+  function copyText(t){
+    if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(t); }
+    return new Promise(function(res,rej){
+      try{
+        var ta=document.createElement("textarea");
+        ta.value=t; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.top="-1000px"; ta.style.opacity="0";
+        document.body.appendChild(ta); ta.select();
+        var ok=document.execCommand("copy"); document.body.removeChild(ta);
+        ok?res():rej();
+      }catch(e){ rej(e); }
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".term .copy"), function(btn){
+    btn.addEventListener("click", function(){
+      var term=btn.closest(".term"); if(!term) return;
+      var pre=term.querySelector("pre"); if(!pre) return;
+      copyText(pre.innerText).then(function(){
+        btn.textContent="copied"; btn.classList.add("ok");
+        setTimeout(function(){ btn.textContent="copy"; btn.classList.remove("ok"); }, 1600);
+      }).catch(function(){
+        btn.textContent="\u2318C"; setTimeout(function(){ btn.textContent="copy"; }, 1600);
+      });
+    });
+  });
+
+  /* ---------- scroll-spy via IntersectionObserver ---------- */
+  var links=Array.prototype.slice.call(document.querySelectorAll(".rail a[href^='#']"));
+  var sections=links.map(function(a){ return document.getElementById(a.getAttribute("href").slice(1)); }).filter(Boolean);
+  function setActive(id){
+    links.forEach(function(a){ a.classList.toggle("active", a.getAttribute("href")==="#"+id); });
+  }
+  if("IntersectionObserver" in window && sections.length){
+    var vis={};
+    var obs=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ vis[en.target.id]= en.isIntersecting ? en.intersectionRatio : 0; });
+      var best=null, bv=-1;
+      sections.forEach(function(s){ var v=vis[s.id]||0; if(v>bv){ bv=v; best=s.id; } });
+      if(best && bv>0) setActive(best);
+    }, { rootMargin:"-72px 0px -60% 0px", threshold:[0,0.08,0.2,0.4,0.75,1] });
+    sections.forEach(function(s){ obs.observe(s); });
+  }
+  setActive(sections.length ? sections[0].id : "intro");
+
+  /* ---------- smooth back-to-top ---------- */
+  var bt=document.getElementById("backtop");
+  if(bt){
+    bt.addEventListener("click", function(e){
+      e.preventDefault();
+      var reduce=window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top:0, behavior: reduce ? "auto" : "smooth" });
+    });
+  }
+})();
+</script>
+<script src="../dist/js/header.js"></script>
+</body>
+</html>

@@ -17,6 +17,7 @@ const blogCategoryLabels = [
   "Engineering",
   "Finance",
   "Hardware",
+  "IoT",
   "Kubernetes",
   "Learning",
   "Math & Physics",
@@ -31,6 +32,7 @@ const blogCategoryLabels = [
   "Python",
   "Robotics",
   "Security",
+  "SDLC",
   "Side-Channel Attacks",
   "Society & Civics",
   "Software Design & Architecture",
@@ -50,6 +52,90 @@ type BlogDirectoryPost = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/phase-0-planning-feasibility.html",
+    publishedAt: "2026-07-11",
+    summary: "An expert-level treatment of Phase 0 in the software development life cycle, covering problem definition, feasibility analysis, estimation, and the decisions that shape the rest of delivery.",
+    title: "Phase 0 — Planning & Feasibility Analysis"
+  },
+  {
+    path: "blog-articles/the-path-to-production.html",
+    publishedAt: "2026-07-10",
+    summary: "A field guide to how web software moves from a developer laptop to the public internet, spanning version control, environments, CI/CD, containers, orchestration, and DNS/TLS.",
+    title: "The Path to Production — DevOps, Deployment & Infrastructure for the Web"
+  },
+  {
+    path: "blog-articles/site-reliability-engineering.html",
+    publishedAt: "2026-07-09",
+    summary: "An expert-level treatment of site reliability engineering, focused on SLOs, error budgets, observability, toil reduction, incident response, and reliability as a managed property.",
+    title: "Site Reliability Engineering: Reliability as an Engineered Quantity"
+  },
+  {
+    path: "blog-articles/container-orchestration-ecosystem.html",
+    publishedAt: "2026-07-08",
+    summary: "An expert field guide to container orchestration covering Docker, Swarm, Kubernetes, the reconciliation model, runtime layers, and production operating tradeoffs.",
+    title: "The Orchestrated Fleet — Docker, Swarm, Kubernetes and the Container Ecosystem"
+  },
+  {
+    path: "blog-articles/docker-security.html",
+    publishedAt: "2026-07-07",
+    summary: "A technical field manual on Docker security covering container isolation primitives, common escape paths, kernel boundaries, and the layered controls required to trust the runtime.",
+    title: "Docker Security: Everything Is a Process Pretending to Be a Machine"
+  },
+  {
+    path: "blog-articles/dockerfile.html",
+    publishedAt: "2026-07-06",
+    summary: "A deep dive into the Dockerfile covering the layered image model, BuildKit behavior, core instructions, multi-stage builds, caching strategy, and hardening practices.",
+    title: "The Dockerfile: A Manifest for Machines"
+  },
+  {
+    path: "blog-articles/managing-docker-containers.html",
+    publishedAt: "2026-07-05",
+    summary: "An operator's field guide to running Docker containers through their lifecycle, from state transitions and engine behavior to day-two operational practices in production.",
+    title: "Managing Docker Containers — An Operator's Field Guide"
+  },
+  {
+    path: "blog-articles/python.html",
+    publishedAt: "2026-07-04",
+    summary: "A technical portrait of Python covering its origins, language design, technical strengths, ecosystem reach, and why it remains central across modern software stacks.",
+    title: "Python: A Technical Portrait"
+  },
+  {
+    path: "blog-articles/digital-control-systems.html",
+    publishedAt: "2026-07-03",
+    summary: "A technical monograph on digital control systems, from sampled-data theory and z-domain stability to controller design, quantization, delay, and real-time implementation.",
+    title: "Digital Control Systems — Sampled-Data Theory, Controller Design & Real-Time Implementation"
+  },
+  {
+    path: "blog-articles/heliocentrism-copernican-revolution.html",
+    publishedAt: "2026-07-02",
+    summary: "An expert-level history of the Copernican revolution, tracing the geometry, physics, theology, and long scientific struggle that displaced Earth from the center.",
+    title: "The Motion of the Earth — Heliocentrism and the Century That Rebuilt the Cosmos"
+  },
+  {
+    path: "blog-articles/non-euclidean-geometry.html",
+    publishedAt: "2026-07-01",
+    summary: "A history of non-Euclidean geometry and the collapse of geometrical necessity, from the parallel postulate to the philosophical break between mathematical truth and physical space.",
+    title: "Out of Nothing — Non-Euclidean Geometry and the End of Necessary Truth"
+  },
+  {
+    path: "blog-articles/especes_perdues.html",
+    publishedAt: "2026-06-30",
+    summary: "A history of how Cuvier established extinction as a scientific fact and helped break the older theological picture of nature as full, fixed, and complete.",
+    title: "The Annihilation of Species — Cuvier, Lost Worlds, and the Breaking of the Great Chain of Being"
+  },
+  {
+    path: "blog-articles/where-new-things-come-from.html",
+    publishedAt: "2026-06-29",
+    summary: "A long-form theory of innovation focused on recombination, exaptation, abstraction, selection, and the adjacent possible as engines of technological novelty.",
+    title: "Where New Things Come From — A Theory of Innovation"
+  },
+  {
+    path: "blog-articles/software-by-market-segment.html",
+    publishedAt: "2026-06-28",
+    summary: "A history of how the software industry learned to classify itself, from IBM unbundling and analyst taxonomies to the structure of the cloud-era software stack.",
+    title: "A Typology of Software by Market Segment"
+  },
   {
     path: "blog-articles/agno-framework.html",
     publishedAt: "2026-07-05",
@@ -1641,6 +1727,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/soft-robotics.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
   "blog-articles/rewriting_history_git.html": ["Programming & Software"],
+  "blog-articles/site-reliability-engineering.html": ["Engineering", "DevSecOps", "Programming & Software", "SDLC"],
   "blog-articles/os-vm-isolation.html": ["Operating Systems", "Security", "Programming & Software"],
   "blog-articles/network-observability.html": ["Networks", "Security"],
   "blog-articles/mlops.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
@@ -1648,19 +1735,24 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/csharp.html": ["Programming & Software"],
   "blog-articles/concurrency_python.html": ["Python", "Programming & Software"],
   "blog-articles/aspnet-orm.html": ["ASP.NET", "Programming & Software"],
-  "blog-articles/aspnet-core-testing.html": ["ASP.NET", "Programming & Software"],
+  "blog-articles/aspnet-core-testing.html": ["ASP.NET", "Programming & Software", "SDLC"],
   "blog-articles/anonymous_comm.html": ["Privacy", "Security", "Networks"],
   "blog-articles/aspnet-dependency-injection.html": ["ASP.NET", "Programming & Software"],
   "blog-articles/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
   "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
   "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "DevSecOps"],
+  "blog-articles/docker-security.html": ["Docker", "Security", "DevSecOps", "Programming & Software"],
+  "blog-articles/dockerfile.html": ["Docker", "Programming & Software", "DevSecOps"],
   "blog-articles/go-language.html": ["Programming & Software"],
   "blog-articles/kubernetes-deployment-patterns.html": ["Programming & Software", "Engineering", "Networks", "Kubernetes", "DevSecOps"],
   "blog-articles/malware-analysis.html": ["Security"],
+  "blog-articles/managing-docker-containers.html": ["Docker", "Programming & Software", "DevSecOps"],
   "blog-articles/mojo.html": ["Programming & Software", "AI & Machine Learning"],
   "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
   "blog-articles/data-quality.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
+  "blog-articles/container-orchestration-ecosystem.html": ["Docker", "Kubernetes", "DevSecOps", "Programming & Software"],
+  "blog-articles/digital-control-systems.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering", "IoT"],
   "blog-articles/efficient-edge-ai.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "Security", "DevSecOps"],
   "blog-articles/wireless-networking.html": ["Networks", "Security"],
@@ -1681,7 +1773,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/red-teamer-infosec.html": ["Security"],
   "blog-articles/mcp.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "Security"],
   "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy"],
-  "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software"],
+  "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "IoT"],
   "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
   "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
   "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker", "Spring"],
@@ -1690,13 +1782,14 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/java-build-tools.html": ["Programming & Software"],
   "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
-  "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering", "IoT"],
   "blog-articles/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
   "blog-articles/ai-model-vulnerabilities.html": ["AI & Machine Learning", "Security", "DevSecOps"],
   "blog-articles/animal-research-science-education.html": ["Veganism", "Society & Civics"],
   "blog-articles/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
   "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering", "Differential Equations"],
+  "blog-articles/non-euclidean-geometry.html": ["Math & Physics", "Philosophy"],
   "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/causal_ai.html": ["AI & Machine Learning"],
   "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
@@ -1715,14 +1808,14 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/network-layered-models.html": ["Networks"],
   "blog-articles/vegan-behavioral-interventions.html": ["Veganism", "Society & Civics"],
   "blog-articles/zero-trust-architecture.html": ["Security", "Networks", "DevSecOps"],
-  "blog-articles/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems"],
+  "blog-articles/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems", "IoT"],
   "blog-articles/vegan_business_models.html": ["Veganism", "Society & Civics"],
   "blog-articles/learning-modalities.html": ["Learning", "Society & Civics"],
   "blog-articles/corporate-vegan-pressure.html": ["Veganism", "Society & Civics"],
   "blog-articles/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "Control Theory & Engineering"],
   "blog-articles/vegan-activism-incentives.html": ["Veganism", "Society & Civics"],
   "blog-articles/industrial-protocol-design.html": ["Cyber-Physical Systems", "Networks", "Security"],
-  "blog-articles/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security"],
+  "blog-articles/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "IoT"],
   "blog-articles/us-citizen-politics-guide.html": ["Society & Civics"],
   "blog-articles/vegan-legislative-activism.html": ["Veganism", "Society & Civics"],
   "blog-articles/suffering_humans_vs_animals.html": ["Veganism", "Philosophy"],
@@ -1768,9 +1861,15 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/emergency-services-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
   "blog-articles/chemical-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/especes_perdues.html": ["Earth Sciences", "Philosophy"],
   "blog-articles/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
   "blog-articles/cloud-service-models.html": ["Programming & Software", "Networks", "DevSecOps"],
+  "blog-articles/heliocentrism-copernican-revolution.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/phase-0-planning-feasibility.html": ["Programming & Software", "Engineering", "SDLC"],
+  "blog-articles/python.html": ["Python", "Programming & Software"],
+  "blog-articles/software-by-market-segment.html": ["Programming & Software", "Engineering"],
   "blog-articles/the-big-bang.html": ["Math & Physics", "Philosophy", "Cosmology"],
+  "blog-articles/the-path-to-production.html": ["Programming & Software", "DevSecOps", "Networks", "Docker", "SDLC"],
   "blog-articles/the-replication-crisis.html": ["Learning", "Philosophy", "Society & Civics"],
   "blog-articles/anthropogenic-climate-change.html": ["Earth Sciences", "Society & Civics"],
   "blog-articles/nonlocality.html": ["Math & Physics", "Philosophy"],
@@ -1798,11 +1897,12 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/heat-death-of-the-universe.html": ["Math & Physics", "Philosophy", "Cosmology"],
   "blog-articles/public-key-infrastructure.html": ["Security", "Networks", "Programming & Software"],
   "blog-articles/software-architecture-frameworks.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
-  "blog-articles/software-requirements-specification.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/software-requirements-specification.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
   "blog-articles/telecommunications-attacks.html": ["Security", "Networks"],
   "blog-articles/the-irrationality-of-sqrt2.html": ["Math & Physics", "Philosophy"],
   "blog-articles/uncertainty-principle.html": ["Math & Physics", "Philosophy"],
-  "blog-articles/unified-modeling-language.html": ["Programming & Software", "Engineering", "Software Design & Architecture"]
+  "blog-articles/unified-modeling-language.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/where-new-things-come-from.html": ["Engineering", "Philosophy"]
 };
 
 function formatBlogDate(dateString: string): string {
