@@ -186,6 +186,7 @@ function validateCoreInternalLinks() {
   const corePages = [
     "index.html",
     "blog.html",
+    "tutorials.html",
     "tools.html",
     "games.html",
     "blog-articles/privacy.html"

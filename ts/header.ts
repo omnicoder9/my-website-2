@@ -21,6 +21,7 @@ const fallbackHeaderMarkup = `
       <li><a href="tools.html">Tools</a></li>
       <li><a href="games.html">Games</a></li>
       <li><a href="blog.html">Blog</a></li>
+      <li><a href="tutorials.html">Tutorials and Walkthroughs</a></li>
       <li><a href="other.html">Other</a></li>
     </ul>
   </nav>
@@ -55,7 +56,7 @@ const enhancementTierSummaries: Record<EnhancementTier, string> = {
 };
 
 function getSitePrefix(): string {
-  return window.location.pathname.includes("/blog-articles/") ? "../" : "";
+  return /\/(?:blog|tutorial)-articles\//.test(window.location.pathname) ? "../" : "";
 }
 
 function canUseLocalStorage(): boolean {

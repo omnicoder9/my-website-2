@@ -459,6 +459,7 @@ function initializeToolsPage(): void {
   initializeUsernameGenerator();
   initializePasswordGenerator();
   initializeFileConverter();
+  initializeBase64Tool();
 }
 
 if (document.readyState === "loading") {
@@ -846,6 +847,134 @@ function initializeFileConverter(): void {
   });
 }
 
+function initializeBase64Tool(): void {
+  const plainTextArea = document.getElementById("base64Plaintext") as HTMLTextAreaElement | null;
+  const encodedTextArea = document.getElementById("base64EncodedText") as HTMLTextAreaElement | null;
+  const encodeButton = document.getElementById("encodeBase64Btn") as HTMLButtonElement | null;
+  const decodeButton = document.getElementById("decodeBase64Btn") as HTMLButtonElement | null;
+  const swapButton = document.getElementById("swapBase64Btn") as HTMLButtonElement | null;
+  const clearButton = document.getElementById("clearBase64Btn") as HTMLButtonElement | null;
+  const copyTextButton = document.getElementById("copyBase64TextBtn") as HTMLButtonElement | null;
+  const copyBase64Button = document.getElementById("copyBase64EncodedBtn") as HTMLButtonElement | null;
+  const statusElement = document.getElementById("base64Status");
+
+  if (
+    !plainTextArea ||
+    !encodedTextArea ||
+    !encodeButton ||
+    !decodeButton ||
+    !swapButton ||
+    !clearButton ||
+    !copyTextButton ||
+    !copyBase64Button ||
+    !statusElement
+  ) {
+    return;
+  }
+
+  const refreshBase64Status = (): void => {
+    const hasPlainText = plainTextArea.value.length > 0;
+    const hasEncodedText = normalizeBase64Input(encodedTextArea.value).length > 0;
+
+    if (hasPlainText && hasEncodedText) {
+      setConverterStatus(statusElement, "Both panes have content. Encode, decode, swap, or copy either side.", "idle");
+      return;
+    }
+
+    if (hasPlainText) {
+      setConverterStatus(statusElement, "Text pane ready to encode.", "idle");
+      return;
+    }
+
+    if (hasEncodedText) {
+      setConverterStatus(statusElement, "Base64 pane ready to decode.", "idle");
+      return;
+    }
+
+    setConverterStatus(
+      statusElement,
+      "UTF-8 text only. Encode plain text into Base64 or decode Base64 back into text.",
+      "idle"
+    );
+  };
+
+  const encodeBase64 = (): void => {
+    try {
+      const encodedValue = encodeTextToBase64(plainTextArea.value);
+      encodedTextArea.value = encodedValue;
+      setConverterStatus(
+        statusElement,
+        encodedValue
+          ? `Encoded ${plainTextArea.value.length.toLocaleString()} text characters into ${encodedValue.length.toLocaleString()} Base64 characters.`
+          : "Encoded an empty string.",
+        "success"
+      );
+    } catch (error) {
+      setConverterStatus(
+        statusElement,
+        error instanceof Error ? error.message : "Unable to encode the current text.",
+        "error"
+      );
+    }
+  };
+
+  const decodeBase64 = (): void => {
+    try {
+      const decodedValue = decodeBase64ToText(encodedTextArea.value);
+      plainTextArea.value = decodedValue;
+      setConverterStatus(
+        statusElement,
+        decodedValue
+          ? `Decoded ${normalizeBase64Input(encodedTextArea.value).length.toLocaleString()} Base64 characters into ${decodedValue.length.toLocaleString()} text characters.`
+          : "Decoded an empty Base64 value.",
+        "success"
+      );
+    } catch (error) {
+      setConverterStatus(
+        statusElement,
+        error instanceof Error ? error.message : "Unable to decode that Base64 input.",
+        "error"
+      );
+    }
+  };
+
+  encodeButton.addEventListener("click", encodeBase64);
+  decodeButton.addEventListener("click", decodeBase64);
+  swapButton.addEventListener("click", () => {
+    const currentPlainText = plainTextArea.value;
+    plainTextArea.value = encodedTextArea.value;
+    encodedTextArea.value = currentPlainText;
+    refreshBase64Status();
+  });
+  clearButton.addEventListener("click", () => {
+    plainTextArea.value = "";
+    encodedTextArea.value = "";
+    refreshBase64Status();
+  });
+  copyTextButton.addEventListener("click", () => {
+    void copyTextWithFeedback(plainTextArea.value, copyTextButton);
+  });
+  copyBase64Button.addEventListener("click", () => {
+    void copyTextWithFeedback(encodedTextArea.value, copyBase64Button);
+  });
+  plainTextArea.addEventListener("input", refreshBase64Status);
+  encodedTextArea.addEventListener("input", refreshBase64Status);
+  plainTextArea.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      encodeBase64();
+    }
+  });
+  encodedTextArea.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      decodeBase64();
+    }
+  });
+
+  refreshBase64Status();
+}
+
 function populateSourceFormatOptions(selectElement: HTMLSelectElement): void {
   const formatGroups: Array<{ label: string; formats: ToolsFileFormat[] }> = [
     {
@@ -997,6 +1126,60 @@ function updateFileConverterState(
 function setConverterStatus(statusElement: HTMLElement, message: string, state: string): void {
   statusElement.textContent = message;
   statusElement.dataset.state = state;
+}
+
+function normalizeBase64Input(value: string): string {
+  return value.replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+}
+
+function encodeTextToBase64(value: string): string {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(value);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, Math.min(index + chunkSize, bytes.length));
+    let chunkBinary = "";
+    for (let chunkIndex = 0; chunkIndex < chunk.length; chunkIndex += 1) {
+      chunkBinary += String.fromCharCode(chunk[chunkIndex]);
+    }
+    binary += chunkBinary;
+  }
+
+  return btoa(binary);
+}
+
+function decodeBase64ToText(value: string): string {
+  const normalizedValue = normalizeBase64Input(value);
+
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalizedValue) || normalizedValue.length % 4 === 1) {
+    throw new Error("Please enter valid Base64 text.");
+  }
+
+  const paddedValue = normalizedValue.padEnd(normalizedValue.length + ((4 - (normalizedValue.length % 4)) % 4), "=");
+
+  let binary = "";
+  try {
+    binary = atob(paddedValue);
+  } catch {
+    throw new Error("Please enter valid Base64 text.");
+  }
+
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("Decoded Base64 bytes are not valid UTF-8 text.");
+  }
 }
 
 function inferFileFormat(file: File): ToolsFileFormat | "" {
