@@ -261,7 +261,7 @@ function initializeWallpaperEngine(): void {
   initializeWallpaperEngine();
 
   try {
-    const response = await fetch(`${getSitePrefix()}partials/header.html`, { cache: "no-store" });
+    const response = await fetch(`${getSitePrefix()}partials/header.html`);
     if (!response.ok) {
       throw new Error("Header partial request failed");
     }

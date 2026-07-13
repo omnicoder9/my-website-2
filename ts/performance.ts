@@ -11,6 +11,10 @@ type PerformanceHealthResponse = {
   uptime?: string;
 };
 
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+};
+
 type LayoutShiftLike = PerformanceEntry & {
   hadRecentInput?: boolean;
   value?: number;
@@ -222,7 +226,7 @@ function updateServerStatus(message: string, state: "live" | "static" | "down"):
 
 async function getData(): Promise<void> {
   try {
-    const response = await fetch("/api/health", { cache: "no-store" });
+    const response = await fetch("/api/health");
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -400,6 +404,17 @@ function scoreLowerIsBetter(value: number, goodThreshold: number, poorThreshold:
   return Math.round(100 - ratio * 65);
 }
 
+function scheduleIdleTask(task: () => void, timeout = 1500): void {
+  const idleWindow = window as IdleWindow;
+
+  if (typeof idleWindow.requestIdleCallback === "function") {
+    idleWindow.requestIdleCallback(task, { timeout });
+    return;
+  }
+
+  window.setTimeout(task, 200);
+}
+
 function startAnimationBudgetSample(): void {
   const sampleDuration = 3000;
   const budgetPerFrame = 16.7;
@@ -474,7 +489,7 @@ function startAnimationBudgetSample(): void {
   window.requestAnimationFrame(sampleFrame);
 }
 
-function populateVisitorInfo(): void {
+function populateLocalVisitorInfo(): void {
   const userAgent = navigator.userAgent || "";
   const requestedPage = window.location.href;
   const requestTime = new Date().toISOString();
@@ -497,8 +512,10 @@ function populateVisitorInfo(): void {
   setText("visitorRequestedPage", requestedPage);
   setText("visitorRequestTime", requestTime);
   setText("visitorProtocolInfo", protocolInfo);
+}
 
-  void fetch("https://ipapi.co/json/", { cache: "no-store" })
+function populateVisitorNetworkDetails(): void {
+  void fetch("https://ipapi.co/json/")
     .then((response) => {
       if (!response.ok) {
         throw new Error("IP lookup failed");
@@ -518,11 +535,7 @@ function populateVisitorInfo(): void {
 }
 
 function initializePerformanceDashboard(): void {
-  updateLoadMetrics();
-  updateAssetMetrics();
-  updateOverallSummary();
-  populateVisitorInfo();
-  void getData();
+  populateLocalVisitorInfo();
 
   const existingPaintEntries = performance.getEntriesByType("paint");
   setText("paintEntryCount", existingPaintEntries.length.toLocaleString());
@@ -611,20 +624,24 @@ function initializePerformanceDashboard(): void {
     updateOverallSummary();
   });
 
+  const finalizePerformanceDashboard = () => {
+    updateLoadMetrics();
+    updateAssetMetrics();
+    updateOverallSummary();
+
+    scheduleIdleTask(() => {
+      void getData();
+      populateVisitorNetworkDetails();
+      startAnimationBudgetSample();
+    });
+  };
+
   if (document.readyState === "complete") {
-    startAnimationBudgetSample();
-  } else {
-    window.addEventListener(
-      "load",
-      () => {
-        updateLoadMetrics();
-        updateAssetMetrics();
-        startAnimationBudgetSample();
-        updateOverallSummary();
-      },
-      { once: true }
-    );
+    finalizePerformanceDashboard();
+    return;
   }
+
+  window.addEventListener("load", finalizePerformanceDashboard, { once: true });
 }
 
 document.addEventListener("DOMContentLoaded", initializePerformanceDashboard);
