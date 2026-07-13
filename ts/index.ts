@@ -361,7 +361,7 @@ async function loadResourceDropdown(type: IndexResourceType): Promise<void> {
 
   try {
     const resourcePath = resourceFiles[type];
-    const response = await fetch(resourcePath, { cache: "no-store" });
+    const response = await fetch(resourcePath);
     if (!response.ok) {
       throw new Error(`Failed to load ${resourcePath}`);
     }
