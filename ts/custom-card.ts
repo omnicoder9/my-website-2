@@ -1,3 +1,16 @@
+const customCardLimits = {
+  description: 280,
+  title: 80
+} as const;
+
+function sanitizeCustomCardText(value: string, maxLength: number): string {
+  return value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
 class CustomCard extends HTMLElement {
   constructor() {
     super();
@@ -47,11 +60,12 @@ class CustomCard extends HTMLElement {
     const paragraph = shadowRoot.querySelector("p");
 
     if (heading) {
-      heading.textContent = this.getAttribute("title") || "Default Title";
+      heading.textContent = sanitizeCustomCardText(this.getAttribute("title") || "", customCardLimits.title) || "Default Title";
     }
 
     if (paragraph) {
-      paragraph.textContent = this.getAttribute("description") || "Default Description";
+      paragraph.textContent =
+        sanitizeCustomCardText(this.getAttribute("description") || "", customCardLimits.description) || "Default Description";
     }
   }
 }
@@ -86,14 +100,36 @@ function openPopup(): void {
       }
     </style>
     <div class="popup">
-      <label>Title: <input type="text" id="cardTitle"></label>
-      <label>Description: <input type="text" id="cardDescription"></label>
-      <button onclick="addCustomCard()">Add Card</button>
-      <button onclick="this.parentElement.remove()">Cancel</button>
+      <label>Title: <input type="text" id="cardTitle" maxlength="${customCardLimits.title}"></label>
+      <label>Description: <input type="text" id="cardDescription" maxlength="${customCardLimits.description}"></label>
+      <button type="button" id="confirmAddCardBtn">Add Card</button>
+      <button type="button" id="cancelAddCardBtn">Cancel</button>
     </div>
   `;
 
   document.body.appendChild(popup);
+
+  const titleInput = popup.querySelector<HTMLInputElement>("#cardTitle");
+  const descriptionInput = popup.querySelector<HTMLInputElement>("#cardDescription");
+  const confirmButton = popup.querySelector<HTMLButtonElement>("#confirmAddCardBtn");
+  const cancelButton = popup.querySelector<HTMLButtonElement>("#cancelAddCardBtn");
+
+  titleInput?.addEventListener("input", () => {
+    const sanitizedValue = sanitizeCustomCardText(titleInput.value, customCardLimits.title);
+    if (sanitizedValue !== titleInput.value) {
+      titleInput.value = sanitizedValue;
+    }
+  });
+  descriptionInput?.addEventListener("input", () => {
+    const sanitizedValue = sanitizeCustomCardText(descriptionInput.value, customCardLimits.description);
+    if (sanitizedValue !== descriptionInput.value) {
+      descriptionInput.value = sanitizedValue;
+    }
+  });
+  confirmButton?.addEventListener("click", addCustomCard);
+  cancelButton?.addEventListener("click", () => {
+    popup.remove();
+  });
 }
 
 function addCustomCard(): void {
@@ -107,8 +143,8 @@ function addCustomCard(): void {
   }
 
   const newCard = document.createElement("custom-card");
-  newCard.setAttribute("title", titleInput.value);
-  newCard.setAttribute("description", descriptionInput.value);
+  newCard.setAttribute("title", sanitizeCustomCardText(titleInput.value, customCardLimits.title));
+  newCard.setAttribute("description", sanitizeCustomCardText(descriptionInput.value, customCardLimits.description));
 
   container.appendChild(newCard);
   popup.remove();

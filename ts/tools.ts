@@ -66,7 +66,21 @@ type ToolsPasswordAnalysis = {
   findings: string[];
 };
 
+type ToolsSanitizedTextOptions = {
+  allowNewlines?: boolean;
+  maxLength: number;
+  trim?: boolean;
+};
+
 console.log("Tools");
+
+const toolsInputLimits = {
+  base64Text: 250_000,
+  fileName: 160,
+  fileSizeBytes: 10 * 1024 * 1024,
+  numericCharacters: 64,
+  passwordInspection: 512
+} as const;
 
 const massVolumeUnitConversions: Record<ToolsMassVolumeUnit, number> = {
   grams: 1,
@@ -453,6 +467,72 @@ const keyboardSequenceRows = [
   "1234567890"
 ];
 
+function sanitizeToolsText(value: string, options: ToolsSanitizedTextOptions): string {
+  const safeValue = typeof value === "string" ? value : "";
+  const newlineNormalized = safeValue.replace(/\r\n?/g, "\n");
+  const controlPattern = options.allowNewlines
+    ? /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g
+    : /[\u0000-\u001F\u007F]/g;
+  const withoutControls = newlineNormalized.replace(controlPattern, "");
+  const trimmedValue = options.trim === false ? withoutControls : withoutControls.trim();
+
+  return trimmedValue.slice(0, options.maxLength);
+}
+
+function sanitizeToolsSingleLineInput(value: string, maxLength: number): string {
+  return sanitizeToolsText(value, { maxLength }).replace(/\s+/g, " ");
+}
+
+function sanitizeToolsMultilineInput(value: string, maxLength: number): string {
+  return sanitizeToolsText(value, {
+    allowNewlines: true,
+    maxLength,
+    trim: false
+  });
+}
+
+function sanitizePasswordInspectionInput(value: string): string {
+  return sanitizeToolsMultilineInput(value, toolsInputLimits.passwordInspection).replace(/[\n\t]/g, " ");
+}
+
+function sanitizeBase64EditingInput(value: string): string {
+  return sanitizeToolsMultilineInput(value, toolsInputLimits.base64Text).replace(/[^A-Za-z0-9+/=_\-\s]/g, "");
+}
+
+function sanitizeDisplayFileName(value: string): string {
+  const sanitizedValue = sanitizeToolsSingleLineInput(value, toolsInputLimits.fileName)
+    .replace(/[<>:"/\\|?*]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^\.+|\.+$/g, "")
+    .trim();
+
+  return sanitizedValue || "uploaded-file";
+}
+
+function sanitizeDownloadBaseName(value: string): string {
+  const sanitizedValue = sanitizeDisplayFileName(value)
+    .replace(/\.[^.]+$/u, "")
+    .replace(/[^a-zA-Z0-9._ -]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^\.+|\.+$/g, "")
+    .replace(/^-+|-+$/g, "");
+
+  return sanitizedValue || "converted-file";
+}
+
+function validateSelectedFileForConversion(file: File | null): string {
+  if (!file) {
+    return "";
+  }
+
+  if (file.size > toolsInputLimits.fileSizeBytes) {
+    return `Files larger than ${formatBytes(toolsInputLimits.fileSizeBytes)} are not supported in this browser-side converter.`;
+  }
+
+  return "";
+}
+
 function initializeToolsPage(): void {
   initializeMassVolumeConverter();
   initializeRandomNumberGenerator();
@@ -483,8 +563,13 @@ function initializeMassVolumeConverter(): void {
   converterForm.addEventListener("submit", (event) => {
     event.preventDefault();
 
+    const sanitizedInputValue = sanitizeToolsSingleLineInput(inputValueElement.value, toolsInputLimits.numericCharacters);
+    if (sanitizedInputValue !== inputValueElement.value) {
+      inputValueElement.value = sanitizedInputValue;
+    }
+
     const inputType = inputTypeElement.value as ToolsMassVolumeUnit;
-    const inputValue = parseFloat(inputValueElement.value);
+    const inputValue = parseFloat(sanitizedInputValue);
     const outputType = outputTypeElement.value as ToolsMassVolumeUnit;
     const substanceDensity = parseFloat(substanceElement.value);
     const inputIsMass = isMassUnit(inputType);
@@ -528,8 +613,17 @@ function initializeRandomNumberGenerator(): void {
   }
 
   const generateRandomNumber = () => {
-    const min = Number(minInput.value);
-    const max = Number(maxInput.value);
+    const sanitizedMinValue = sanitizeToolsSingleLineInput(minInput.value, toolsInputLimits.numericCharacters);
+    const sanitizedMaxValue = sanitizeToolsSingleLineInput(maxInput.value, toolsInputLimits.numericCharacters);
+    if (sanitizedMinValue !== minInput.value) {
+      minInput.value = sanitizedMinValue;
+    }
+    if (sanitizedMaxValue !== maxInput.value) {
+      maxInput.value = sanitizedMaxValue;
+    }
+
+    const min = Number(sanitizedMinValue);
+    const max = Number(sanitizedMaxValue);
 
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
       resultElement.textContent = "Please enter valid numbers for both minimum and maximum values.";
@@ -701,10 +795,15 @@ function initializePasswordGenerator(): void {
     return;
   }
 
+  passwordStrengthInput.maxLength = toolsInputLimits.passwordInspection;
   generateButton.addEventListener("click", generatePassword);
   copyButton.addEventListener("click", copyPassword);
   passwordStrengthInput.addEventListener("input", () => {
-    updatePasswordStrength(passwordStrengthInput.value);
+    const sanitizedPassword = sanitizePasswordInspectionInput(passwordStrengthInput.value);
+    if (sanitizedPassword !== passwordStrengthInput.value) {
+      passwordStrengthInput.value = sanitizedPassword;
+    }
+    updatePasswordStrength(sanitizedPassword);
   });
 
   generatePassword();
@@ -740,6 +839,7 @@ function initializeFileConverter(): void {
 
   fileInput.addEventListener("change", () => {
     const selectedFile = fileInput.files?.[0] || null;
+    const selectedFileError = validateSelectedFileForConversion(selectedFile);
     const inferredFormat = selectedFile ? inferFileFormat(selectedFile) : "";
 
     sourceFormatSelect.value = inferredFormat || "";
@@ -750,10 +850,12 @@ function initializeFileConverter(): void {
 
     if (!selectedFile) {
       setConverterStatus(statusElement, "Choose a file to begin.", "idle");
+    } else if (selectedFileError) {
+      setConverterStatus(statusElement, selectedFileError, "error");
     } else if (sourceFormatSelect.value && isToolsFileFormat(sourceFormatSelect.value)) {
       setConverterStatus(
         statusElement,
-        `Detected ${fileFormatCatalog[sourceFormatSelect.value].label}. Choose an output format and convert.`,
+        `Detected ${fileFormatCatalog[sourceFormatSelect.value].label} for ${sanitizeDisplayFileName(selectedFile.name)}. Choose an output format and convert.`,
         "idle"
       );
     } else {
@@ -769,6 +871,7 @@ function initializeFileConverter(): void {
 
   sourceFormatSelect.addEventListener("change", () => {
     const selectedFile = fileInput.files?.[0] || null;
+    const selectedFileError = validateSelectedFileForConversion(selectedFile);
 
     updateTargetFormatOptions(sourceFormatSelect.value, targetFormatSelect, targetFormatSelect.value);
     updateFileMetadata(selectedFile, sourceFormatSelect.value, metadataElement);
@@ -776,10 +879,12 @@ function initializeFileConverter(): void {
 
     if (!selectedFile) {
       setConverterStatus(statusElement, "Choose a file to begin.", "idle");
+    } else if (selectedFileError) {
+      setConverterStatus(statusElement, selectedFileError, "error");
     } else if (sourceFormatSelect.value && isToolsFileFormat(sourceFormatSelect.value)) {
       setConverterStatus(
         statusElement,
-        `Ready to convert ${selectedFile.name} from ${fileFormatCatalog[sourceFormatSelect.value].shortLabel}.`,
+        `Ready to convert ${sanitizeDisplayFileName(selectedFile.name)} from ${fileFormatCatalog[sourceFormatSelect.value].shortLabel}.`,
         "idle"
       );
     } else {
@@ -796,11 +901,14 @@ function initializeFileConverter(): void {
   targetFormatSelect.addEventListener("change", () => {
     const selectedFile = fileInput.files?.[0] || null;
     const targetFormat = targetFormatSelect.value;
+    const selectedFileError = validateSelectedFileForConversion(selectedFile);
 
-    if (selectedFile && isToolsFileFormat(targetFormat)) {
+    if (selectedFileError) {
+      setConverterStatus(statusElement, selectedFileError, "error");
+    } else if (selectedFile && isToolsFileFormat(targetFormat)) {
       setConverterStatus(
         statusElement,
-        `Ready to convert ${selectedFile.name} to ${fileFormatCatalog[targetFormat].shortLabel}.`,
+        `Ready to convert ${sanitizeDisplayFileName(selectedFile.name)} to ${fileFormatCatalog[targetFormat].shortLabel}.`,
         "idle"
       );
     }
@@ -812,6 +920,7 @@ function initializeFileConverter(): void {
     const selectedFile = fileInput.files?.[0] || null;
     const sourceFormat = sourceFormatSelect.value;
     const targetFormat = targetFormatSelect.value;
+    const selectedFileError = validateSelectedFileForConversion(selectedFile);
 
     if (!selectedFile || !isToolsFileFormat(sourceFormat) || !isToolsFileFormat(targetFormat)) {
       setConverterStatus(statusElement, "Choose a file and both formats before converting.", "error");
@@ -819,13 +928,20 @@ function initializeFileConverter(): void {
       return;
     }
 
+    if (selectedFileError) {
+      setConverterStatus(statusElement, selectedFileError, "error");
+      updateFileConverterState(fileInput, sourceFormatSelect, targetFormatSelect, convertButton);
+      return;
+    }
+
     const downloadName = buildDownloadFilename(selectedFile.name, targetFormat);
+    const safeDisplayName = sanitizeDisplayFileName(selectedFile.name);
 
     convertButton.disabled = true;
     convertButton.textContent = "Converting...";
     setConverterStatus(
       statusElement,
-      `Converting ${selectedFile.name} to ${fileFormatCatalog[targetFormat].label}...`,
+      `Converting ${safeDisplayName} to ${fileFormatCatalog[targetFormat].label}...`,
       "working"
     );
 
@@ -872,7 +988,23 @@ function initializeBase64Tool(): void {
     return;
   }
 
+  plainTextArea.maxLength = toolsInputLimits.base64Text;
+  encodedTextArea.maxLength = toolsInputLimits.base64Text;
+
+  const sanitizeBase64Inputs = (): void => {
+    const sanitizedPlainText = sanitizeToolsMultilineInput(plainTextArea.value, toolsInputLimits.base64Text);
+    const sanitizedEncodedText = sanitizeBase64EditingInput(encodedTextArea.value);
+
+    if (sanitizedPlainText !== plainTextArea.value) {
+      plainTextArea.value = sanitizedPlainText;
+    }
+    if (sanitizedEncodedText !== encodedTextArea.value) {
+      encodedTextArea.value = sanitizedEncodedText;
+    }
+  };
+
   const refreshBase64Status = (): void => {
+    sanitizeBase64Inputs();
     const hasPlainText = plainTextArea.value.length > 0;
     const hasEncodedText = normalizeBase64Input(encodedTextArea.value).length > 0;
 
@@ -900,12 +1032,14 @@ function initializeBase64Tool(): void {
 
   const encodeBase64 = (): void => {
     try {
-      const encodedValue = encodeTextToBase64(plainTextArea.value);
+      const sanitizedPlainText = sanitizeToolsMultilineInput(plainTextArea.value, toolsInputLimits.base64Text);
+      plainTextArea.value = sanitizedPlainText;
+      const encodedValue = encodeTextToBase64(sanitizedPlainText);
       encodedTextArea.value = encodedValue;
       setConverterStatus(
         statusElement,
         encodedValue
-          ? `Encoded ${plainTextArea.value.length.toLocaleString()} text characters into ${encodedValue.length.toLocaleString()} Base64 characters.`
+          ? `Encoded ${sanitizedPlainText.length.toLocaleString()} text characters into ${encodedValue.length.toLocaleString()} Base64 characters.`
           : "Encoded an empty string.",
         "success"
       );
@@ -920,6 +1054,7 @@ function initializeBase64Tool(): void {
 
   const decodeBase64 = (): void => {
     try {
+      encodedTextArea.value = sanitizeBase64EditingInput(encodedTextArea.value);
       const decodedValue = decodeBase64ToText(encodedTextArea.value);
       plainTextArea.value = decodedValue;
       setConverterStatus(
@@ -942,8 +1077,8 @@ function initializeBase64Tool(): void {
   decodeButton.addEventListener("click", decodeBase64);
   swapButton.addEventListener("click", () => {
     const currentPlainText = plainTextArea.value;
-    plainTextArea.value = encodedTextArea.value;
-    encodedTextArea.value = currentPlainText;
+    plainTextArea.value = sanitizeToolsMultilineInput(encodedTextArea.value, toolsInputLimits.base64Text);
+    encodedTextArea.value = sanitizeBase64EditingInput(currentPlainText);
     refreshBase64Status();
   });
   clearButton.addEventListener("click", () => {
@@ -952,9 +1087,11 @@ function initializeBase64Tool(): void {
     refreshBase64Status();
   });
   copyTextButton.addEventListener("click", () => {
+    sanitizeBase64Inputs();
     void copyTextWithFeedback(plainTextArea.value, copyTextButton);
   });
   copyBase64Button.addEventListener("click", () => {
+    sanitizeBase64Inputs();
     void copyTextWithFeedback(encodedTextArea.value, copyBase64Button);
   });
   plainTextArea.addEventListener("input", refreshBase64Status);
@@ -1107,7 +1244,7 @@ function updateFileMetadata(file: File | null, sourceFormat: string, metadataEle
     ? fileFormatCatalog[normalizedSource].label
     : "Unknown format";
 
-  metadataElement.textContent = `${file.name} | ${formatBytes(file.size)} | ${detectedLabel}`;
+  metadataElement.textContent = `${sanitizeDisplayFileName(file.name)} | ${formatBytes(file.size)} | ${detectedLabel}`;
 }
 
 function updateFileConverterState(
@@ -1116,11 +1253,13 @@ function updateFileConverterState(
   targetSelect: HTMLSelectElement,
   convertButton: HTMLButtonElement
 ): void {
-  const hasFile = Boolean(fileInput.files?.[0]);
+  const selectedFile = fileInput.files?.[0] || null;
+  const hasFile = Boolean(selectedFile);
   const hasSource = Boolean(sourceSelect.value);
   const hasTarget = Boolean(targetSelect.value);
+  const hasValidationError = Boolean(validateSelectedFileForConversion(selectedFile));
 
-  convertButton.disabled = !(hasFile && hasSource && hasTarget);
+  convertButton.disabled = !(hasFile && hasSource && hasTarget) || hasValidationError;
 }
 
 function setConverterStatus(statusElement: HTMLElement, message: string, state: string): void {
@@ -1183,7 +1322,7 @@ function decodeBase64ToText(value: string): string {
 }
 
 function inferFileFormat(file: File): ToolsFileFormat | "" {
-  const fileName = file.name.toLowerCase();
+  const fileName = sanitizeDisplayFileName(file.name).toLowerCase();
   const extension = fileName.includes(".") ? fileName.split(".").pop() || "" : "";
   const normalizedExtension = normalizeFormat(extension);
 
@@ -1242,9 +1381,7 @@ function formatBytes(size: number): string {
 }
 
 function buildDownloadFilename(originalName: string, targetFormat: ToolsFileFormat): string {
-  const dotIndex = originalName.lastIndexOf(".");
-  const baseName = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
-  const safeBaseName = baseName || "converted-file";
+  const safeBaseName = sanitizeDownloadBaseName(originalName);
   return `${safeBaseName}.${targetFormat}`;
 }
 
@@ -1968,7 +2105,12 @@ function generatePassword(): void {
     return;
   }
 
-  const length = Math.max(8, Math.min(40, parseInt(lengthInput.value, 10) || 8));
+  const sanitizedLengthValue = sanitizeToolsSingleLineInput(lengthInput.value, toolsInputLimits.numericCharacters);
+  if (sanitizedLengthValue !== lengthInput.value) {
+    lengthInput.value = sanitizedLengthValue;
+  }
+
+  const length = Math.max(8, Math.min(40, parseInt(sanitizedLengthValue, 10) || 8));
   lengthInput.value = String(length);
 
   let chars = "abcdefghijklmnopqrstuvwxyz";
@@ -1988,8 +2130,8 @@ function generatePassword(): void {
   }
 
   passwordElement.textContent = password;
-  passwordStrengthInput.value = password;
-  updatePasswordStrength(password);
+  passwordStrengthInput.value = sanitizePasswordInspectionInput(password);
+  updatePasswordStrength(passwordStrengthInput.value);
 }
 
 function getSecureRandomIndex(maxExclusive: number): number {
@@ -2031,7 +2173,7 @@ function updatePasswordStrength(password: string): void {
     return;
   }
 
-  const analysis = analyzePasswordStrength(password);
+  const analysis = analyzePasswordStrength(sanitizePasswordInspectionInput(password));
 
   strengthContainer.dataset.score = analysis.score;
   labelElement.textContent = analysis.scoreLabel;

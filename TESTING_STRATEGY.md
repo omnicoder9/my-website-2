@@ -65,8 +65,9 @@ Purpose:
 
 Add a lightweight validation script to check:
 
-- every `blog-articles/*.html` file exists and is reachable from the blog manifest in `ts/blog.ts`
 - every blog manifest entry points to a real file
+- every article linked from `blog.html` is represented in the blog manifest in `ts/blog.ts`
+- legacy `blog-articles/*.html` files that are intentionally outside the current directory manifest are allowed, but should be flagged for cleanup as notes rather than hard CI failures
 - every standalone article page that should use the shared shell contains:
   - `body.blog-article-page`
   - `#site-header`
@@ -106,6 +107,10 @@ Checks:
 Recommended framework:
 
 - `vitest`
+
+Baseline implementation:
+
+- Node's built-in `node:test` runner is acceptable for the initial Phase 2 rollout when keeping dependencies minimal is a higher priority than framework features.
 
 Why:
 
@@ -369,7 +374,7 @@ Create scripts to flag:
 - duplicate blog titles
 - duplicate `publishedAt` formatting anomalies
 - missing article bylines/dates if required
-- article pages missing shared shell markers
+- article pages that opt into the shared shell but are missing required shell markers
 - suspiciously broken links in references or internal navigation
 - empty headings or malformed heading order
 

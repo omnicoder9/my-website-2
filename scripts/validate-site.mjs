@@ -57,6 +57,10 @@ function extractHtmlReferences(html, tagName, attributeName) {
   return [...html.matchAll(pattern)].map((match) => match[1]);
 }
 
+function uniqueValues(items) {
+  return [...new Set(items)];
+}
+
 function extractBlogManifestPosts() {
   const source = readFile("ts/blog.ts");
   const manifestMatch = source.match(/const blogPosts: BlogDirectoryPost\[] = \[(?<body>[\s\S]*?)\n\];/);
@@ -89,6 +93,23 @@ function extractBlogManifestPosts() {
   return posts;
 }
 
+function extractBlogHtmlArticleLinks() {
+  const blogHtml = readFile("blog.html");
+  return uniqueValues(
+    extractHtmlReferences(blogHtml, "a", "href").filter((reference) => reference.startsWith("blog-articles/"))
+  ).sort();
+}
+
+function articleUsesSharedShell(html) {
+  return (
+    /<body[^>]*class=["'][^"']*\bblog-article-page\b/.test(html) ||
+    /id=["']site-header["']/.test(html) ||
+    /<script[^>]+src=["']\.\.\/dist\/js\/header\.js["']/.test(html) ||
+    /<script[^>]+src=["']\.\.\/dist\/js\/site-core\.js["']/.test(html) ||
+    /<script[^>]+src=["']\.\.\/dist\/js\/theme\.js["']/.test(html)
+  );
+}
+
 function validateBlogManifest() {
   const posts = extractBlogManifestPosts();
   if (posts.length === 0) {
@@ -96,8 +117,10 @@ function validateBlogManifest() {
   }
 
   const articleFiles = walkHtml("blog-articles");
+  const linkedArticlePaths = extractBlogHtmlArticleLinks();
   const manifestPaths = posts.map((post) => post.path);
   const manifestPathSet = new Set(manifestPaths);
+  const linkedArticlePathSet = new Set(linkedArticlePaths);
   const manifestTitleSet = new Set();
 
   for (const post of posts) {
@@ -124,24 +147,41 @@ function validateBlogManifest() {
     addError(`Duplicate blog path in manifest: ${duplicatePath}`);
   }
 
-  for (const articleFile of articleFiles) {
-    if (!manifestPathSet.has(articleFile)) {
-      addError(`Blog article file is not represented in ts/blog.ts: ${articleFile}`);
+  for (const articlePath of linkedArticlePaths) {
+    if (!fileExists(articlePath)) {
+      addError(`blog.html links to a missing article file: ${articlePath}`);
+      continue;
+    }
+
+    if (!manifestPathSet.has(articlePath)) {
+      addError(`blog.html links to an article not represented in ts/blog.ts: ${articlePath}`);
     }
   }
 
-  const blogHtml = readFile("blog.html");
   for (const post of posts) {
-    if (!blogHtml.includes(`href="${post.path}"`)) {
+    if (!linkedArticlePathSet.has(post.path)) {
       addError(`blog.html is missing a static link to manifest article: ${post.path}`);
     }
   }
 
-  addNote(`Validated ${posts.length} manifest entries against ${articleFiles.length} blog article files.`);
+  const legacyStandaloneArticles = articleFiles.filter(
+    (articleFile) => !manifestPathSet.has(articleFile) && !linkedArticlePathSet.has(articleFile)
+  );
+  if (legacyStandaloneArticles.length > 0) {
+    addNote(
+      `Found ${legacyStandaloneArticles.length} legacy standalone article files outside the current blog directory manifest.`
+    );
+  }
+
+  addNote(
+    `Validated ${posts.length} manifest entries and ${linkedArticlePaths.length} blog.html article links.`
+  );
 }
 
 function validateSharedArticleShell() {
-  const articleFiles = walkHtml("blog-articles");
+  const articleFiles = walkHtml("blog-articles").filter((articleFile) => {
+    return articleUsesSharedShell(readFile(articleFile));
+  });
 
   for (const articleFile of articleFiles) {
     const html = readFile(articleFile);
@@ -160,7 +200,7 @@ function validateSharedArticleShell() {
     }
   }
 
-  addNote(`Validated shared shell markers on ${articleFiles.length} article pages.`);
+  addNote(`Validated shared shell markers on ${articleFiles.length} managed article pages.`);
 }
 
 function validateCompiledAssetReferences() {

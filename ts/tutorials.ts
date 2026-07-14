@@ -104,6 +104,13 @@ function escapeTutorialHtml(value: string): string {
   });
 }
 
+function normalizeTutorialSearchTerm(value: string): string {
+  return value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
 function getTutorialCategoryCount(category: TutorialCategory): number {
   return tutorials.filter((tutorial) => getTutorialCategories(tutorial).indexOf(category) !== -1).length;
 }
@@ -140,7 +147,7 @@ function renderTutorialDirectory(searchTerm: string, categoryValue: string): voi
     return;
   }
 
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const normalizedSearchTerm = normalizeTutorialSearchTerm(searchTerm).toLowerCase();
   const activeCategory = isTutorialCategory(categoryValue) ? categoryValue : "";
   const filteredTutorials = getSortedTutorials().filter((tutorial) => {
     const searchHaystack = [
@@ -200,7 +207,13 @@ function initializeTutorialDirectory(): void {
     renderTutorialCategoryOptions(categorySelect);
   }
 
+  searchInput.maxLength = 120;
+
   const updateTutorialDirectory = (): void => {
+    const normalizedValue = normalizeTutorialSearchTerm(searchInput.value);
+    if (normalizedValue !== searchInput.value) {
+      searchInput.value = normalizedValue;
+    }
     renderTutorialDirectory(searchInput.value, categorySelect ? categorySelect.value : "");
   };
 

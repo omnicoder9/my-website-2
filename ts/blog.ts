@@ -695,6 +695,12 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "The Matrix Fills Itself — A Field Guide to 2D Dynamic Programming"
   },
   {
+    path: "blog-articles/automotive-cybersecurity.html",
+    publishedAt: "2026-06-05",
+    summary: "A technical reference on automotive cybersecurity covering vehicle E/E architecture, CAN buses, ECUs, telematics, autonomous systems, firmware analysis, in-vehicle attacks, secure boot, and OTA update security.",
+    title: "Automotive Cybersecurity: A Field Reference for the Connected Car"
+  },
+  {
     path: "blog-articles/the-map-is-not-the-territory.html",
     publishedAt: "2026-06-03",
     summary: "A philosophical and security-minded essay on abstraction failure, threat models, formal systems, machine learning, and why engineered models never perfectly capture reality.",
@@ -1699,6 +1705,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
   "blog-articles/ai-cannot-compensate-for-natural-stupidity.html": ["AI & Machine Learning", "Philosophy", "Society & Civics"],
   "blog-articles/2d-dynamic-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/automotive-cybersecurity.html": ["Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
   "blog-articles/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
   "blog-articles/stacks-in-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
   "blog-articles/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
@@ -1971,6 +1978,13 @@ function escapeHtml(value: string): string {
   });
 }
 
+function normalizeBlogSearchTerm(value: string): string {
+  return value
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
 function getBlogCategoryPostCount(category: BlogCategory): number {
   return blogPosts.filter((post) => getBlogPostCategories(post).indexOf(category) !== -1).length;
 }
@@ -2007,7 +2021,7 @@ function renderBlogArticles(searchTerm: string, categoryValue: string): void {
     return;
   }
 
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const normalizedSearchTerm = normalizeBlogSearchTerm(searchTerm).toLowerCase();
   const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
   const filteredPosts = getSortedBlogPosts().filter((post) => {
     const searchHaystack = `${post.title} ${getFilenameLabel(post)}`.toLowerCase();
@@ -2056,7 +2070,13 @@ function initializeBlogDirectory(): void {
     renderBlogCategoryOptions(categorySelect);
   }
 
+  searchInput.maxLength = 120;
+
   const updateBlogDirectory = (): void => {
+    const normalizedValue = normalizeBlogSearchTerm(searchInput.value);
+    if (normalizedValue !== searchInput.value) {
+      searchInput.value = normalizedValue;
+    }
     renderBlogArticles(searchInput.value, categorySelect ? categorySelect.value : "");
   };
 
