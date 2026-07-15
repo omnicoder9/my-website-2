@@ -51,6 +51,16 @@ type BlogDirectoryPost = {
   title: string;
 };
 
+type PreparedBlogDirectoryPost = {
+  categories: BlogCategory[];
+  filenameLabel: string;
+  post: BlogDirectoryPost;
+  publishedLabel: string;
+  searchHaystack: string;
+};
+
+const BLOG_PAGE_SIZE = 24;
+
 const blogPosts: BlogDirectoryPost[] = [
   {
     path: "blog-articles/phase-0-planning-feasibility.html",
@@ -1986,7 +1996,7 @@ function normalizeBlogSearchTerm(value: string): string {
 }
 
 function getBlogCategoryPostCount(category: BlogCategory): number {
-  return blogPosts.filter((post) => getBlogPostCategories(post).indexOf(category) !== -1).length;
+  return blogCategoryPostCounts[category] || 0;
 }
 
 function renderBlogCategoryOptions(selectElement: HTMLSelectElement): void {
@@ -2000,8 +2010,7 @@ function renderBlogCategoryOptions(selectElement: HTMLSelectElement): void {
   selectElement.innerHTML = `<option value="">All categories</option>${categoryOptions}`;
 }
 
-function renderBlogCategoryChips(post: BlogDirectoryPost): string {
-  const categories = getBlogPostCategories(post);
+function renderBlogCategoryChips(categories: BlogCategory[]): string {
   if (categories.length === 0) {
     return "";
   }
@@ -2013,7 +2022,60 @@ function renderBlogCategoryChips(post: BlogDirectoryPost): string {
   return `<div class="blog-category-chips" aria-label="Categories">${chips}</div>`;
 }
 
-function renderBlogArticles(searchTerm: string, categoryValue: string): void {
+const sortedBlogPosts = getSortedBlogPosts();
+const preparedBlogPosts: PreparedBlogDirectoryPost[] = sortedBlogPosts.map((post) => {
+  const filenameLabel = getFilenameLabel(post);
+  const categories = getBlogPostCategories(post);
+
+  return {
+    categories,
+    filenameLabel,
+    post,
+    publishedLabel: getPublishedLabel(post),
+    searchHaystack: `${post.title} ${filenameLabel}`.toLowerCase()
+  };
+});
+const blogCategoryPostCounts = blogCategoryLabels.reduce((counts, category) => {
+  counts[category] = 0;
+  return counts;
+}, {} as Record<BlogCategory, number>);
+
+preparedBlogPosts.forEach((preparedPost) => {
+  preparedPost.categories.forEach((category) => {
+    blogCategoryPostCounts[category] += 1;
+  });
+});
+
+function getFilteredBlogPosts(searchTerm: string, categoryValue: string): PreparedBlogDirectoryPost[] {
+  const normalizedSearchTerm = normalizeBlogSearchTerm(searchTerm).toLowerCase();
+  const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
+
+  return preparedBlogPosts.filter((preparedPost) => {
+    const matchesSearch = preparedPost.searchHaystack.includes(normalizedSearchTerm);
+    const matchesCategory = activeCategory === "" || preparedPost.categories.indexOf(activeCategory) !== -1;
+    return matchesSearch && matchesCategory;
+  });
+}
+
+function renderBlogDirectoryActions(totalCount: number, visibleCount: number): string {
+  if (totalCount <= visibleCount) {
+    return "";
+  }
+
+  const remainingCount = totalCount - visibleCount;
+  const buttonLabel =
+    remainingCount > BLOG_PAGE_SIZE
+      ? `Load ${BLOG_PAGE_SIZE} more articles`
+      : `Load final ${remainingCount} article${remainingCount === 1 ? "" : "s"}`;
+
+  return `
+    <div class="blog-directory-actions">
+      <button id="blogLoadMoreButton" type="button" aria-controls="blog-articles">${buttonLabel}</button>
+    </div>
+  `;
+}
+
+function renderBlogArticles(searchTerm: string, categoryValue: string, visibleCount: number, onLoadMore: () => void): void {
   const target = document.getElementById("blog-articles");
   const statusElement = document.getElementById("blogResultsStatus");
 
@@ -2021,14 +2083,8 @@ function renderBlogArticles(searchTerm: string, categoryValue: string): void {
     return;
   }
 
-  const normalizedSearchTerm = normalizeBlogSearchTerm(searchTerm).toLowerCase();
   const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
-  const filteredPosts = getSortedBlogPosts().filter((post) => {
-    const searchHaystack = `${post.title} ${getFilenameLabel(post)}`.toLowerCase();
-    const matchesSearch = searchHaystack.includes(normalizedSearchTerm);
-    const matchesCategory = activeCategory === "" || getBlogPostCategories(post).indexOf(activeCategory) !== -1;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredPosts = getFilteredBlogPosts(searchTerm, categoryValue);
 
   if (filteredPosts.length === 0) {
     target.innerHTML = `
@@ -2041,22 +2097,35 @@ function renderBlogArticles(searchTerm: string, categoryValue: string): void {
     return;
   }
 
-  target.innerHTML = filteredPosts
+  const visiblePosts = filteredPosts.slice(0, visibleCount);
+
+  target.innerHTML =
+    visiblePosts
     .map((post) => {
+      const { categories, post: blogPost, publishedLabel } = post;
+
       return `
         <article class="privacy-section blog-directory-card">
-          <p class="blog-directory-card__date">${getPublishedLabel(post)}</p>
-          ${renderBlogCategoryChips(post)}
-          <h2><a href="${escapeHtml(post.path)}">${escapeHtml(post.title)}</a></h2>
-          <p>${escapeHtml(post.summary)}</p>
-          <a class="blog-directory-card__link" href="${escapeHtml(post.path)}">Read article</a>
+          <p class="blog-directory-card__date">${publishedLabel}</p>
+          ${renderBlogCategoryChips(categories)}
+          <h2><a href="${escapeHtml(blogPost.path)}">${escapeHtml(blogPost.title)}</a></h2>
+          <p>${escapeHtml(blogPost.summary)}</p>
+          <a class="blog-directory-card__link" href="${escapeHtml(blogPost.path)}">Read article</a>
         </article>
       `;
     })
-    .join("");
+    .join("") +
+    renderBlogDirectoryActions(filteredPosts.length, visiblePosts.length);
 
   const categoryStatus = activeCategory ? ` in ${activeCategory}` : "";
-  statusElement.textContent = `${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown${categoryStatus}. Sorted newest first.`;
+  statusElement.textContent =
+    `${visiblePosts.length} of ${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown${categoryStatus}. ` +
+    `Sorted newest first.`;
+
+  const loadMoreButton = document.getElementById("blogLoadMoreButton");
+  if (loadMoreButton instanceof HTMLButtonElement) {
+    loadMoreButton.addEventListener("click", onLoadMore, { once: true });
+  }
 }
 
 function initializeBlogDirectory(): void {
@@ -2071,23 +2140,33 @@ function initializeBlogDirectory(): void {
   }
 
   searchInput.maxLength = 120;
+  let visibleCount = BLOG_PAGE_SIZE;
 
-  const updateBlogDirectory = (): void => {
+  const renderCurrentBlogDirectory = (): void => {
     const normalizedValue = normalizeBlogSearchTerm(searchInput.value);
     if (normalizedValue !== searchInput.value) {
       searchInput.value = normalizedValue;
     }
-    renderBlogArticles(searchInput.value, categorySelect ? categorySelect.value : "");
+
+    renderBlogArticles(searchInput.value, categorySelect ? categorySelect.value : "", visibleCount, () => {
+      visibleCount += BLOG_PAGE_SIZE;
+      renderCurrentBlogDirectory();
+    });
   };
 
-  updateBlogDirectory();
+  const resetAndRenderBlogDirectory = (): void => {
+    visibleCount = BLOG_PAGE_SIZE;
+    renderCurrentBlogDirectory();
+  };
+
+  renderCurrentBlogDirectory();
   searchInput.addEventListener("input", () => {
-    updateBlogDirectory();
+    resetAndRenderBlogDirectory();
   });
 
   if (categorySelect) {
     categorySelect.addEventListener("change", () => {
-      updateBlogDirectory();
+      resetAndRenderBlogDirectory();
     });
   }
 }
