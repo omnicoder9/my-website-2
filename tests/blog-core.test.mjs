@@ -34,9 +34,9 @@ test("getBlogFilenameLabel extracts the final path segment", () => {
   assert.equal(getBlogFilenameLabel({ path: "blog-articles/python.html" }), "python.html");
 });
 
-test("normalizeBlogSearchTerm strips control characters and enforces the length cap", () => {
+test("normalizeBlogSearchTerm preserves spaces, strips control characters, and enforces the length cap", () => {
   const value = normalizeBlogSearchTerm(`  prod\u0000uction ${"x".repeat(200)}  `);
-  assert.equal(value.startsWith("prod uction"), true);
+  assert.equal(value.startsWith("  prod uction "), true);
   assert.equal(value.length, 120);
 });
 
@@ -48,5 +48,6 @@ test("blogMatchesSearch checks both titles and filenames", () => {
 
   assert.equal(blogMatchesSearch(post, "production"), true);
   assert.equal(blogMatchesSearch(post, "path-to-production"), true);
+  assert.equal(blogMatchesSearch(post, "  path to production  "), true);
   assert.equal(blogMatchesSearch(post, "container security"), false);
 });

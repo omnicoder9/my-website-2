@@ -244,3 +244,9 @@ If this gets built out, the highest-return ridiculous additions are probably:
   Google Fonts privacy FAQ (https://developers.google.com/fonts/faq/privacy), YouTube privacy-enhanced embeds
   (https://support.google.com/youtube/answer/171780), California CCPA overview (https://www.oag.ca.gov/privacy/ccpa).
   
+  blog page load time improvements
+
+  - Move blog metadata out of JS into generated HTML or a JSON manifest so the page can show content with less upfront script work.
+  - Inline the shared header instead of fetching partials/header.html on every page.
+  - Fingerprint js/css assets and switch from revalidation to long-lived immutable caching in server.go:112.
+  - If the common path is home -> blog, prefetch blog.html and blog.js on hover or when the blog link becomes visible.

@@ -43,12 +43,15 @@ export function getBlogFilenameLabel(post: Pick<BlogDirectoryPost, "path">): str
 export function normalizeBlogSearchTerm(value: string): string {
   return value
     .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .trim()
     .slice(0, 120);
 }
 
+function getNormalizedBlogSearchQuery(value: string): string {
+  return normalizeBlogSearchTerm(value).trim().toLowerCase();
+}
+
 export function blogMatchesSearch(post: Pick<BlogDirectoryPost, "title" | "path">, searchTerm: string): boolean {
-  const normalizedSearchTerm = normalizeBlogSearchTerm(searchTerm).toLowerCase();
+  const normalizedSearchTerm = getNormalizedBlogSearchQuery(searchTerm);
   if (!normalizedSearchTerm) {
     return true;
   }

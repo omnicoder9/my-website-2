@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Static Application Security Testing &mdash; A Technical Field Guide</title>
+<meta name="description" content="How SAST works: abstract syntax trees, control-flow graphs, data-flow and taint analysis, semantic vs pattern engines, tools, and best practice.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;750;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101319; --ink-2:#171b23; --paper:#f4f2ec; --paper-2:#efece4;
+  --text:#1b1e26; --muted:#6a6f7d; --faint:#9a9ea9;
+  --taint:#cf4426; --taint-d:#a5341d; --safe:#1f7a63; --safe-l:#2f9e7f;
+  --amber:#c98a1e; --violet:#6b5bd6;
+  --rule:#dcd7cc; --rule-2:#e8e4da; --ink-rule:rgba(255,255,255,.13);
+  --code-bg:#12151d; --code-text:#d7dae2; --code-dim:#7f8593;
+  --maxw:1080px; --measure:720px; --rail:56px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--text);
+  font-family:"Newsreader",Georgia,serif; font-optical-sizing:auto;
+  font-size:19px; line-height:1.62; font-weight:400;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:var(--taint); color:#fff}
+a{color:inherit}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px}
+
+/* ---- mono / display helpers ---- */
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.disp{font-family:"Archivo",system-ui,sans-serif}
+
+/* =========================================================== MASTHEAD */
+.mast{background:var(--ink); color:#eceef3; position:relative; overflow:hidden;
+  border-bottom:1px solid #05070b}
+.mast-grid{position:absolute; inset:0; opacity:.5; pointer-events:none}
+.mast .wrap{position:relative; z-index:2; padding-top:34px; padding-bottom:52px}
+.tag-row{display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  font-family:"JetBrains Mono",monospace; font-size:11.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:#8b93a6}
+.tag-row .dot{width:6px;height:6px;border-radius:50%;background:var(--taint);
+  box-shadow:0 0 0 4px rgba(207,68,38,.18)}
+.tag-row .sep{color:#3a4152}
+.mast h1{font-family:"Archivo",sans-serif; font-weight:800; color:#fff;
+  font-size:clamp(2.7rem,7.4vw,5.3rem); line-height:.96; letter-spacing:-.02em;
+  margin:30px 0 0; max-width:16ch}
+.mast h1 .em{color:var(--taint); font-style:normal}
+.mast .dek{font-family:"Newsreader",serif; font-weight:400; color:#c3c8d4;
+  font-size:clamp(1.12rem,2.3vw,1.42rem); line-height:1.5; margin:22px 0 0;
+  max-width:60ch}
+.mast .dek em{color:#eef0f5; font-style:italic}
+
+/* report-style meta bar */
+.meta{margin-top:36px; border-top:1px solid var(--ink-rule);
+  display:grid; grid-template-columns:repeat(4,1fr); gap:0}
+.meta .cell{padding:16px 20px 4px 0; border-right:1px solid var(--ink-rule)}
+.meta .cell:last-child{border-right:0}
+.meta .k{font-family:"JetBrains Mono",monospace; font-size:10.5px;
+  letter-spacing:.15em; text-transform:uppercase; color:#727a8d}
+.meta .v{font-family:"Archivo",sans-serif; font-weight:600; color:#e7eaf0;
+  font-size:.98rem; margin-top:7px; line-height:1.3}
+.meta .v small{display:block; color:#8b93a6; font-weight:400; font-size:.8rem;
+  font-family:"JetBrains Mono",monospace; margin-top:3px; letter-spacing:.02em}
+
+/* =========================================================== BODY LAYOUT */
+main{padding:8px 0 40px}
+.lead{max-width:var(--measure); margin:52px auto 0; font-size:1.16rem;
+  line-height:1.66; color:#2a2d36}
+.lead .drop::first-letter{
+  font-family:"Archivo",sans-serif; font-weight:800; float:left;
+  font-size:4.0em; line-height:.72; padding:8px 12px 0 0; color:var(--taint)}
+.lead p+p{margin-top:1.05em}
+
+section.sec{max-width:var(--measure); margin:0 auto; padding:60px 0 4px}
+section.sec.wide{max-width:var(--maxw)}
+.sec-head{margin:0 0 26px; position:relative}
+.sec-eyebrow{font-family:"JetBrains Mono",monospace; font-size:11.5px;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--taint);
+  display:flex; align-items:baseline; gap:12px}
+.sec-eyebrow .num{color:var(--faint)}
+.sec-eyebrow .bar{flex:1; height:1px; background:var(--rule);
+  transform:translateY(-3px)}
+h2.sec-title{font-family:"Archivo",sans-serif; font-weight:750; color:#14171d;
+  font-size:clamp(1.7rem,3.6vw,2.5rem); line-height:1.06; letter-spacing:-.015em;
+  margin:16px 0 0}
+.sec.wide .inner{max-width:var(--measure); margin:0 auto}
+
+h3.sub{font-family:"Archivo",sans-serif; font-weight:700; font-size:1.24rem;
+  letter-spacing:-.01em; color:#22262e; margin:2.1em 0 .5em; line-height:1.2}
+h4.subsub{font-family:"JetBrains Mono",monospace; font-weight:600; font-size:.82rem;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+  margin:1.7em 0 .5em}
+
+p{margin:0 0 1.05em}
+.sec p, .sec li{color:#232730}
+strong{font-weight:600; color:#14171d}
+em{font-style:italic}
+.sec a[href^="http"]{color:var(--taint-d); text-decoration:underline;
+  text-decoration-thickness:1px; text-underline-offset:2px;
+  text-decoration-color:rgba(165,52,29,.4)}
+.sec a[href^="http"]:hover{text-decoration-color:var(--taint-d)}
+
+ul,ol{margin:0 0 1.1em; padding-left:0}
+.sec ul{list-style:none}
+.sec ul>li{position:relative; padding-left:26px; margin:0 0 .62em}
+.sec ul>li::before{content:""; position:absolute; left:6px; top:.62em;
+  width:7px; height:7px; background:var(--paper); border:1.5px solid var(--taint);
+  transform:rotate(45deg)}
+.sec ol{counter-reset:li; list-style:none; padding-left:0}
+.sec ol>li{position:relative; padding-left:34px; margin:0 0 .62em}
+.sec ol>li::before{counter-increment:li; content:counter(li,decimal-leading-zero);
+  position:absolute; left:0; top:.06em; font-family:"JetBrains Mono",monospace;
+  font-size:.72em; font-weight:600; color:var(--taint); letter-spacing:.02em}
+
+/* citation superscripts */
+sup.cref{font-family:"JetBrains Mono",monospace; font-size:.62em; font-weight:600;
+  line-height:0; vertical-align:super; margin-left:1px}
+sup.cref a{color:var(--taint-d); text-decoration:none; padding:0 .5px}
+sup.cref a:hover{text-decoration:underline}
+
+/* pull / aside */
+.pull{border-left:3px solid var(--taint); padding:2px 0 2px 22px; margin:2em 0;
+  font-family:"Archivo",sans-serif; font-weight:500; font-size:1.28rem;
+  line-height:1.32; color:#1c2028; letter-spacing:-.01em}
+.aside{background:var(--paper-2); border:1px solid var(--rule);
+  border-radius:3px; padding:20px 22px; margin:2em 0; font-size:.96rem;
+  line-height:1.56}
+.aside .lbl{font-family:"JetBrains Mono",monospace; font-size:10.5px;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--taint);
+  display:block; margin-bottom:8px}
+.aside p:last-child{margin-bottom:0}
+
+/* inline code */
+code.ic{font-family:"JetBrains Mono",monospace; font-size:.84em;
+  background:var(--paper-2); border:1px solid var(--rule-2); border-radius:3px;
+  padding:.08em .36em; color:#3a2018; white-space:nowrap}
+.sec strong code.ic{color:#3a2018}
+
+/* =========================================================== CODE PANELS */
+.code{background:var(--code-bg); border-radius:6px; margin:1.9em 0;
+  overflow:hidden; border:1px solid #05070b;
+  box-shadow:0 1px 0 rgba(255,255,255,.4), 0 18px 40px -28px rgba(16,19,25,.6)}
+.code .bar{display:flex; align-items:center; gap:10px; padding:9px 15px;
+  background:#0b0e14; border-bottom:1px solid rgba(255,255,255,.06)}
+.code .bar .fn{font-family:"JetBrains Mono",monospace; font-size:11px;
+  color:#8b93a6; letter-spacing:.04em}
+.code .bar .lang{margin-left:auto; font-family:"JetBrains Mono",monospace;
+  font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:#5b6273; border:1px solid #262c38; border-radius:3px; padding:2px 7px}
+.code pre{margin:0; padding:17px 18px; overflow-x:auto;
+  font-family:"JetBrains Mono",monospace; font-size:13px; line-height:1.72;
+  color:var(--code-text); -webkit-font-smoothing:auto}
+.code pre .c{color:#69707f; font-style:italic}      /* comment */
+.code pre .k{color:#c98ce6}                          /* keyword */
+.code pre .s{color:#9ccf8a}                          /* string */
+.code pre .n{color:#e6b566}                          /* number/const */
+.code pre .f{color:#7cb8e8}                          /* function/attr */
+.code pre .t{color:var(--taint); font-weight:600}    /* tainted / danger */
+.code pre .g{color:var(--safe-l); font-weight:600}   /* sanitized / safe */
+.code pre .d{color:#7f8593}                          /* dim / punctuation */
+.code .cap{padding:9px 16px; background:#0b0e14; color:#6d7486;
+  font-family:"JetBrains Mono",monospace; font-size:10.5px; line-height:1.5;
+  border-top:1px solid rgba(255,255,255,.05)}
+
+/* =========================================================== FIGURES */
+figure.fig{margin:2.4em 0; background:#fff; border:1px solid var(--rule);
+  border-radius:6px; overflow:hidden}
+figure.fig svg{display:block; width:100%; height:auto; background:#fff}
+figure.fig figcaption{display:flex; gap:14px; align-items:baseline;
+  padding:13px 20px; border-top:1px solid var(--rule-2); background:var(--paper-2)}
+figcaption .fignum{font-family:"JetBrains Mono",monospace; font-size:10.5px;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--taint);
+  white-space:nowrap; font-weight:600; padding-top:2px}
+figcaption .figcap{font-family:"Newsreader",serif; font-size:.92rem;
+  line-height:1.48; color:#4b505c; font-style:italic}
+
+/* =========================================================== TABLE */
+.tbl-wrap{margin:2em 0; overflow-x:auto; border:1px solid var(--rule);
+  border-radius:6px}
+table.data{border-collapse:collapse; width:100%; font-size:.86rem;
+  font-family:"Newsreader",serif; background:#fff; min-width:640px}
+table.data thead th{background:var(--ink); color:#e7eaf0; text-align:left;
+  font-family:"Archivo",sans-serif; font-weight:600; font-size:.76rem;
+  letter-spacing:.02em; padding:12px 15px; border-bottom:2px solid #05070b}
+table.data td{padding:11px 15px; border-bottom:1px solid var(--rule-2);
+  vertical-align:top; color:#2a2e37; line-height:1.42}
+table.data tbody tr:nth-child(even){background:var(--paper-2)}
+table.data td .nm{font-family:"Archivo",sans-serif; font-weight:650;
+  color:#14171d}
+table.data td .mono{font-size:.82em; color:var(--muted)}
+.pill{display:inline-block; font-family:"JetBrains Mono",monospace;
+  font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:600;
+  padding:2px 6px; border-radius:3px; line-height:1.4}
+.pill.oss{background:rgba(31,122,99,.12); color:var(--safe); border:1px solid rgba(31,122,99,.3)}
+.pill.com{background:rgba(207,68,38,.1); color:var(--taint-d); border:1px solid rgba(207,68,38,.3)}
+.pill.mix{background:rgba(201,138,30,.13); color:#8a5f14; border:1px solid rgba(201,138,30,.35)}
+
+/* =========================================================== REFERENCES */
+.refs{background:var(--ink); color:#c3c8d4; margin-top:70px;
+  border-top:3px solid var(--taint)}
+.refs .wrap{padding:56px 28px 72px}
+.refs h2{font-family:"Archivo",sans-serif; font-weight:750; color:#fff;
+  font-size:1.9rem; margin:0 0 6px; letter-spacing:-.01em}
+.refs .rsub{font-family:"JetBrains Mono",monospace; font-size:11px;
+  letter-spacing:.14em; text-transform:uppercase; color:#727a8d; margin:0 0 34px}
+ol.reflist{counter-reset:r; list-style:none; padding:0; margin:0;
+  columns:2; column-gap:52px}
+@media(max-width:820px){ol.reflist{columns:1}}
+ol.reflist li{counter-increment:r; break-inside:avoid; position:relative;
+  padding-left:38px; margin:0 0 15px; font-family:"Newsreader",serif;
+  font-size:.83rem; line-height:1.5; color:#aeb4c2}
+ol.reflist li::before{content:"["counter(r)"]"; position:absolute; left:0; top:0;
+  font-family:"JetBrains Mono",monospace; font-size:.74rem; font-weight:600;
+  color:var(--taint); letter-spacing:-.02em}
+ol.reflist li a{color:#8b93a6; word-break:break-word;
+  text-decoration:underline; text-decoration-color:#3a4152; text-underline-offset:2px}
+ol.reflist li a:hover{color:#c3c8d4}
+ol.reflist li:target{color:#fff}
+ol.reflist li:target::before{color:#fff}
+
+/* colophon */
+.colophon{border-top:1px solid var(--ink-rule); margin-top:44px; padding-top:22px;
+  display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.06em;
+  color:#5b6273; text-transform:uppercase}
+
+/* legend chips reused in prose */
+.legend{display:flex; gap:18px; flex-wrap:wrap; margin:1.4em 0 .2em;
+  font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--muted)}
+.legend span{display:inline-flex; align-items:center; gap:7px}
+.legend i{width:11px;height:11px;border-radius:2px;display:inline-block}
+.legend i.t{background:var(--taint)} .legend i.g{background:var(--safe)}
+.legend i.n{background:var(--ink)} .legend i.m{background:var(--amber)}
+
+/* responsive */
+@media(max-width:720px){
+  body{font-size:17.5px}
+  .meta{grid-template-columns:repeat(2,1fr)}
+  .meta .cell{border-bottom:1px solid var(--ink-rule)}
+  .meta .cell:nth-child(2n){border-right:0}
+  ol.reflist{columns:1}
+  .lead{font-size:1.08rem}
+  .pull{font-size:1.12rem}
+}
+@media(max-width:460px){
+  .wrap{padding:0 18px}
+  .mast h1{font-size:2.35rem}
+}
+@media(prefers-reduced-motion:no-preference){
+  html{scroll-behavior:smooth}
+}
+
+figure.fig svg text{fill:#1b1e26}
+.t-node{font-family:"Archivo",sans-serif;font-weight:700;font-size:15px;fill:#14171d}
+.t-nodesm{font-family:"Archivo",sans-serif;font-weight:650;font-size:12.5px;fill:#14171d}
+.t-lab{font-family:"JetBrains Mono",monospace;font-size:11px;fill:#6a6f7d}
+.t-labu{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#8a8f9b;letter-spacing:.1em}
+.t-code{font-family:"JetBrains Mono",monospace;font-size:12.5px;fill:#d7dae2}
+.t-codek{font-family:"JetBrains Mono",monospace;font-size:12.5px;fill:#c98ce6}
+.t-yr{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:13px;fill:#cf4426}
+.t-h{font-family:"Archivo",sans-serif;font-weight:750;font-size:13px;fill:#14171d}
+.t-h2{font-family:"Archivo",sans-serif;font-weight:750;font-size:16px;fill:#14171d}
+.t-sm{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#9a9ea9}
+.t-white{fill:#eceef3}.t-dim{fill:#8b93a6}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <svg class="mast-grid" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" viewBox="0 0 1200 500"><defs><pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="rgba(255,255,255,.045)" stroke-width="1"/></pattern></defs><rect width="1200" height="500" fill="url(#g)"/><line x1="0" y1="0" x2="1200" y2="500" stroke="rgba(207,68,38,.06)" stroke-width="60"/></svg>
+  <div class="wrap">
+    <div class="tag-row">
+      <span class="dot"></span><span>Static Application Security Testing</span>
+      <span class="sep">/</span><span>Program analysis</span>
+      <span class="sep">/</span><span>Application security</span>
+      <span class="sep">/</span><span>A technical field guide</span>
+    </div>
+    <h1>Finding bugs<br>without running<br>the <span class="em">code</span>.</h1>
+    <p class="dek">How static analyzers parse a program into trees and graphs, trace tainted data from source to sink, and prove things about software they never execute &mdash; <em>and why a theorem from 1953 guarantees they can never be perfectly right.</em></p>
+    <div class="meta"><div class="cell"><div class="k">Method</div><div class="v">Static analysis<small>white-box, no execution</small></div></div><div class="cell"><div class="k">Reads</div><div class="v">Source / bytecode / binary<small>the program as an artifact</small></div></div><div class="cell"><div class="k">Core technique</div><div class="v">Taint over data-flow<small>sources &rarr; sinks &middot; CWE / OWASP</small></div></div><div class="cell"><div class="k">Output</div><div class="v">Findings, e.g. SARIF<small>line + path + remediation</small></div></div></div>
+  </div>
+</header>
+<main>
+<div class="wrap">
+
+<div class="lead">
+  <p class="drop"><strong>Static Application Security Testing</strong> is the discipline of finding security defects in a program by reading it rather than running it. A SAST tool ingests source code, bytecode, or a compiled binary; builds a mathematical model of what the program can do; and reasons over that model to prove that certain bad things &mdash; an unsanitised database query, a hard-coded key, a buffer that can overflow &mdash; are reachable. It never launches the application, never sends it a request, and needs no test harness. In the vocabulary of software assurance it is a <em>white-box</em> technique: it sees the whole implementation, not just the outward behaviour.</p>
+  <p>That single property &mdash; analysis without execution &mdash; is the source of both SAST's greatest strength and its deepest limitation. It lets a scanner examine every branch of a program, including the error paths and privileged code that a running test would rarely hit, and it lets that examination happen the instant a developer types, long before anything is deployed. It also means the tool must <em>reason about</em> behaviour it can never observe, and a fifty-year-old theorem guarantees that such reasoning can never be exactly right. Everything interesting about how SAST works &mdash; the abstract syntax trees, the control-flow graphs, the lattices and the taint propagation &mdash; is machinery for making a fundamentally undecidable problem tractable enough to be useful.</p>
+  <p>This article traces that machinery from the inside out: the theory that makes it possible and bounds what it can do, the internal representations a scanner builds, the algorithms that run over them, the difference between matching patterns and understanding semantics, and the messy engineering realities &mdash; false positives, pipeline placement, tool selection &mdash; that decide whether any of it earns a place in a real development team.</p>
+</div>
+
+
+<section class="sec wide" id="s-what">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">01</span><span>Definition &amp; scope</span><span class="bar"></span></div>
+    <h2 class="sec-title">Reading code to find the flaws before an attacker does</h2>
+  </div>
+  <div class="inner">
+    <p>The formal definitions converge. The OWASP Foundation describes source-code analysis tools &mdash; its preferred umbrella for SAST &mdash; as tools that analyse source code or compiled versions of code to help find security flaws, and notes they can be embedded directly in a developer's editor.<sup class="cref"><a href="#ref-owaspsca" id="cite-owaspsca-1">1</a></sup> Practitioner literature adds the operational detail: SAST is a highly automated method that inspects source, bytecode, or binary during the early stages of the software development lifecycle, identifying injection flaws, cross-site scripting, insecure data handling, and the other weaknesses catalogued in industry standards such as the OWASP Top 10 and the MITRE Common Weakness Enumeration.<sup class="cref"><a href="#ref-owasptop10">2</a>,<a href="#ref-cwe">3</a></sup> The essential move is always the same: the code is treated as a static artifact to be parsed and reasoned over, not as a process to be exercised.</p>
+    <p>It helps to fix SAST's place in the wider family of application-security testing, because the categories are routinely confused. Four techniques dominate:</p>
+    <ul>
+      <li><strong>SAST (static)</strong> reads the code at rest. White-box, no execution, earliest possible feedback, and &mdash; crucially &mdash; it points at the exact line and the exact data-flow path that produced a finding, which is why it is prized for pinpointing the <em>root cause</em> of a defect rather than just its symptom.</li>
+      <li><strong>DAST (dynamic)</strong> attacks a <em>running</em> application from the outside, black-box, sending crafted inputs and observing responses. It sees real runtime behaviour and configuration but cannot say which line is at fault, and it can only test paths it manages to reach.</li>
+      <li><strong>IAST (interactive)</strong> instruments a running application from the inside, combining code visibility with live execution; it is essentially a hybrid that trades SAST's zero-setup for DAST's runtime fidelity.</li>
+      <li><strong>SCA (software composition analysis)</strong> ignores your own code and instead inventories third-party dependencies, matching them against databases of known vulnerable versions. It answers a different question &mdash; not &ldquo;did we write a bug?&rdquo; but &ldquo;did we import one?&rdquo;</li>
+    </ul>
+    <p>These are complements, not competitors. A mature program runs all four, and modern platforms increasingly bundle them. But SAST is the one that lives closest to the keyboard, and it is the only one that can find a vulnerability in code that has never been built or run even once.</p>
+    <p class="pull">The defining constraint of SAST is not that it looks at source code. It is that it must understand behaviour without ever observing it.</p>
+    <p>Because it operates on the implementation itself, SAST is also the technique most tightly coupled to a specific programming language. A DAST scanner speaks HTTP and is largely language-agnostic; a SAST engine must have a parser, a type model, and a library of security rules for every language and framework it supports. This is why tool coverage is described in languages &mdash; a scanner that is excellent for Java may be useless for Rust &mdash; and why the internal representations described in the next sections are built afresh for each language a tool understands.</p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-history">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">02</span><span>Origins</span><span class="bar"></span></div>
+    <h2 class="sec-title">From lint traps to taint graphs</h2>
+  </div>
+  <div class="inner">
+    <p>The lineage of SAST runs through two parallel streams that only converged in the 2000s: a stream of practical bug-finding tools, and a stream of program-analysis theory. Understanding SAST means understanding both, because every modern scanner is a theoretical idea wearing an engineer's clothes.</p>
+    <h3 class="sub">The first tool: Lint, 1978</h3>
+    <p>The practical stream begins at Bell Labs. In 1978, while wrestling with portability bugs that surfaced as Unix was ported to a 32-bit machine, Stephen C. Johnson wrote a program to catch the mistakes that C compilers of the day sailed straight past &mdash; type mismatches across function boundaries, non-portable constructs, unused variables.<sup class="cref"><a href="#ref-johnson1978" id="cite-johnson1978-4">4</a></sup> He called it <em>lint</em>, after the fluff a clothes-dryer trap captures while leaving whole fabric intact, and it shipped to the world in 1979 with Version 7 Unix.<sup class="cref"><a href="#ref-lintwiki" id="cite-lintwiki-5">5</a></sup> Lint established the template that every SAST tool still follows: a separate pass over source code that flags suspicious constructs a compiler will happily accept. The whole modern category of &ldquo;linters&rdquo; carries its name.</p>
+    <h3 class="sub">The theory: data-flow analysis and abstract interpretation</h3>
+    <p>The theoretical stream began five years earlier and reached deeper. In 1973 Gary Kildall unified the ad-hoc optimisations compilers were doing into a single framework, showing that a large class of program analyses could be expressed as the propagation of facts over a lattice until a fixpoint is reached.<sup class="cref"><a href="#ref-kildall1973" id="cite-kildall1973-6">6</a></sup> Frances Allen had already given compilers the control-flow graph as their organising structure.<sup class="cref"><a href="#ref-allen1970" id="cite-allen1970-7">7</a></sup> John Kam and Jeffrey Ullman generalised Kildall's conditions to the broader class of <em>monotone</em> frameworks that practical analyses actually satisfy.<sup class="cref"><a href="#ref-kam1977" id="cite-kam1977-8">8</a></sup> Then, in 1977, Patrick and Radhia Cousot delivered the field's crowning abstraction: <em>abstract interpretation</em>, a theory of sound approximation in which a program's real semantics are systematically replaced by a simpler abstract semantics over a lattice, so that finite computation can safely over-approximate infinite behaviour.<sup class="cref"><a href="#ref-cousot1977" id="cite-cousot1977-9">9</a></sup> This is the mathematics underneath essentially every serious static analyzer built since. The standard treatment of the whole apparatus &mdash; lattices, transfer functions, fixpoints, Galois connections &mdash; is Nielson, Nielson and Hankin's <em>Principles of Program Analysis</em>.<sup class="cref"><a href="#ref-nielson1999" id="cite-nielson1999-10">10</a></sup></p>
+  </div>
+  <figure class="fig" id="fig-history">
+<svg viewBox="0 0 1080 430" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="430" fill="#fff"/>
+<line x1="70" y1="250" x2="1010" y2="250" stroke="#dcd7cc" stroke-width="2"/>
+<circle cx="90" cy="250" r="6" fill="#6b5bd6"/>
+<circle cx="90" cy="250" r="11" fill="none" stroke="#6b5bd6" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="90" y1="239" x2="90" y2="220" stroke="#6b5bd6" stroke-width="1.4"/>
+<text x="90" y="162" text-anchor="middle" class="t-yr" fill="#6b5bd6">1970</text>
+<text x="90" y="180" text-anchor="middle" class="t-lab">Allen: control</text>
+<text x="90" y="194" text-anchor="middle" class="t-lab">flow analysis</text>
+<circle cx="202" cy="250" r="6" fill="#6b5bd6"/>
+<circle cx="202" cy="250" r="11" fill="none" stroke="#6b5bd6" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="202" y1="261" x2="202" y2="268" stroke="#6b5bd6" stroke-width="1.4"/>
+<text x="202" y="294" text-anchor="middle" class="t-yr" fill="#6b5bd6">1973</text>
+<text x="202" y="312" text-anchor="middle" class="t-lab">Kildall: data-flow</text>
+<text x="202" y="326" text-anchor="middle" class="t-lab">& lattices</text>
+<circle cx="315" cy="250" r="6" fill="#6b5bd6"/>
+<circle cx="315" cy="250" r="11" fill="none" stroke="#6b5bd6" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="315" y1="239" x2="315" y2="220" stroke="#6b5bd6" stroke-width="1.4"/>
+<text x="315" y="162" text-anchor="middle" class="t-yr" fill="#6b5bd6">1977</text>
+<text x="315" y="180" text-anchor="middle" class="t-lab">Cousot: abstract</text>
+<text x="315" y="194" text-anchor="middle" class="t-lab">interpretation</text>
+<circle cx="428" cy="250" r="6" fill="#cf4426"/>
+<circle cx="428" cy="250" r="11" fill="none" stroke="#cf4426" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="428" y1="261" x2="428" y2="268" stroke="#cf4426" stroke-width="1.4"/>
+<text x="428" y="294" text-anchor="middle" class="t-yr" fill="#cf4426">1978</text>
+<text x="428" y="312" text-anchor="middle" class="t-lab">Lint</text>
+<text x="428" y="326" text-anchor="middle" class="t-lab">(Bell Labs)</text>
+<circle cx="540" cy="250" r="6" fill="#6b5bd6"/>
+<circle cx="540" cy="250" r="11" fill="none" stroke="#6b5bd6" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="540" y1="239" x2="540" y2="220" stroke="#6b5bd6" stroke-width="1.4"/>
+<text x="540" y="162" text-anchor="middle" class="t-yr" fill="#6b5bd6">1995</text>
+<text x="540" y="180" text-anchor="middle" class="t-lab">IFDS graph</text>
+<text x="540" y="194" text-anchor="middle" class="t-lab">reachability</text>
+<circle cx="652" cy="250" r="6" fill="#cf4426"/>
+<circle cx="652" cy="250" r="11" fill="none" stroke="#cf4426" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="652" y1="261" x2="652" y2="268" stroke="#cf4426" stroke-width="1.4"/>
+<text x="652" y="294" text-anchor="middle" class="t-yr" fill="#cf4426">2000</text>
+<text x="652" y="312" text-anchor="middle" class="t-lab">Coverity /</text>
+<text x="652" y="326" text-anchor="middle" class="t-lab">meta-compilation</text>
+<circle cx="765" cy="250" r="6" fill="#cf4426"/>
+<circle cx="765" cy="250" r="11" fill="none" stroke="#cf4426" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="765" y1="239" x2="765" y2="220" stroke="#cf4426" stroke-width="1.4"/>
+<text x="765" y="162" text-anchor="middle" class="t-yr" fill="#cf4426">2006</text>
+<text x="765" y="180" text-anchor="middle" class="t-lab">FindBugs; Semmle</text>
+<text x="765" y="194" text-anchor="middle" class="t-lab">CodeQuest</text>
+<circle cx="866" cy="250" r="6" fill="#cf4426"/>
+<circle cx="866" cy="250" r="11" fill="none" stroke="#cf4426" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="866" y1="261" x2="866" y2="268" stroke="#cf4426" stroke-width="1.4"/>
+<text x="866" y="294" text-anchor="middle" class="t-yr" fill="#cf4426">2014</text>
+<text x="866" y="312" text-anchor="middle" class="t-lab">Fortify/Checkmarx</text>
+<text x="866" y="326" text-anchor="middle" class="t-lab">enterprise era</text>
+<circle cx="990" cy="250" r="6" fill="#cf4426"/>
+<circle cx="990" cy="250" r="11" fill="none" stroke="#cf4426" stroke-opacity=".3" stroke-width="1.5"/>
+<line x1="990" y1="239" x2="990" y2="220" stroke="#cf4426" stroke-width="1.4"/>
+<text x="990" y="162" text-anchor="middle" class="t-yr" fill="#cf4426">2019</text>
+<text x="990" y="180" text-anchor="middle" class="t-lab">Semgrep; CodeQL</text>
+<text x="990" y="194" text-anchor="middle" class="t-lab">goes free</text>
+<text x="70" y="34" class="t-labu">FOUNDATIONAL THEORY &amp; FIRST TOOLS</text>
+<text x="1010" y="34" text-anchor="end" class="t-labu">COMMERCIAL &amp; DEVELOPER-FIRST ERA</text>
+<g transform="translate(70,400)"><circle cx="6" cy="-4" r="5" fill="#6b5bd6"/><text x="18" y="0" class="t-lab">theory / algorithms</text><circle cx="176" cy="-4" r="5" fill="#cf4426"/><text x="188" y="0" class="t-lab">tools / systems</text></g>
+</svg>
+<figcaption><span class="fignum">Figure 1</span><span class="figcap">Five decades of ideas behind SAST. The lattice-theoretic data-flow analysis of Kildall and the abstract interpretation of the Cousots supplied the mathematics; Lint, meta-compilation, FindBugs, CodeQL and Semgrep turned it into practice.</span></figcaption>
+</figure>
+  <div class="inner">
+    <h3 class="sub">Meta-compilation and the rise of commercial bug-finding</h3>
+    <p>The streams merged around the turn of the millennium at Stanford. Dawson Engler's group argued that developers, not tool vendors, knew the rules their systems had to obey, and built a mechanism &mdash; <em>meta-level compilation</em> &mdash; that let programmers write small, system-specific checkers as compiler extensions.<sup class="cref"><a href="#ref-engler2000" id="cite-engler2000-11">11</a></sup> A companion insight, &ldquo;bugs as deviant behaviour,&rdquo; showed that a tool could <em>infer</em> likely rules statistically: if code calls <code class="ic">lock</code> before touching a structure ninety-nine times and forgets once, the once is probably a bug.<sup class="cref"><a href="#ref-engler2001" id="cite-engler2001-12">12</a></sup> They followed with a dedicated analysis language and engine,<sup class="cref"><a href="#ref-hallem2002" id="cite-hallem2002-13">13</a></sup> and in 2002 spun the work out as <strong>Coverity</strong>. Their retrospective on running that analyzer against tens of millions of lines of real-world code &mdash; the frank, funny <em>A Few Billion Lines of Code Later</em> &mdash; remains the best account of what actually happens when static analysis meets industrial software.<sup class="cref"><a href="#ref-bessey2010" id="cite-bessey2010-14">14</a></sup></p>
+    <p>The same years produced the commercial SAST market. <strong>Fortify Software</strong> was founded in 2003 in San Mateo and built the source-level, interprocedural taint engine that many enterprises still run; it passed to Hewlett-Packard in 2010, then Micro Focus, then OpenText.<sup class="cref"><a href="#ref-fortifywiki" id="cite-fortifywiki-15">15</a></sup> <strong>Checkmarx</strong> (2006) and <strong>Veracode</strong> (2006) rounded out the enterprise field; Veracode, founded by former L0pht and @stake researchers Chris Wysopal and Christien Rioux, took the unusual path of analysing compiled binaries rather than source.<sup class="cref"><a href="#ref-veracodewiki" id="cite-veracodewiki-16">16</a></sup> On the academic-tool side, Bill Pugh's group at the University of Maryland released <strong>FindBugs</strong>, whose &ldquo;finding bugs is easy&rdquo; thesis &mdash; that cheap bytecode pattern-matching catches a surprising number of real defects &mdash; put static analysis in the hands of ordinary Java developers.<sup class="cref"><a href="#ref-hovemeyer2004">17</a>,<a href="#ref-ayewah2008">18</a></sup> Brian Chess and Gary McGraw's <em>Static analysis for security</em> and McGraw's <em>building security in</em> movement reframed all of this explicitly around security rather than mere correctness.<sup class="cref"><a href="#ref-chess2004">19</a>,<a href="#ref-mcgraw2006">20</a></sup></p>
+    <h3 class="sub">Code as data, and the developer-first turn</h3>
+    <p>Two later ideas define the current era. The first is treating code as a <em>database</em>. Oxford research on querying source with Datalog &mdash; the CodeQuest system &mdash; became <strong>Semmle</strong> and its query language QL; GitHub acquired Semmle in 2019, made the engine's queries free for open source, and rebranded it <strong>CodeQL</strong>, which now compiles a program into a relational representation of its syntax, control flow, and data flow that analysts query for vulnerable patterns.<sup class="cref"><a href="#ref-codequest2006">21</a>,<a href="#ref-semmlewiki">22</a>,<a href="#ref-aboutcodeql">23</a></sup> The second is the developer-first, lightweight turn embodied by <strong>Semgrep</strong>: descended from a Facebook tool called sgrep (part of the pfff library, itself inspired by the Coccinelle program-transformation engine), it was reborn at the startup r2c around 2020 as a scanner whose rules look like the code they match, deliberately trading some depth for speed and approachability.<sup class="cref"><a href="#ref-semgrepgh">24</a>,<a href="#ref-semgrepwiki">25</a></sup> Between the queryable database and the grep-like rule, these two tools bracket the design space that the rest of this article dissects.</p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-theory">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">03</span><span>The bedrock</span><span class="bar"></span></div>
+    <h2 class="sec-title">Why perfect static analysis is impossible &mdash; and useful anyway</h2>
+  </div>
+  <div class="inner">
+    <p>Before any AST or algorithm, one result governs the entire field. In 1953 H. G. Rice proved that <em>every non-trivial semantic property of a program is undecidable</em>.<sup class="cref"><a href="#ref-rice1953" id="cite-rice1953-26">26</a></sup> A semantic property is one about behaviour &mdash; &ldquo;does this program ever dereference a null pointer?&rdquo;, &ldquo;can attacker input reach this query?&rdquo; &mdash; as opposed to a syntactic one like &ldquo;does the source contain the word <code class="ic">eval</code>?&rdquo;. Non-trivial means it holds for some programs and not others. The presence of a security vulnerability is the canonical example of exactly such a property. Rice's theorem, a generalisation of Turing's undecidability of the halting problem,<sup class="cref"><a href="#ref-turing1937" id="cite-turing1937-27">27</a></sup> therefore delivers an uncomfortable verdict: <strong>there is no algorithm that, for every program, always terminates and correctly answers whether it contains a given class of vulnerability.</strong></p>
+    <p>If that were the end of the story, SAST could not exist. The escape hatch is to abandon the demand for a correct yes/no answer on every input and accept a one-sided error instead. An analysis can be built to always answer &ldquo;safe&rdquo; only when it is genuinely certain, and to answer &ldquo;possibly vulnerable&rdquo; whenever it cannot rule the danger out. Such an analysis is <em>sound</em> for the property: it never misses a real instance, at the price of sometimes flagging things that are actually fine. The formal engine for constructing such analyses in a principled way is precisely the Cousots' abstract interpretation &mdash; deliberately over-approximating the set of states a program can reach so that finite computation stays on the safe side of the truth.<sup class="cref"><a href="#ref-cousot1977" id="cite-cousot1977-9">9</a></sup></p>
+    <h3 class="sub">Soundness, completeness, and the two kinds of lie</h3>
+    <p>Two failure modes bound every tool, and the vocabulary matters:</p>
+    <ul>
+      <li>A <strong>false positive</strong> is a finding the tool reports that is not a real defect. Too many, and developers stop reading the output. The academic term for a tool that produces none is <em>complete</em>.</li>
+      <li>A <strong>false negative</strong> is a real defect the tool fails to report. Too many, and the tool provides false confidence. A tool that produces none is <em>sound</em>.</li>
+    </ul>
+    <p>Rice's theorem says no tool can be both sound and complete on a Turing-complete language. Worse, recent work sharpens the geometry of the trade-off: any decidable over-approximation of a non-trivial property necessarily admits an <em>infinite</em> set of false positives. Perfect recall and perfect precision are not merely hard to hit simultaneously; the second is mathematically forbidden once you insist on the first.</p>
+  </div>
+  <figure class="fig" id="fig-soundcomplete">
+<svg viewBox="0 0 1080 430" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="430" fill="#fff"/>
+<text x="40" y="34" class="t-labu">SOUNDNESS vs COMPLETENESS &middot; NO TOOL ACHIEVES BOTH ON A TURING-COMPLETE LANGUAGE</text>
+<line x1="40" y1="46" x2="1040" y2="46" stroke="#e8e4da"/>
+<rect x="360" y="80" width="420" height="300" fill="#fff" stroke="#dcd7cc" stroke-width="1.5"/>
+<line x1="570.0" y1="80" x2="570.0" y2="380" stroke="#dcd7cc"/>
+<line x1="360" y1="230.0" x2="780" y2="230.0" stroke="#dcd7cc"/>
+<text x="570.0" y="414" text-anchor="middle" class="t-h">COMPLETE  &rarr;  (no false positives)</text>
+<text x="336" y="230.0" text-anchor="middle" class="t-h" transform="rotate(-90 336 230.0)">SOUND  &rarr;  (no false negatives)</text>
+<text x="465.0" y="141.0" text-anchor="middle" class="t-h2" fill="#cf4426">Sound &amp;</text>
+<text x="465.0" y="158.0" text-anchor="middle" class="t-h2" fill="#cf4426">incomplete</text>
+<text x="465.0" y="187.0" text-anchor="middle" class="t-lab">flags all real bugs,</text>
+<text x="465.0" y="201.0" text-anchor="middle" class="t-lab">plus false alarms</text>
+<text x="465.0" y="223.0" text-anchor="middle" class="t-sm" fill="#cf4426">verification, safety-critical</text>
+<text x="675.0" y="141.0" text-anchor="middle" class="t-h2" fill="#c98a1e">The dream</text>
+<text x="675.0" y="175.0" text-anchor="middle" class="t-lab">every bug, no noise</text>
+<text x="675.0" y="197.0" text-anchor="middle" class="t-sm" fill="#c98a1e">undecidable &mdash; unreachable</text>
+<text x="465.0" y="291.0" text-anchor="middle" class="t-h2" fill="#8a8f9b">Neither</text>
+<text x="465.0" y="325.0" text-anchor="middle" class="t-lab">heuristic linters,</text>
+<text x="465.0" y="339.0" text-anchor="middle" class="t-lab">best-effort</text>
+<text x="465.0" y="361.0" text-anchor="middle" class="t-sm" fill="#8a8f9b">fast, shallow checks</text>
+<text x="675.0" y="291.0" text-anchor="middle" class="t-h2" fill="#1f7a63">Complete &amp;</text>
+<text x="675.0" y="308.0" text-anchor="middle" class="t-h2" fill="#1f7a63">unsound</text>
+<text x="675.0" y="337.0" text-anchor="middle" class="t-lab">only true bugs,</text>
+<text x="675.0" y="351.0" text-anchor="middle" class="t-lab">but misses some</text>
+<text x="675.0" y="373.0" text-anchor="middle" class="t-sm" fill="#1f7a63">most commercial SAST</text>
+<text x="70" y="120" class="t-lab" fill="#6a6f7d" style="font-size:12px">Rice&#8217;s theorem (1953)</text>
+<text x="70" y="140" class="t-lab" fill="#9a9ea9">Every non-trivial</text>
+<text x="70" y="156" class="t-lab" fill="#9a9ea9">semantic property of</text>
+<text x="70" y="172" class="t-lab" fill="#9a9ea9">programs is undecidable.</text>
+<text x="70" y="196" class="t-lab" fill="#9a9ea9">So analyzers must</text>
+<text x="70" y="212" class="t-lab" fill="#9a9ea9">approximate: over- or</text>
+<text x="70" y="228" class="t-lab" fill="#9a9ea9">under-report on purpose.</text>
+<text x="70" y="260" class="t-h" fill="#cf4426" style="font-size:34px;font-weight:800">&#8734;</text>
+<text x="102" y="260" class="t-lab" fill="#6a6f7d">any decidable</text>
+<text x="102" y="276" class="t-lab" fill="#6a6f7d">over-approximation</text>
+<text x="102" y="292" class="t-lab" fill="#6a6f7d">admits infinite</text>
+<text x="102" y="308" class="t-lab" fill="#6a6f7d">false positives</text>
+<text x="835" y="120" class="t-lab" fill="#6a6f7d" style="font-size:12px">&#8220;Soundiness&#8221; (2015)</text>
+<text x="835" y="140" class="t-lab" fill="#9a9ea9">Real tools are sound</text>
+<text x="835" y="156" class="t-lab" fill="#9a9ea9">for a core language</text>
+<text x="835" y="172" class="t-lab" fill="#9a9ea9">but deliberately unsound</text>
+<text x="835" y="188" class="t-lab" fill="#9a9ea9">for reflection, eval,</text>
+<text x="835" y="204" class="t-lab" fill="#9a9ea9">native code, dynamic</text>
+<text x="835" y="220" class="t-lab" fill="#9a9ea9">dispatch. Honesty about</text>
+<text x="835" y="236" class="t-lab" fill="#9a9ea9">the gaps is the point.</text>
+</svg>
+<figcaption><span class="fignum">Figure 2</span><span class="figcap">The unavoidable trade-off. A <em>sound</em> analysis never misses a real defect but raises false alarms; a <em>complete</em> analysis never cries wolf but lets some defects slip through. Rice's theorem makes the top-right quadrant impossible, so every practical SAST tool chooses a corner &mdash; most commercial scanners favour precision (complete-ish, mildly unsound) to keep developer trust.</span></figcaption>
+</figure>
+  <div class="inner">
+    <h3 class="sub">&ldquo;Soundiness&rdquo;: the honest compromise every real tool makes</h3>
+    <p>In practice, even tools that aspire to soundness quietly give it up in specific places. Reflection, dynamic code loading, <code class="ic">eval</code>, native calls, and heavy dependency injection defeat static reasoning; a genuinely sound treatment of them would flag so much that the tool would be useless. So real analyzers are sound for a well-behaved core of the language and deliberately unsound for the hard features &mdash; a stance a group of leading researchers formalised as <em>soundiness</em> in a 2015 manifesto, arguing that the virtue is not pretending to total soundness but being explicit about exactly which language features you do and do not model.<sup class="cref"><a href="#ref-soundiness2015" id="cite-soundiness2015-28">28</a></sup> This is not a defect of the discipline; it is the discipline. Every SAST result you read is an assertion within a modelled fragment of the language, and knowing the boundary of that fragment is what separates competent use of a tool from cargo-cult trust in it.</p>
+    <p>The consequence for the rest of this article is that all the sophistication to come &mdash; path sensitivity, interprocedural taint, points-to analysis &mdash; is not an attempt to reach the impossible top-right corner. It is an attempt to move as far toward it as the compute budget allows, shrinking both kinds of lie without ever eliminating either.</p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-internals">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">04</span><span>Under the hood</span><span class="bar"></span></div>
+    <h2 class="sec-title">The representations a scanner builds before it reasons</h2>
+  </div>
+  <div class="inner">
+    <p>A SAST engine cannot reason about a text file. Its first job is to transform raw source into a series of progressively richer representations, each one exposing structure that the previous one hid. The pipeline below is essentially universal; where tools differ is how far along it they travel and how much precision they preserve at each step.</p>
+  </div>
+  <figure class="fig" id="fig-pipeline">
+<svg viewBox="0 0 1080 340" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="340" fill="#fff"/>
+<defs><marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L8 4.5 L0 9 z" fill="#cf4426"/></marker></defs>
+<rect x="54.0" y="96" width="148.7" height="132" rx="5" fill="#fff" stroke="#dcd7cc" stroke-width="1.5"/>
+<text x="69.0" y="122" class="t-yr">01</text>
+<text x="128.3" y="162" text-anchor="middle" class="t-h2" fill="#14171d">Source</text>
+<text x="128.3" y="184" text-anchor="middle" class="t-lab" fill="#6a6f7d">lexer + parser</text>
+<text x="128.3" y="250" text-anchor="middle" class="t-sm">code as text</text>
+<path d="M204.7 162.0 L216.7 162.0" stroke="#cf4426" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="218.7" y="96" width="148.7" height="132" rx="5" fill="#fff" stroke="#dcd7cc" stroke-width="1.5"/>
+<text x="233.7" y="122" class="t-yr">02</text>
+<text x="293.0" y="162" text-anchor="middle" class="t-h2" fill="#14171d">AST</text>
+<text x="293.0" y="184" text-anchor="middle" class="t-lab" fill="#6a6f7d">syntax tree</text>
+<text x="293.0" y="250" text-anchor="middle" class="t-sm">structure</text>
+<path d="M369.3 162.0 L381.3 162.0" stroke="#cf4426" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="383.3" y="96" width="148.7" height="132" rx="5" fill="#fff" stroke="#dcd7cc" stroke-width="1.5"/>
+<text x="398.3" y="122" class="t-yr">03</text>
+<text x="457.7" y="162" text-anchor="middle" class="t-h2" fill="#14171d">CFG / SSA</text>
+<text x="457.7" y="184" text-anchor="middle" class="t-lab" fill="#6a6f7d">control flow</text>
+<text x="457.7" y="250" text-anchor="middle" class="t-sm">paths & order</text>
+<path d="M534.0 162.0 L546.0 162.0" stroke="#cf4426" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="548.0" y="96" width="148.7" height="132" rx="5" fill="#fff" stroke="#dcd7cc" stroke-width="1.5"/>
+<text x="563.0" y="122" class="t-yr">04</text>
+<text x="622.3" y="162" text-anchor="middle" class="t-h2" fill="#14171d">Data-flow</text>
+<text x="622.3" y="184" text-anchor="middle" class="t-lab" fill="#6a6f7d">fixpoint over lattice</text>
+<text x="622.3" y="250" text-anchor="middle" class="t-sm">facts per point</text>
+<path d="M698.7 162.0 L710.7 162.0" stroke="#cf4426" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="712.7" y="96" width="148.7" height="132" rx="5" fill="#12151d" stroke="#05070b" stroke-width="1.5"/>
+<text x="727.7" y="122" class="t-yr">05</text>
+<text x="787.0" y="162" text-anchor="middle" class="t-h2" fill="#eceef3">Taint / rules</text>
+<text x="787.0" y="184" text-anchor="middle" class="t-lab" fill="#8b93a6">sources &rarr; sinks</text>
+<text x="787.0" y="250" text-anchor="middle" class="t-sm">exploitable paths</text>
+<path d="M863.3 162.0 L875.3 162.0" stroke="#cf4426" stroke-width="2" marker-end="url(#ar)"/>
+<rect x="877.3" y="96" width="148.7" height="132" rx="5" fill="#12151d" stroke="#05070b" stroke-width="1.5"/>
+<text x="892.3" y="122" class="t-yr">06</text>
+<text x="951.7" y="162" text-anchor="middle" class="t-h2" fill="#eceef3">Findings</text>
+<text x="951.7" y="184" text-anchor="middle" class="t-lab" fill="#8b93a6">SARIF report</text>
+<text x="951.7" y="250" text-anchor="middle" class="t-sm">triage &amp; fix</text>
+<text x="54" y="46" class="t-labu">STATIC = NEVER EXECUTED &middot; THE PROGRAM IS EXAMINED AS AN ARTIFACT, NOT RUN</text>
+<line x1="54" y1="58" x2="1026" y2="58" stroke="#e8e4da" stroke-width="1"/>
+<text x="54" y="300" class="t-lab" fill="#6a6f7d">Each stage enriches the representation: text &rarr; tree &rarr; graph &rarr; annotated graph. Security rules ride on top of the general machinery.</text>
+</svg>
+<figcaption><span class="fignum">Figure 3</span><span class="figcap">The canonical SAST pipeline. Every serious analyzer parses source into an abstract syntax tree, lifts it to a control-flow graph, computes data-flow facts by iterating to a fixpoint, then overlays security-specific source/sink rules before emitting findings.</span></figcaption>
+</figure>
+  <div class="inner">
+    <h3 class="sub">Lexing and parsing &rarr; the abstract syntax tree</h3>
+    <p>Analysis begins where a compiler begins. A <em>lexer</em> turns the character stream into tokens; a <em>parser</em> assembles those tokens, according to the language grammar, into an <strong>abstract syntax tree</strong> (AST). The AST is &ldquo;abstract&rdquo; because it throws away everything inessential &mdash; parentheses, semicolons, whitespace, the literal spelling of operators &mdash; and keeps only the hierarchical structure of the program's meaning. An assignment becomes an <code class="ic">Assign</code> node with a target and a value; a string concatenation becomes a <code class="ic">BinOp</code> with two children. Pattern-matching tools operate largely at this level, which is why a scanner like Semgrep can match code by its structure rather than its exact text: <code class="ic">db.execute(x)</code> and <code class="ic">db . execute( x )</code> parse to the identical AST.<sup class="cref"><a href="#ref-semgrepgh" id="cite-semgrepgh-24">24</a></sup></p>
+  </div>
+  <figure class="fig" id="fig-ast">
+<svg viewBox="0 0 1080 392" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="392" fill="#fff"/>
+<rect x="40" y="28" width="1000" height="40" rx="4" fill="#12151d"/>
+<text x="58" y="53" class="t-code"><tspan fill="#7cb8e8">query</tspan><tspan fill="#7f8593"> = </tspan><tspan fill="#9ccf8a">"SELECT * FROM users WHERE id = "</tspan><tspan fill="#7f8593"> + </tspan><tspan fill="#cf4426">userId</tspan></text>
+<path d="M540 144 C 540 174, 300 174, 300 205" stroke="#c9c4b8" stroke-width="1.6" fill="none"/>
+<path d="M540 144 C 540 174, 780 174, 780 205" stroke="#c9c4b8" stroke-width="1.6" fill="none"/>
+<rect x="465" y="110" width="150" height="34" rx="4" fill="#6b5bd6" stroke="#6b5bd6" stroke-width="1.6"/>
+<text x="540" y="132" text-anchor="middle" class="t-nodesm" fill="#eceef3">Assign  =</text>
+<path d="M300 239 C 300 270, 300 270, 300 300" stroke="#c9c4b8" stroke-width="1.6" fill="none"/>
+<rect x="225" y="300" width="150" height="34" rx="4" fill="#fff" stroke="#cf4426" stroke-width="1.6"/>
+<text x="300" y="322" text-anchor="middle" class="t-nodesm" fill="#cf4426">Name  query</text>
+<rect x="705" y="205" width="150" height="34" rx="4" fill="#12151d" stroke="#12151d" stroke-width="1.6"/>
+<text x="780" y="227" text-anchor="middle" class="t-nodesm" fill="#eceef3">BinOp  +</text>
+<path d="M780 239 C 780 270, 660 270, 660 300" stroke="#c9c4b8" stroke-width="1.6" fill="none"/>
+<path d="M780 239 C 780 270, 900 270, 900 300" stroke="#c9c4b8" stroke-width="1.6" fill="none"/>
+<rect x="570" y="300" width="180" height="34" rx="4" fill="#fff" stroke="#1f7a63" stroke-width="1.6"/>
+<text x="660" y="322" text-anchor="middle" class="t-nodesm" fill="#1f7a63">Str  "SELECT..."</text>
+<rect x="825" y="300" width="150" height="34" rx="4" fill="#fff" stroke="#cf4426" stroke-width="1.6"/>
+<text x="900" y="322" text-anchor="middle" class="t-nodesm" fill="#cf4426">Name  userId</text>
+<text x="40" y="108" class="t-labu">PARSE TREE</text>
+<text x="900" y="348" text-anchor="middle" class="t-sm" fill="#cf4426">untrusted leaf</text>
+<line x1="40" y1="88" x2="1040" y2="88" stroke="#e8e4da"/>
+<text x="1040" y="108" text-anchor="end" class="t-lab" fill="#6a6f7d">nodes carry type &amp; name-binding metadata</text>
+</svg>
+<figcaption><span class="fignum">Figure 4</span><span class="figcap">An abstract syntax tree for a string-concatenated SQL query. Parsing discards punctuation and whitespace and keeps structure: the assignment, the concatenation operator, the string literal, and the <code>userId</code> identifier whose value originates outside the program.</span></figcaption>
+</figure>
+  <div class="inner">
+    <p>The AST already carries more than raw syntax. A good extractor annotates each node with the results of <em>name resolution</em> (which declaration does this identifier refer to?) and <em>type information</em> (what is its static type?). CodeQL's extractors, for instance, record exactly this syntactic and semantic data before importing it into the queryable database.<sup class="cref"><a href="#ref-aboutcodeql" id="cite-aboutcodeql-23">23</a></sup> That metadata is what lets an analysis distinguish a method call on a database connection from an identically named method on some harmless object &mdash; a distinction on which the accuracy of every security rule depends.</p>
+    <h3 class="sub">Control-flow graph &rarr; the order of things</h3>
+    <p>An AST captures structure but not <em>order of execution</em>: it says a loop body exists, not that it may run zero times, nor which statements can follow which. To reason about what happens when the program runs, the engine lifts the AST into a <strong>control-flow graph</strong> (CFG), the representation Frances Allen introduced in 1970.<sup class="cref"><a href="#ref-allen1970" id="cite-allen1970-7">7</a></sup> Its nodes are <em>basic blocks</em> &mdash; maximal straight-line runs of instructions with no branches in or out except at their ends &mdash; and its edges are the possible transfers of control between them. Every conditional becomes a fork; every loop, a back-edge. The CFG is where an analysis can finally ask questions like &ldquo;on which paths does this variable reach that call?&rdquo;.</p>
+  </div>
+  <figure class="fig" id="fig-cfg">
+<svg viewBox="0 0 1080 470" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="470" fill="#fff"/>
+<defs><marker id="ac" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 L8 4.5 L0 9 z" fill="#6a6f7d"/></marker></defs>
+<text x="40" y="34" class="t-labu">CONTROL-FLOW GRAPH &middot; BASIC BLOCKS + BRANCHES</text>
+<line x1="40" y1="46" x2="1040" y2="46" stroke="#e8e4da"/>
+<rect x="430" y="72" width="220" height="56" rx="5" fill="#12151d" stroke="#cf4426" stroke-width="2"/>
+<rect x="430" y="72" width="220" height="18" rx="5" fill="#cf4426"/>
+<rect x="430" y="80" width="220" height="10" fill="#cf4426"/>
+<text x="438" y="85" class="t-sm" fill="#fff" font-weight="700">B0  entry</text>
+<text x="440" y="102" class="t-code" font-size="11.5"><tspan fill="#7cb8e8">id</tspan> = request.get(<tspan fill="#9ccf8a">"id"</tspan>)</text>
+<text x="440" y="119" class="t-code" font-size="11.5">q = base + id</text>
+<rect x="430" y="168" width="220" height="39" rx="5" fill="#12151d" stroke="#12151d" stroke-width="2"/>
+<rect x="430" y="168" width="220" height="18" rx="5" fill="#12151d"/>
+<rect x="430" y="176" width="220" height="10" fill="#12151d"/>
+<text x="438" y="181" class="t-sm" fill="#fff" font-weight="700">B1  test</text>
+<text x="440" y="198" class="t-code" font-size="11.5"><tspan fill="#c98ce6">if</tspan> is_admin(user):</text>
+<path d="M540 128 L540 168" stroke="#6a6f7d" stroke-width="1.8" fill="none" marker-end="url(#ac)"/>
+<rect x="180" y="268" width="240" height="56" rx="5" fill="#12151d" stroke="#6b5bd6" stroke-width="2"/>
+<rect x="180" y="268" width="240" height="18" rx="5" fill="#6b5bd6"/>
+<rect x="180" y="276" width="240" height="10" fill="#6b5bd6"/>
+<text x="188" y="281" class="t-sm" fill="#fff" font-weight="700">B2  then</text>
+<text x="190" y="298" class="t-code" font-size="11.5">rows = db.query(q)</text>
+<text x="190" y="315" class="t-code" font-size="11.5"><tspan fill="#69707f"># privileged path</tspan></text>
+<rect x="660" y="268" width="260" height="39" rx="5" fill="#12151d" stroke="#1f7a63" stroke-width="2"/>
+<rect x="660" y="268" width="260" height="18" rx="5" fill="#1f7a63"/>
+<rect x="660" y="276" width="260" height="10" fill="#1f7a63"/>
+<text x="668" y="281" class="t-sm" fill="#fff" font-weight="700">B3  else</text>
+<text x="670" y="298" class="t-code" font-size="11.5">rows = db.query(sanitize(q))</text>
+<path d="M470 207 L300 268" stroke="#6b5bd6" stroke-width="1.8" fill="none" marker-end="url(#ac)"/>
+<rect x="372" y="228" width="26" height="16" rx="3" fill="#fff" stroke="#dcd7cc"/>
+<text x="385" y="240" text-anchor="middle" class="t-sm" fill="#6b5bd6">true</text>
+<path d="M610 207 L790 268" stroke="#1f7a63" stroke-width="1.8" fill="none" marker-end="url(#ac)"/>
+<rect x="687" y="228" width="26" height="16" rx="3" fill="#fff" stroke="#dcd7cc"/>
+<text x="700" y="240" text-anchor="middle" class="t-sm" fill="#1f7a63">false</text>
+<rect x="430" y="392" width="220" height="39" rx="5" fill="#12151d" stroke="#12151d" stroke-width="2"/>
+<rect x="430" y="392" width="220" height="18" rx="5" fill="#12151d"/>
+<rect x="430" y="400" width="220" height="10" fill="#12151d"/>
+<text x="438" y="405" class="t-sm" fill="#fff" font-weight="700">B4  merge</text>
+<text x="440" y="422" class="t-code" font-size="11.5"><tspan fill="#c98ce6">return</tspan> render(rows)</text>
+<path d="M300 324 L470 392" stroke="#6a6f7d" stroke-width="1.8" fill="none" marker-end="url(#ac)"/>
+<path d="M790 307 L610 392" stroke="#6a6f7d" stroke-width="1.8" fill="none" marker-end="url(#ac)"/>
+<text x="1040" y="300" text-anchor="end" class="t-lab" fill="#cf4426">B2: query built from</text>
+<text x="1040" y="316" text-anchor="end" class="t-lab" fill="#cf4426">unsanitised input</text>
+<text x="1040" y="360" text-anchor="end" class="t-lab" fill="#1f7a63">B3: input sanitised</text>
+<text x="40" y="450" class="t-sm">Edges encode every path the analyzer must consider; the vulnerability exists on the B0&rarr;B1&rarr;B2 path only.</text>
+</svg>
+<figcaption><span class="fignum">Figure 5</span><span class="figcap">The same code lifted to a control-flow graph. Basic blocks are straight-line fragments; edges are possible transfers of control. A path-sensitive analysis can distinguish the privileged branch (B2), where the query reaches the database unsanitised, from the safe branch (B3).</span></figcaption>
+</figure>
+  <div class="inner">
+    <p>A key precision axis lives here. A <em>path-sensitive</em> analysis reasons about branch conditions and can conclude that the vulnerable code in one branch is unreachable when a guard holds; a cheaper <em>path-insensitive</em> analysis merges information at every join point and may conflate the safe and unsafe branches. Path sensitivity buys accuracy at real computational cost, and how much of it a tool affords is one of the main things that separates a fast linter from a deep enterprise engine.</p>
+    <h3 class="sub">SSA form &rarr; making data dependencies explicit</h3>
+    <p>To track how values flow, many engines convert the CFG into <strong>static single assignment</strong> (SSA) form, the intermediate representation in which every variable is assigned exactly once. Where control-flow paths merge and two definitions of a variable meet, SSA inserts a special <code class="ic">&phi;</code> (phi) node to reconcile them. The efficient algorithm for placing those phi-functions, using the notion of <em>dominance frontiers</em>, was given by Cytron and colleagues in 1991 and is now standard in production compilers and analyzers alike.<sup class="cref"><a href="#ref-cytron1991" id="cite-cytron1991-29">29</a></sup> SSA's payoff for SAST is directly relevant: because each value has a single, uniquely named definition, the chain from where a value is <em>defined</em> to where it is <em>used</em> becomes trivial to follow &mdash; and following such chains is exactly what taint tracking does.</p>
+    <h3 class="sub">Going interprocedural: call graphs and points-to analysis</h3>
+    <p>Everything so far concerns a single function. Real vulnerabilities cross function and file boundaries: untrusted input arrives in one method, is stored, and is used unsafely in another &mdash; a pattern the industry calls <em>second-order</em> injection. To follow data across calls, an engine needs a <strong>call graph</strong> (which functions can invoke which) and, in languages with pointers or references, a <strong>points-to</strong> (alias) analysis that determines which variables may refer to the same memory or object. The foundational algorithms here are Lars Andersen's inclusion-based analysis<sup class="cref"><a href="#ref-andersen1994" id="cite-andersen1994-30">30</a></sup> and Bjarne Steensgaard's near-linear-time unification-based approximation,<sup class="cref"><a href="#ref-steensgaard1996" id="cite-steensgaard1996-31">31</a></sup> which trade precision against scalability in opposite ways. Points-to analysis is notoriously the hardest and most expensive part of the pipeline, and the ability to do <em>cross-file, interprocedural</em> data-flow is the single feature that most cleanly divides deep commercial engines from lightweight open-source scanners: only a handful of tools trace tainted data reliably across file boundaries at scale.</p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-dataflow">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">05</span><span>The core algorithm</span><span class="bar"></span></div>
+    <h2 class="sec-title">Data-flow analysis: propagating facts to a fixpoint</h2>
+  </div>
+  <div class="inner">
+    <p>With a control-flow graph in hand, the engine can run the workhorse of static analysis: <strong>data-flow analysis</strong>. The goal is to compute, at every program point, a sound over-approximation of some property &mdash; which definitions can reach here, which variables might be null, which values might be tainted. Kildall's 1973 insight was that an enormous variety of such analyses share one abstract structure, and that structure is worth stating precisely because taint analysis is simply one instance of it.<sup class="cref"><a href="#ref-kildall1973" id="cite-kildall1973-6">6</a></sup></p>
+    <h3 class="sub">The three ingredients</h3>
+    <p>Every data-flow analysis is defined by three things:</p>
+    <ol>
+      <li>A <strong>lattice</strong> <code class="ic">L</code> of abstract facts &mdash; a partially ordered set with a <em>meet</em> operation (&#8851;) that combines information arriving from different paths, plus a top (&#8868;) and bottom (&#8869;). The lattice must have finite height for the analysis to terminate.</li>
+      <li>A <strong>transfer function</strong> <code class="ic">f[b]</code> for each basic block, describing how that block transforms the incoming facts into outgoing facts. For soundness these functions must be <em>monotone</em>: more input information never produces less output information.<sup class="cref"><a href="#ref-kam1977" id="cite-kam1977-8">8</a></sup></li>
+      <li>A <strong>direction and a meet</strong>: forward analyses (like reaching definitions and taint) push facts along control-flow edges and combine at merge points; backward analyses (like liveness) push the other way.</li>
+    </ol>
+  </div>
+  <figure class="fig" id="fig-lattice">
+<svg viewBox="0 0 1080 360" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="360" fill="#fff"/>
+<text x="40" y="34" class="t-labu">DATA-FLOW LATTICE &middot; THE ALGEBRA OF FACTS</text>
+<line x1="40" y1="46" x2="1040" y2="46" stroke="#e8e4da"/>
+<text x="230" y="86" text-anchor="middle" class="t-h2">Taint lattice</text>
+<line x1="230" y1="130" x2="230" y2="250" stroke="#c9c4b8" stroke-width="2"/>
+<circle cx="230" cy="110" r="26" fill="#fff" stroke="#cf4426" stroke-width="2.2"/>
+<text x="230" y="115" text-anchor="middle" class="t-h" fill="#cf4426">&#8868;</text>
+<circle cx="230" cy="270" r="26" fill="#fff" stroke="#1f7a63" stroke-width="2.2"/>
+<text x="230" y="275" text-anchor="middle" class="t-h" fill="#1f7a63">&#8869;</text>
+<text x="290" y="115" class="t-lab" fill="#cf4426">&#8868; = possibly tainted</text>
+<text x="290" y="275" class="t-lab" fill="#1f7a63">&#8869; = definitely clean</text>
+<text x="230" y="326" text-anchor="middle" class="t-sm">meet &#8851; = join to &#8868; if either input is tainted</text>
+<text x="760" y="86" text-anchor="middle" class="t-h2">Sign lattice</text>
+<line x1="760" y1="132" x2="610" y2="168" stroke="#c9c4b8" stroke-width="2"/>
+<line x1="610" y1="212" x2="760" y2="248" stroke="#c9c4b8" stroke-width="2"/>
+<line x1="760" y1="132" x2="760" y2="168" stroke="#c9c4b8" stroke-width="2"/>
+<line x1="760" y1="212" x2="760" y2="248" stroke="#c9c4b8" stroke-width="2"/>
+<line x1="760" y1="132" x2="910" y2="168" stroke="#c9c4b8" stroke-width="2"/>
+<line x1="910" y1="212" x2="760" y2="248" stroke="#c9c4b8" stroke-width="2"/>
+<circle cx="760" cy="110" r="26" fill="#fff" stroke="#12151d" stroke-width="2.2"/>
+<text x="760" y="115" text-anchor="middle" class="t-h" fill="#12151d">&#8868;</text>
+<circle cx="610" cy="190" r="26" fill="#fff" stroke="#6b5bd6" stroke-width="2.2"/>
+<text x="610" y="195" text-anchor="middle" class="t-h" fill="#6b5bd6">&minus;</text>
+<circle cx="760" cy="190" r="26" fill="#fff" stroke="#c98a1e" stroke-width="2.2"/>
+<text x="760" y="195" text-anchor="middle" class="t-h" fill="#c98a1e">0</text>
+<circle cx="910" cy="190" r="26" fill="#fff" stroke="#6b5bd6" stroke-width="2.2"/>
+<text x="910" y="195" text-anchor="middle" class="t-h" fill="#6b5bd6">+</text>
+<circle cx="760" cy="270" r="26" fill="#fff" stroke="#12151d" stroke-width="2.2"/>
+<text x="760" y="275" text-anchor="middle" class="t-h" fill="#12151d">&#8869;</text>
+<text x="945" y="115" class="t-sm">&#8868; = unknown sign</text>
+<text x="945" y="195" class="t-sm">the three concrete signs</text>
+<text x="945" y="275" class="t-sm">&#8869; = unreachable</text>
+<line x1="470" y1="80" x2="470" y2="300" stroke="#e8e4da" stroke-dasharray="3 4"/>
+</svg>
+<figcaption><span class="fignum">Figure 6</span><span class="figcap">Static analyses reason over a lattice: a partially ordered set of abstract facts with a well-defined meet operation and top/bottom elements. Taint tracking uses a two-point lattice (clean &le; tainted); a sign analysis uses the classic five-element lattice. Iterating transfer functions to a least fixpoint over such a lattice is what the Cousots' abstract interpretation formalised.</span></figcaption>
+</figure>
+  <div class="inner">
+    <p>The lattice is the algebra of what the analysis knows. Taint tracking uses the simplest interesting one: a two-point lattice where <em>clean</em> sits below <em>tainted</em>, and the meet of anything with <em>tainted</em> is <em>tainted</em> &mdash; so if data arriving on any path is tainted, the merge is tainted. A sign analysis uses a slightly richer lattice; a constant-propagation analysis, richer still. Choosing the lattice is choosing the question.</p>
+    <h3 class="sub">Solving by iteration: the worklist algorithm</h3>
+    <p>Given these ingredients, the solution is computed not by cleverness but by brute, guaranteed-to-converge iteration. Initialise every point to the lattice bottom, then repeatedly recompute each block's facts from its neighbours until nothing changes. Because the lattice has finite height and the transfer functions are monotone, facts only ever move upward, so the process must reach a stable <em>least fixpoint</em> &mdash; the tightest sound answer the abstraction admits. The classic implementation keeps a worklist of blocks whose inputs have changed:</p>
+  </div>
+  <div class="inner">
+    <div class="code">
+      <div class="bar"><span class="fn">monotone_dataflow.py</span><span class="lang">pseudocode</span></div>
+<pre><span class="c"># Generic monotone data-flow analysis by fixpoint iteration.</span>
+<span class="c"># L    : lattice of facts, with meet (&#8851;) and partial order (&#8849;)</span>
+<span class="c"># f[b] : monotone transfer function for basic block b</span>
+<span class="c"># cfg  : nodes = basic blocks, edges = possible control transfers</span>
+
+<span class="k">def</span> <span class="f">analyze</span>(cfg, L, f):
+    <span class="c"># 1. every block starts at &#8869; ("nothing known yet")</span>
+    IN  = {b: L.bottom <span class="k">for</span> b <span class="k">in</span> cfg.nodes}
+    OUT = {b: L.bottom <span class="k">for</span> b <span class="k">in</span> cfg.nodes}
+    work = <span class="f">deque</span>(cfg.nodes)          <span class="c"># all blocks start dirty</span>
+
+    <span class="k">while</span> work:
+        b = work.<span class="f">popleft</span>()
+        <span class="c"># 2. combine facts from every predecessor with the meet</span>
+        IN[b] = L.<span class="f">meet</span>(OUT[p] <span class="k">for</span> p <span class="k">in</span> cfg.<span class="f">preds</span>(b))
+        <span class="c"># 3. push them through this block's transfer function</span>
+        new_out = f[b](IN[b])
+        <span class="c"># 4. if the output moved, successors must be recomputed</span>
+        <span class="k">if</span> new_out != OUT[b]:
+            OUT[b] = new_out
+            work.<span class="f">extend</span>(cfg.<span class="f">succs</span>(b))
+
+    <span class="k">return</span> IN, OUT   <span class="c"># least fixpoint &mdash; termination guaranteed</span></pre>
+      <div class="cap">The engine of nearly all SAST: iterate the monotone transfer functions over the CFG until the lattice facts stop changing. Finite lattice height + monotonicity &rArr; convergence (Kildall 1973; Kam &amp; Ullman 1977).</div>
+    </div>
+  </div>
+  <div class="inner">
+    <p>This single algorithm, instantiated with different lattices and transfer functions, computes reaching definitions for a compiler, nullability for a bug-finder, and &mdash; with a taint lattice and transfer functions that model sources, sinks, and sanitisers &mdash; the security analysis at the heart of SAST. The interprocedural version, which threads facts through function calls precisely rather than merging them crudely, was given its definitive formulation by Reps, Horwitz, and Sagiv, who reduced precise interprocedural data-flow to a <em>graph-reachability</em> problem in their 1995 IFDS framework &mdash; the theoretical basis for how modern engines follow taint across call boundaries.<sup class="cref"><a href="#ref-reps1995" id="cite-reps1995-32">32</a></sup></p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-taint">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">06</span><span>The security overlay</span><span class="bar"></span></div>
+    <h2 class="sec-title">Taint analysis: sources, sinks, and the paths between them</h2>
+  </div>
+  <div class="inner">
+    <p>Data-flow analysis is generic; <strong>taint analysis</strong> is the specialisation that turns it into a security tool. The idea is to overlay security semantics on the analyzer's data-flow graph by declaring three kinds of program location:</p>
+    <ul>
+      <li><strong>Sources</strong> introduce untrusted or sensitive data &mdash; an HTTP request parameter, a form field, a file read, a network socket, an environment variable. Data from a source is marked <em>tainted</em>.</li>
+      <li><strong>Sinks</strong> are security-sensitive operations that must not receive tainted data &mdash; a SQL query executor, a shell command, an HTML response writer, a file path, a deserializer.</li>
+      <li><strong>Sanitisers</strong> (also called downgraders or validators) neutralise taint &mdash; a parameterised-query binding, an output encoder, an allow-list check. Passing tainted data through a sanitiser clears its taint bit.</li>
+    </ul>
+    <p>The rule is then elegantly simple, and reduces security analysis to <em>graph reachability</em>: a vulnerability exists wherever there is a data-flow path from a source to a sink that does not pass through an appropriate sanitiser.<sup class="cref"><a href="#ref-reps1995" id="cite-reps1995-32">32</a></sup> Each such report is a &ldquo;witness&rdquo; &mdash; a concrete sequence of statements from the point untrusted data enters to the point it is used dangerously. These source/sink/sanitiser specifications are typically organised around the CWE catalogue, each weakness type carrying its own characteristic triples.<sup class="cref"><a href="#ref-cwe" id="cite-cwe-3">3</a></sup></p>
+    <h3 class="sub">A concrete vulnerability</h3>
+    <p>Consider a textbook SQL-injection flaw (CWE-89). The endpoint reads an identifier from the query string and splices it directly into a SQL statement:</p>
+  </div>
+  <div class="inner">
+    <div class="code">
+      <div class="bar"><span class="fn">app/views.py &middot; vulnerable</span><span class="lang">python</span></div>
+<pre><span class="k">from</span> flask <span class="k">import</span> request
+
+<span class="f">@app.route</span>(<span class="s">"/user"</span>)
+<span class="k">def</span> <span class="f">get_user</span>():
+    uid   = request.args.<span class="f">get</span>(<span class="s">"id"</span>)                  <span class="t"># &#9668; SOURCE: attacker-controlled</span>
+    query = <span class="s">"SELECT * FROM users WHERE id = "</span> + uid  <span class="t"># taint propagates</span>
+    cur   = db.<span class="f">execute</span>(query)                       <span class="t"># &#9668; SINK: raw SQL, no sanitiser</span>
+    <span class="k">return</span> cur.<span class="f">fetchall</span>()</pre>
+      <div class="cap">A source-to-sink path with no sanitiser on it. Passing <code style="color:#e6b566">id=1 OR 1=1--</code> returns every row; worse payloads read or write arbitrary data.</div>
+    </div>
+  </div>
+  <figure class="fig" id="fig-taintflow">
+<svg viewBox="0 0 1080 560" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="560" fill="#fff"/>
+<text x="40" y="34" class="t-labu">TAINT PROPAGATION &middot; SOURCE &rarr; SINK WITHOUT A SANITISER = VULNERABILITY (CWE-89)</text>
+<line x1="40" y1="46" x2="1040" y2="46" stroke="#e8e4da"/>
+<rect x="250" y="72" width="600" height="238" rx="6" fill="#12151d" stroke="#05070b" stroke-width="1.5"/>
+<rect x="250" y="72" width="600" height="26" rx="6" fill="#0b0e14"/>
+<rect x="250" y="86" width="600" height="12" fill="#0b0e14"/>
+<text x="264" y="89" class="t-sm" fill="#8b93a6">app/views.py</text>
+<text x="836" y="89" text-anchor="end" class="t-sm" fill="#5b6273">PYTHON</text>
+<text x="302" y="112" class="t-code"><tspan fill="#c98ce6">def</tspan> <tspan fill="#7cb8e8">get_user</tspan>(request):</text>
+<text x="264" y="112" class="t-sm" fill="#4b5160"> 1</text>
+<rect x="251" y="123" width="598" height="26" fill="#cf4426" fill-opacity=".16"/>
+<text x="302" y="142" class="t-code">    uid = request.args.get(<tspan fill="#9ccf8a">"id"</tspan>)</text>
+<text x="264" y="142" class="t-sm" fill="#4b5160"> 2</text>
+<text x="302" y="172" class="t-code">    <tspan fill="#69707f"># uid is now attacker-controlled</tspan></text>
+<text x="264" y="172" class="t-sm" fill="#4b5160"> 3</text>
+<rect x="251" y="183" width="598" height="26" fill="#cf4426" fill-opacity=".10"/>
+<text x="302" y="202" class="t-code">    frag = <tspan fill="#9ccf8a">"WHERE id = "</tspan> + uid</text>
+<text x="264" y="202" class="t-sm" fill="#4b5160"> 4</text>
+<rect x="251" y="213" width="598" height="26" fill="#cf4426" fill-opacity=".10"/>
+<text x="302" y="232" class="t-code">    sql  = <tspan fill="#9ccf8a">"SELECT * FROM users "</tspan> + frag</text>
+<text x="264" y="232" class="t-sm" fill="#4b5160"> 5</text>
+<rect x="251" y="243" width="598" height="26" fill="#cf4426" fill-opacity=".18"/>
+<text x="302" y="262" class="t-code">    cur  = db.execute(sql)</text>
+<text x="264" y="262" class="t-sm" fill="#4b5160"> 6</text>
+<text x="302" y="292" class="t-code">    <tspan fill="#c98ce6">return</tspan> cur.fetchall()</text>
+<text x="264" y="292" class="t-sm" fill="#4b5160"> 7</text>
+<path d="M296 137 L236 137 L236 257 L296 257" fill="none" stroke="#cf4426" stroke-width="2.4"/>
+<circle cx="236" cy="137" r="4.5" fill="#cf4426"/>
+<line x1="236" y1="137" x2="252" y2="137" stroke="#cf4426" stroke-width="2"/>
+<circle cx="236" cy="197" r="4.5" fill="#cf4426"/>
+<line x1="236" y1="197" x2="252" y2="197" stroke="#cf4426" stroke-width="2"/>
+<circle cx="236" cy="227" r="4.5" fill="#cf4426"/>
+<line x1="236" y1="227" x2="252" y2="227" stroke="#cf4426" stroke-width="2"/>
+<circle cx="236" cy="257" r="4.5" fill="#cf4426"/>
+<line x1="236" y1="257" x2="252" y2="257" stroke="#cf4426" stroke-width="2"/>
+<g transform="translate(60,137)"><text x="0" y="-6" class="t-h" fill="#cf4426">SOURCE</text><text x="0" y="12" class="t-lab">untrusted input</text><text x="0" y="26" class="t-lab">enters the program</text></g>
+<g transform="translate(60,217)"><text x="0" y="-2" class="t-h" fill="#a5341d">PROPAGATION</text><text x="0" y="16" class="t-lab">taint spreads through</text><text x="0" y="30" class="t-lab">assignments &amp; concat</text></g>
+<g transform="translate(60,257)"><text x="0" y="-6" class="t-h" fill="#cf4426">SINK</text><text x="0" y="12" class="t-lab">reaches a dangerous</text><text x="0" y="26" class="t-lab">operation unfiltered</text></g>
+<text x="890" y="102" class="t-h2" fill="#1f7a63">The break</text>
+<line x1="890" y1="112" x2="1020" y2="112" stroke="#1f7a63" stroke-width="2"/>
+<foreignObject x="890" y="122" width="150" height="120"></foreignObject>
+<text x="890" y="136" class="t-lab" fill="#4b505c">A <tspan font-weight="700" fill="#1f7a63">sanitiser</tspan> on the</text>
+<text x="890" y="152" class="t-lab" fill="#4b505c">path &mdash; parameterised</text>
+<text x="890" y="168" class="t-lab" fill="#4b505c">query, escaping, an</text>
+<text x="890" y="184" class="t-lab" fill="#4b505c">allow-list &mdash; clears the</text>
+<text x="890" y="200" class="t-lab" fill="#4b505c">taint bit and the path</text>
+<text x="890" y="216" class="t-lab" fill="#4b505c">is no longer reported.</text>
+<rect x="890" y="236" width="150" height="66" rx="5" fill="#0f1a16" stroke="#1f7a63" stroke-width="1.4"/>
+<text x="902" y="258" class="t-code" font-size="10.5" fill="#9ccf8a">db.execute(</text>
+<text x="902" y="273" class="t-code" font-size="10.5" fill="#d7dae2">  q, [uid])</text>
+<text x="902" y="292" class="t-code" font-size="9.5" fill="#2f9e7f">&#10003; param bound</text>
+<rect x="250" y="350" width="600" height="66" rx="5" fill="#f4f2ec" stroke="#dcd7cc"/>
+<text x="268" y="376" class="t-h">Reachability, not pattern-matching</text>
+<text x="268" y="396" class="t-lab" fill="#4b505c">The tool proves a path exists from source to sink through the data-flow graph.</text>
+<text x="268" y="410" class="t-lab" fill="#4b505c">No path &rArr; no finding. This is why interprocedural taint analysis is expensive but precise.</text>
+</svg>
+<figcaption><span class="fignum">Figure 7</span><span class="figcap">The security question SAST is built to answer: can attacker-controlled data reach a dangerous operation? Here untrusted input from an HTTP parameter (the <em>source</em>) flows through two string concatenations into a raw SQL execution (the <em>sink</em>). Because no <em>sanitiser</em> lies on the path, the analyzer reports a SQL-injection finding. Formalised as graph reachability, this is the core of interprocedural taint tracking.</span></figcaption>
+</figure>
+  <div class="inner">
+    <p>The engine finds this not by matching the string <code class="ic">execute</code> &mdash; that would flag every safe query too &mdash; but by proving that the value handed to <code class="ic">db.execute</code> derives, through the concatenation, from <code class="ic">request.args.get</code>. Change the last two lines to bind the input as a parameter, and the taint is broken at the sink; the tool reports nothing because no tainted path remains:</p>
+    <div class="code">
+      <div class="bar"><span class="fn">app/views.py &middot; fixed</span><span class="lang">python</span></div>
+<pre>    uid = request.args.<span class="f">get</span>(<span class="s">"id"</span>)                       <span class="g"># still a source&hellip;</span>
+    cur = db.<span class="f">execute</span>(<span class="s">"SELECT * FROM users WHERE id = ?"</span>, [uid])  <span class="g"># &#10003; parameterised: taint cleared</span></pre>
+      <div class="cap">The sanitiser is structural: the driver binds <code style="color:#9ccf8a">uid</code> as data, never as SQL text, so it can never alter the query's meaning.</div>
+    </div>
+    <h3 class="sub">Why this is hard to do well</h3>
+    <p>Getting taint analysis right at scale is where the deepest engineering lives. The path may cross many functions and files; the source data may be stored in a field and retrieved later; a sanitiser may be effective for one sink type (HTML encoding) but useless for another (SQL). The analysis must be <em>interprocedural</em>, ideally <em>field-</em> and <em>object-sensitive</em>, and must model the framework: a rule that does not know Flask's <code class="ic">request</code> object, or Spring's request mappings, will miss the source entirely. The FlowDroid analyzer for Android is a landmark demonstration of how much apparatus this demands &mdash; context-, flow-, field-, and object-sensitive taint tracking that is also aware of the application lifecycle.<sup class="cref"><a href="#ref-flowdroid2014" id="cite-flowdroid2014-33">33</a></sup> Commercial engines from Fortify, Checkmarx, Coverity, and Veracode, and the taint engines in CodeQL, SonarQube, and Semgrep's paid tier, all invest heavily in exactly this precision, because a taint tracker that only works within a single function catches only the most naive bugs.<sup class="cref"><a href="#ref-sonartaint" id="cite-sonartaint-34">34</a></sup></p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-approaches">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">07</span><span>Two philosophies</span><span class="bar"></span></div>
+    <h2 class="sec-title">Pattern matching versus semantic understanding</h2>
+  </div>
+  <div class="inner">
+    <p>Not all SAST tools reason at the same depth, and the industry has settled into a spectrum with two poles. At one end are <strong>pattern-based</strong> tools that match structural templates against the AST. At the other are <strong>semantic</strong> engines that build a full model of the program &mdash; control flow, data flow, type hierarchy, call graph &mdash; and reason over it. The distinction is not academic: it determines which bugs a tool can even express, let alone find.</p>
+    <h3 class="sub">The pattern end: rules that look like code</h3>
+    <p>The lightweight approach, exemplified by Semgrep, is essentially a structural search-and-match over the syntax tree, enriched with limited data-flow. Its great virtue is approachability: a rule looks like the code it targets, with <em>metavariables</em> standing in for the parts you do not want to pin down, so a developer can write a useful check without a background in program analysis.<sup class="cref"><a href="#ref-semgrepgh">24</a>,<a href="#ref-semgrepwiki">25</a></sup> Semgrep's taint mode lets a rule declare sources, sinks, and sanitisers directly:</p>
+    <div class="code">
+      <div class="bar"><span class="fn">rules/python-sqli.yaml</span><span class="lang">semgrep</span></div>
+<pre><span class="f">rules:</span>
+  <span class="d">-</span> <span class="f">id:</span> python-sqli-string-concat
+    <span class="f">languages:</span> <span class="d">[</span>python<span class="d">]</span>
+    <span class="f">severity:</span> ERROR
+    <span class="f">mode:</span> taint                        <span class="c"># track flow, not just shape</span>
+    <span class="f">message:</span> <span class="s">Untrusted input reaches a SQL execute() call.</span>
+    <span class="f">pattern-sources:</span>
+      <span class="d">-</span> <span class="f">pattern:</span> flask.request.<span class="d">$ANYTHING</span>
+    <span class="f">pattern-sinks:</span>
+      <span class="d">-</span> <span class="f">pattern:</span> <span class="d">$CURSOR</span>.execute(<span class="d">...</span>)
+    <span class="f">pattern-sanitizers:</span>
+      <span class="d">-</span> <span class="f">pattern:</span> <span class="d">$CURSOR</span>.execute(<span class="s">"..."</span>, <span class="d">...</span>)   <span class="c"># parameterised form is safe</span></pre>
+      <div class="cap">A Semgrep taint rule. <code style="color:#e6b566">$CURSOR</code> and <code style="color:#e6b566">$ANYTHING</code> are metavariables. The rule reads almost like the vulnerable code itself &mdash; the design goal of the pattern-first school.</div>
+    </div>
+    <p>The cost of this approachability is depth. Community-edition pattern tools analyse largely within a single function or file, and their maintainers say so plainly &mdash; cross-function, cross-file taint is reserved for the heavier engines.<sup class="cref"><a href="#ref-semgrepgh" id="cite-semgrepgh-24">24</a></sup> For a large class of real bugs that is enough, and running fast enough to sit in a pre-commit hook is often worth more than catching the last exotic flow.</p>
+    <h3 class="sub">The semantic end: code as a queryable database</h3>
+    <p>The deeper approach treats the program as data. CodeQL compiles a codebase into a relational database of facts &mdash; every AST node, every control-flow edge, every data-flow relationship, the whole type hierarchy &mdash; and then executes queries against it in QL, a declarative language whose syntax resembles SQL but whose semantics come from Datalog.<sup class="cref"><a href="#ref-aboutcodeql">23</a>,<a href="#ref-codequest2006">21</a></sup> Because the entire program is a structure you can join over, a query can traverse arbitrary call chains and express a vulnerability as a logical predicate:</p>
+    <div class="code">
+      <div class="bar"><span class="fn">Sqli.ql &middot; simplified</span><span class="lang">codeql / QL</span></div>
+<pre><span class="c">/** Untrusted request data flowing into a SQL execute() call. */</span>
+<span class="k">import</span> python
+<span class="k">import</span> semmle.python.dataflow.new.TaintTracking
+
+<span class="k">module</span> SqliConfig <span class="k">implements</span> DataFlow::ConfigSig {
+  <span class="k">predicate</span> <span class="f">isSource</span>(DataFlow::Node n) {
+    n.asExpr() <span class="k">instanceof</span> RequestArgsAccess          <span class="c">// framework-modelled source</span>
+  }
+  <span class="k">predicate</span> <span class="f">isSink</span>(DataFlow::Node n) {
+    <span class="k">exists</span>(Call c |
+      c.getFunc().(Attribute).getName() = <span class="s">"execute"</span> <span class="k">and</span>
+      n.asExpr() = c.getArg(<span class="n">0</span>))
+  }
+}
+<span class="k">module</span> SqliFlow = TaintTracking::Global&lt;SqliConfig&gt;;
+
+<span class="k">from</span> DataFlow::Node source, DataFlow::Node sink
+<span class="k">where</span> SqliFlow::<span class="f">flow</span>(source, sink)
+<span class="k">select</span> sink, <span class="s">"Untrusted data from $@ reaches a SQL sink."</span>, source, <span class="s">"here"</span></pre>
+      <div class="cap">The same vulnerability class expressed as a global taint-tracking query. The engine handles the interprocedural search; the analyst only declares what counts as a source and a sink. This is the &ldquo;code as data&rdquo; paradigm that variant analysis with CodeQL has used to uncover hundreds of CVEs.<sup class="cref"><a href="#ref-semmlewiki" id="cite-semmlewiki-22">22</a></sup></div>
+    </div>
+    <p>Between these poles sit the deep commercial engines &mdash; Fortify, Checkmarx, Coverity &mdash; which perform whole-program interprocedural taint with proprietary abstractions, and the &ldquo;bugs as deviant behaviour&rdquo; style of statistical inference that Coverity pioneered, in which the tool learns a codebase's own implicit rules and flags the deviations.<sup class="cref"><a href="#ref-engler2001" id="cite-engler2001-12">12</a></sup> The right mental model is a dial from cheap-and-shallow to expensive-and-deep, and a serious program often runs tools from more than one point on it.</p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-tradeoffs">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">08</span><span>What it can and cannot do</span><span class="bar"></span></div>
+    <h2 class="sec-title">Strengths, weaknesses, and the false-positive tax</h2>
+  </div>
+  <div class="inner">
+    <h3 class="sub">Where SAST is uniquely strong</h3>
+    <ul>
+      <li><strong>Earliest possible feedback.</strong> Because it needs no running system, SAST can run in the editor as code is typed and on every commit &mdash; the cheapest moment to fix anything. This is the concrete meaning of &ldquo;shift left.&rdquo;</li>
+      <li><strong>Total path coverage.</strong> A running test only exercises the paths it happens to hit; a static analyzer examines every branch, including rare error paths and privileged code that dynamic testing routinely misses.</li>
+      <li><strong>Root-cause precision.</strong> A finding points at the exact line and, for taint results, the exact source-to-sink path. Developers get the <em>cause</em>, not just an externally observed symptom, which makes fixes fast and verifiable.</li>
+      <li><strong>Whole-codebase reach, including legacy.</strong> It scans code that is hard to run, hard to reach, or simply old &mdash; large legacy systems where manual review is infeasible and no test harness exists.</li>
+      <li><strong>Consistency and compliance.</strong> The same rules apply uniformly across millions of lines, and coverage maps cleanly onto standards &mdash; the OWASP Top 10, CWE, PCI DSS, and similar &mdash; which is why SAST is a fixture of regulated software assurance.<sup class="cref"><a href="#ref-owasptop10">2</a>,<a href="#ref-cwe">3</a></sup></li>
+    </ul>
+    <h3 class="sub">Where it is structurally blind</h3>
+    <ul>
+      <li><strong>No runtime or configuration context.</strong> SAST cannot see environment variables, deployment configuration, real authentication state, or how components actually interact at run time. Business-logic flaws and authorisation errors that depend on runtime state largely elude it &mdash; this is DAST's and IAST's territory.</li>
+      <li><strong>Framework and dynamism blindness.</strong> Reflection, <code class="ic">eval</code>, dynamic dispatch, metaprogramming, and unmodelled frameworks break the analysis; a rule that does not know a framework's request object cannot see the source. This is the practical face of the soundiness compromise.<sup class="cref"><a href="#ref-soundiness2015" id="cite-soundiness2015-28">28</a></sup></li>
+      <li><strong>It finds your code's bugs, not your dependencies'.</strong> A vulnerable third-party library is invisible to SAST; that is SCA's job.</li>
+      <li><strong>Cost and scale.</strong> Deep interprocedural and points-to analysis is computationally expensive; full scans of large codebases can take from minutes to hours, which is why incremental, diff-aware scanning matters so much in practice.</li>
+    </ul>
+  </div>
+  <div class="inner">
+    <p class="pull">The hardest problem in SAST is not detection. It is earning enough developer trust that the findings get read at all.</p>
+  </div>
+  <figure class="fig" id="fig-precision">
+<svg viewBox="0 0 1080 380" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="380" fill="#fff"/>
+<text x="40" y="34" class="t-labu">THE OPERATING POINT &middot; FALSE POSITIVES vs FALSE NEGATIVES</text>
+<line x1="40" y1="46" x2="1040" y2="46" stroke="#e8e4da"/>
+<text x="200" y="66" text-anchor="middle" class="t-lab" fill="#6a6f7d">ACTUAL STATE OF CODE</text>
+<text x="145.0" y="84" text-anchor="middle" class="t-sm" fill="#cf4426">vulnerable</text>
+<text x="255.0" y="84" text-anchor="middle" class="t-sm" fill="#1f7a63">safe</text>
+<text x="76" y="145.0" text-anchor="middle" class="t-sm" transform="rotate(-90 76 145.0)">tool: alarm</text>
+<text x="76" y="255.0" text-anchor="middle" class="t-sm" transform="rotate(-90 76 255.0)">tool: silent</text>
+<rect x="90" y="90" width="110" height="110" fill="#cf4426" fill-opacity=".12" stroke="#cf4426" stroke-width="1.5"/>
+<text x="145.0" y="139.0" text-anchor="middle" class="t-nodesm" fill="#cf4426">True</text>
+<text x="145.0" y="156.0" text-anchor="middle" class="t-nodesm" fill="#cf4426">positive</text>
+<rect x="200" y="90" width="110" height="110" fill="#c98a1e" fill-opacity=".12" stroke="#c98a1e" stroke-width="1.5"/>
+<text x="255.0" y="139.0" text-anchor="middle" class="t-nodesm" fill="#c98a1e">False</text>
+<text x="255.0" y="156.0" text-anchor="middle" class="t-nodesm" fill="#c98a1e">positive</text>
+<rect x="90" y="200" width="110" height="110" fill="#6b5bd6" fill-opacity=".12" stroke="#6b5bd6" stroke-width="1.5"/>
+<text x="145.0" y="249.0" text-anchor="middle" class="t-nodesm" fill="#6b5bd6">False</text>
+<text x="145.0" y="266.0" text-anchor="middle" class="t-nodesm" fill="#6b5bd6">negative</text>
+<rect x="200" y="200" width="110" height="110" fill="#1f7a63" fill-opacity=".12" stroke="#1f7a63" stroke-width="1.5"/>
+<text x="255.0" y="249.0" text-anchor="middle" class="t-nodesm" fill="#1f7a63">True</text>
+<text x="255.0" y="266.0" text-anchor="middle" class="t-nodesm" fill="#1f7a63">negative</text>
+<text x="460" y="100" class="t-h2">One knob, two failure modes</text>
+<circle cx="466" cy="136" r="5" fill="#cf4426"/>
+<text x="482" y="140" class="t-h" fill="#cf4426">Loosen the rules</text>
+<text x="482" y="158" class="t-lab" fill="#4b505c">catch more real bugs (fewer FN)</text>
+<text x="482" y="174" class="t-lab" fill="#4b505c">but drown developers in noise (more FP)</text>
+<circle cx="466" cy="208" r="5" fill="#1f7a63"/>
+<text x="482" y="212" class="t-h" fill="#1f7a63">Tighten the rules</text>
+<text x="482" y="230" class="t-lab" fill="#4b505c">suppress the noise (fewer FP)</text>
+<text x="482" y="246" class="t-lab" fill="#4b505c">but silently miss vulnerabilities (more FN)</text>
+<text x="460" y="286" class="t-lab" fill="#6a6f7d" style="font-size:12px">Untuned scanners commonly report 30&ndash;60% false positives; independent</text>
+<text x="460" y="304" class="t-lab" fill="#6a6f7d" style="font-size:12px">evaluations such as the OWASP Benchmark plot tools on a true-positive /</text>
+<text x="460" y="322" class="t-lab" fill="#6a6f7d" style="font-size:12px">false-positive chart &mdash; the diagonal is the &#8220;random guess&#8221; line.</text>
+</svg>
+<figcaption><span class="fignum">Figure 8</span><span class="figcap">Every finding falls into one of four cells. A SAST deployment is really a choice of operating point on the precision/recall curve: loosening rules trades false negatives for false positives and vice-versa. There is no setting that eliminates both, which is why triage, tuning and baselining &mdash; not just raw detection &mdash; determine whether a tool earns developers' trust.</span></figcaption>
+</figure>
+  <div class="inner">
+    <h3 class="sub">The false-positive tax</h3>
+    <p>The single greatest obstacle to SAST's value is noise. Because sound analysis over-approximates, it reports flows that are technically possible but practically infeasible, and untuned scanners commonly generate false positives at rates high enough to bury the real findings. NIST's Static Analysis Tool Exposition evaluations found that only a minority of tool warnings were security-relevant, and independent measurements of large codebases routinely report false-positive rates well into the tens of percent.<sup class="cref"><a href="#ref-samate" id="cite-samate-35">35</a></sup> The human cost is documented: the classic study of why developers abandon static analysis tools traced it directly to false positives, poor result presentation, and workflow friction &mdash; not to any doubt that the underlying bugs were real.<sup class="cref"><a href="#ref-johnson2013" id="cite-johnson2013-36">36</a></sup> When a team investigates twenty findings, discovers fifteen are noise, and stops looking, the next genuine SQL-injection sits unread in the backlog.</p>
+    <p>The most important lesson from operators running SAST at the largest scale is that <em>fix rate, not find rate, is the real metric</em>. Google's account of building static analysis for its monorepo stresses integrating results into the developer workflow, showing them at code-review time, and ruthlessly suppressing checks that developers do not act on.<sup class="cref"><a href="#ref-sadowski2018" id="cite-sadowski2018-37">37</a></sup> Facebook's Infer team reached the same conclusion from a different direction: reporting issues on the specific code a developer is changing, at review time, dramatically raised the rate at which findings were actually fixed compared with dumping a batch report on an existing codebase.<sup class="cref"><a href="#ref-distefano2019" id="cite-distefano2019-38">38</a></sup> Both reframed the problem from &ldquo;how many bugs can we find?&rdquo; to &ldquo;how many do we get fixed without eroding trust?&rdquo; &mdash; the question that actually determines whether a SAST deployment succeeds. Techniques to rank and triage findings statistically, such as Z-ranking, exist precisely because raw output is unusable without prioritisation.<sup class="cref"><a href="#ref-kremenek2003" id="cite-kremenek2003-39">39</a></sup> To let teams compare tools on this axis objectively, the OWASP Benchmark seeds a deliberately insecure application with thousands of known true and false vulnerabilities and plots each tool on a true-positive-versus-false-positive chart whose diagonal marks the line of random guessing.<sup class="cref"><a href="#ref-owaspbench" id="cite-owaspbench-40">40</a></sup></p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-pipeline">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">09</span><span>In the workflow</span><span class="bar"></span></div>
+    <h2 class="sec-title">Where SAST fits in the DevOps pipeline</h2>
+  </div>
+  <div class="inner">
+    <p>SAST's zero-execution property makes it the earliest automated security gate, and modern practice threads it through the whole development lifecycle rather than bolting it on at the end. When static analysis is embedded in the continuous-integration and continuous-delivery pipeline, the result is what the industry calls <em>DevSecOps</em>: security testing as an automatic, continuous part of building software rather than a separate audit.<sup class="cref"><a href="#ref-owaspsca" id="cite-owaspsca-1">1</a></sup> The guiding principle, articulated in the &ldquo;building security in&rdquo; movement, is that finding a defect during development costs a fraction of finding it in production.<sup class="cref"><a href="#ref-mcgraw2006" id="cite-mcgraw2006-20">20</a></sup></p>
+  </div>
+  <figure class="fig" id="fig-sdlc">
+<svg viewBox="0 0 1080 470" xmlns="http://www.w3.org/2000/svg" role="img" preserveAspectRatio="xMidYMid meet">
+<rect width="1080" height="470" fill="#fff"/>
+<defs><marker id="as" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L9 5 L0 10 z" fill="#12151d"/></marker></defs>
+<text x="40" y="34" class="t-labu">SHIFT LEFT &middot; WHERE SAST SITS IN A DEVSECOPS PIPELINE</text>
+<line x1="40" y1="46" x2="1040" y2="46" stroke="#e8e4da"/>
+<line x1="70" y1="110" x2="1010" y2="110" stroke="#12151d" stroke-width="2.5"/>
+<path d="M980 110 L1010 110" stroke="#12151d" stroke-width="2.5" marker-end="url(#as)"/>
+<circle cx="70" cy="110" r="7" fill="#12151d"/>
+<circle cx="70" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="70" y="80" text-anchor="middle" class="t-h" fill="#14171d">Code</text>
+<text x="70" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(IDE)</text>
+<circle cx="227" cy="110" r="7" fill="#12151d"/>
+<circle cx="227" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="227" y="80" text-anchor="middle" class="t-h" fill="#14171d">Commit</text>
+<text x="227" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(pre-commit)</text>
+<circle cx="383" cy="110" r="7" fill="#12151d"/>
+<circle cx="383" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="383" y="80" text-anchor="middle" class="t-h" fill="#14171d">Pull request</text>
+<text x="383" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(CI gate)</text>
+<circle cx="540" cy="110" r="7" fill="#12151d"/>
+<circle cx="540" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="540" y="80" text-anchor="middle" class="t-h" fill="#14171d">Build</text>
+<text x="540" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(pipeline)</text>
+<circle cx="697" cy="110" r="7" fill="#12151d"/>
+<circle cx="697" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="697" y="80" text-anchor="middle" class="t-h" fill="#14171d">Test</text>
+<text x="697" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(staging)</text>
+<circle cx="853" cy="110" r="7" fill="#12151d"/>
+<circle cx="853" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="853" y="80" text-anchor="middle" class="t-h" fill="#14171d">Deploy</text>
+<text x="853" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(prod)</text>
+<circle cx="1010" cy="110" r="7" fill="#12151d"/>
+<circle cx="1010" cy="110" r="12" fill="none" stroke="#12151d" stroke-opacity=".2"/>
+<text x="1010" y="80" text-anchor="middle" class="t-h" fill="#14171d">Runtime</text>
+<text x="1010" y="95" text-anchor="middle" class="t-sm" fill="#9a9ea9">(monitor)</text>
+<rect x="56" y="180" width="498" height="36" rx="18" fill="#cf4426" fill-opacity=".14" stroke="#cf4426" stroke-width="1.6"/>
+<text x="72" y="203" class="t-h" fill="#cf4426" style="font-size:12.5px">SAST</text>
+<text x="540" y="203" text-anchor="end" class="t-sm" fill="#cf4426">source / bytecode &middot; no run needed</text>
+<rect x="56" y="234" width="498" height="36" rx="18" fill="#6b5bd6" fill-opacity=".14" stroke="#6b5bd6" stroke-width="1.6"/>
+<text x="72" y="257" class="t-h" fill="#6b5bd6" style="font-size:12.5px">SCA</text>
+<text x="540" y="257" text-anchor="end" class="t-sm" fill="#6b5bd6">dependency &amp; license risk</text>
+<rect x="526" y="288" width="341" height="36" rx="18" fill="#c98a1e" fill-opacity=".14" stroke="#c98a1e" stroke-width="1.6"/>
+<text x="542" y="311" class="t-h" fill="#c98a1e" style="font-size:12.5px">IAST</text>
+<text x="853" y="311" text-anchor="end" class="t-sm" fill="#c98a1e">instrumented, needs execution</text>
+<rect x="683" y="342" width="341" height="36" rx="18" fill="#1f7a63" fill-opacity=".14" stroke="#1f7a63" stroke-width="1.6"/>
+<text x="699" y="365" class="t-h" fill="#1f7a63" style="font-size:12.5px">DAST</text>
+<text x="1010" y="365" text-anchor="end" class="t-sm" fill="#1f7a63">black-box against running app</text>
+<text x="70" y="452" class="t-lab" fill="#6a6f7d">Cost to fix a defect rises sharply left&#8594;right; SAST&#8217;s value is catching flaws in the two cheapest columns, often within seconds of a keystroke or commit.</text>
+</svg>
+<figcaption><span class="fignum">Figure 9</span><span class="figcap">SAST is the earliest automated security gate. Because it needs only source or bytecode &mdash; never a running system &mdash; it runs in the IDE, on commit, and in the pull-request pipeline, where a fix costs a fraction of what the same bug costs in production. Dynamic (DAST), interactive (IAST) and composition (SCA) analysis cover the later, execution-dependent stages that SAST cannot see.</span></figcaption>
+</figure>
+  <div class="inner">
+    <p>In a well-run pipeline, SAST appears at several points, each with a different depth/latency trade-off:</p>
+    <ul>
+      <li><strong>In the IDE</strong>, a lightweight analyzer or plugin flags issues as the developer types, before the code is even saved &mdash; the cheapest feedback of all, and the reason many vendors ship editor integrations.</li>
+      <li><strong>On commit</strong>, a fast pre-commit hook runs quick rules so that obvious problems never enter version control. Speed matters more than depth here; a scan that takes minutes will be disabled.</li>
+      <li><strong>On the pull request</strong>, the CI pipeline runs a deeper scan and &mdash; critically &mdash; a <em>diff-aware</em> one, reporting only issues introduced by the change rather than the entire backlog. This is the operating point where the Google and Facebook experience says findings actually get fixed, because they are attached to the code under review.<sup class="cref"><a href="#ref-sadowski2018">37</a>,<a href="#ref-distefano2019">38</a></sup> Here a <em>quality gate</em> can block the merge if new high-severity issues appear.</li>
+      <li><strong>On a schedule</strong>, a full, slow, whole-program scan runs nightly or weekly to catch deep interprocedural flows and to track the security posture of the entire codebase over time.</li>
+    </ul>
+    <h3 class="sub">Speaking a common language: SARIF</h3>
+    <p>Threading many tools through one pipeline created a Babel problem: every scanner emitted findings in its own format, making aggregation painful. The answer is the <strong>Static Analysis Results Interchange Format</strong> (SARIF), a JSON-based standard for static-analysis output ratified by OASIS as version 2.1.0 in 2020.<sup class="cref"><a href="#ref-sarif210" id="cite-sarif210-41">41</a></sup> SARIF lets a low-cost tool plug into a rich ecosystem of viewers and dashboards, and lets an organisation merge the output of many scanners into a single view &mdash; the mechanism behind, for example, code-scanning dashboards that ingest results from CodeQL, Semgrep, SpotBugs, Brakeman, and more. A minimal result carries the rule, a severity level, a message, and a precise location:</p>
+    <div class="code">
+      <div class="bar"><span class="fn">results.sarif &middot; excerpt</span><span class="lang">sarif 2.1.0 / json</span></div>
+<pre>{
+  <span class="f">"version"</span>: <span class="s">"2.1.0"</span>,
+  <span class="f">"runs"</span>: [{
+    <span class="f">"tool"</span>: { <span class="f">"driver"</span>: { <span class="f">"name"</span>: <span class="s">"ExampleSAST"</span> } },
+    <span class="f">"results"</span>: [{
+      <span class="f">"ruleId"</span>: <span class="s">"py/sql-injection"</span>,
+      <span class="f">"level"</span>:  <span class="s">"error"</span>,
+      <span class="f">"message"</span>: { <span class="f">"text"</span>: <span class="s">"Untrusted input reaches a SQL sink."</span> },
+      <span class="f">"locations"</span>: [{ <span class="f">"physicalLocation"</span>: {
+        <span class="f">"artifactLocation"</span>: { <span class="f">"uri"</span>: <span class="s">"app/views.py"</span> },
+        <span class="f">"region"</span>: { <span class="f">"startLine"</span>: <span class="n">7</span> } } }]
+    }]
+  }]
+}</pre>
+      <div class="cap">A single SARIF finding. Because the format is standardised, the same JSON drives editors, pull-request annotations, and security dashboards regardless of which tool produced it.</div>
+    </div>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-tools">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">10</span><span>The landscape</span><span class="bar"></span></div>
+    <h2 class="sec-title">The tools: enterprise, open-source, language-specific</h2>
+  </div>
+  <div class="inner">
+    <p>The market splits along two axes: commercial versus open-source, and general-purpose versus language-specific. No single tool is best for everyone, and OWASP explicitly declines to endorse any of them, maintaining only a neutral catalogue.<sup class="cref"><a href="#ref-owaspsca" id="cite-owaspsca-1">1</a></sup> The pragmatic pattern in serious programs is a layered one &mdash; a fast, developer-facing scanner in the pull-request loop, a deep engine on a schedule, and language-specific linters filling gaps &mdash; unified through SARIF.</p>
+    <div class="tbl-wrap">
+    <table class="data">
+      <thead><tr><th>Tool</th><th>Licence</th><th>Engine / approach</th><th>Primary languages</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="nm">OpenText Fortify</span><br><span class="mono">SCA</span></td><td><span class="pill com">Commercial</span></td><td>Source-level interprocedural taint; long-standing deep engine</td><td>44+, incl. COBOL, ABAP, Fortran</td><td>Founded 2003; via HP &rarr; Micro Focus &rarr; OpenText<sup class="cref"><a href="#ref-fortifywiki" id="cite-fortifywiki-15">15</a></sup></td></tr>
+        <tr><td><span class="nm">Checkmarx</span><br><span class="mono">One / CxSAST</span></td><td><span class="pill com">Commercial</span></td><td>Source-based taint; custom rules in the CxQL query language</td><td>35+</td><td>Founded 2006; no build required to scan</td></tr>
+        <tr><td><span class="nm">Veracode</span><br><span class="mono">Static Analysis</span></td><td><span class="pill com">Commercial</span></td><td>Analyses compiled <em>binaries/bytecode</em>; SaaS, policy-driven</td><td>100+ via bytecode</td><td>Founded 2006 by ex-L0pht/@stake researchers<sup class="cref"><a href="#ref-veracodewiki" id="cite-veracodewiki-16">16</a></sup></td></tr>
+        <tr><td><span class="nm">Coverity</span><br><span class="mono">Black Duck</span></td><td><span class="pill com">Commercial</span></td><td>Whole-program interprocedural + statistical &ldquo;deviant behaviour&rdquo; inference</td><td>C/C++, Java, C#, JS, &hellip;</td><td>Stanford/Engler lineage; spun out 2002<sup class="cref"><a href="#ref-engler2001" id="cite-engler2001-12">12</a></sup></td></tr>
+        <tr><td><span class="nm">CodeQL</span><br><span class="mono">GitHub</span></td><td><span class="pill mix">OSS queries / proprietary engine</span></td><td>Compiles code to a relational DB; queried in QL (Datalog-based)</td><td>C/C++, C#, Go, Java/Kotlin, JS/TS, Python, Ruby, Swift</td><td>From Semmle; free for open source; 400+ CVEs via variant analysis<sup class="cref"><a href="#ref-aboutcodeql" id="cite-aboutcodeql-23">23</a></sup></td></tr>
+        <tr><td><span class="nm">Semgrep</span><br><span class="mono">Community Ed.</span></td><td><span class="pill oss">Open source (LGPL)</span></td><td>AST pattern matching + limited data-flow; taint mode</td><td>30+</td><td>From Facebook's sgrep; Pro tier adds cross-file taint<sup class="cref"><a href="#ref-semgrepgh" id="cite-semgrepgh-24">24</a></sup></td></tr>
+        <tr><td><span class="nm">SonarQube</span><br><span class="mono">SonarSource</span></td><td><span class="pill mix">Open core / commercial</span></td><td>Code-quality first; taint (data-flow) analysis in paid editions</td><td>30+</td><td>Widely deployed; security depth concentrated in commercial tiers<sup class="cref"><a href="#ref-sonartaint" id="cite-sonartaint-34">34</a></sup></td></tr>
+        <tr><td><span class="nm">SpotBugs</span> + Find Security Bugs<br><span class="mono">JVM</span></td><td><span class="pill oss">Open source</span></td><td>Bytecode bug-pattern matching; security plugin adds CWE coverage</td><td>Java, Kotlin, Scala, Groovy</td><td>Community successor to Maryland's FindBugs<sup class="cref"><a href="#ref-ayewah2008" id="cite-ayewah2008-18">18</a></sup></td></tr>
+        <tr><td><span class="nm">Bandit</span><br><span class="mono">PyCQA</span></td><td><span class="pill oss">Open source</span></td><td>Walks the Python AST for known-insecure constructs</td><td>Python</td><td>Fast, shallow; ideal in pre-commit hooks</td></tr>
+        <tr><td><span class="nm">Brakeman</span><br><span class="mono">Rails</span></td><td><span class="pill oss">Open source</span></td><td>Framework-specific data-flow for Ruby on Rails</td><td>Ruby on Rails</td><td>Confidence-rated findings; deep Rails awareness</td></tr>
+        <tr><td><span class="nm">gosec</span><br><span class="mono">securego</span></td><td><span class="pill oss">Open source</span></td><td>SSA-based analysis; taint rules G701&ndash;G706 for injection</td><td>Go</td><td>Sources/sinks/sanitisers over Go's SSA form</td></tr>
+        <tr><td><span class="nm">ESLint</span> + security plugins<br><span class="mono">JS/TS</span></td><td><span class="pill oss">Open source</span></td><td>Configurable AST linting; security rule sets bolt on</td><td>JavaScript, TypeScript</td><td>Descends from the linter tradition Lint began<sup class="cref"><a href="#ref-lintwiki" id="cite-lintwiki-5">5</a></sup></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="legend">
+      <span><i class="t"></i> commercial &mdash; deep, supported, licensed</span>
+      <span><i class="g"></i> open source &mdash; free, self-hosted, community rules</span>
+      <span><i class="m"></i> open core &mdash; free base, paid depth</span>
+    </div>
+    <p><strong>Enterprise engines</strong> (Fortify, Checkmarx, Veracode, Coverity) buy depth, support, broad language coverage, and compliance reporting at significant cost and configuration weight; they remain the standard for large, regulated organisations that need cross-file taint and audit trails. <strong>Cross-language open-source tools</strong> (CodeQL, Semgrep, SonarQube) have narrowed that gap dramatically for the majority of applications, adding custom-rule authoring that lets teams encode their own security invariants. <strong>Language-specific scanners</strong> (SpotBugs+Find Security Bugs, Bandit, Brakeman, gosec, ESLint) trade breadth for intimacy with one ecosystem's idioms and frameworks, and are cheap enough to run on every commit &mdash; several are the built-in analyzers behind larger platforms' SAST features.</p>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-practice">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">11</span><span>Doing it well</span><span class="bar"></span></div>
+    <h2 class="sec-title">Best practices: from scanner to security outcome</h2>
+  </div>
+  <div class="inner">
+    <p>Buying a SAST tool is easy; getting security value from it is not. The failure mode is universal &mdash; a scanner is switched on, produces a mountain of findings, overwhelms and alienates developers, and is quietly ignored. The practices that avoid it are consistent across the operators who have run static analysis at the largest scale.<sup class="cref"><a href="#ref-sadowski2018">37</a>,<a href="#ref-distefano2019">38</a></sup></p>
+    <ol>
+      <li><strong>Integrate into the workflow; do not bolt on at the end.</strong> Findings that appear in the editor and at code-review time, on the code being changed, get fixed; batch reports delivered to a separate dashboard do not. Meet developers where they already work.</li>
+      <li><strong>Scan diffs, and baseline the backlog.</strong> Report only issues a change introduces, and set aside pre-existing findings as a managed baseline. A team that must fix three hundred legacy warnings before shipping will simply turn the tool off; a team that must fix only what it just added will keep it on.</li>
+      <li><strong>Measure fix rate, not find rate, and tune ruthlessly.</strong> A check whose findings developers consistently dismiss is worse than no check &mdash; it trains people to ignore output. Suppress it. Use severity, confidence, and statistical ranking to surface the few findings that matter first.<sup class="cref"><a href="#ref-kremenek2003" id="cite-kremenek2003-39">39</a></sup> Track how many findings are actually remediated, and treat that number as the real score.<sup class="cref"><a href="#ref-sadowski2018" id="cite-sadowski2018-37">37</a></sup></li>
+      <li><strong>Write custom rules for your own invariants.</strong> The generic rule set does not know your frameworks, your internal sanitisers, or your organisation's forbidden APIs. Modern tools &mdash; Semgrep's YAML, CodeQL's QL, Checkmarx's CxQL &mdash; exist precisely so teams can encode security knowledge that a vendor never could. This is where a program moves from catching textbook bugs to enforcing its own security architecture.<sup class="cref"><a href="#ref-semgrepgh">24</a>,<a href="#ref-aboutcodeql">23</a></sup></li>
+      <li><strong>Give developers actionable output.</strong> Every finding should carry the data-flow path, a clear explanation of why it is dangerous, and concrete remediation guidance. The research on tool abandonment points squarely at poor result presentation as a primary cause of failure, independent of detection quality.<sup class="cref"><a href="#ref-johnson2013" id="cite-johnson2013-36">36</a></sup></li>
+      <li><strong>Know &mdash; and document &mdash; the soundiness boundary.</strong> Understand which language features and frameworks your tool does not model, so its silence is never mistaken for a guarantee. A clean SAST run means &ldquo;no findings within the modelled fragment,&rdquo; not &ldquo;no vulnerabilities.&rdquo;<sup class="cref"><a href="#ref-soundiness2015" id="cite-soundiness2015-28">28</a></sup></li>
+      <li><strong>Treat SAST as one layer of defence in depth.</strong> It cannot see runtime behaviour, configuration, or dependency vulnerabilities. Pair it with DAST or IAST for runtime coverage and SCA for third-party risk. Cross-validating SAST findings against a running-application test is one of the most reliable ways to separate real exploitable flaws from theoretical ones.</li>
+    </ol>
+  </div>
+</section>
+
+
+<section class="sec wide" id="s-coda">
+  <div class="sec-head">
+    <div class="sec-eyebrow"><span class="num">12</span><span>Coda</span><span class="bar"></span></div>
+    <h2 class="sec-title">The shape of the problem does not change</h2>
+  </div>
+  <div class="inner">
+    <p>The frontier of SAST today is the marriage of program analysis with machine learning. Large language models are being used as triage assistants &mdash; reading a tool's raw output and filtering the false positives that traditional ranking misses &mdash; and as generators of taint specifications and even of analysis queries. Early results are genuinely promising: LLM-based post-processing can discard a substantial fraction of false positives while preserving true findings, and hybrid pipelines that combine a classical analyzer's soundness with a model's contextual judgement point toward tools that are both thorough and quiet.</p>
+    <p>But it is worth being precise about what such tools can and cannot escape. An analyzer &mdash; classical or neural &mdash; that claimed to detect every vulnerability in every program with no false alarms would be claiming to decide an undecidable problem, and Rice's theorem forbids it as firmly for a transformer trained on billions of lines of code as for a hand-written data-flow pass.<sup class="cref"><a href="#ref-rice1953" id="cite-rice1953-26">26</a></sup> What machine learning changes is not the boundary but the <em>nature of the approximation</em>: where classical analysis uses formal abstractions with predictable failure modes, learned models use statistical patterns with different, sometimes complementary, blind spots. The most effective systems will almost certainly be hybrids that play the two against each other &mdash; the sound over-approximation of abstract interpretation to guarantee coverage, the learned model to prune the noise.</p>
+    <p>Which returns us to where the field began. Kildall's lattices, the Cousots' abstract interpretation, Reps and Sagiv's reachability, Engler's deviant behaviour, Semmle's queryable database, Semgrep's approachable rules &mdash; each was an answer to the same permanent question: how to say something rigorous and useful about a program's behaviour without ever running it, in a world where saying anything perfectly is provably impossible. SAST is the accumulated, practical, imperfect answer. Its value was never that it is right about everything. It is that, read at the right moment and tuned with care, it is right about enough &mdash; early enough, and cheaply enough &mdash; to matter.<sup class="cref"><a href="#ref-bessey2010" id="cite-bessey2010-14">14</a></sup></p>
+  </div>
+</section>
+
+</div>
+</main>
+
+<footer class="refs">
+  <div class="wrap">
+    <h2>References</h2>
+    <p class="rsub">Vancouver style &middot; numbered in order of first citation &middot; 41 sources</p>
+    <ol class="reflist">
+<li id="ref-owaspsca">OWASP Foundation. Source Code Analysis Tools [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://owasp.org/www-community/Source_Code_Analysis_Tools">https://owasp.org/www-community/Source_Code_Analysis_Tools</a></li>
+<li id="ref-owasptop10">OWASP Foundation. OWASP Top 10:2021 [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://owasp.org/Top10/">https://owasp.org/Top10/</a></li>
+<li id="ref-cwe">MITRE. Common Weakness Enumeration (CWE) [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://cwe.mitre.org/">https://cwe.mitre.org/</a></li>
+<li id="ref-johnson1978">Johnson SC. Lint, a C Program Checker. Comp. Sci. Tech. Rep. No. 65. Murray Hill (NJ): Bell Laboratories; 1978.</li>
+<li id="ref-lintwiki">Lint (software) [Internet]. Wikipedia; [cited 2026 Jul 16]. Available from: <a href="https://en.wikipedia.org/wiki/Lint_(software">https://en.wikipedia.org/wiki/Lint_(software</a>)</li>
+<li id="ref-kildall1973">Kildall GA. A unified approach to global program optimization. In: Conference Record of the ACM Symposium on Principles of Programming Languages (POPL '73). Boston (MA): ACM; 1973. p. 194&ndash;206.</li>
+<li id="ref-allen1970">Allen FE. Control flow analysis. ACM SIGPLAN Notices. 1970;5(7):1&ndash;19.</li>
+<li id="ref-kam1977">Kam JB, Ullman JD. Monotone data flow analysis frameworks. Acta Informatica. 1977;7(3):305&ndash;317.</li>
+<li id="ref-cousot1977">Cousot P, Cousot R. Abstract interpretation: a unified lattice model for static analysis of programs by construction or approximation of fixpoints. In: Conference Record of the 4th ACM Symposium on Principles of Programming Languages (POPL '77). Los Angeles (CA): ACM; 1977. p. 238&ndash;252.</li>
+<li id="ref-nielson1999">Nielson F, Nielson HR, Hankin C. Principles of Program Analysis. Berlin: Springer; 1999.</li>
+<li id="ref-engler2000">Engler D, Chelf B, Chou A, Hallem S. Checking system rules using system-specific, programmer-written compiler extensions. In: Proc. 4th Symposium on Operating Systems Design and Implementation (OSDI '00). San Diego (CA): USENIX; 2000. p. 1&ndash;16.</li>
+<li id="ref-engler2001">Engler D, Chen DY, Hallem S, Chou A, Chelf B. Bugs as deviant behavior: a general approach to inferring errors in systems code. In: Proc. 18th ACM Symposium on Operating Systems Principles (SOSP '01). Banff: ACM; 2001. p. 57&ndash;72.</li>
+<li id="ref-hallem2002">Hallem S, Chelf B, Xie Y, Engler D. A system and language for building system-specific, static analyses. In: Proc. ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '02). Berlin: ACM; 2002. p. 69&ndash;82.</li>
+<li id="ref-bessey2010">Bessey A, Block K, Chelf B, Chou A, Fulton B, Hallem S, Henri-Gros C, Kamsky A, McPeak S, Engler D. A few billion lines of code later: using static analysis to find bugs in the real world. Commun. ACM. 2010;53(2):66&ndash;75.</li>
+<li id="ref-fortifywiki">Fortify Software [Internet]. Wikipedia; [cited 2026 Jul 16]. Available from: <a href="https://en.wikipedia.org/wiki/Fortify_Software">https://en.wikipedia.org/wiki/Fortify_Software</a></li>
+<li id="ref-veracodewiki">Veracode [Internet]. Wikipedia; [cited 2026 Jul 16]. Available from: <a href="https://en.wikipedia.org/wiki/Veracode">https://en.wikipedia.org/wiki/Veracode</a></li>
+<li id="ref-hovemeyer2004">Hovemeyer D, Pugh W. Finding bugs is easy. ACM SIGPLAN Notices. 2004;39(12):92&ndash;106.</li>
+<li id="ref-ayewah2008">Ayewah N, Pugh W, Hovemeyer D, Morgenthaler JD, Penix J. Using static analysis to find bugs. IEEE Software. 2008;25(5):22&ndash;29.</li>
+<li id="ref-chess2004">Chess B, McGraw G. Static analysis for security. IEEE Security &amp; Privacy. 2004;2(6):76&ndash;79.</li>
+<li id="ref-mcgraw2006">McGraw G. Software Security: Building Security In. Boston: Addison-Wesley Professional; 2006.</li>
+<li id="ref-codequest2006">Hajiyev E, Verbaere M, de Moor O. CodeQuest: scalable source code queries with Datalog. In: Proc. 20th European Conference on Object-Oriented Programming (ECOOP 2006). LNCS 4067. Berlin: Springer; 2006. p. 2&ndash;27.</li>
+<li id="ref-semmlewiki">Semmle [Internet]. Wikipedia; [cited 2026 Jul 16]. Available from: <a href="https://en.wikipedia.org/wiki/Semmle">https://en.wikipedia.org/wiki/Semmle</a></li>
+<li id="ref-aboutcodeql">GitHub. About CodeQL [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://codeql.github.com/docs/codeql-overview/about-codeql/">https://codeql.github.com/docs/codeql-overview/about-codeql/</a></li>
+<li id="ref-semgrepgh">Semgrep [Internet]. GitHub repository; [cited 2026 Jul 16]. Available from: <a href="https://github.com/semgrep/semgrep">https://github.com/semgrep/semgrep</a></li>
+<li id="ref-semgrepwiki">Semgrep [Internet]. Wikipedia; [cited 2026 Jul 16]. Available from: <a href="https://en.wikipedia.org/wiki/Semgrep">https://en.wikipedia.org/wiki/Semgrep</a></li>
+<li id="ref-rice1953">Rice HG. Classes of recursively enumerable sets and their decision problems. Trans. Amer. Math. Soc. 1953;74(2):358&ndash;366.</li>
+<li id="ref-turing1937">Turing AM. On computable numbers, with an application to the Entscheidungsproblem. Proc. Lond. Math. Soc. 1937;s2-42(1):230&ndash;265.</li>
+<li id="ref-soundiness2015">Livshits B, Sridharan M, Smaragdakis Y, Lhot&aacute;k O, Amaral JN, Chang BE, Guyer SZ, Khedker UP, M&oslash;ller A, Vardoulakis D. In defense of soundiness: a manifesto. Commun. ACM. 2015;58(2):44&ndash;46.</li>
+<li id="ref-cytron1991">Cytron R, Ferrante J, Rosen BK, Wegman MN, Zadeck FK. Efficiently computing static single assignment form and the control dependence graph. ACM Trans. Program. Lang. Syst. 1991;13(4):451&ndash;490.</li>
+<li id="ref-andersen1994">Andersen LO. Program analysis and specialization for the C programming language [PhD thesis]. Copenhagen: DIKU, University of Copenhagen; 1994.</li>
+<li id="ref-steensgaard1996">Steensgaard B. Points-to analysis in almost linear time. In: Conference Record of the 23rd ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (POPL '96). St. Petersburg Beach (FL): ACM; 1996. p. 32&ndash;41.</li>
+<li id="ref-reps1995">Reps T, Horwitz S, Sagiv M. Precise interprocedural dataflow analysis via graph reachability. In: Conference Record of the 22nd ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (POPL '95). San Francisco (CA): ACM; 1995. p. 49&ndash;61.</li>
+<li id="ref-flowdroid2014">Arzt S, Rasthofer S, Fritz C, Bodden E, Bartel A, Klein J, Le Traon Y, Octeau D, McDaniel P. FlowDroid: precise context, flow, field, object-sensitive and lifecycle-aware taint analysis for Android apps. In: Proc. 35th ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '14). Edinburgh: ACM; 2014. p. 259&ndash;269.</li>
+<li id="ref-sonartaint">SonarSource. Taint analysis [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://www.sonarsource.com/solutions/taint-analysis/">https://www.sonarsource.com/solutions/taint-analysis/</a></li>
+<li id="ref-samate">National Institute of Standards and Technology. Software Assurance Metrics And Tool Evaluation (SAMATE) [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://www.nist.gov/itl/ssd/software-quality-group/samate">https://www.nist.gov/itl/ssd/software-quality-group/samate</a></li>
+<li id="ref-johnson2013">Johnson B, Song Y, Murphy-Hill E, Bowdidge R. Why don't software developers use static analysis tools to find bugs? In: Proc. 35th International Conference on Software Engineering (ICSE '13). San Francisco (CA): IEEE; 2013. p. 672&ndash;681.</li>
+<li id="ref-sadowski2018">Sadowski C, Aftandilian E, Eagle A, Miller-Cushon L, Jaspan C. Lessons from building static analysis tools at Google. Commun. ACM. 2018;61(4):58&ndash;66.</li>
+<li id="ref-distefano2019">Distefano D, F&auml;hndrich M, Logozzo F, O'Hearn PW. Scaling static analyses at Facebook. Commun. ACM. 2019;62(8):62&ndash;70.</li>
+<li id="ref-kremenek2003">Kremenek T, Engler D. Z-ranking: using statistical analysis to counter the impact of static analysis approximations. In: Proc. 10th International Static Analysis Symposium (SAS '03). LNCS 2694. Berlin: Springer; 2003. p. 295&ndash;315.</li>
+<li id="ref-owaspbench">OWASP Foundation. OWASP Benchmark Project [Internet]. [cited 2026 Jul 16]. Available from: <a href="https://owasp.org/www-project-benchmark/">https://owasp.org/www-project-benchmark/</a></li>
+<li id="ref-sarif210">Fanning MC, Golding LJ, editors. Static Analysis Results Interchange Format (SARIF) Version 2.1.0. OASIS Standard; 2020 Mar 27. Available from: <a href="https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html">https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html</a></li>
+    </ol>
+    <div class="colophon">
+      <span>Static Application Security Testing &mdash; a technical field guide</span>
+      <span>Compiled 16 July 2026</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

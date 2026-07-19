@@ -15,26 +15,30 @@ const blogCategoryLabels = [
   "Docker",
   "Earth Sciences",
   "Engineering",
+  "Ethics",
   "Finance",
   "Hardware",
   "IoT",
   "Kubernetes",
   "Learning",
-  "Math & Physics",
+  "Math",
   "Mobile App Development",
   "Networks",
   "Nmap",
   "Operating Systems",
   "Pentesting",
+  "Physics",
   "Philosophy",
   "Privacy",
   "Programming & Software",
+  "Programming Languages",
   "Python",
   "Robotics",
   "Security",
   "SDLC",
   "Side-Channel Attacks",
   "Society & Civics",
+  "Society & Technology",
   "Software Design & Architecture",
   "Spring",
   "Veganism",
@@ -62,6 +66,42 @@ type PreparedBlogDirectoryPost = {
 const BLOG_PAGE_SIZE = 24;
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/metaethics.html",
+    publishedAt: "2026-07-17",
+    summary: "A survey of metaethics covering moral realism, anti-realism, error theory, constructivism, and the problem of grounding moral truth without metaphysical shortcuts.",
+    title: "Neither Bedrock nor Abyss — A Survey of Metaethics"
+  },
+  {
+    path: "blog-articles/machine-learning-lifecycle.html",
+    publishedAt: "2026-07-16",
+    summary: "An end-to-end technical guide to the machine-learning lifecycle, from problem framing and data work through feature engineering, validation, deployment, and monitoring.",
+    title: "The Machine Learning Lifecycle"
+  },
+  {
+    path: "blog-articles/ai-coding-agent-failures.html",
+    publishedAt: "2026-07-15",
+    summary: "A field guide to where AI coding agents fail in practice, covering hallucinated changes, destructive actions, false success reports, and the reliability gap behind benchmark wins.",
+    title: "The Reliability Gap — Where AI coding agents break, why, and whose fault it is"
+  },
+  {
+    path: "blog-articles/ai-in-robotics.html",
+    publishedAt: "2026-07-14",
+    summary: "A technical survey of AI in robotics, from classic planning and reinforcement learning to foundation models, sim-to-real transfer, evaluation, and embodied-system constraints.",
+    title: "Artificial Intelligence in Robotics: Foundation Models, Sim-to-Real, and the Body Problem"
+  },
+  {
+    path: "blog-articles/vulnerability-scanning.html",
+    publishedAt: "2026-07-13",
+    summary: "A technical history and reference on vulnerability scanning, covering scanner architecture, CVE and CVSS, major tools, detection tradeoffs, and the limits of automated coverage.",
+    title: "Vulnerability Scanning: Automating the Search for Known Weakness"
+  },
+  {
+    path: "blog-articles/bayesian-statistics.html",
+    publishedAt: "2026-07-12",
+    summary: "A technical primer on Bayesian statistics covering priors, likelihoods, posteriors, conjugate models, credible intervals, and Markov chain Monte Carlo intuition.",
+    title: "Bayesian Statistics — A Technical Primer"
+  },
   {
     path: "blog-articles/phase-0-planning-feasibility.html",
     publishedAt: "2026-07-11",
@@ -115,6 +155,60 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-07-03",
     summary: "A technical monograph on digital control systems, from sampled-data theory and z-domain stability to controller design, quantization, delay, and real-time implementation.",
     title: "Digital Control Systems — Sampled-Data Theory, Controller Design & Real-Time Implementation"
+  },
+  {
+    path: "blog-articles/javascript.html",
+    publishedAt: "2026-07-02",
+    summary: "A technical field guide to JavaScript covering its history, engines, runtimes, event loop, ecosystem, and why the web's accidental language became unavoidable.",
+    title: "JavaScript — The Accidental Language of the Web"
+  },
+  {
+    path: "blog-articles/breach_attack_simulation.html",
+    publishedAt: "2026-07-01",
+    summary: "A technical guide to breach and attack simulation covering ATT&CK-aligned validation, adversary emulation platforms, detection testing, control assurance, and BAS market evolution.",
+    title: "Breach and Attack Simulation"
+  },
+  {
+    path: "blog-articles/the-language-of-things.html",
+    publishedAt: "2026-06-30",
+    summary: "An engineering guide to IoT connectivity and communication protocols, comparing Wi-Fi, BLE, Zigbee, LoRaWAN, cellular IoT, and the messaging layers built on top of them.",
+    title: "The Language of Things — IoT Connectivity & Communication Protocols"
+  },
+  {
+    path: "blog-articles/cognitive-layer-robotics.html",
+    publishedAt: "2026-06-29",
+    summary: "A technical survey of the cognitive layer in robotics, covering planning, decision-making, trajectory optimization, vision integration, and reinforcement-learning interfaces.",
+    title: "The Cognitive Layer in Robotics"
+  },
+  {
+    path: "blog-articles/robotics-perception.html",
+    publishedAt: "2026-06-28",
+    summary: "A field guide to robotics perception covering proprioception, exteroception, sensor fusion, state estimation, and SLAM across modern robotic systems.",
+    title: "Robotics Perception: Proprioception, Exteroception, and SLAM"
+  },
+  {
+    path: "blog-articles/three-walls-robotics.html",
+    publishedAt: "2026-06-27",
+    summary: "A technical account of the three constraints that still limit robotics, focusing on power density, dexterity, robustness, and the engineering realities behind the hype.",
+    title: "Three Walls — The Technical Hurdles That Still Define Robotics"
+  },
+  {
+    path: "blog-articles/why-projects-run-late-and-over-budget.html",
+    publishedAt: "2026-06-26",
+    summary: "A referenced account of why projects overrun on cost and schedule, covering optimism bias, political incentives, bad forecasting, lock-in, and the few practices that actually help.",
+    title: "The Anatomy of the Overrun — Why Projects Run Late and Cost More Than Planned"
+  },
+  {
+    path: "blog-articles/engineering_is_philosophy.html",
+    publishedAt: "2026-06-25",
+    summary: "An essay arguing that engineering is a practical form of philosophy, where every design encodes assumptions about knowledge, evidence, uncertainty, and failure.",
+    title: "Engineering Is Philosophy"
+  },
+  {
+    path: "blog-articles/sast-technical-field-guide.html",
+    publishedAt: "2026-06-24",
+    summary: "A technical field guide to static application security testing, covering ASTs, control flow, taint analysis, semantic engines, tooling, and practical use in secure delivery.",
+    title: "Static Application Security Testing — A Technical Field Guide"
   },
   {
     path: "blog-articles/heliocentrism-copernican-revolution.html",
@@ -1413,12 +1507,6 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Life's Impossible Machine: Biology as the Ultimate Engineering Challenge"
   },
   {
-    path: "blog-articles/engineering_as_philosophy.html",
-    publishedAt: "2026-04-08",
-    summary: "An essay on design, epistemology, and the hidden assumptions built into every system.",
-    title: "Engineering Is Philosophy in Disguise"
-  },
-  {
     path: "blog-articles/know-your-rights.html",
     publishedAt: "2026-04-07",
     summary: "A civic reference guide to constitutional protections, police encounters, and the rights Americans carry with them.",
@@ -1655,41 +1743,41 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
-  "blog-articles/chicxulub.html": ["Earth Sciences", "Math & Physics", "Philosophy"],
+  "blog-articles/chicxulub.html": ["Earth Sciences", "Physics", "Philosophy"],
   "blog-articles/commercial-facilities-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/the-self-in-question.html": ["Philosophy"],
   "blog-articles/dams-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/food-agriculture-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/chaos-theory-butterfly-effect.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/chaos-theory-butterfly-effect.html": ["Math", "Physics", "Philosophy"],
   "blog-articles/communications-sector-cybersecurity.html": ["Security", "Networks", "Engineering"],
-  "blog-articles/black-hole-singularities.html": ["Math & Physics", "Philosophy", "Cosmology"],
+  "blog-articles/black-hole-singularities.html": ["Physics", "Philosophy", "Cosmology"],
   "blog-articles/defense-industrial-base-cybersecurity.html": ["Security", "Engineering", "Society & Civics"],
   "blog-articles/libet-free-will.html": ["Philosophy"],
   "blog-articles/nuclear-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/dark-energy-accelerating-universe.html": ["Math & Physics", "Cosmology"],
+  "blog-articles/dark-energy-accelerating-universe.html": ["Physics", "Cosmology"],
   "blog-articles/hph-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/financial-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering", "Finance"],
-  "blog-articles/many-worlds-interpretation.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/many-worlds-interpretation.html": ["Physics", "Philosophy"],
   "blog-articles/transportation-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/water-cyber.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/energy-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/continuum-hypothesis.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/continuum-hypothesis.html": ["Math", "Philosophy"],
   "blog-articles/zero-click-attacks.html": ["Security", "Mobile App Development", "Operating Systems"],
   "blog-articles/the-nature-of-the-crime.html": ["Philosophy", "Society & Civics"],
   "blog-articles/timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
   "blog-articles/power-analysis-attacks.html": ["Security", "Engineering", "Side-Channel Attacks"],
   "blog-articles/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
   "blog-articles/windows-legacy-security.html": ["Security", "Operating Systems", "Pentesting", "Cyber-Physical Systems"],
-  "blog-articles/cobol.html": ["Programming & Software", "Engineering"],
-  "blog-articles/advanced-graph-problems.html": ["Competitive Programming", "Programming & Software", "Math & Physics"],
+  "blog-articles/cobol.html": ["Programming & Software", "Programming Languages", "Engineering"],
+  "blog-articles/advanced-graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
   "blog-articles/cache-invalidation.html": ["Programming & Software", "Engineering", "DevSecOps"],
   "blog-articles/its-always-dns.html": ["Networks", "Security"],
   "blog-articles/printer-troubleshooting.html": ["Engineering", "Operating Systems"],
   "blog-articles/ping.html": ["Networks"],
-  "blog-articles/cpp.html": ["Programming & Software", "Operating Systems", "Engineering"],
-  "blog-articles/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math & Physics"],
+  "blog-articles/cpp.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Engineering"],
+  "blog-articles/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
   "blog-articles/supply-chain-vulnerabilities.html": ["Security", "DevSecOps", "Programming & Software", "Engineering"],
-  "blog-articles/impossibility.html": ["Philosophy", "Math & Physics", "Engineering"],
+  "blog-articles/impossibility.html": ["Philosophy", "Math", "Physics", "Engineering"],
   "blog-articles/cloud-vulnerabilities.html": ["Security", "Networks", "DevSecOps"],
   "blog-articles/app-vulns.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/curl-reference.html": ["Programming & Software", "Networks"],
@@ -1699,27 +1787,27 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/cpu-fundamentals.html": ["Engineering", "Hardware", "Operating Systems"],
   "blog-articles/ram.html": ["Engineering", "Hardware", "Operating Systems"],
   "blog-articles/spring-cache.html": ["Programming & Software", "DevSecOps", "Spring"],
-  "blog-articles/complexity-classes.html": ["Math & Physics", "Programming & Software"],
+  "blog-articles/complexity-classes.html": ["Math", "Programming & Software"],
   "blog-articles/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
   "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
   "blog-articles/system-reliability-patterns.html": ["Engineering", "DevSecOps", "Programming & Software"],
   "blog-articles/spring-cloud-devops.html": ["Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
   "blog-articles/secure-architecture.html": ["Security", "Engineering", "DevSecOps", "Software Design & Architecture"],
-  "blog-articles/rust-programming-language.html": ["Programming & Software", "Operating Systems", "Security"],
-  "blog-articles/rlc-circuit-equation.html": ["Math & Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
+  "blog-articles/rust-programming-language.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Security"],
+  "blog-articles/rlc-circuit-equation.html": ["Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
   "blog-articles/ot-ics-scada-pentesting.html": ["Security", "Cyber-Physical Systems", "Networks", "Pentesting"],
-  "blog-articles/interval-problems-playbook.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
-  "blog-articles/greedy-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/interval-problems-playbook.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/greedy-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/django-architecture-scaling.html": ["Programming & Software", "Engineering", "DevSecOps", "Django"],
   "blog-articles/devsecops-engineer.html": ["DevSecOps", "Security", "Programming & Software"],
   "blog-articles/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
   "blog-articles/ai-cannot-compensate-for-natural-stupidity.html": ["AI & Machine Learning", "Philosophy", "Society & Civics"],
-  "blog-articles/2d-dynamic-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/2d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/automotive-cybersecurity.html": ["Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
   "blog-articles/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
-  "blog-articles/stacks-in-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/stacks-in-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
-  "blog-articles/models-of-reality.html": ["Philosophy", "AI & Machine Learning", "Math & Physics"],
+  "blog-articles/models-of-reality.html": ["Philosophy", "AI & Machine Learning", "Math", "Physics"],
   "blog-articles/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
   "blog-articles/dc-infrastructure-security.html": ["Security", "Networks", "DevSecOps", "Engineering"],
   "blog-articles/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
@@ -1727,11 +1815,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/css-methodologies.html": ["Web & UI", "Programming & Software"],
   "blog-articles/code-review-best-practices.html": ["Programming & Software", "Engineering"],
   "blog-articles/backend-performance.html": ["Programming & Software", "Engineering", "DevSecOps"],
-  "blog-articles/arrays-and-hashing-cp.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
-  "blog-articles/two-pointers.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/arrays-and-hashing-cp.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/two-pointers.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/trusted-hardware.html": ["Security", "Engineering", "Hardware", "Operating Systems"],
   "blog-articles/nmap-red-team.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/1d-dynamic-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/1d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/angular-performance.html": ["Web & UI", "Programming & Software", "Angular"],
   "blog-articles/animation-angular.html": ["Web & UI", "Programming & Software", "Angular"],
   "blog-articles/internationalization-angular.html": ["Web & UI", "Programming & Software", "Angular"],
@@ -1749,7 +1837,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/network-observability.html": ["Networks", "Security"],
   "blog-articles/mlops.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
   "blog-articles/messaging-security.html": ["Security", "Privacy", "Programming & Software"],
-  "blog-articles/csharp.html": ["Programming & Software"],
+  "blog-articles/csharp.html": ["Programming & Software", "Programming Languages"],
   "blog-articles/concurrency_python.html": ["Python", "Programming & Software"],
   "blog-articles/aspnet-orm.html": ["ASP.NET", "Programming & Software"],
   "blog-articles/aspnet-core-testing.html": ["ASP.NET", "Programming & Software", "SDLC"],
@@ -1760,11 +1848,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "DevSecOps"],
   "blog-articles/docker-security.html": ["Docker", "Security", "DevSecOps", "Programming & Software"],
   "blog-articles/dockerfile.html": ["Docker", "Programming & Software", "DevSecOps"],
-  "blog-articles/go-language.html": ["Programming & Software"],
+  "blog-articles/go-language.html": ["Programming & Software", "Programming Languages"],
   "blog-articles/kubernetes-deployment-patterns.html": ["Programming & Software", "Engineering", "Networks", "Kubernetes", "DevSecOps"],
   "blog-articles/malware-analysis.html": ["Security"],
   "blog-articles/managing-docker-containers.html": ["Docker", "Programming & Software", "DevSecOps"],
-  "blog-articles/mojo.html": ["Programming & Software", "AI & Machine Learning"],
+  "blog-articles/mojo.html": ["Programming & Software", "Programming Languages", "AI & Machine Learning"],
   "blog-articles/autonomous-vehicles.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
   "blog-articles/data-quality.html": ["AI & Machine Learning", "Engineering", "Programming & Software"],
@@ -1774,18 +1862,18 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/vibe-coding-risk-framework.html": ["AI & Machine Learning", "AI Strategy", "Programming & Software", "Security", "DevSecOps"],
   "blog-articles/wireless-networking.html": ["Networks", "Security"],
   "blog-articles/api-authentication.html": ["Security", "Programming & Software", "DevSecOps"],
-  "blog-articles/bit-manipulation.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/bit-manipulation.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/error-prevention-high-stakes.html": ["Engineering"],
   "blog-articles/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
   "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
   "blog-articles/purple-teamer-role.html": ["Security"],
   "blog-articles/service-mesh.html": ["Networks", "Programming & Software", "Kubernetes", "DevSecOps"],
   "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
-  "blog-articles/lua-programming-language.html": ["Programming & Software"],
+  "blog-articles/lua-programming-language.html": ["Programming & Software", "Programming Languages"],
   "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
   "blog-articles/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
   "blog-articles/threat-hunter-role.html": ["Security"],
-  "blog-articles/swift-programming-language.html": ["Programming & Software", "Mobile App Development"],
+  "blog-articles/swift-programming-language.html": ["Programming & Software", "Programming Languages", "Mobile App Development"],
   "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
   "blog-articles/red-teamer-infosec.html": ["Security"],
   "blog-articles/mcp.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "Security"],
@@ -1795,8 +1883,8 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
   "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker", "Spring"],
   "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
-  "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math & Physics"],
-  "blog-articles/math-geometry-competitive-programming.html": ["Math & Physics", "Programming & Software", "Competitive Programming"],
+  "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & Machine Learning", "Programming & Software", "Math"],
+  "blog-articles/math-geometry-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/java-build-tools.html": ["Programming & Software"],
   "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
   "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering", "IoT"],
@@ -1805,8 +1893,8 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/animal-research-science-education.html": ["Veganism", "Society & Civics"],
   "blog-articles/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
   "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software", "DevSecOps"],
-  "blog-articles/newtons_second_law_dynamics.html": ["Math & Physics", "Engineering", "Differential Equations"],
-  "blog-articles/non-euclidean-geometry.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/newtons_second_law_dynamics.html": ["Physics", "Engineering", "Differential Equations"],
+  "blog-articles/non-euclidean-geometry.html": ["Math", "Philosophy"],
   "blog-articles/drl-humanoid-robotics.html": ["AI & Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/causal_ai.html": ["AI & Machine Learning"],
   "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
@@ -1840,7 +1928,21 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/outages-are-inevitable.html": ["Engineering", "Philosophy"],
   "blog-articles/limits-of-knowledge.html": ["Philosophy", "AI & Machine Learning"],
   "blog-articles/biology-engineering-challenge.html": ["Engineering", "Philosophy"],
-  "blog-articles/engineering_as_philosophy.html": ["Engineering", "Philosophy"],
+  "blog-articles/metaethics.html": ["Philosophy", "Ethics"],
+  "blog-articles/machine-learning-lifecycle.html": ["AI & Machine Learning", "Engineering"],
+  "blog-articles/ai-coding-agent-failures.html": ["AI Agents", "Programming & Software"],
+  "blog-articles/ai-in-robotics.html": ["Robotics", "AI & Machine Learning"],
+  "blog-articles/vulnerability-scanning.html": ["Security", "DevSecOps"],
+  "blog-articles/bayesian-statistics.html": ["Math", "AI & Machine Learning"],
+  "blog-articles/javascript.html": ["Programming & Software", "Programming Languages", "Web & UI"],
+  "blog-articles/breach_attack_simulation.html": ["Security", "Pentesting"],
+  "blog-articles/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
+  "blog-articles/cognitive-layer-robotics.html": ["Robotics", "AI & Machine Learning"],
+  "blog-articles/robotics-perception.html": ["Robotics", "Engineering"],
+  "blog-articles/three-walls-robotics.html": ["Robotics", "Engineering"],
+  "blog-articles/why-projects-run-late-and-over-budget.html": ["Engineering", "SDLC"],
+  "blog-articles/engineering_is_philosophy.html": ["Engineering", "Philosophy"],
+  "blog-articles/sast-technical-field-guide.html": ["Security", "DevSecOps"],
   "blog-articles/know-your-rights.html": ["Society & Civics"],
   "blog-articles/mental_health_blog.html": ["Society & Civics"],
   "blog-articles/information-security-for-everyone.html": ["Security", "Privacy"],
@@ -1863,36 +1965,36 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/privacy.html": ["Privacy", "Security"],
   "blog-articles/distributed-systems-networks.html": ["Networks", "Programming & Software"],
   "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy"],
-  "blog-articles/graph-theory-networks.html": ["Networks", "Math & Physics"],
+  "blog-articles/graph-theory-networks.html": ["Networks", "Math"],
   "blog-articles/hierarchical-network-design.html": ["Networks"],
-  "blog-articles/halting-problem.html": ["Programming & Software", "Math & Physics", "Philosophy"],
+  "blog-articles/halting-problem.html": ["Programming & Software", "Math", "Philosophy"],
   "blog-articles/authorized-adversary.html": ["Security", "Networks", "Pentesting"],
   "blog-articles/active-directory-pentesting.html": ["Security", "Networks", "Pentesting", "Operating Systems"],
   "blog-articles/semmelweis-childbed-fever.html": ["Philosophy", "Society & Civics"],
   "blog-articles/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
   "blog-articles/it-sector-security.html": ["Security", "Networks", "Engineering", "Society & Civics"],
-  "blog-articles/aether.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/aether.html": ["Physics", "Philosophy"],
   "blog-articles/government-services-facilities-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
   "blog-articles/critical-manufacturing-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/commons.html": ["Society & Civics", "Philosophy"],
   "blog-articles/emergency-services-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
   "blog-articles/chemical-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Physics", "Philosophy"],
   "blog-articles/especes_perdues.html": ["Earth Sciences", "Philosophy"],
   "blog-articles/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
   "blog-articles/cloud-service-models.html": ["Programming & Software", "Networks", "DevSecOps"],
-  "blog-articles/heliocentrism-copernican-revolution.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/heliocentrism-copernican-revolution.html": ["Physics", "Philosophy"],
   "blog-articles/phase-0-planning-feasibility.html": ["Programming & Software", "Engineering", "SDLC"],
-  "blog-articles/python.html": ["Python", "Programming & Software"],
+  "blog-articles/python.html": ["Python", "Programming & Software", "Programming Languages"],
   "blog-articles/software-by-market-segment.html": ["Programming & Software", "Engineering"],
-  "blog-articles/the-big-bang.html": ["Math & Physics", "Philosophy", "Cosmology"],
+  "blog-articles/the-big-bang.html": ["Physics", "Philosophy", "Cosmology"],
   "blog-articles/the-path-to-production.html": ["Programming & Software", "DevSecOps", "Networks", "Docker", "SDLC"],
   "blog-articles/the-replication-crisis.html": ["Learning", "Philosophy", "Society & Civics"],
   "blog-articles/anthropogenic-climate-change.html": ["Earth Sciences", "Society & Civics"],
-  "blog-articles/nonlocality.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/nonlocality.html": ["Physics", "Philosophy"],
   "blog-articles/continental-drift-wegener.html": ["Earth Sciences", "Philosophy"],
-  "blog-articles/banach-tarski-paradox.html": ["Math & Physics", "Philosophy"],
-  "blog-articles/godel-incompleteness.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/banach-tarski-paradox.html": ["Math", "Philosophy"],
+  "blog-articles/godel-incompleteness.html": ["Math", "Philosophy"],
   "blog-articles/the-integration-imperative.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "DevSecOps"],
   "blog-articles/webapp_pentesting.html": ["Security", "Web & UI", "Pentesting"],
   "blog-articles/api-security-testing.html": ["Security", "Programming & Software", "DevSecOps", "Pentesting"],
@@ -1903,7 +2005,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/social-engineering-assessments.html": ["Security", "Pentesting", "Society & Civics"],
   "blog-articles/hardware-embedded-pentesting.html": ["Security", "Engineering", "Cyber-Physical Systems", "Pentesting"],
   "blog-articles/agno-framework.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software"],
-  "blog-articles/Cantors-Paradise.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/Cantors-Paradise.html": ["Math", "Philosophy"],
   "blog-articles/chainlit.html": ["AI & Machine Learning", "AI Agents", "Programming & Software", "Python"],
   "blog-articles/control-engineering-implementation.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
   "blog-articles/cybersecurity-civic-responsibility.html": ["Security", "Society & Civics"],
@@ -1911,13 +2013,13 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/descent-with-modification.html": ["Philosophy", "Learning"],
   "blog-articles/enterprise-ai-agent-roadmap.html": ["AI & Machine Learning", "AI Agents", "AI Strategy", "Programming & Software", "DevSecOps"],
   "blog-articles/hardware-troubleshooting.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/heat-death-of-the-universe.html": ["Math & Physics", "Philosophy", "Cosmology"],
+  "blog-articles/heat-death-of-the-universe.html": ["Physics", "Philosophy", "Cosmology"],
   "blog-articles/public-key-infrastructure.html": ["Security", "Networks", "Programming & Software"],
   "blog-articles/software-architecture-frameworks.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
   "blog-articles/software-requirements-specification.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
   "blog-articles/telecommunications-attacks.html": ["Security", "Networks"],
-  "blog-articles/the-irrationality-of-sqrt2.html": ["Math & Physics", "Philosophy"],
-  "blog-articles/uncertainty-principle.html": ["Math & Physics", "Philosophy"],
+  "blog-articles/the-irrationality-of-sqrt2.html": ["Math", "Philosophy"],
+  "blog-articles/uncertainty-principle.html": ["Physics", "Philosophy"],
   "blog-articles/unified-modeling-language.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
   "blog-articles/where-new-things-come-from.html": ["Engineering", "Philosophy"]
 };
@@ -1991,8 +2093,11 @@ function escapeHtml(value: string): string {
 function normalizeBlogSearchTerm(value: string): string {
   return value
     .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .trim()
     .slice(0, 120);
+}
+
+function getNormalizedBlogSearchQuery(value: string): string {
+  return normalizeBlogSearchTerm(value).trim().toLowerCase();
 }
 
 function getBlogCategoryPostCount(category: BlogCategory): number {
@@ -2047,7 +2152,7 @@ preparedBlogPosts.forEach((preparedPost) => {
 });
 
 function getFilteredBlogPosts(searchTerm: string, categoryValue: string): PreparedBlogDirectoryPost[] {
-  const normalizedSearchTerm = normalizeBlogSearchTerm(searchTerm).toLowerCase();
+  const normalizedSearchTerm = getNormalizedBlogSearchQuery(searchTerm);
   const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
 
   return preparedBlogPosts.filter((preparedPost) => {
@@ -2169,6 +2274,10 @@ function initializeBlogDirectory(): void {
       resetAndRenderBlogDirectory();
     });
   }
+
+  window.addEventListener("pageshow", () => {
+    resetAndRenderBlogDirectory();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", initializeBlogDirectory);
