@@ -5,6 +5,8 @@ import {
   blogMatchesSearch,
   formatBlogDate,
   getBlogFilenameLabel,
+  normalizeBlogDirectoryViewState,
+  normalizeBlogDirectoryVisibleCount,
   normalizeBlogSearchTerm,
   sortBlogPostsNewestFirst
 } from "../dist/js/test-core/blog-core.js";
@@ -38,6 +40,29 @@ test("normalizeBlogSearchTerm preserves spaces, strips control characters, and e
   const value = normalizeBlogSearchTerm(`  prod\u0000uction ${"x".repeat(200)}  `);
   assert.equal(value.startsWith("  prod uction "), true);
   assert.equal(value.length, 120);
+});
+
+test("normalizeBlogDirectoryVisibleCount enforces a minimum page size", () => {
+  assert.equal(normalizeBlogDirectoryVisibleCount(72.9), 72);
+  assert.equal(normalizeBlogDirectoryVisibleCount(12), 24);
+  assert.equal(normalizeBlogDirectoryVisibleCount("48"), 24);
+});
+
+test("normalizeBlogDirectoryViewState keeps valid categories and sanitizes invalid state", () => {
+  const allowedCategories = ["Docker", "Security"];
+  const restored = normalizeBlogDirectoryViewState("dock\u0000er", "Docker", 48, allowedCategories);
+  const invalid = normalizeBlogDirectoryViewState("query", "Unknown", 3, allowedCategories);
+
+  assert.deepEqual(restored, {
+    categoryValue: "Docker",
+    searchTerm: "dock er",
+    visibleCount: 48
+  });
+  assert.deepEqual(invalid, {
+    categoryValue: "",
+    searchTerm: "query",
+    visibleCount: 24
+  });
 });
 
 test("blogMatchesSearch checks both titles and filenames", () => {

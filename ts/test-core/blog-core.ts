@@ -6,6 +6,14 @@ export type BlogDirectoryPost = {
   title: string;
 };
 
+export type BlogDirectoryViewState = {
+  categoryValue: string;
+  searchTerm: string;
+  visibleCount: number;
+};
+
+const BLOG_PAGE_SIZE = 24;
+
 export function formatBlogDate(dateString: string): string {
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
@@ -48,6 +56,29 @@ export function normalizeBlogSearchTerm(value: string): string {
 
 function getNormalizedBlogSearchQuery(value: string): string {
   return normalizeBlogSearchTerm(value).trim().toLowerCase();
+}
+
+export function normalizeBlogDirectoryVisibleCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return BLOG_PAGE_SIZE;
+  }
+
+  const normalizedValue = Math.floor(value);
+  return normalizedValue >= BLOG_PAGE_SIZE ? normalizedValue : BLOG_PAGE_SIZE;
+}
+
+export function normalizeBlogDirectoryViewState(
+  searchTerm: unknown,
+  categoryValue: unknown,
+  visibleCount: unknown,
+  allowedCategories: readonly string[]
+): BlogDirectoryViewState {
+  return {
+    categoryValue:
+      typeof categoryValue === "string" && allowedCategories.indexOf(categoryValue) !== -1 ? categoryValue : "",
+    searchTerm: normalizeBlogSearchTerm(typeof searchTerm === "string" ? searchTerm : ""),
+    visibleCount: normalizeBlogDirectoryVisibleCount(visibleCount)
+  };
 }
 
 export function blogMatchesSearch(post: Pick<BlogDirectoryPost, "title" | "path">, searchTerm: string): boolean {

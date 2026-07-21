@@ -64,6 +64,13 @@ type PreparedBlogDirectoryPost = {
 };
 
 const BLOG_PAGE_SIZE = 24;
+const BLOG_DIRECTORY_HISTORY_STATE_KEY = "blogDirectory";
+
+type BlogDirectoryViewState = {
+  categoryValue: string;
+  searchTerm: string;
+  visibleCount: number;
+};
 
 const blogPosts: BlogDirectoryPost[] = [
   {
@@ -2100,8 +2107,56 @@ function getNormalizedBlogSearchQuery(value: string): string {
   return normalizeBlogSearchTerm(value).trim().toLowerCase();
 }
 
+function normalizeBlogDirectoryVisibleCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return BLOG_PAGE_SIZE;
+  }
+
+  const normalizedValue = Math.floor(value);
+  return normalizedValue >= BLOG_PAGE_SIZE ? normalizedValue : BLOG_PAGE_SIZE;
+}
+
 function getBlogCategoryPostCount(category: BlogCategory): number {
   return blogCategoryPostCounts[category] || 0;
+}
+
+function getNormalizedBlogDirectoryViewState(
+  searchTerm: unknown,
+  categoryValue: unknown,
+  visibleCount: unknown
+): BlogDirectoryViewState {
+  return {
+    categoryValue: typeof categoryValue === "string" && isBlogCategory(categoryValue) ? categoryValue : "",
+    searchTerm: normalizeBlogSearchTerm(typeof searchTerm === "string" ? searchTerm : ""),
+    visibleCount: normalizeBlogDirectoryVisibleCount(visibleCount)
+  };
+}
+
+function getBlogDirectoryStateFromHistory(state: unknown): BlogDirectoryViewState | null {
+  if (!state || typeof state !== "object") {
+    return null;
+  }
+
+  const viewState = (state as Record<string, unknown>)[BLOG_DIRECTORY_HISTORY_STATE_KEY];
+  if (!viewState || typeof viewState !== "object") {
+    return null;
+  }
+
+  const record = viewState as Record<string, unknown>;
+  return getNormalizedBlogDirectoryViewState(record.searchTerm, record.categoryValue, record.visibleCount);
+}
+
+function updateBlogDirectoryHistoryState(searchTerm: string, categoryValue: string, visibleCount: number): void {
+  const nextViewState = getNormalizedBlogDirectoryViewState(searchTerm, categoryValue, visibleCount);
+  const currentState = window.history.state;
+  const stateRecord =
+    currentState && typeof currentState === "object"
+      ? { ...(currentState as Record<string, unknown>) }
+      : {};
+
+  stateRecord[BLOG_DIRECTORY_HISTORY_STATE_KEY] = nextViewState;
+
+  window.history.replaceState(stateRecord, document.title, window.location.href);
 }
 
 function renderBlogCategoryOptions(selectElement: HTMLSelectElement): void {
@@ -2240,6 +2295,9 @@ function initializeBlogDirectory(): void {
     return;
   }
 
+  const initialSearchValue = searchInput.value;
+  const initialCategoryValue = categorySelect ? categorySelect.value : "";
+
   if (categorySelect) {
     renderBlogCategoryOptions(categorySelect);
   }
@@ -2247,13 +2305,32 @@ function initializeBlogDirectory(): void {
   searchInput.maxLength = 120;
   let visibleCount = BLOG_PAGE_SIZE;
 
-  const renderCurrentBlogDirectory = (): void => {
-    const normalizedValue = normalizeBlogSearchTerm(searchInput.value);
-    if (normalizedValue !== searchInput.value) {
-      searchInput.value = normalizedValue;
-    }
+  const applyBlogDirectoryState = (state: BlogDirectoryViewState): void => {
+    searchInput.value = state.searchTerm;
+    visibleCount = state.visibleCount;
 
-    renderBlogArticles(searchInput.value, categorySelect ? categorySelect.value : "", visibleCount, () => {
+    if (categorySelect) {
+      categorySelect.value = state.categoryValue;
+    }
+  };
+
+  const restoreBlogDirectoryState = (): void => {
+    const historyState = getBlogDirectoryStateFromHistory(window.history.state);
+    const fallbackState = getNormalizedBlogDirectoryViewState(initialSearchValue, initialCategoryValue, visibleCount);
+    applyBlogDirectoryState(historyState || fallbackState);
+  };
+
+  const renderCurrentBlogDirectory = (): void => {
+    const nextViewState = getNormalizedBlogDirectoryViewState(
+      searchInput.value,
+      categorySelect ? categorySelect.value : "",
+      visibleCount
+    );
+
+    applyBlogDirectoryState(nextViewState);
+    updateBlogDirectoryHistoryState(nextViewState.searchTerm, nextViewState.categoryValue, nextViewState.visibleCount);
+
+    renderBlogArticles(nextViewState.searchTerm, nextViewState.categoryValue, nextViewState.visibleCount, () => {
       visibleCount += BLOG_PAGE_SIZE;
       renderCurrentBlogDirectory();
     });
@@ -2264,6 +2341,7 @@ function initializeBlogDirectory(): void {
     renderCurrentBlogDirectory();
   };
 
+  restoreBlogDirectoryState();
   renderCurrentBlogDirectory();
   searchInput.addEventListener("input", () => {
     resetAndRenderBlogDirectory();
@@ -2276,7 +2354,8 @@ function initializeBlogDirectory(): void {
   }
 
   window.addEventListener("pageshow", () => {
-    resetAndRenderBlogDirectory();
+    restoreBlogDirectoryState();
+    renderCurrentBlogDirectory();
   });
 }
 
