@@ -226,6 +226,7 @@ function validateCoreInternalLinks() {
   const corePages = [
     "index.html",
     "blog.html",
+    "infographics.html",
     "tutorials.html",
     "tools.html",
     "games.html",

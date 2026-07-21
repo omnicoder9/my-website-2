@@ -21,6 +21,7 @@ const fallbackHeaderMarkup = `
       <li><a href="tools.html">Tools</a></li>
       <li><a href="games.html">Games</a></li>
       <li><a href="blog.html">Blog</a></li>
+      <li><a href="infographics.html">Infographics</a></li>
       <li><a href="tutorials.html">Tutorials and Walkthroughs</a></li>
       <li><a href="other.html">Other</a></li>
     </ul>
