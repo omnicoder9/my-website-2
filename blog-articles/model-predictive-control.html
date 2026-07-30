@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model Predictive Control &mdash; the receding horizon, constraints, and where it runs</title>
+<meta name="description" content="A technical account of model predictive control: the receding-horizon principle, its industrial origins, the constrained optimisation problem at its core, stability and robustness theory, the solvers that make it real-time, and the domains it now governs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Spectral:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(','\\)']], displayMath: [['$$','$$']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] }
+};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
+        onerror="document.documentElement.classList.add('no-mathjax')"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --ink:#0C1521; --ink2:#16212F; --paper:#F2F5F8; --surface:#FFFFFF;
+  --text:#17222E; --muted:#5A6672; --faint:#8A96A2;
+  --line:#D6DDE4; --line2:#E7ECF1;
+  --amber:#C0871F; --amber-lt:#E7B85A; --teal:#127C82; --red:#B23A2A;
+  --measure:41rem; --wide:62rem;
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Spectral",Georgia,"Times New Roman",serif;
+  --display:"Fraunces","Spectral",Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--text);
+  font-family:var(--serif); font-size:1.0625rem; line-height:1.72;
+  font-feature-settings:"kern" 1,"liga" 1,"onum" 1;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------------------------------------------------- masthead --- */
+.masthead{
+  position:relative; overflow:hidden; color:#E8EEF3;
+  background:
+    radial-gradient(120% 140% at 82% 12%, #1B2A3B 0%, rgba(27,42,59,0) 58%),
+    linear-gradient(168deg,#0C1521 0%,#131F2C 62%,#0C1521 100%);
+  border-bottom:1px solid #24313F;
+}
+.masthead .inner{
+  position:relative; z-index:2;
+  max-width:var(--wide); margin:0 auto;
+  padding:clamp(3.25rem,7vw,6rem) clamp(1.25rem,4vw,2rem) clamp(2.75rem,5vw,4rem);
+}
+.kicker{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--amber-lt); margin:0 0 1.35rem;
+}
+.kicker span{color:#5F7183; padding:0 .55rem}
+h1{
+  font-family:var(--display); font-weight:600;
+  font-size:clamp(2.5rem,6.6vw,4.5rem); line-height:1.02;
+  letter-spacing:-.022em; margin:0 0 1.1rem; max-width:16ch;
+  font-variation-settings:"opsz" 144,"SOFT" 0,"WONK" 0;
+  color:#F4F8FB;
+}
+.deck{
+  font-size:clamp(1.06rem,2vw,1.28rem); line-height:1.6; color:#A9B9C7;
+  max-width:36rem; margin:0; font-style:italic;
+}
+.byline{
+  margin:2.25rem 0 0; padding-top:1.3rem; border-top:1px solid #223040;
+  font-family:var(--sans); font-size:.8rem; letter-spacing:.02em; color:#7A8B9B;
+  display:flex; flex-wrap:wrap; gap:.5rem 1.6rem;
+}
+.byline b{color:#C3D0DB; font-weight:600}
+.sig{
+  position:absolute; right:-2%; bottom:-6%; width:min(46%,520px);
+  opacity:.5; z-index:1; pointer-events:none;
+}
+.sig .win{animation:slide 11s cubic-bezier(.5,0,.5,1) infinite}
+@keyframes slide{0%{transform:translateX(0)}50%{transform:translateX(150px)}100%{transform:translateX(0)}}
+
+/* ------------------------------------------------------------ layout --- */
+main{padding:clamp(2.5rem,5vw,4.5rem) clamp(1.25rem,4vw,2rem) 4rem}
+article{
+  display:grid;
+  grid-template-columns:1fr min(var(--measure),100%) 1fr;
+}
+article>*{grid-column:2}
+article>.breakout{
+  grid-column:1/-1; width:min(var(--wide),100%); margin-inline:auto;
+}
+p{margin:0 0 1.25rem}
+em{font-style:italic}
+strong{font-weight:600}
+
+/* ------------------------------------------------------------- lead ---- */
+.lead{font-size:1.2rem; line-height:1.62; color:#22303E; margin-bottom:1.6rem}
+.dropcap{
+  float:left; font-family:var(--display); font-weight:600;
+  font-size:3.6rem; line-height:.86; padding:.28rem .55rem 0 0; color:var(--ink);
+  font-variation-settings:"opsz" 144;
+}
+
+/* --------------------------------------------------------- headings ---- */
+h2{
+  font-family:var(--display); font-weight:600; font-size:1.72rem;
+  line-height:1.2; letter-spacing:-.012em; color:var(--ink);
+  margin:3.4rem 0 1.15rem; padding-top:1.5rem;
+  border-top:1px solid var(--line); position:relative;
+  font-variation-settings:"opsz" 40;
+}
+.sec-n{
+  display:block; font-family:var(--mono); font-size:.72rem; font-weight:500;
+  letter-spacing:.18em; color:var(--amber); margin-bottom:.5rem;
+}
+h3{
+  font-family:var(--sans); font-weight:600; font-size:.95rem;
+  letter-spacing:.01em; margin:0 0 .7rem; color:var(--ink);
+}
+
+/* --------------------------------------------------------- figures ----- */
+.fig{
+  margin:2.5rem auto 2.75rem; padding:1.15rem 1.15rem .35rem;
+  background:var(--surface); border:1px solid var(--line); border-radius:3px;
+}
+.fig svg{display:block}
+figcaption{
+  margin:.95rem 0 .9rem; padding-top:.85rem; border-top:1px solid var(--line2);
+  font-family:var(--sans); font-size:.845rem; line-height:1.55; color:var(--muted);
+}
+.fig-n{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--amber); font-weight:500;
+  margin-right:.7rem; white-space:nowrap;
+}
+
+/* ------------------------------------------------------------ code ----- */
+.code{
+  margin:2rem auto 2.5rem; border-radius:3px; overflow:hidden;
+  border:1px solid #1E2B39; background:var(--ink);
+}
+.code-bar{
+  display:flex; align-items:center; gap:.6rem;
+  padding:.55rem .95rem; background:#111C28; border-bottom:1px solid #1E2B39;
+}
+.code-bar .dot{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:none}
+.code-bar .fn{font-family:var(--mono);font-size:.73rem;letter-spacing:.05em;color:#8FA1B2}
+.code pre{margin:0; padding:1.1rem 1.15rem 1.3rem; overflow-x:auto}
+.code code{
+  font-family:var(--mono); font-size:.795rem; line-height:1.72; color:#CBD8E4;
+  font-feature-settings:"liga" 0;
+}
+.code .c{color:#657B8E; font-style:italic}
+.code .s{color:#7FC5A6}
+.code .k{color:var(--amber-lt)}
+.code .n{color:#D79B7A}
+.code .f{color:#7FB0D8}
+
+/* ----------------------------------------------------------- tables ---- */
+.table-wrap{margin:2rem auto 2.5rem; overflow-x:auto}
+table{border-collapse:collapse; width:100%; font-family:var(--sans); font-size:.87rem}
+thead th{
+  text-align:left; font-weight:600; font-size:.71rem; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--muted);
+  padding:0 1rem .6rem 0; border-bottom:1.5px solid var(--ink);
+}
+tbody td{
+  padding:.85rem 1rem .85rem 0; border-bottom:1px solid var(--line);
+  vertical-align:top; line-height:1.55;
+}
+tbody tr:last-child td{border-bottom:1px solid var(--ink)}
+tbody td:first-child{font-weight:600; color:var(--ink); width:11rem}
+.mono{font-family:var(--mono); font-size:.85em; letter-spacing:-.01em}
+
+/* --------------------------------------------------------- callouts ---- */
+.callout{
+  margin:2rem 0 2.25rem; padding:1.25rem 1.4rem 1.35rem;
+  background:var(--surface); border:1px solid var(--line);
+  border-left:3px solid var(--teal); border-radius:2px;
+}
+.callout ol{margin:0; padding-left:1.15rem; font-size:.965rem}
+.callout li{margin-bottom:.45rem}
+.callout li:last-child{margin-bottom:0}
+.pull{
+  margin:2.4rem 0; padding:0 0 0 1.4rem; border-left:3px solid var(--amber);
+  font-family:var(--display); font-size:1.3rem; line-height:1.38;
+  letter-spacing:-.008em; color:var(--ink);
+  font-variation-settings:"opsz" 60;
+}
+
+/* ------------------------------------------------------------- math ---- */
+.eq{
+  margin:1.7rem 0 1.8rem; padding:.35rem 0; overflow-x:auto; overflow-y:hidden;
+  font-size:1.02rem;
+}
+mjx-container[display="true"]{margin:0 !important}
+/* if the typesetter cannot be fetched, present the source as a deliberate block */
+.no-mathjax .eq{
+  font-family:var(--mono); font-size:.78rem; line-height:1.65;
+  white-space:pre-wrap; color:var(--muted); background:var(--surface);
+  border:1px solid var(--line); border-left:3px solid var(--amber);
+  padding:.9rem 1.05rem; border-radius:2px;
+}
+
+/* -------------------------------------------------------- citations ---- */
+sup.cite{
+  font-family:var(--sans); font-size:.68em; font-weight:600;
+  line-height:0; vertical-align:super; letter-spacing:.02em;
+  margin-left:.06em; white-space:nowrap;
+}
+sup.cite a{color:var(--amber); text-decoration:none; padding:0 .04em}
+sup.cite a:hover{color:var(--red); text-decoration:underline}
+.marker{display:none}
+
+/* ------------------------------------------------------- references ---- */
+.refs{
+  max-width:var(--wide); margin:4rem auto 0; padding:2.25rem 0 0;
+  border-top:1px solid var(--line);
+}
+.refs h2{border-top:none; padding-top:0; margin-top:0}
+.refs ol{list-style:none; margin:0; padding:0; counter-reset:none;
+  columns:2; column-gap:2.75rem}
+.ref{
+  display:flex; gap:.75rem; break-inside:avoid;
+  font-family:var(--sans); font-size:.815rem; line-height:1.5;
+  color:var(--muted); padding:.5rem 0; border-bottom:1px solid var(--line2);
+}
+.ref-n{
+  font-family:var(--mono); font-size:.72rem; color:var(--amber);
+  flex:none; width:1.7rem; text-align:right; padding-top:.08rem;
+}
+.ref:target{background:#FBF4E6; outline:2px solid var(--amber-lt); outline-offset:3px}
+.ref:target .ref-t{color:var(--text)}
+
+/* ----------------------------------------------------------- footer ---- */
+footer{
+  margin-top:3.5rem; padding:2rem clamp(1.25rem,4vw,2rem) 3rem;
+  border-top:1px solid var(--line);
+  font-family:var(--sans); font-size:.78rem; color:var(--faint);
+}
+footer .in{max-width:var(--wide); margin:0 auto}
+
+a:focus-visible,sup.cite a:focus-visible{
+  outline:2px solid var(--amber); outline-offset:2px; border-radius:2px;
+}
+
+/* ------------------------------------------------------- responsive ---- */
+@media (max-width:900px){
+  body{font-size:1.0125rem; line-height:1.68}
+  .lead{font-size:1.1rem}
+  .refs ol{columns:1}
+  .fig{padding:.85rem .85rem .25rem}
+  tbody td:first-child{width:auto}
+  .pull{font-size:1.15rem}
+}
+@media (max-width:560px){
+  .dropcap{font-size:3rem}
+  .byline{gap:.35rem 1rem; font-size:.75rem}
+  .code code{font-size:.72rem}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important; transition:none !important}
+}
+@media print{
+  .masthead{background:none;color:#000;border-bottom:2px solid #000}
+  .sig{display:none} h1{color:#000} .deck{color:#333}
+  body{background:#fff} .code{border:1px solid #999}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  
+<svg class="sig" viewBox="0 0 520 300" xmlns="http://www.w3.org/2000/svg"
+     aria-hidden="true" focusable="false">
+  <g fill="none" stroke-linecap="round">
+    <path d="M20 250 H500" stroke="#24313F" stroke-width="1"/>
+    <path d="M20 170 H500" stroke="#1B2734" stroke-width="1"/>
+    <path d="M20 90 H500"  stroke="#1B2734" stroke-width="1"/>
+    <path d="M20 232 C 70 232, 96 150, 150 148 C 196 146, 214 196, 258 190
+             C 306 184, 320 104, 372 100 C 424 96, 448 128, 500 122"
+          stroke="#127C82" stroke-width="2.2" opacity=".85"/>
+    <path d="M20 244 C 78 244, 104 176, 158 172 C 206 168, 226 214, 268 206
+             C 318 196, 330 126, 384 120 C 436 114, 452 146, 500 140"
+          stroke="#C0871F" stroke-width="2.2" stroke-dasharray="5 4" opacity=".9"/>
+  </g>
+  <g class="win">
+    <rect x="188" y="46" width="132" height="222" fill="#C0871F" opacity=".10"/>
+    <line x1="188" y1="46" x2="188" y2="268" stroke="#E7B85A" stroke-width="1.2" opacity=".55"/>
+    <line x1="320" y1="46" x2="320" y2="268" stroke="#E7B85A" stroke-width="1.2" opacity=".55"/>
+  </g>
+</svg>
+
+  <div class="inner">
+    <p class="kicker">Control theory<span>&middot;</span>Constrained optimisation<span>&middot;</span>Long read</p>
+    <h1>Model Predictive Control</h1>
+    <p class="deck">Solve the whole problem, apply one move, throw the rest away,
+      and do it again. A method invented in refineries, proved correct two
+      decades later, and now running at a microsecond.</p>
+    <p class="byline">
+      <span><b>Subject</b> &nbsp;Receding-horizon control</span>
+      <span><b>Figures</b> &nbsp;9, generated programmatically</span>
+      <span><b>References</b> &nbsp;39, Vancouver</span>
+    </p>
+  </div>
+</header>
+
+<main>
+<article>
+
+<p class="lead"><span class="dropcap">A</span>lmost every feedback controller
+ever deployed answers a single question: given the error right now, what should
+the actuator do right now? Model predictive control asks a harder and more
+useful one. Given everything I know about how this system behaves, what is the
+best <em>sequence</em> of moves over the next few seconds — and which of those
+moves am I forbidden from making? It solves that question completely, applies
+the first move, throws the rest of the answer away, and asks it again at the
+next sampling instant.</p>
+
+<p>That last step sounds wasteful. It is the entire point. The discarding is
+what converts an open-loop plan into a feedback law, and the re-solving is what
+makes the controller robust to the fact that its model is wrong and the world
+has moved on.<span class="marker"><sup class="cite">[<a href="#ref-1">1</a>]</sup></span> Everything else in
+MPC — the horizon, the cost function, the constraint sets, the quadratic
+program solved in microseconds on an embedded chip — is machinery in service of
+that loop.</p>
+
+<p>MPC is now the dominant advanced control technology in the process
+industries, the standard tool for constrained multivariable problems in
+automotive and aerospace, and increasingly the method of choice in legged
+robotics and power electronics. It is also, unusually for a control
+methodology, a technique that industry invented and academia spent two decades
+catching up to.<sup class="cite">[<a href="#ref-2">2</a>, <a href="#ref-3">3</a>]</sup></p>
+
+
+<h2 id="principle"><span class="sec-n">01</span>The receding horizon</h2>
+
+<p>Fix a sampling instant and call it <em>k</em>. The controller holds an
+explicit dynamic model of the plant. It takes the current state — measured, or
+more usually reconstructed by an observer — and uses the model to predict how
+the plant would respond to any candidate sequence of future inputs over a
+finite window of <em>N</em> steps. Among all sequences that respect the
+system's physical limits, it selects the one that minimises a scalar cost:
+typically the accumulated tracking error plus a penalty on control effort.</p>
+
+<p>The optimiser returns a full plan, <em>N</em> moves deep. The controller
+applies only the first, <em>u</em>(<em>k</em>). At the next instant the window
+slides forward one step, the state is measured afresh, and the whole problem is
+solved again from scratch. The horizon recedes ahead of the controller like a
+carrot on a stick, never reached, always the same length. Hence the name:
+receding-horizon control.<sup class="cite">[<a href="#ref-1">1</a>, <a href="#ref-4">4</a>]</sup></p>
+
+<figure class="fig breakout" id="fig-1"><svg viewBox="0 0 940 470" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><defs><marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="4.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.8 L7.6,4.2 L0.5,7.6" fill="none" stroke="#5A6672" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="ahm" markerWidth="9" markerHeight="9" refX="7" refY="4.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.8 L7.6,4.2 L0.5,7.6" fill="none" stroke="#C0871F" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker></defs><rect x="0.00" y="0.00" width="940.00" height="470.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><rect x="328.46" y="50.00" width="375.69" height="418.00" fill="#C0871F" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.060"/><line x1="328.46" y1="50.00" x2="328.46" y2="430.00" stroke="#0C1521" stroke-width="1.40" stroke-linecap="butt" stroke-dasharray="2 3" opacity="1.00"/><line x1="704.15" y1="50.00" x2="704.15" y2="430.00" stroke="#C0871F" stroke-width="1.20" stroke-linecap="butt" stroke-dasharray="2 3" opacity="1.00"/><line x1="78.00" y1="236.00" x2="892.00" y2="236.00" stroke="#D6DDE4" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><line x1="78.00" y1="50.00" x2="78.00" y2="236.00" stroke="#D6DDE4" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><line x1="78.00" y1="93.60" x2="892.00" y2="93.60" stroke="#5A6672" stroke-width="1.40" stroke-linecap="butt" stroke-dasharray="6 4" opacity="1.00"/><text x="890.00" y="85.60" font-size="12.5" fill="#5A6672" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">reference  r</text><polyline points="78.00,213.21 109.31,193.60 140.62,180.60 171.92,171.42 203.23,163.19 234.54,158.63 265.85,152.83 297.15,147.71 328.46,148.70" fill="none" stroke="#127C82" stroke-width="2.60" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><circle cx="78.00" cy="213.21" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="109.31" cy="193.60" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="140.62" cy="180.60" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="171.92" cy="171.42" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="203.23" cy="163.19" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="234.54" cy="158.63" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="265.85" cy="152.83" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="297.15" cy="147.71" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><circle cx="328.46" cy="148.70" r="2.40" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><polyline points="328.46,148.70 359.77,134.66 391.08,124.20 422.38,116.40 453.69,110.59 485.00,106.26 516.31,103.04 547.62,100.63 578.92,98.84 610.23,97.50 641.54,96.51 672.85,95.77 704.15,95.22" fill="none" stroke="#C0871F" stroke-width="2.80" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 0" opacity="1.000"/><circle cx="328.46" cy="148.70" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="359.77" cy="134.66" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="391.08" cy="124.20" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="422.38" cy="116.40" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="453.69" cy="110.59" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="485.00" cy="106.26" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="516.31" cy="103.04" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="547.62" cy="100.63" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="578.92" cy="98.84" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="610.23" cy="97.50" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="641.54" cy="96.51" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="672.85" cy="95.77" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><circle cx="704.15" cy="95.22" r="2.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" opacity="1.000"/><polyline points="704.15,95.22 892.00,93.60" fill="none" stroke="#C0871F" stroke-width="2.00" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 4" opacity="0.350"/><text x="68.00" y="64.00" font-size="12.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">output</text><line x1="140.62" y1="44.00" x2="171.92" y2="44.00" stroke="#127C82" stroke-width="2.60" stroke-linecap="butt" opacity="1.00"/><text x="179.92" y="48.00" font-size="12.5" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">measured  y(·)</text><line x1="372.29" y1="44.00" x2="403.60" y2="44.00" stroke="#C0871F" stroke-width="2.80" stroke-linecap="butt" opacity="1.00"/><text x="411.60" y="48.00" font-size="12.5" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">predicted optimal  ŷ(·)</text><line x1="78.00" y1="359.00" x2="892.00" y2="359.00" stroke="#D6DDE4" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><line x1="78.00" y1="296.00" x2="78.00" y2="418.00" stroke="#D6DDE4" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><text x="68.00" y="304.00" font-size="12.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">input</text><polyline points="78.00,320.52 109.31,320.52 109.31,312.83 140.62,312.83 140.62,307.70 171.92,307.70 171.92,307.70 203.23,307.70 203.23,315.39 234.54,315.39 234.54,328.22 265.85,328.22 265.85,338.48 297.15,338.48 297.15,344.63 328.46,344.63" fill="none" stroke="#127C82" stroke-width="2.40" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><polyline points="328.46,347.71 359.77,347.71 359.77,353.87 391.08,353.87 391.08,359.00 422.38,359.00 422.38,363.10 453.69,363.10 453.69,365.16 485.00,365.16 485.00,365.16 516.31,365.16 516.31,363.10 547.62,363.10 547.62,361.05 578.92,361.05 578.92,360.03 610.23,360.03 610.23,359.00 641.54,359.00 641.54,359.00 672.85,359.00 672.85,359.00 704.15,359.00" fill="none" stroke="#C0871F" stroke-width="2.60" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 3" opacity="1.000"/><rect x="328.46" y="347.71" width="31.31" height="11.29" fill="#C0871F" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.160"/><polyline points="328.46,347.71 359.77,347.71" fill="none" stroke="#C0871F" stroke-width="4.20" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><circle cx="344.12" cy="347.71" r="3.20" fill="#C0871F" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="367.77" y="339.71" font-size="12.5" fill="#C0871F" font-weight="600" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">only  u(k)  is applied</text><text x="328.46" y="446.00" font-size="12" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">now  k</text><text x="704.15" y="446.00" font-size="12" fill="#C0871F" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k + N</text><line x1="328.46" y1="262.00" x2="704.15" y2="262.00" stroke="#C0871F" stroke-width="1.20" stroke-linecap="butt" stroke-dasharray="1 0" opacity="1.00"/><line x1="328.46" y1="258.00" x2="328.46" y2="266.00" stroke="#C0871F" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><line x1="704.15" y1="258.00" x2="704.15" y2="266.00" stroke="#C0871F" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><text x="516.31" y="255.00" font-size="12" fill="#C0871F" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">prediction horizon  N</text></svg><figcaption><span class="fig-n">Fig. 1</span><span class="fig-c">The receding-horizon principle. At the current instant the optimiser computes a complete plan over the horizon (amber), but only the first input is applied to the plant. At the next instant the window slides forward, the state is re-measured, and the plan is discarded and rebuilt.</span></figcaption></figure>
+
+<p>Why discard a perfectly good plan? Because the plan was optimal for a
+<em>model</em>, and the model is a fiction. Real plants drift, loads change,
+disturbances arrive unannounced, and the identification data was collected on a
+Tuesday two years ago. An open-loop plan executed to completion accumulates
+model error with no mechanism to correct it. Re-solving from the measured state
+at every instant injects the one thing the plan lacks — feedback — and does so
+without the controller ever needing an explicit feedback gain. The optimiser
+<em>is</em> the feedback law; it just happens to be defined implicitly, as the
+solution to a problem rather than the output of a formula.<sup class="cite">[<a href="#ref-5">5</a>]</sup></p>
+
+<div class="callout">
+<h3>Three things MPC needs that a PID loop does not</h3>
+<ol>
+<li><strong>A model.</strong> Explicit, dynamic, and good enough over the
+horizon length — not over all time.</li>
+<li><strong>An optimiser.</strong> Run to convergence, in real time, every
+sampling instant, on the target hardware.</li>
+<li><strong>A state estimate.</strong> The prediction has to start
+somewhere, and that somewhere is rarely measured in full.</li>
+</ol>
+</div>
+
+<p>The cost of those three requirements is why MPC did not begin life on
+fast systems. Its natural first home was the chemical plant, where sampling
+periods are measured in minutes and a minute is a comfortable budget for an
+optimisation. Its subsequent history is largely the story of that budget
+collapsing by nine orders of magnitude.</p>
+
+<figure class="fig breakout" id="fig-2"><svg viewBox="0 0 940 360" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><defs><marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="4.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.8 L7.6,4.2 L0.5,7.6" fill="none" stroke="#5A6672" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="ahm" markerWidth="9" markerHeight="9" refX="7" refY="4.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.8 L7.6,4.2 L0.5,7.6" fill="none" stroke="#C0871F" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker></defs><rect x="0.00" y="0.00" width="940.00" height="360.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><rect x="70.00" y="138.00" width="168.00" height="92.00" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.60" rx="9.00" opacity="1.000"/><rect x="70.00" y="138.00" width="5.00" height="92.00" fill="#C0871F" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.900"/><text x="156.00" y="178.00" font-size="15" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Optimizer</text><text x="156.00" y="198.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">solve QP / NLP</text><rect x="392.00" y="138.00" width="158.00" height="92.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.60" rx="9.00" opacity="1.000"/><rect x="392.00" y="138.00" width="5.00" height="92.00" fill="#0C1521" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.900"/><text x="473.00" y="178.00" font-size="15" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Plant</text><text x="473.00" y="198.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">real dynamics</text><rect x="690.00" y="138.00" width="176.00" height="92.00" fill="#FFFFFF" stroke="#127C82" stroke-width="1.60" rx="9.00" opacity="1.000"/><rect x="690.00" y="138.00" width="5.00" height="92.00" fill="#127C82" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.900"/><text x="780.00" y="178.00" font-size="15" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Estimator</text><text x="780.00" y="198.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">state / disturbance</text><rect x="70.00" y="40.00" width="168.00" height="52.00" fill="#FBF6EC" stroke="#C0871F" stroke-width="1.30" rx="8.00" opacity="1.000"/><text x="154.00" y="62.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">model  +  cost</text><text x="154.00" y="80.00" font-size="11.5" fill="#C0871F" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">constraints  X, U</text><line x1="154.00" y1="92.00" x2="154.00" y2="136.00" stroke="#C0871F" stroke-width="1.70" stroke-linecap="butt" opacity="1.00"/><line x1="153.90" y1="136.00" x2="154.00" y2="136.00" stroke="#C0871F" stroke-width="1.70" marker-end="url(#ah)"/><line x1="14.00" y1="184.00" x2="68.00" y2="184.00" stroke="#5A6672" stroke-width="1.70" stroke-linecap="butt" opacity="1.00"/><line x1="67.90" y1="184.00" x2="68.00" y2="184.00" stroke="#5A6672" stroke-width="1.70" marker-end="url(#ah)"/><text x="41.00" y="175.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">r</text><text x="41.00" y="206.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">setpoint</text><line x1="238.00" y1="184.00" x2="390.00" y2="184.00" stroke="#C0871F" stroke-width="2.20" stroke-linecap="butt" opacity="1.00"/><line x1="389.90" y1="184.00" x2="390.00" y2="184.00" stroke="#C0871F" stroke-width="2.20" marker-end="url(#ah)"/><text x="314.00" y="175.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">u(k)</text><text x="314.00" y="202.00" font-size="11" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="font-style:italic">first move only</text><line x1="550.00" y1="184.00" x2="688.00" y2="184.00" stroke="#0C1521" stroke-width="1.70" stroke-linecap="butt" opacity="1.00"/><line x1="687.90" y1="184.00" x2="688.00" y2="184.00" stroke="#0C1521" stroke-width="1.70" marker-end="url(#ah)"/><text x="619.00" y="175.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">y(k)</text><line x1="778.00" y1="230.00" x2="778.00" y2="300.00" stroke="#127C82" stroke-width="1.70" stroke-linecap="butt" opacity="1.00"/><line x1="778.00" y1="300.00" x2="154.00" y2="300.00" stroke="#127C82" stroke-width="1.70" stroke-linecap="butt" opacity="1.00"/><line x1="154.1" y1="300" x2="154" y2="232" stroke="#127C82" stroke-width="1.7" marker-end="url(#ah)"/><text x="466.00" y="316.00" font-size="12" fill="#127C82" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">state estimate  x̂(k)   —   the loop closes by re-solving every step</text></svg><figcaption><span class="fig-n">Fig. 2</span><span class="fig-c">The MPC loop. Model, cost and constraints define the optimisation problem; the optimiser returns a sequence but only its first element reaches the plant; an estimator reconstructs the state that seeds the next solve. The loop is closed by re-optimising, not by a fixed gain.</span></figcaption></figure>
+
+<h2 id="history"><span class="sec-n">02</span>Born in industry</h2>
+
+<p>The intellectual ingredients of MPC — dynamic models, quadratic costs,
+optimal trajectories over a horizon — were assembled by the optimal control
+theory of the late 1950s and 1960s. But the linear-quadratic regulator that
+theory produced has a structural flaw from an industrial point of view: it is
+optimal only in the absence of constraints, and process plants are defined by
+their constraints. Valves saturate, vessels have pressure ratings, and product
+purity has a contractual floor. A control law that cannot represent those facts
+is a control law that operators will detune into
+uselessness.<sup class="cite">[<a href="#ref-3">3</a>, <a href="#ref-1">1</a>]</sup></p>
+
+<p>So the method was invented, more or less independently of the academic
+literature, by people running refineries. In 1978 Richalet and colleagues
+published model predictive heuristic control, implemented as the IDCOM package
+and demonstrated on industrial plants; it used an impulse-response model and a
+reference trajectory approaching the setpoint.<sup class="cite">[<a href="#ref-6">6</a>]</sup> In 1980 Cutler
+and Ramaker of Shell Oil described dynamic matrix control, built on a
+step-response model and least-squares solution of the prediction
+equations.<sup class="cite">[<a href="#ref-7">7</a>]</sup> Neither paper contained a stability proof. Both worked
+in the field, which mattered more.</p>
+
+<p>The decisive move came in 1986, when García and Morshedi reformulated DMC as
+a quadratic program.<sup class="cite">[<a href="#ref-8">8</a>]</sup> That single change made constraints
+first-class citizens: instead of clipping the computed move at a limit after
+the fact, the optimiser was told about the limit in advance and planned around
+it. Almost everything distinctive about modern MPC descends from that
+reformulation. In parallel, Clarke and co-workers developed generalised
+predictive control from the adaptive-control tradition, using transfer-function
+models and drawing an explicit connection to self-tuning
+regulators.<sup class="cite">[<a href="#ref-9">9</a>]</sup></p>
+
+<figure class="fig breakout" id="fig-3"><svg viewBox="0 0 940 400" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="400.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><line x1="70.00" y1="200.00" x2="892.00" y2="200.00" stroke="#D6DDE4" stroke-width="2.00" stroke-linecap="butt" opacity="1.00"/><rect x="70.00" y="197.00" width="239.75" height="6.00" fill="#C0871F" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.500"/><rect x="309.75" y="197.00" width="582.25" height="6.00" fill="#127C82" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.350"/><text x="189.88" y="246.00" font-size="11.5" fill="#C0871F" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" letter-spacing="0.06em" style="">born in industry</text><text x="618.00" y="246.00" font-size="11.5" fill="#127C82" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" letter-spacing="0.06em" style="">made rigorous · made fast</text><circle cx="104.25" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="2.40" opacity="1.000"/><line x1="104.25" y1="192.00" x2="104.25" y2="112.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="104.25" y="104.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1978</text><text x="104.25" y="121.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">IDCOM / MPHC</text><text x="104.25" y="137.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">impulse-response,</text><text x="104.25" y="150.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">heuristic</text><circle cx="138.50" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="2.40" opacity="1.000"/><line x1="138.50" y1="208.00" x2="138.50" y2="246.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="138.50" y="262.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1980</text><text x="138.50" y="279.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">DMC</text><text x="138.50" y="295.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">step-response,</text><text x="138.50" y="308.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">at Shell</text><circle cx="241.25" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="2.40" opacity="1.000"/><line x1="241.25" y1="192.00" x2="241.25" y2="112.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="241.25" y="104.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1986</text><text x="241.25" y="121.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">QDMC</text><text x="241.25" y="137.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">constraints as</text><text x="241.25" y="150.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">a QP</text><circle cx="258.38" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#C0871F" stroke-width="2.40" opacity="1.000"/><line x1="258.38" y1="208.00" x2="258.38" y2="304.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="258.38" y="320.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1987</text><text x="258.38" y="337.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">GPC</text><text x="258.38" y="353.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">adaptive,</text><text x="258.38" y="366.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">transfer-function</text><circle cx="481.00" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#127C82" stroke-width="2.40" opacity="1.000"/><line x1="481.00" y1="192.00" x2="481.00" y2="112.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="481.00" y="104.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">2000</text><text x="481.00" y="121.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Stability theory</text><text x="481.00" y="137.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">terminal cost +</text><text x="481.00" y="150.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">invariant set</text><circle cx="515.25" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#127C82" stroke-width="2.40" opacity="1.000"/><line x1="515.25" y1="208.00" x2="515.25" y2="246.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="515.25" y="262.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">2002</text><text x="515.25" y="279.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Explicit MPC</text><text x="515.25" y="295.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">PWA law by</text><text x="515.25" y="308.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">mp-QP</text><circle cx="532.38" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#127C82" stroke-width="2.40" opacity="1.000"/><line x1="532.38" y1="192.00" x2="532.38" y2="54.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="532.38" y="46.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">2003</text><text x="532.38" y="63.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Industrial survey</text><text x="532.38" y="79.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">thousands of</text><text x="532.38" y="92.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">deployments</text><circle cx="806.38" cy="200.00" r="5.50" fill="#FFFFFF" stroke="#127C82" stroke-width="2.40" opacity="1.000"/><line x1="806.38" y1="208.00" x2="806.38" y2="246.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="806.38" y="262.00" font-size="12.5" fill="#0C1521" font-weight="700" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">2019</text><text x="806.38" y="279.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Embedded solvers</text><text x="806.38" y="295.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">CasADi · OSQP ·</text><text x="806.38" y="308.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">acados</text></svg><figcaption><span class="fig-n">Fig. 3</span><span class="fig-c">A genealogy. The first two decades were industrial and largely heuristic; the following two supplied the stability theory and the computational machinery that let the method migrate onto fast, embedded, safety-relevant systems.</span></figcaption></figure>
+
+<p>By the late 1990s the gap between practice and theory had become
+embarrassing: thousands of successful installations governed by algorithms with
+no guarantee of stability. The consolidation arrived in 2000, when Mayne,
+Rawlings, Rao and Scokaert published a synthesis showing that a broad family of
+constrained MPC formulations could be proved stabilising by equipping them with
+a terminal cost and a terminal constraint set, with the optimal value function
+serving as a Lyapunov function.<sup class="cite">[<a href="#ref-5">5</a>]</sup> It is difficult to overstate how
+much of the subsequent literature is downstream of that paper.</p>
+
+<p>Qin and Badgwell's industrial survey, published in 2003, documented well over
+four thousand deployed applications across vendors, heavily concentrated in
+refining and petrochemicals, and made the scale of the installed base legible to
+the academic community for the first time.<sup class="cite">[<a href="#ref-2">2</a>]</sup> Two years earlier,
+Bemporad and colleagues had shown that for linear systems with quadratic costs
+and linear constraints the optimal MPC law is piecewise affine over a polytopic
+partition of the state space, and can therefore be computed
+offline.<sup class="cite">[<a href="#ref-10">10</a>]</sup> That result opened the door to sampling rates that
+online optimisation could not then reach. By 2014 Mayne could survey a field
+that had acquired robust, stochastic, economic and distributed variants, and
+identify the remaining open problems as ones of scale and
+computation.<sup class="cite">[<a href="#ref-11">11</a>]</sup></p>
+
+
+<h2 id="problem"><span class="sec-n">03</span>The problem being solved</h2>
+
+<p>Write the plant as a discrete-time model with state
+\(x \in \mathbb{R}^{n}\) and input \(u \in \mathbb{R}^{m}\). At instant
+<em>k</em> the controller has an estimate \(\hat{x}(k)\), and it reasons about
+predicted quantities \(x_{j|k}\) — the state predicted <em>j</em> steps ahead,
+given information at <em>k</em>. The finite-horizon optimal control problem is
+then:</p>
+
+<div class="eq">
+$$
+\begin{aligned}
+\min_{\;u_{0|k},\,\dots,\,u_{N-1|k}}\quad
+& V_f\big(x_{N|k}\big) \;+\; \sum_{j=0}^{N-1}\ \ell\big(x_{j|k},\,u_{j|k}\big)\\[4pt]
+\text{subject to}\quad
+& x_{j+1|k} = f\big(x_{j|k},\,u_{j|k}\big),\qquad x_{0|k}=\hat{x}(k)\\[2pt]
+& x_{j|k}\in\mathcal{X},\qquad u_{j|k}\in\mathcal{U},\qquad j=0,\dots,N-1\\[2pt]
+& x_{N|k}\in\mathcal{X}_f
+\end{aligned}
+$$
+</div>
+
+<p>Four objects carry all the design freedom. The <strong>stage cost</strong>
+\(\ell\) prices deviation and effort at every step. The <strong>terminal
+cost</strong> \(V_f\) prices the state left over when the horizon runs out. The
+<strong>constraint sets</strong> \(\mathcal{X}\) and \(\mathcal{U}\) encode
+what the hardware and the process will tolerate. The <strong>terminal
+set</strong> \(\mathcal{X}_f\) is the theoretical keystone, and we return to it
+below. In the common linear-quadratic case these specialise to</p>
+
+<div class="eq">
+$$\ell(x,u)=\lVert x-r\rVert_{Q}^{2}+\lVert u\rVert_{R}^{2},
+\qquad V_f(x)=\lVert x-r\rVert_{P}^{2},$$
+</div>
+
+<p>with \(Q\succeq 0\) and \(R\succ 0\) chosen by the designer and \(P\)
+usually taken as the solution of the discrete algebraic Riccati equation, so
+that the tail of the horizon is priced as though the unconstrained optimal
+policy took over at step <em>N</em>.<sup class="cite">[<a href="#ref-1">1</a>, <a href="#ref-4">4</a>]</sup></p>
+
+<figure class="fig breakout" id="fig-4"><svg viewBox="0 0 940 380" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="380.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><line x1="78.00" y1="300.00" x2="892.00" y2="300.00" stroke="#D6DDE4" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><line x1="78.00" y1="64.00" x2="78.00" y2="300.00" stroke="#D6DDE4" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><line x1="78.00" y1="108.33" x2="892.00" y2="108.33" stroke="#5A6672" stroke-width="1.30" stroke-linecap="butt" stroke-dasharray="6 4" opacity="1.00"/><text x="890.00" y="100.33" font-size="12" fill="#5A6672" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">reference  r</text><line x1="78.00" y1="273.17" x2="78.00" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="149.40" y1="226.44" x2="149.40" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="220.81" y1="192.96" x2="220.81" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="292.21" y1="168.97" x2="292.21" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="363.61" y1="151.78" x2="363.61" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="435.02" y1="139.47" x2="435.02" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="506.42" y1="130.64" x2="506.42" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="577.82" y1="124.32" x2="577.82" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="649.23" y1="119.79" x2="649.23" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><line x1="720.63" y1="116.54" x2="720.63" y2="108.33" stroke="#127C82" stroke-width="6.00" stroke-linecap="butt" opacity="0.28"/><rect x="780.04" y="66.00" width="24.00" height="234.00" fill="#C0871F" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.100"/><line x1="792.04" y1="114.21" x2="792.04" y2="108.33" stroke="#C0871F" stroke-width="7.00" stroke-linecap="butt" opacity="0.50"/><polyline points="78.00,273.17 149.40,226.44 220.81,192.96 292.21,168.97 363.61,151.78 435.02,139.47 506.42,130.64 577.82,124.32 649.23,119.79 720.63,116.54 792.04,114.21" fill="none" stroke="#0C1521" stroke-width="2.60" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><circle cx="78.00" cy="273.17" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="149.40" cy="226.44" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="220.81" cy="192.96" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="292.21" cy="168.97" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="363.61" cy="151.78" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="435.02" cy="139.47" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="506.42" cy="130.64" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="577.82" cy="124.32" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="649.23" cy="119.79" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="720.63" cy="116.54" r="3.00" fill="#FFFFFF" stroke="#0C1521" stroke-width="1.80" opacity="1.000"/><circle cx="792.04" cy="114.21" r="3.00" fill="#FFFFFF" stroke="#C0871F" stroke-width="1.80" opacity="1.000"/><text x="220.81" y="218.96" font-size="12" fill="#127C82" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">stage cost  ℓ(xₖ, uₖ)</text><text x="220.81" y="234.96" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">penalises error + effort</text><text x="792.04" y="322.00" font-size="12" fill="#C0871F" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">terminal</text><text x="792.04" y="337.00" font-size="11" fill="#C0871F" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">cost  V_f(x_N)</text><line x1="78.00" y1="300.00" x2="78.00" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="78.00" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k</text><line x1="149.40" y1="300.00" x2="149.40" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="149.40" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+1</text><line x1="220.81" y1="300.00" x2="220.81" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="220.81" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+2</text><line x1="292.21" y1="300.00" x2="292.21" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="292.21" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+3</text><line x1="363.61" y1="300.00" x2="363.61" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="363.61" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+4</text><line x1="435.02" y1="300.00" x2="435.02" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="435.02" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+5</text><line x1="506.42" y1="300.00" x2="506.42" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="506.42" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+6</text><line x1="577.82" y1="300.00" x2="577.82" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="577.82" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+7</text><line x1="649.23" y1="300.00" x2="649.23" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="649.23" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+8</text><line x1="720.63" y1="300.00" x2="720.63" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="720.63" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+9</text><line x1="792.04" y1="300.00" x2="792.04" y2="305.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="792.04" y="317.00" font-size="9.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">k+10</text><text x="68.00" y="74.00" font-size="11.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">predicted</text><text x="68.00" y="88.00" font-size="11.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">state</text></svg><figcaption><span class="fig-n">Fig. 4</span><span class="fig-c">Anatomy of the cost. Each step of the predicted trajectory contributes a stage cost penalising tracking error and control effort; the state remaining when the horizon expires is charged a terminal cost, which stands in for everything beyond the window.</span></figcaption></figure>
+
+<p>Horizon length is the first real design decision, and it is a trade. Too
+short and the controller becomes myopic: it will happily drive the state into a
+corner from which the constraints admit no escape, because the trap lies beyond
+the window. Too long and the problem grows, the solve time grows with it, and
+the predictions at the far end are dominated by model error anyway. The terminal
+cost exists precisely to buy back some of the foresight that a short horizon
+gives up.<sup class="cite">[<a href="#ref-12">12</a>]</sup></p>
+
+<p>Two ways of handing the problem to a solver dominate practice. The
+<strong>condensed</strong> form eliminates the predicted states by substituting
+the dynamics recursively, leaving only the input sequence as a decision
+variable. Stacking the predictions gives \(\mathbf{X}=S_x\hat{x}(k)+S_u\mathbf{U}\)
+and the problem collapses to a dense quadratic program:</p>
+
+<div class="eq">
+$$\min_{\mathbf{U}}\ \tfrac12\,\mathbf{U}^{\!\top} H\,\mathbf{U}
++ \big(F\hat{x}(k)\big)^{\!\top}\mathbf{U}
+\qquad\text{s.t.}\qquad G\,\mathbf{U}\;\le\;w+E\,\hat{x}(k)$$
+</div>
+
+<p>The Hessian \(H\) is small — its dimension is <em>Nm</em>, not
+<em>N</em>(<em>n</em>+<em>m</em>) — but dense. The <strong>sparse</strong> form
+keeps the states as variables and the dynamics as equality constraints,
+producing a much larger problem with a banded, block-diagonal structure that a
+structure-exploiting solver can factor in time linear in the horizon rather
+than cubic. For long horizons or high-dimensional states the sparse form wins
+decisively, which is why fast MPC implementations almost universally adopt
+it.<sup class="cite">[<a href="#ref-13">13</a>]</sup></p>
+
+
+<h2 id="constraints"><span class="sec-n">04</span>Constraints, and why they are the point</h2>
+
+<p>Strip the constraints out of the problem above and, for a linear plant with
+a quadratic cost and an infinite horizon, the solution collapses to the
+linear-quadratic regulator: a constant gain matrix, computable once, evaluated
+in nanoseconds. If that were the operating regime, nobody would tolerate the
+cost of an online optimiser. MPC earns its keep exactly in the region where the
+LQR answer is inadmissible.<sup class="cite">[<a href="#ref-1">1</a>]</sup></p>
+
+<figure class="fig breakout" id="fig-5"><svg viewBox="0 0 940 390" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="390.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><line x1="96.00" y1="320.00" x2="396.00" y2="320.00" stroke="#D6DDE4" stroke-width="1.40" stroke-linecap="butt" opacity="1.00"/><line x1="96.00" y1="320.00" x2="96.00" y2="70.00" stroke="#D6DDE4" stroke-width="1.40" stroke-linecap="butt" opacity="1.00"/><line x1="395.0" y1="320.0" x2="404.0" y2="320.0" stroke="#D6DDE4" stroke-width="1.4" marker-end="url(#ah)"/><line x1="96.0" y1="71.0" x2="96.0" y2="62.0" stroke="#D6DDE4" stroke-width="1.4" marker-end="url(#ah)"/><defs><marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="4.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.8 L7.6,4.2 L0.5,7.6" fill="none" stroke="#5A6672" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker><marker id="ahm" markerWidth="9" markerHeight="9" refX="7" refY="4.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.8 L7.6,4.2 L0.5,7.6" fill="none" stroke="#C0871F" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker></defs><text x="400.00" y="336.00" font-size="12" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">state  x₁</text><text x="90.00" y="58.00" font-size="12" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">state  x₂</text><polygon points="114.00,298.00 346.00,290.00 382.00,170.00 276.00,88.00 136.00,110.00 108.00,224.00" fill="#127C82" stroke="none" stroke-width="1.00" opacity="0.100"/><polygon points="114.0,298.0 346.0,290.0 382.0,170.0 276.0,88.0 136.0,110.0 108.0,224.0" fill="none" stroke="#127C82" stroke-width="1.8"/><text x="246.00" y="200.00" font-size="13" fill="#127C82" font-weight="600" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">feasible set</text><text x="246.00" y="216.00" font-size="12" fill="#127C82" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">X ∩ U</text><text x="296.00" y="76.00" font-size="11" fill="#B23A2A" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">x₂ ≤ x₂,max</text><line x1="136.00" y1="110.00" x2="276.00" y2="88.00" stroke="#B23A2A" stroke-width="2.20" stroke-linecap="butt" opacity="1.00"/><polyline points="331.00,296.00 344.00,250.00 334.00,180.00 266.00,96.00 216.00,130.00 192.00,180.00 188.00,228.00" fill="none" stroke="#C0871F" stroke-width="2.60" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><circle cx="331.00" cy="296.00" r="2.80" fill="#0C1521" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="344.00" cy="250.00" r="2.80" fill="#C0871F" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="334.00" cy="180.00" r="2.80" fill="#C0871F" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="266.00" cy="96.00" r="2.80" fill="#C0871F" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="216.00" cy="130.00" r="2.80" fill="#C0871F" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="192.00" cy="180.00" r="2.80" fill="#C0871F" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="188.00" cy="228.00" r="2.80" fill="#C0871F" stroke="#FFFFFF" stroke-width="1.00" opacity="1.000"/><circle cx="331.00" cy="296.00" r="3.60" fill="#0C1521" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="337.00" y="300.00" font-size="10.5" fill="#0C1521" font-weight="400" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">x(0)</text><text x="246.00" y="356.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">the optimiser drives the state along the</text><text x="246.00" y="372.00" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">active boundary — not away from it</text><line x1="560.00" y1="62.00" x2="560.00" y2="336.00" stroke="#E7ECF1" stroke-width="1.20" stroke-linecap="butt" opacity="1.00"/><rect x="600.00" y="90.00" width="292.00" height="42.00" fill="#B23A2A" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.050"/><line x1="600.00" y1="132.00" x2="892.00" y2="132.00" stroke="#B23A2A" stroke-width="2.00" stroke-linecap="butt" opacity="1.00"/><text x="602.00" y="123.00" font-size="11.5" fill="#B23A2A" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">constraint limit</text><line x1="600.00" y1="300.00" x2="892.00" y2="300.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><polyline points="600.00,207.60 603.70,205.69 607.39,203.77 611.09,201.86 614.78,199.94 618.48,198.03 622.18,196.12 625.87,194.20 629.57,192.29 633.27,190.37 636.96,188.46 640.66,186.55 644.35,184.63 648.05,182.72 651.75,180.81 655.44,178.89 659.14,176.98 662.84,175.06 666.53,173.15 670.23,171.24 673.92,169.32 677.62,167.41 681.32,165.49 685.01,163.58 688.71,161.67 692.41,159.75 696.10,157.84 699.80,155.92 703.49,154.01 707.19,152.10 710.89,150.18 714.58,148.27 718.28,146.35 721.97,144.44 725.67,142.53 729.37,140.61 733.06,138.70 736.76,136.78 740.46,134.87 744.15,132.96 747.85,132.00 751.54,132.00 755.24,132.00 758.94,132.00 762.63,132.00 766.33,132.00 770.03,132.00 773.72,132.00 777.42,132.00 781.11,132.00 784.81,132.00 788.51,132.00 792.20,132.00 795.90,132.00 799.59,132.00 803.29,132.00 806.99,132.00 810.68,132.00 814.38,132.00 818.08,132.00 821.77,132.00 825.47,132.00 829.16,132.00 832.86,132.00 836.56,132.00 840.25,132.00 843.95,132.00 847.65,132.00 851.34,132.00 855.04,132.00 858.73,132.00 862.43,132.00 866.13,132.00 869.82,132.00 873.52,132.00 877.22,132.00 880.91,132.00 884.61,132.00 888.30,132.00 892.00,132.00" fill="none" stroke="#127C82" stroke-width="2.40" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><polyline points="600.00,207.60 603.70,205.69 607.39,203.77 611.09,201.86 614.78,199.94 618.48,198.03 622.18,196.12 625.87,194.20 629.57,192.29 633.27,190.37 636.96,188.46 640.66,186.55 644.35,184.63 648.05,182.72 651.75,180.81 655.44,178.89 659.14,176.98 662.84,175.06 666.53,173.15 670.23,171.24 673.92,169.32 677.62,167.41 681.32,165.49 685.01,163.58 688.71,161.67 692.41,159.75 696.10,157.84 699.80,155.92 703.49,154.01 707.19,152.10 710.89,150.18 714.58,148.27 718.28,146.35 721.97,144.44 725.67,142.53 729.37,140.61 733.06,138.70 736.76,136.78 740.46,134.87 744.15,132.96 747.85,131.15 751.54,129.52 755.24,127.99 758.94,126.53 762.63,125.16 766.33,123.87 770.03,122.64 773.72,121.49 777.42,120.39 781.11,119.36 784.81,118.39 788.51,117.47 792.20,116.60 795.90,115.78 799.59,115.00 803.29,114.27 806.99,113.57 810.68,112.92 814.38,112.30 818.08,111.72 821.77,111.17 825.47,110.65 829.16,110.15 832.86,109.69 836.56,109.25 840.25,108.84 843.95,108.44 847.65,108.07 851.34,107.72 855.04,107.39 858.73,107.08 862.43,106.79 866.13,106.51 869.82,106.25 873.52,106.00 877.22,105.76 880.91,105.54 884.61,105.33 888.30,105.13 892.00,104.95" fill="none" stroke="#C0871F" stroke-width="2.40" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 3" opacity="1.000"/><line x1="839.44" y1="132.00" x2="839.44" y2="108.92" stroke="#C0871F" stroke-width="1.50" stroke-linecap="butt" opacity="1.00"/><line x1="835.44" y1="132.00" x2="843.44" y2="132.00" stroke="#C0871F" stroke-width="1.50" stroke-linecap="butt" opacity="1.00"/><line x1="835.44" y1="108.92" x2="843.44" y2="108.92" stroke="#C0871F" stroke-width="1.50" stroke-linecap="butt" opacity="1.00"/><text x="829.44" y="124.46" font-size="11.5" fill="#C0871F" font-weight="600" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">slack  ε ≥ 0</text><line x1="600.00" y1="322.00" x2="626.00" y2="322.00" stroke="#127C82" stroke-width="2.40" stroke-linecap="butt" opacity="1.00"/><text x="632.00" y="326.00" font-size="11.5" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">hard: never violated</text><line x1="600.00" y1="346.00" x2="626.00" y2="346.00" stroke="#C0871F" stroke-width="2.40" stroke-linecap="butt" stroke-dasharray="5 3" opacity="1.00"/><text x="632.00" y="350.00" font-size="11.5" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">soft: violation allowed, but paid for</text><text x="600.00" y="46.00" font-size="13" fill="#0C1521" font-weight="700" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Hard limits vs. softened limits</text><text x="96.00" y="46.00" font-size="13" fill="#0C1521" font-weight="700" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">The feasible set in state space</text></svg><figcaption><span class="fig-n">Fig. 5</span><span class="fig-c">Left: the feasible set is the intersection of the state and input constraints, and the optimiser routinely drives the trajectory along an active boundary rather than retreating from it. Right: a hard constraint is never violated, while a softened one permits a bounded, penalised excursion — which is what keeps the problem solvable when a disturbance makes the hard version infeasible.</span></figcaption></figure>
+
+<p>Constraints come in kinds that behave very differently. <strong>Input
+constraints</strong> — actuator saturation, slew-rate limits, valve travel —
+are structurally benign: the set \(\mathcal{U}\) is under the controller's
+direct authority, so a feasible input can always be found. <strong>State and
+output constraints</strong> are the dangerous ones. A temperature ceiling or a
+minimum clearance is a restriction on where the plant may go, and whether it
+can be honoured depends on where the plant already is and how much control
+authority remains. A state constraint can be violated by a disturbance before
+the controller has any say in the matter.</p>
+
+<p>This is why hard state constraints are usually <strong>softened</strong> in
+deployment: the constraint is relaxed by a non-negative slack variable which is
+then heavily penalised in the cost, often with an exact-penalty term that
+keeps the slack at zero whenever the hard problem is feasible. The result is a
+controller that respects the limit when it can and degrades gracefully rather
+than failing to return an answer when it cannot. An optimiser that reports
+infeasibility to a plant that still needs a valve position in eighty
+milliseconds has not solved anybody's problem.<sup class="cite">[<a href="#ref-4">4</a>, <a href="#ref-1">1</a>]</sup></p>
+
+<p>The deeper issue is <strong>recursive feasibility</strong>. It is not
+enough that the problem be solvable now; it must remain solvable at every
+future instant. Nothing in the naive formulation guarantees this, and a
+controller can walk itself into a state from which no admissible input sequence
+satisfies the constraints. The standard remedy is to require the predicted
+state to land, at the end of the horizon, inside a terminal set
+\(\mathcal{X}_f\) that is <em>control invariant</em>: a set from which some
+admissible input keeps the state inside the set forever. Once the state reaches
+such a region the controller has a guaranteed escape route in perpetuity, and
+the feasible solution at the current step can be shifted forward to construct a
+feasible solution at the next.<sup class="cite">[<a href="#ref-14">14</a>, <a href="#ref-5">5</a>]</sup></p>
+
+<div class="pull">Constraints are not a nuisance bolted onto the control
+problem. They are the reason the control problem is interesting.</div>
+
+<p>There is an economic argument here too, and in the process industries it is
+the one that pays for the installation. Plants are most profitable near their
+limits — higher throughput, tighter product specification, less energy per unit
+output. A controller with large variance must sit well back from every limit to
+avoid violating it. A controller that handles constraints explicitly can
+operate closer to the boundary and, in many installations, ride along it. The
+constraint becomes an operating point rather than a hazard, and the difference
+between those two regimes is measured in margin.<sup class="cite">[<a href="#ref-2">2</a>]</sup></p>
+
+
+<h2 id="stability"><span class="sec-n">05</span>Stability, feasibility, robustness</h2>
+
+<p>An MPC controller is defined implicitly, as whatever the optimiser returns.
+Proving that such an object stabilises anything is not obvious. The
+now-standard argument makes the optimal value function \(V^{\star}\) do the
+work of a Lyapunov function. Equip the problem with a terminal cost that is a
+local control-Lyapunov function on a control-invariant terminal set, together
+with a local controller that keeps the state inside that set. Then the
+optimal plan computed at the current step can be shifted one step forward and
+completed by the local controller, producing a feasible — though generally
+suboptimal — plan for the next step. Comparing its cost to the current optimum
+yields the descent inequality</p>
+
+<div class="eq">
+$$V^{\star}\big(x^{+}\big)-V^{\star}(x)\ \le\ -\,\ell\big(x,\kappa(x)\big),$$
+</div>
+
+<p>which drives \(V^{\star}\) monotonically down and the state to the origin.
+The same shifted-plan construction simultaneously delivers recursive
+feasibility, which is why the two properties are almost always proved
+together.<sup class="cite">[<a href="#ref-5">5</a>]</sup></p>
+
+<p>Stability, however, is not robustness. The argument above assumes the model
+is exact. A controller can be nominally stabilising and still lose feasibility
+under a disturbance that pushes the state outside the region where the shifted
+plan works. Three families of response have developed.</p>
+
+<p><strong>Tube MPC</strong> separates the problem into a nominal trajectory
+and an error. A nominal MPC plans for the disturbance-free system, while an
+ancillary feedback law keeps the true state inside a bounded set — the tube —
+centred on the nominal path. The nominal problem is then solved with
+<em>tightened</em> constraints, shrunk by exactly the tube's cross-section, so
+that every realisation within the tube satisfies the original constraints. The
+result is robust constraint satisfaction with a nominal problem no harder than
+before.<sup class="cite">[<a href="#ref-15">15</a>]</sup> The construction extends to nonlinear dynamics, where the
+tube is generated by a local controller rather than an explicit
+set recursion.<sup class="cite">[<a href="#ref-16">16</a>]</sup></p>
+
+<figure class="fig breakout" id="fig-6"><svg viewBox="0 0 940 350" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="350.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><polygon points="78.0,162.0 84.8,158.6 91.7,155.3 98.5,152.1 105.4,149.0 112.2,146.0 119.0,143.0 125.9,140.2 132.7,137.4 139.6,134.7 146.4,132.1 153.2,129.5 160.1,127.0 166.9,124.6 173.8,122.2 180.6,119.9 187.4,117.7 194.3,115.5 201.1,113.4 208.0,111.4 214.8,109.4 221.6,107.5 228.5,105.6 235.3,103.8 242.2,102.0 249.0,100.3 255.8,98.6 262.7,96.9 269.5,95.4 276.4,93.8 283.2,92.3 290.1,90.8 296.9,89.4 303.7,88.1 310.6,86.7 317.4,85.4 324.3,84.1 331.1,82.9 337.9,81.7 344.8,80.6 351.6,79.4 358.5,78.3 365.3,77.3 372.1,76.2 379.0,75.2 385.8,74.2 392.7,73.3 399.5,72.4 406.3,71.5 413.2,70.6 420.0,69.7 426.9,68.9 433.7,68.1 440.5,67.3 447.4,66.6 454.2,65.9 461.1,65.1 467.9,64.5 474.7,63.8 481.6,63.1 488.4,62.5 495.3,61.9 502.1,61.3 508.9,60.7 515.8,60.1 522.6,59.6 529.5,59.1 536.3,58.5 543.1,58.0 550.0,57.6 556.8,57.1 563.7,56.6 570.5,56.2 577.3,55.8 584.2,55.3 591.0,54.9 597.9,54.5 604.7,54.2 611.5,53.8 618.4,53.4 625.2,53.1 632.1,52.7 638.9,52.4 645.7,52.1 652.6,51.8 659.4,51.5 666.3,51.2 673.1,50.9 679.9,50.6 686.8,50.4 693.6,50.1 700.5,49.9 707.3,49.6 714.2,49.4 721.0,49.2 727.8,48.9 734.7,48.7 741.5,48.5 748.4,48.3 755.2,48.1 762.0,47.9 768.9,47.7 775.7,47.6 782.6,47.4 789.4,47.2 796.2,47.1 803.1,46.9 809.9,46.8 816.8,46.6 823.6,46.5 830.4,46.3 837.3,46.2 844.1,46.1 851.0,46.0 857.8,45.8 864.6,45.7 871.5,45.6 878.3,45.5 885.2,45.4 892.0,45.3 892.0,87.7 885.2,87.9 878.3,88.1 871.5,88.3 864.6,88.5 857.8,88.7 851.0,89.0 844.1,89.2 837.3,89.4 830.4,89.7 823.6,89.9 816.8,90.2 809.9,90.4 803.1,90.7 796.2,91.0 789.4,91.2 782.6,91.5 775.7,91.8 768.9,92.1 762.0,92.4 755.2,92.7 748.4,93.0 741.5,93.4 734.7,93.7 727.8,94.1 721.0,94.4 714.2,94.8 707.3,95.1 700.5,95.5 693.6,95.9 686.8,96.3 679.9,96.7 673.1,97.1 666.3,97.5 659.4,98.0 652.6,98.4 645.7,98.9 638.9,99.4 632.1,99.8 625.2,100.3 618.4,100.8 611.5,101.4 604.7,101.9 597.9,102.4 591.0,103.0 584.2,103.6 577.3,104.2 570.5,104.8 563.7,105.4 556.8,106.0 550.0,106.7 543.1,107.3 536.3,108.0 529.5,108.7 522.6,109.4 515.8,110.2 508.9,110.9 502.1,111.7 495.3,112.5 488.4,113.3 481.6,114.1 474.7,115.0 467.9,115.8 461.1,116.7 454.2,117.7 447.4,118.6 440.5,119.6 433.7,120.6 426.9,121.6 420.0,122.6 413.2,123.7 406.3,124.8 399.5,125.9 392.7,127.1 385.8,128.3 379.0,129.5 372.1,130.7 365.3,132.0 358.5,133.3 351.6,134.7 344.8,136.0 337.9,137.5 331.1,138.9 324.3,140.4 317.4,141.9 310.6,143.5 303.7,145.1 296.9,146.8 290.1,148.5 283.2,150.2 276.4,152.0 269.5,153.8 262.7,155.7 255.8,157.6 249.0,159.6 242.2,161.6 235.3,163.7 228.5,165.8 221.6,168.0 214.8,170.3 208.0,172.6 201.1,175.0 194.3,177.4 187.4,179.9 180.6,182.4 173.8,185.1 166.9,187.8 160.1,190.5 153.2,193.4 146.4,196.3 139.6,199.3 132.7,202.3 125.9,205.5 119.0,208.7 112.2,212.0 105.4,215.5 98.5,218.9 91.7,222.5 84.8,226.2 78.0,230.0" fill="#C0871F" opacity="0.12"/><polyline points="78.00,162.00 84.84,158.62 91.68,155.33 98.52,152.13 105.36,149.01 112.20,145.99 119.04,143.04 125.88,140.18 132.72,137.40 139.56,134.69 146.40,132.06 153.24,129.50 160.08,127.01 166.92,124.58 173.76,122.23 180.61,119.94 187.45,117.71 194.29,115.55 201.13,113.44 207.97,111.40 214.81,109.41 221.65,107.47 228.49,105.59 235.33,103.76 242.17,101.98 249.01,100.26 255.85,98.58 262.69,96.94 269.53,95.35 276.37,93.81 283.21,92.31 290.05,90.85 296.89,89.43 303.73,88.05 310.57,86.71 317.41,85.41 324.25,84.14 331.09,82.91 337.93,81.72 344.77,80.56 351.61,79.43 358.45,78.33 365.29,77.26 372.13,76.23 378.97,75.22 385.82,74.24 392.66,73.29 399.50,72.37 406.34,71.47 413.18,70.60 420.02,69.75 426.86,68.93 433.70,68.13 440.54,67.35 447.38,66.59 454.22,65.86 461.06,65.15 467.90,64.46 474.74,63.79 481.58,63.13 488.42,62.50 495.26,61.88 502.10,61.29 508.94,60.71 515.78,60.14 522.62,59.60 529.46,59.06 536.30,58.55 543.14,58.05 549.98,57.56 556.82,57.09 563.66,56.63 570.50,56.19 577.34,55.76 584.18,55.34 591.03,54.93 597.87,54.54 604.71,54.15 611.55,53.78 618.39,53.42 625.23,53.07 632.07,52.73 638.91,52.40 645.75,52.09 652.59,51.78 659.43,51.48 666.27,51.18 673.11,50.90 679.95,50.63 686.79,50.36 693.63,50.11 700.47,49.86 707.31,49.61 714.15,49.38 720.99,49.15 727.83,48.93 734.67,48.72 741.51,48.51 748.35,48.31 755.19,48.12 762.03,47.93 768.87,47.75 775.71,47.57 782.55,47.40 789.39,47.24 796.24,47.08 803.08,46.92 809.92,46.77 816.76,46.63 823.60,46.49 830.44,46.35 837.28,46.22 844.12,46.09 850.96,45.97 857.80,45.85 864.64,45.73 871.48,45.62 878.32,45.51 885.16,45.41 892.00,45.31" fill="none" stroke="#C0871F" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3" opacity="0.700"/><polyline points="78.00,230.00 84.84,226.22 91.68,222.54 98.52,218.95 105.36,215.45 112.20,212.04 119.04,208.73 125.88,205.49 132.72,202.34 139.56,199.27 146.40,196.28 153.24,193.37 160.08,190.53 166.92,187.76 173.76,185.07 180.61,182.44 187.45,179.88 194.29,177.39 201.13,174.96 207.97,172.59 214.81,170.28 221.65,168.03 228.49,165.84 235.33,163.70 242.17,161.62 249.01,159.59 255.85,157.62 262.69,155.69 269.53,153.81 276.37,151.98 283.21,150.20 290.05,148.46 296.89,146.76 303.73,145.11 310.57,143.50 317.41,141.93 324.25,140.41 331.09,138.92 337.93,137.46 344.77,136.05 351.61,134.66 358.45,133.32 365.29,132.01 372.13,130.73 378.97,129.48 385.82,128.27 392.66,127.08 399.50,125.92 406.34,124.80 413.18,123.70 420.02,122.63 426.86,121.59 433.70,120.57 440.54,119.57 447.38,118.61 454.22,117.66 461.06,116.74 467.90,115.85 474.74,114.97 481.58,114.12 488.42,113.28 495.26,112.47 502.10,111.68 508.94,110.91 515.78,110.16 522.62,109.42 529.46,108.71 536.30,108.01 543.14,107.33 549.98,106.66 556.82,106.01 563.66,105.38 570.50,104.76 577.34,104.16 584.18,103.57 591.03,103.00 597.87,102.44 604.71,101.90 611.55,101.36 618.39,100.84 625.23,100.34 632.07,99.84 638.91,99.36 645.75,98.89 652.59,98.43 659.43,97.98 666.27,97.55 673.11,97.12 679.95,96.70 686.79,96.30 693.63,95.90 700.47,95.51 707.31,95.13 714.15,94.76 720.99,94.40 727.83,94.05 734.67,93.71 741.51,93.37 748.35,93.05 755.19,92.73 762.03,92.41 768.87,92.11 775.71,91.81 782.55,91.52 789.39,91.24 796.24,90.96 803.08,90.69 809.92,90.43 816.76,90.17 823.60,89.92 830.44,89.67 837.28,89.43 844.12,89.19 850.96,88.97 857.80,88.74 864.64,88.52 871.48,88.31 878.32,88.10 885.16,87.89 892.00,87.70" fill="none" stroke="#C0871F" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3" opacity="0.700"/><polyline points="78.00,194.33 84.84,192.83 91.68,189.01 98.52,186.06 105.36,183.09 112.20,180.03 119.04,178.39 125.88,175.48 132.72,173.10 139.56,167.79 146.40,164.80 153.24,162.30 160.08,159.82 166.92,157.66 173.76,155.82 180.61,153.58 187.45,150.84 194.29,148.63 201.13,145.73 207.97,143.63 214.81,141.44 221.65,138.40 228.49,136.03 235.33,134.33 242.17,132.50 249.01,130.31 255.85,127.40 262.69,125.78 269.53,124.18 276.37,121.97 283.21,120.81 290.05,119.36 296.89,117.37 303.73,115.58 310.57,114.08 317.41,112.34 324.25,112.29 331.09,110.46 337.93,109.58 344.77,109.04 351.61,107.65 358.45,106.11 365.29,105.11 372.13,104.39 378.97,103.24 385.82,102.15 392.66,100.51 399.50,99.17 406.34,98.08 413.18,96.68 420.02,95.81 426.86,95.22 433.70,94.10 440.54,93.02 447.38,92.24 454.22,91.67 461.06,90.78 467.90,90.79 474.74,89.79 481.58,88.87 488.42,88.63 495.26,87.88 502.10,87.45 508.94,86.54 515.78,86.43 522.62,86.01 529.46,85.17 536.30,84.23 543.14,84.16 549.98,83.68 556.82,83.00 563.66,82.56 570.50,81.63 577.34,81.35 584.18,80.74 591.03,80.44 597.87,79.63 604.71,79.14 611.55,78.73 618.39,78.59 625.23,77.81 632.07,77.22 638.91,76.66 645.75,76.05 652.59,75.59 659.43,75.30 666.27,75.04 673.11,74.78 679.95,74.21 686.79,74.06 693.63,73.79 700.47,73.48 707.31,73.11 714.15,72.71 720.99,72.53 727.83,72.41 734.67,72.09 741.51,71.65 748.35,71.28 755.19,70.98 762.03,70.73 768.87,70.43 775.71,70.18 782.55,69.86 789.39,69.66 796.24,69.41 803.08,69.17 809.92,68.91 816.76,68.67 823.60,68.34 830.44,68.07 837.28,67.83 844.12,67.71 850.96,67.53 857.80,67.36 864.64,67.17 871.48,67.03 878.32,66.84 885.16,66.66 892.00,66.50" fill="none" stroke="#127C82" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" opacity="0.550"/><polyline points="78.00,196.80 84.84,193.85 91.68,190.31 98.52,186.39 105.36,181.50 112.20,178.44 119.04,174.75 125.88,171.60 132.72,167.37 139.56,163.99 146.40,160.25 153.24,158.32 160.08,155.83 166.92,153.83 173.76,150.34 180.61,147.50 187.45,145.36 194.29,143.37 201.13,140.84 207.97,139.12 214.81,137.58 221.65,135.24 228.49,131.79 235.33,130.01 242.17,128.45 249.01,127.28 255.85,126.24 262.69,124.20 269.53,122.04 276.37,120.39 283.21,118.62 290.05,117.00 296.89,115.42 303.73,114.70 310.57,113.48 317.41,112.02 324.25,111.02 331.09,109.90 337.93,108.96 344.77,107.83 351.61,106.21 358.45,105.18 365.29,104.07 372.13,102.58 378.97,101.20 385.82,99.44 392.66,99.23 399.50,97.88 406.34,97.07 413.18,96.06 420.02,94.81 426.86,93.51 433.70,92.27 440.54,91.37 447.38,90.00 454.22,89.30 461.06,88.58 467.90,87.58 474.74,87.03 481.58,85.66 488.42,84.68 495.26,83.39 502.10,82.78 508.94,82.29 515.78,81.66 522.62,80.90 529.46,80.51 536.30,79.88 543.14,79.37 549.98,78.47 556.82,78.16 563.66,77.45 570.50,77.15 577.34,76.93 584.18,76.66 591.03,76.50 597.87,76.05 604.71,75.45 611.55,75.03 618.39,74.54 625.23,73.88 632.07,73.50 638.91,73.14 645.75,72.88 652.59,72.84 659.43,72.41 666.27,72.40 673.11,72.01 679.95,71.74 686.79,71.31 693.63,71.07 700.47,70.93 707.31,70.64 714.15,70.47 720.99,70.27 727.83,70.04 734.67,69.84 741.51,69.65 748.35,69.53 755.19,69.35 762.03,69.34 768.87,69.15 775.71,69.05 782.55,68.78 789.39,68.52 796.24,68.47 803.08,68.29 809.92,68.13 816.76,68.02 823.60,67.83 830.44,67.70 837.28,67.61 844.12,67.46 850.96,67.32 857.80,67.17 864.64,67.05 871.48,66.90 878.32,66.76 885.16,66.63 892.00,66.50" fill="none" stroke="#127C82" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" opacity="0.550"/><polyline points="78.00,196.07 84.84,192.94 91.68,188.06 98.52,184.52 105.36,182.01 112.20,179.39 119.04,176.30 125.88,171.55 132.72,168.73 139.56,165.77 146.40,162.61 153.24,159.92 160.08,155.72 166.92,153.53 173.76,150.55 180.61,148.03 187.45,145.28 194.29,143.75 201.13,140.42 207.97,138.34 214.81,136.23 221.65,134.75 228.49,133.19 235.33,130.92 242.17,128.47 249.01,126.22 255.85,123.78 262.69,121.68 269.53,120.00 276.37,117.95 283.21,116.07 290.05,114.61 296.89,112.77 303.73,110.70 310.57,109.21 317.41,108.04 324.25,106.40 331.09,104.26 337.93,103.14 344.77,102.00 351.61,100.91 358.45,99.27 365.29,98.97 372.13,97.76 378.97,96.24 385.82,95.58 392.66,94.02 399.50,92.89 406.34,92.20 413.18,91.24 420.02,90.96 426.86,90.33 433.70,88.86 440.54,88.39 447.38,87.00 454.22,86.30 461.06,85.26 467.90,84.57 474.74,84.61 481.58,84.13 488.42,83.43 495.26,83.15 502.10,82.93 508.94,82.23 515.78,81.83 522.62,81.72 529.46,81.34 536.30,80.57 543.14,80.16 549.98,79.41 556.82,78.54 563.66,78.06 570.50,77.86 577.34,77.70 584.18,77.26 591.03,76.64 597.87,76.17 604.71,75.66 611.55,75.36 618.39,74.92 625.23,74.64 632.07,74.34 638.91,74.22 645.75,74.14 652.59,73.88 659.43,73.72 666.27,73.54 673.11,73.11 679.95,72.81 686.79,72.10 693.63,71.69 700.47,71.51 707.31,71.15 714.15,70.85 720.99,70.68 727.83,70.33 734.67,70.18 741.51,70.26 748.35,69.95 755.19,69.79 762.03,69.45 768.87,69.30 775.71,69.18 782.55,68.88 789.39,68.76 796.24,68.56 803.08,68.30 809.92,68.13 816.76,67.97 823.60,67.81 830.44,67.62 837.28,67.51 844.12,67.35 850.96,67.20 857.80,67.02 864.64,66.92 871.48,66.82 878.32,66.70 885.16,66.60 892.00,66.50" fill="none" stroke="#127C82" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" opacity="0.550"/><polyline points="78.00,195.89 84.84,191.37 91.68,188.42 98.52,185.11 105.36,183.77 112.20,181.21 119.04,176.90 125.88,174.34 132.72,171.86 139.56,169.81 146.40,166.55 153.24,163.66 160.08,161.77 166.92,158.68 173.76,155.95 180.61,152.96 187.45,150.96 194.29,147.49 201.13,144.95 207.97,142.80 214.81,140.96 221.65,138.99 228.49,136.43 235.33,134.60 242.17,132.04 249.01,129.83 255.85,127.25 262.69,125.04 269.53,123.36 276.37,122.70 283.21,120.91 290.05,118.91 296.89,117.29 303.73,115.51 310.57,114.28 317.41,113.04 324.25,112.10 331.09,110.11 337.93,108.73 344.77,107.67 351.61,107.02 358.45,105.86 365.29,104.06 372.13,102.72 378.97,101.90 385.82,100.24 392.66,98.62 399.50,97.23 406.34,95.95 413.18,94.57 420.02,93.46 426.86,92.30 433.70,91.72 440.54,90.36 447.38,89.48 454.22,88.03 461.06,87.95 467.90,86.99 474.74,85.97 481.58,85.39 488.42,84.59 495.26,83.72 502.10,82.94 508.94,82.49 515.78,81.94 522.62,81.09 529.46,80.21 536.30,79.66 543.14,79.13 549.98,78.59 556.82,77.86 563.66,77.65 570.50,77.51 577.34,77.03 584.18,76.85 591.03,76.55 597.87,76.12 604.71,75.62 611.55,75.44 618.39,74.91 625.23,74.87 632.07,74.41 638.91,74.34 645.75,74.21 652.59,73.76 659.43,73.49 666.27,73.29 673.11,73.04 679.95,72.66 686.79,72.36 693.63,72.08 700.47,71.66 707.31,71.47 714.15,71.26 720.99,71.06 727.83,70.68 734.67,70.33 741.51,69.98 748.35,69.76 755.19,69.57 762.03,69.29 768.87,69.13 775.71,68.87 782.55,68.64 789.39,68.52 796.24,68.35 803.08,68.20 809.92,67.95 816.76,67.67 823.60,67.55 830.44,67.42 837.28,67.38 844.12,67.25 850.96,67.13 857.80,67.04 864.64,66.91 871.48,66.82 878.32,66.71 885.16,66.61 892.00,66.50" fill="none" stroke="#127C82" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" opacity="0.550"/><polyline points="78.00,195.30 84.84,190.88 91.68,188.51 98.52,186.23 105.36,182.45 112.20,179.25 119.04,177.02 125.88,174.18 132.72,171.27 139.56,168.46 146.40,165.04 153.24,162.03 160.08,158.14 166.92,154.63 173.76,151.67 180.61,148.54 187.45,145.33 194.29,142.60 201.13,141.16 207.97,138.47 214.81,136.33 221.65,133.32 228.49,131.30 235.33,129.08 242.17,127.03 249.01,124.28 255.85,122.44 262.69,120.90 269.53,119.09 276.37,117.72 283.21,116.07 290.05,114.56 296.89,112.95 303.73,110.57 310.57,109.39 317.41,108.03 324.25,106.82 331.09,105.24 337.93,104.55 344.77,103.65 351.61,102.49 358.45,101.11 365.29,100.02 372.13,99.16 378.97,98.46 385.82,97.23 392.66,95.66 399.50,94.57 406.34,93.57 413.18,92.50 420.02,91.98 426.86,91.24 433.70,90.50 440.54,89.58 447.38,88.81 454.22,88.45 461.06,87.33 467.90,86.06 474.74,85.45 481.58,84.66 488.42,83.92 495.26,83.06 502.10,82.88 508.94,81.82 515.78,81.38 522.62,80.48 529.46,79.92 536.30,79.51 543.14,79.04 549.98,78.33 556.82,78.06 563.66,77.69 570.50,77.35 577.34,77.30 584.18,76.58 591.03,76.04 597.87,75.64 604.71,75.02 611.55,74.83 618.39,74.48 625.23,73.81 632.07,73.30 638.91,73.37 645.75,73.62 652.59,73.46 659.43,72.97 666.27,72.74 673.11,72.47 679.95,72.09 686.79,71.93 693.63,71.63 700.47,71.26 707.31,70.95 714.15,70.65 720.99,70.49 727.83,70.20 734.67,70.02 741.51,69.68 748.35,69.23 755.19,69.11 762.03,69.12 768.87,68.97 775.71,68.76 782.55,68.51 789.39,68.28 796.24,68.17 803.08,68.07 809.92,67.85 816.76,67.77 823.60,67.58 830.44,67.46 837.28,67.31 844.12,67.17 850.96,67.05 857.80,66.93 864.64,66.85 871.48,66.75 878.32,66.67 885.16,66.58 892.00,66.50" fill="none" stroke="#127C82" stroke-width="1.20" stroke-linecap="round" stroke-linejoin="round" opacity="0.550"/><polyline points="78.00,196.00 84.84,192.42 91.68,188.93 98.52,185.54 105.36,182.23 112.20,179.02 119.04,175.88 125.88,172.84 132.72,169.87 139.56,166.98 146.40,164.17 153.24,161.43 160.08,158.77 166.92,156.17 173.76,153.65 180.61,151.19 187.45,148.80 194.29,146.47 201.13,144.20 207.97,141.99 214.81,139.84 221.65,137.75 228.49,135.71 235.33,133.73 242.17,131.80 249.01,129.92 255.85,128.10 262.69,126.32 269.53,124.58 276.37,122.90 283.21,121.25 290.05,119.65 296.89,118.10 303.73,116.58 310.57,115.11 317.41,113.67 324.25,112.28 331.09,110.91 337.93,109.59 344.77,108.30 351.61,107.05 358.45,105.82 365.29,104.64 372.13,103.48 378.97,102.35 385.82,101.25 392.66,100.19 399.50,99.15 406.34,98.13 413.18,97.15 420.02,96.19 426.86,95.26 433.70,94.35 440.54,93.46 447.38,92.60 454.22,91.76 461.06,90.95 467.90,90.15 474.74,89.38 481.58,88.62 488.42,87.89 495.26,87.18 502.10,86.48 508.94,85.81 515.78,85.15 522.62,84.51 529.46,83.89 536.30,83.28 543.14,82.69 549.98,82.11 556.82,81.55 563.66,81.01 570.50,80.48 577.34,79.96 584.18,79.46 591.03,78.97 597.87,78.49 604.71,78.03 611.55,77.57 618.39,77.13 625.23,76.71 632.07,76.29 638.91,75.88 645.75,75.49 652.59,75.10 659.43,74.73 666.27,74.37 673.11,74.01 679.95,73.67 686.79,73.33 693.63,73.00 700.47,72.68 707.31,72.37 714.15,72.07 720.99,71.78 727.83,71.49 734.67,71.21 741.51,70.94 748.35,70.68 755.19,70.42 762.03,70.17 768.87,69.93 775.71,69.69 782.55,69.46 789.39,69.24 796.24,69.02 803.08,68.81 809.92,68.60 816.76,68.40 823.60,68.20 830.44,68.01 837.28,67.82 844.12,67.64 850.96,67.47 857.80,67.29 864.64,67.13 871.48,66.97 878.32,66.81 885.16,66.65 892.00,66.50" fill="none" stroke="#0C1521" stroke-width="2.60" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><line x1="78.00" y1="31.00" x2="892.00" y2="31.00" stroke="#B23A2A" stroke-width="1.60" stroke-linecap="butt" opacity="1.00"/><text x="890.00" y="23.00" font-size="11.5" fill="#B23A2A" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">original constraint</text><line x1="78.00" y1="71.00" x2="892.00" y2="71.00" stroke="#B23A2A" stroke-width="1.40" stroke-linecap="butt" stroke-dasharray="6 4" opacity="1.00"/><text x="890.00" y="87.00" font-size="11.5" fill="#B23A2A" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">tightened for the nominal path</text><text x="582.68" y="109.46" font-size="12.5" fill="#0C1521" font-weight="600" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">nominal trajectory</text><text x="322.20" y="66.28" font-size="12" fill="#C0871F" font-weight="600" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">tube: every disturbed path stays inside</text><line x1="78.00" y1="346.00" x2="892.00" y2="346.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="78.00" y="336.00" font-size="11.5" fill="#8A96A2" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">time  →</text></svg><figcaption><span class="fig-n">Fig. 6</span><span class="fig-c">Tube MPC. The optimiser plans a nominal trajectory while an ancillary controller confines every disturbed realisation to a bounded tube around it. Constraints are tightened for the nominal path by the width of the tube, so satisfaction of the tightened constraint implies satisfaction of the real one for every admissible disturbance.</span></figcaption></figure>
+
+<p><strong>Stochastic MPC</strong> takes a different view: if the disturbance
+has a known distribution, insisting on satisfaction for every realisation is
+needlessly conservative, since worst cases may be vanishingly improbable.
+Constraints are instead imposed in probability — the chance of violation must
+stay below a stated level — which trades a small, quantified risk for a
+substantial gain in performance. The price is that chance constraints are
+generally non-convex and must be approximated, by scenario sampling,
+distributionally robust reformulation, or analytic tightening.<sup class="cite">[<a href="#ref-17">17</a>]</sup></p>
+
+<p><strong>Min–max MPC</strong> optimises against the worst admissible
+disturbance directly. It is the most conservative approach and, in its
+closed-loop form, the most expensive; it appears more often in the literature
+than on plants.<sup class="cite">[<a href="#ref-18">18</a>]</sup></p>
+
+
+<h2 id="computation"><span class="sec-n">06</span>Making it fast enough</h2>
+
+<p>Every sampling instant, an optimisation problem must be solved to
+sufficient accuracy, on the available hardware, within the sampling period,
+<em>every single time</em>. A control law that is usually fast enough is not a
+control law. This hard real-time requirement shapes the algorithms far more
+than raw throughput does: what matters is a tight and provable bound on the
+worst case, not a good average.</p>
+
+<p>For linear MPC the problem is a convex quadratic program, and three solver
+families dominate. <strong>Active-set methods</strong> guess which constraints
+are tight and update that guess; because consecutive MPC problems differ only
+slightly, an active-set solver can be warm-started from the previous solution
+and often converges in a handful of iterations. qpOASES exploits this by
+treating the QP as a parametric problem traversed along a homotopy from the
+previous solve to the current one.<sup class="cite">[<a href="#ref-19">19</a>]</sup> <strong>Interior-point
+methods</strong> follow a central path and offer far more predictable iteration
+counts; combined with the banded structure of the sparse formulation, they give
+per-iteration cost linear in the horizon, and this combination is what first
+made online MPC viable at kilohertz rates.<sup class="cite">[<a href="#ref-13">13</a>]</sup> <strong>First-order
+operator-splitting methods</strong> trade asymptotic accuracy for extremely
+cheap iterations and a division-free inner loop; OSQP, built on the alternating
+direction method of multipliers, factors its matrix once and reuses it across
+iterations and across solves, is division-free after setup, and detects
+infeasibility reliably — properties that suit embedded targets
+well.<sup class="cite">[<a href="#ref-20">20</a>]</sup></p>
+
+<p>A fourth strategy removes the online solver altogether. Because the linear
+MPC problem depends on the current state only through the right-hand side of
+its constraints, it is a multiparametric quadratic program, and its solution is
+a piecewise-affine function of the state defined over a polytopic partition of
+the feasible region.<sup class="cite">[<a href="#ref-10">10</a>]</sup> Solve it once offline, store the regions
+and their affine gains, and the online task reduces to locating the region
+containing the current state and evaluating one small matrix–vector
+product.<sup class="cite">[<a href="#ref-21">21</a>]</sup></p>
+
+<figure class="fig breakout" id="fig-7"><svg viewBox="0 0 940 380" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="380.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><rect x="300.00" y="46.00" width="300.00" height="300.00" fill="none" stroke="#D6DDE4" stroke-width="1.40" rx="0.00" opacity="1.000"/><polygon points="300,46 430,46 360,170 300,150" fill="#FBF3E4" stroke="#D6DDE4" stroke-width="1.3"/><text x="347.50" y="107.00" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₁x+g₁</text><polygon points="430,46 600,46 600,120 470,150 360,170" fill="#EAF3F3" stroke="#D6DDE4" stroke-width="1.3"/><text x="492.00" y="110.40" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₂x+g₂</text><polygon points="300,150 360,170 340,260 300,300" fill="#F3ECF7" stroke="#D6DDE4" stroke-width="1.3"/><text x="325.00" y="224.00" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₃x+g₃</text><polygon points="360,170 470,150 540,220 440,300 340,260" fill="#EAF0F6" stroke="#D6DDE4" stroke-width="1.3"/><text x="430.00" y="224.00" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₄x+g₄</text><polygon points="470,150 600,120 600,240 540,220" fill="#F7EEE8" stroke="#D6DDE4" stroke-width="1.3"/><text x="552.50" y="186.50" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₅x+g₅</text><polygon points="540,220 600,240 600,346 470,346 440,300" fill="#EFF4EC" stroke="#D6DDE4" stroke-width="1.3"/><text x="530.00" y="294.40" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₆x+g₆</text><polygon points="300,300 340,260 440,300 470,346 300,346" fill="#F1EFEA" stroke="#D6DDE4" stroke-width="1.3"/><text x="370.00" y="314.40" font-size="11.5" fill="#0C1521" font-weight="600" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">K₇x+g₇</text><text x="450.00" y="372.00" font-size="12" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">state  x₁</text><text x="280.00" y="196.00" font-size="12" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">state  x₂</text><text x="70.00" y="70.00" font-size="13" fill="#C0871F" font-weight="700" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" letter-spacing="0.08em" style="">Offline</text><text x="70.00" y="96.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Solve the QP once,</text><text x="70.00" y="116.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">parametrically in x.</text><text x="70.00" y="136.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">The optimal law is</text><text x="70.00" y="156.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">piecewise-affine over</text><text x="70.00" y="176.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">polytopic regions.</text><text x="660.00" y="70.00" font-size="13" fill="#127C82" font-weight="700" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" letter-spacing="0.08em" style="">Online</text><text x="660.00" y="96.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">No optimisation.</text><text x="660.00" y="116.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Locate the region</text><text x="660.00" y="136.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">containing x, then</text><text x="660.00" y="156.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">evaluate  u = Kᵢx + gᵢ.</text><text x="660.00" y="176.00" font-size="13" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Microseconds, bounded.</text><circle cx="500.00" cy="200.00" r="4.20" fill="#B23A2A" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="508.00" y="194.00" font-size="11" fill="#B23A2A" font-weight="600" text-anchor="start" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">x(k)</text></svg><figcaption><span class="fig-n">Fig. 7</span><span class="fig-c">Explicit MPC. Solving the QP parametrically, once and offline, yields a control law that is affine on each of a finite number of polytopic critical regions. Online, the controller identifies the active region and evaluates a gain — no optimisation, and a bounded, predictable worst-case execution time.</span></figcaption></figure>
+
+<p>Explicit MPC delivers microsecond execution and a worst-case time that can be
+certified, which is why it appears in automotive and power-electronics
+applications where the sampling period is short and the processor is small. Its
+limitation is combinatorial: the number of critical regions grows sharply with
+horizon length, state dimension and constraint count, and beyond a handful of
+states the lookup table exceeds any plausible memory budget. Explicit MPC is a
+technique for small problems that must run very fast, not a general
+replacement for online optimisation.<sup class="cite">[<a href="#ref-4">4</a>]</sup></p>
+
+<p>Nonlinear MPC adds another layer, since each solve is now a nonconvex
+program. The pivotal insight is that the controller does not need the exact
+optimum — it needs a good input, quickly, and it will get another chance in a
+few milliseconds. The <strong>real-time iteration</strong> scheme exploits this
+by performing a single Newton-type step per sampling instant, splitting the
+work into a preparation phase that runs before the measurement arrives and a
+short feedback phase that runs after, so the latency between measuring and
+actuating is a small fraction of the total computation.<sup class="cite">[<a href="#ref-22">22</a>]</sup> Combined
+with automatic differentiation and code generation, it brought nonlinear MPC
+onto systems sampling at hundreds of hertz.<sup class="cite">[<a href="#ref-23">23</a>, <a href="#ref-24">24</a>]</sup></p>
+
+
+<h2 id="variants"><span class="sec-n">07</span>A family, not an algorithm</h2>
+
+<p>&ldquo;MPC&rdquo; names a design pattern — predict, optimise, apply the first
+move, repeat — instantiated very differently depending on what the model looks
+like and what the cost is asked to represent.</p>
+
+<div class="table-wrap breakout">
+<table>
+<thead><tr><th>Variant</th><th>What changes</th><th>Bought at the cost of</th></tr></thead>
+<tbody>
+<tr><td>Linear MPC</td><td>Linear model, quadratic cost, polyhedral constraints; each solve is a convex QP with a unique optimum</td><td>Fidelity, once the plant leaves the regime where the linearisation holds</td></tr>
+<tr><td>Nonlinear MPC<sup class="cite">[<a href="#ref-12">12</a>]</sup></td><td>Nonlinear dynamics and possibly nonconvex costs; each solve is an NLP</td><td>Local optima, far higher computation, weaker guarantees</td></tr>
+<tr><td>Hybrid MPC<sup class="cite">[<a href="#ref-25">25</a>]</sup></td><td>Logic, switching and discrete modes enter the model; solves become mixed-integer programs</td><td>Combinatorial blow-up in the number of integer variables</td></tr>
+<tr><td>Economic MPC<sup class="cite">[<a href="#ref-26">26</a>]</sup></td><td>The stage cost is profit or energy directly, not tracking error</td><td>The value function is no longer naturally a Lyapunov function; stability needs dissipativity arguments</td></tr>
+<tr><td>Robust / tube MPC<sup class="cite">[<a href="#ref-15">15</a>]</sup></td><td>Constraints tightened so every disturbance realisation stays admissible</td><td>Conservatism, and the need for a bounded disturbance set</td></tr>
+<tr><td>Stochastic MPC<sup class="cite">[<a href="#ref-17">17</a>]</sup></td><td>Constraints imposed in probability rather than for all realisations</td><td>Non-convexity of chance constraints; a small accepted violation risk</td></tr>
+<tr><td>Explicit MPC<sup class="cite">[<a href="#ref-10">10</a>]</sup></td><td>The optimisation is solved offline; the online law is a lookup plus a gain</td><td>Memory that scales badly with problem size</td></tr>
+<tr><td>Distributed MPC<sup class="cite">[<a href="#ref-27">27</a>]</sup></td><td>Subsystems solve local problems and exchange information to reach a coordinated solution</td><td>Communication, and coupling that must be handled to recover centralised performance</td></tr>
+<tr><td>Finite-control-set MPC<sup class="cite">[<a href="#ref-28">28</a>]</sup></td><td>The input set is a small finite list of switch states; optimisation becomes enumeration</td><td>Variable switching frequency and a spread harmonic spectrum</td></tr>
+<tr><td>Learning-based MPC<sup class="cite">[<a href="#ref-29">29</a>]</sup></td><td>The model, or part of it, is fitted from operating data rather than derived</td><td>Guarantees that depend on the quality and coverage of the data</td></tr>
+</tbody>
+</table>
+</div>
+
+
+<h2 id="tools"><span class="sec-n">08</span>The working toolchain</h2>
+
+<p>The practical barrier to MPC was never the concept; it was the engineering
+between a formulation on paper and a solver running deterministically on a
+microcontroller. Over roughly fifteen years that gap has been closed by a small
+set of open frameworks, most of them from the same academic lineage that
+produced the theory.</p>
+
+<div class="table-wrap breakout">
+<table>
+<thead><tr><th>Tool</th><th>Layer</th><th>What it is for</th></tr></thead>
+<tbody>
+<tr><td><span class="mono">CasADi</span><sup class="cite">[<a href="#ref-23">23</a>]</sup></td><td>Modelling &amp; AD</td><td>Symbolic framework for nonlinear optimisation and optimal control, with efficient automatic differentiation and interfaces to many solvers; the substrate much of the rest is built on</td></tr>
+<tr><td><span class="mono">acados</span><sup class="cite">[<a href="#ref-24">24</a>]</sup></td><td>Embedded NMPC</td><td>Modular framework generating fast embedded optimal-control solvers, with real-time iteration and structure-exploiting QP back-ends</td></tr>
+<tr><td><span class="mono">ACADO</span><sup class="cite">[<a href="#ref-30">30</a>]</sup></td><td>Codegen NMPC</td><td>The earlier code-generating toolkit for nonlinear MPC and moving-horizon estimation; still widely cited in embedded work</td></tr>
+<tr><td><span class="mono">do-mpc</span><sup class="cite">[<a href="#ref-31">31</a>]</sup></td><td>Python front end</td><td>High-level Python interface for nonlinear and robust MPC and moving-horizon estimation, built on CasADi</td></tr>
+<tr><td><span class="mono">OSQP</span><sup class="cite">[<a href="#ref-20">20</a>]</sup></td><td>QP solver</td><td>Operator-splitting QP solver: one factorisation reused across solves, division-free iterations, reliable infeasibility detection</td></tr>
+<tr><td><span class="mono">qpOASES</span><sup class="cite">[<a href="#ref-19">19</a>]</sup></td><td>QP solver</td><td>Parametric active-set solver designed for warm-started sequences of closely related QPs — the MPC access pattern exactly</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>A workable division of labour has settled out. Prototype the formulation in
+a high-level environment where the model can be written symbolically and the
+derivatives come for free; profile against realistic sampling periods; then
+generate self-contained C for the target, with a solver whose worst-case
+iteration count you can bound and defend to whoever signs off on the
+system.</p>
+
+
+<h2 id="example"><span class="sec-n">09</span>A worked example</h2>
+
+<p>The smallest problem that shows what MPC actually does is a double
+integrator: a unit mass on a frictionless line, driven by a bounded force,
+asked to move one metre and stop. Two hard limits apply. The force saturates at
+\(\pm 1\). And velocity may never exceed \(0.6\) — a constraint on a
+<em>state</em>, not an input, which is the case a saturation block downstream
+of a PID cannot handle at all.</p>
+
+<p>Everything the controller needs is in the code below: the model, the
+weights, the terminal cost from the Riccati recursion, the constraints, and the
+loop that solves, applies one move, and discards the rest.</p>
+
+<div class="code breakout"><div class="code-bar"><span class="dot"></span><span class="fn">mpc_double_integrator.py</span></div><pre><code><span class="c">"""Constrained linear MPC on a double integrator, solved in closed loop.
+
+The plant is a unit mass sliding on a frictionless line: the state is
+(position, velocity) and the input is a bounded force. A ceiling on velocity
+makes a *state* constraint go active during the transient -- the situation a
+fixed-gain law cannot honour and MPC handles by construction.
+"""</span>
+<span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">import</span> cvxpy <span class="k">as</span> cp
+
+dt, N = <span class="n">0.1</span>, <span class="n">20</span>                        <span class="c"># sample period (s), prediction horizon</span>
+A = np.<span class="f">array</span>([[<span class="n">1.0</span>, dt], [<span class="n">0.0</span>, <span class="n">1.0</span>]])
+B = np.<span class="f">array</span>([[<span class="n">0.5</span> * dt ** <span class="n">2</span>], [dt]])
+Q = np.<span class="f">diag</span>([<span class="n">12.0</span>, <span class="n">1.0</span>])               <span class="c"># state cost: mostly position error</span>
+R = np.<span class="f">array</span>([[<span class="n">0.5</span>]])                  <span class="c"># input cost: penalise effort</span>
+u_max, v_max = <span class="n">1.0</span>, <span class="n">0.6</span>                <span class="c"># hard input limit, hard state limit</span>
+x_ref = np.<span class="f">array</span>([<span class="n">1.0</span>, <span class="n">0.0</span>])           <span class="c"># move one metre, then hold still</span>
+
+<span class="c"># Terminal weight = the LQR cost-to-go, so the tail beyond the horizon is</span>
+<span class="c"># priced as if the unconstrained optimal policy took over at step N.</span>
+P = Q.<span class="f">copy</span>()
+<span class="k">for</span> _ <span class="k">in</span> <span class="k">range</span>(<span class="n">500</span>):
+    K = np.linalg.<span class="f">solve</span>(R + B.T @ P @ B, B.T @ P @ A)
+    P = Q + A.T @ P @ (A - B @ K)
+
+
+<span class="k">def</span> <span class="f">mpc_step</span>(x0):
+    <span class="c">"""Solve the finite-horizon OCP from x0; return only the first input."""</span>
+    x = cp.<span class="f">Variable</span>((<span class="n">2</span>, N + <span class="n">1</span>))
+    u = cp.<span class="f">Variable</span>((<span class="n">1</span>, N))
+    cost, cons = <span class="n">0</span>, [x[:, <span class="n">0</span>] == x0]
+    <span class="k">for</span> k <span class="k">in</span> <span class="k">range</span>(N):
+        cost += cp.<span class="f">quad_form</span>(x[:, k] - x_ref, Q) + cp.<span class="f">quad_form</span>(u[:, k], R)
+        cons += [x[:, k + <span class="n">1</span>] == A @ x[:, k] + B @ u[:, k],   <span class="c"># dynamics</span>
+                 cp.<span class="f">abs</span>(u[:, k]) &lt;= u_max,                   <span class="c"># input limit</span>
+                 cp.<span class="f">abs</span>(x[<span class="n">1</span>, k + <span class="n">1</span>]) &lt;= v_max]               <span class="c"># state limit</span>
+    cost += cp.<span class="f">quad_form</span>(x[:, N] - x_ref, P)                 <span class="c"># terminal cost</span>
+    cp.<span class="f">Problem</span>(cp.<span class="f">Minimize</span>(cost), cons).<span class="f">solve</span>(solver=cp.OSQP)
+    <span class="k">return</span> <span class="f">float</span>(u[:, <span class="n">0</span>].value[<span class="n">0</span>])
+
+
+x, log = np.<span class="f">zeros</span>(<span class="n">2</span>), []
+<span class="k">for</span> k <span class="k">in</span> <span class="k">range</span>(<span class="n">55</span>):
+    uk = <span class="f">mpc_step</span>(x)                   <span class="c"># re-solve from the measured state</span>
+    log.<span class="f">append</span>((k * dt, x[<span class="n">0</span>], x[<span class="n">1</span>], uk))
+    x = A @ x + B.<span class="f">flatten</span>() * uk       <span class="c"># apply the first move, discard the rest</span>
+
+t, pos, vel, u = <span class="f">map</span>(np.array, <span class="f">zip</span>(*log))
+<span class="k">print</span>(f<span class="s">"settles at {pos[-1]:.3f} m   peak velocity {vel.max():.3f} m/s "</span>
+      f<span class="s">"(limit {v_max})   peak |force| {np.abs(u).max():.3f} (limit {u_max})"</span>)</code></pre></div>
+
+<p>Running it produces the closed-loop response in Figure 8, and the behaviour
+is worth reading carefully, because both constraints become active and the
+controller handles each differently.</p>
+
+<figure class="fig breakout" id="fig-8"><svg viewBox="0 0 940 470" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="470.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><line x1="84.00" y1="228.31" x2="892.00" y2="228.31" stroke="#E7ECF1" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="76.00" y="232.31" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">0.0</text><line x1="84.00" y1="151.38" x2="892.00" y2="151.38" stroke="#E7ECF1" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="76.00" y="155.38" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">0.5</text><line x1="84.00" y1="74.46" x2="892.00" y2="74.46" stroke="#E7ECF1" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="76.00" y="78.46" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1.0</text><line x1="84.00" y1="74.46" x2="892.00" y2="74.46" stroke="#5A6672" stroke-width="1.30" stroke-linecap="butt" stroke-dasharray="6 4" opacity="1.00"/><text x="890.00" y="66.46" font-size="11.5" fill="#5A6672" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">setpoint</text><rect x="84.00" y="52.00" width="808.00" height="84.00" fill="#B23A2A" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.045"/><line x1="84.00" y1="136.00" x2="892.00" y2="136.00" stroke="#B23A2A" stroke-width="1.60" stroke-linecap="butt" stroke-dasharray="1 0" opacity="1.00"/><text x="890.00" y="128.00" font-size="11.5" fill="#B23A2A" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">velocity limit  v_max</text><polyline points="84.00,228.31 98.96,227.54 113.93,225.23 128.89,221.38 143.85,216.00 158.81,209.08 173.78,200.62 188.74,191.38 203.70,182.15 218.67,172.92 233.63,163.69 248.59,154.46 263.56,145.23 278.52,136.00 293.48,126.93 308.44,118.34 323.41,110.42 338.37,103.33 353.33,97.10 368.30,91.74 383.26,87.23 398.22,83.50 413.19,80.48 428.15,78.09 443.11,76.24 458.07,74.86 473.04,73.86 488.00,73.18 502.96,72.75 517.93,72.51 532.89,72.42 547.85,72.45 562.81,72.54 577.78,72.69 592.74,72.87 607.70,73.07 622.67,73.26 637.63,73.45 652.59,73.62 667.56,73.78 682.52,73.92 697.48,74.04 712.44,74.15 727.41,74.23 742.37,74.31 757.33,74.36 772.30,74.41 787.26,74.44 802.22,74.47 817.19,74.48 832.15,74.49 847.11,74.50 862.07,74.50 877.04,74.50 892.00,74.50" fill="none" stroke="#127C82" stroke-width="2.80" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><polyline points="84.00,228.31 98.96,212.92 113.93,197.54 128.89,182.15 143.85,166.77 158.81,151.38 173.78,136.00 188.74,136.00 203.70,136.00 218.67,136.00 233.63,136.00 248.59,136.00 263.56,136.00 278.52,136.00 293.48,139.31 308.44,145.34 323.41,153.04 338.37,161.60 353.33,170.44 368.30,179.10 383.26,187.27 398.22,194.76 413.19,201.47 428.15,207.33 443.11,212.36 458.07,216.58 473.04,220.06 488.00,222.88 502.96,225.09 517.93,226.80 532.89,228.08 547.85,228.99 562.81,229.61 577.78,230.00 592.74,230.20 607.70,230.27 622.67,230.23 637.63,230.13 652.59,229.98 667.56,229.81 682.52,229.62 697.48,229.44 712.44,229.26 727.41,229.09 742.37,228.94 757.33,228.81 772.30,228.69 787.26,228.60 802.22,228.52 817.19,228.45 832.15,228.40 847.11,228.36 862.07,228.32 877.04,228.30 892.00,228.29" fill="none" stroke="#C0871F" stroke-width="2.40" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><text x="76.00" y="58.00" font-size="1" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style=""></text><line x1="113.93" y1="42.00" x2="166.30" y2="42.00" stroke="#127C82" stroke-width="2.80" stroke-linecap="butt" opacity="1.00"/><text x="173.78" y="46.00" font-size="12" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">position</text><line x1="338.37" y1="42.00" x2="390.74" y2="42.00" stroke="#C0871F" stroke-width="2.40" stroke-linecap="butt" opacity="1.00"/><text x="398.22" y="46.00" font-size="12" fill="#17222E" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">velocity</text><text x="192.74" y="156.00" font-size="11" fill="#B23A2A" font-weight="600" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">velocity rides its ceiling — state constraint active</text><rect x="84.00" y="315.89" width="808.00" height="98.21" fill="#EAF0F4" stroke="none" stroke-width="1.00" rx="0.00" opacity="0.500"/><line x1="84.00" y1="315.89" x2="892.00" y2="315.89" stroke="#B23A2A" stroke-width="1.50" stroke-linecap="butt" stroke-dasharray="1 0" opacity="1.00"/><line x1="84.00" y1="414.11" x2="892.00" y2="414.11" stroke="#B23A2A" stroke-width="1.50" stroke-linecap="butt" stroke-dasharray="1 0" opacity="1.00"/><text x="890.00" y="308.89" font-size="11" fill="#B23A2A" font-weight="400" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">+u_max</text><text x="890.00" y="429.11" font-size="11" fill="#B23A2A" font-weight="400" text-anchor="end" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">−u_max</text><line x1="84.00" y1="365.00" x2="892.00" y2="365.00" stroke="#E7ECF1" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><polyline points="84.00,315.89 98.96,315.89 98.96,315.89 113.93,315.89 113.93,315.89 128.89,315.89 128.89,315.89 143.85,315.89 143.85,315.89 158.81,315.89 158.81,315.89 173.78,315.89 173.78,365.00 188.74,365.00 188.74,365.00 203.70,365.00 203.70,365.00 218.67,365.00 218.67,365.00 233.63,365.00 233.63,365.00 248.59,365.00 248.59,365.00 263.56,365.00 263.56,365.00 278.52,365.00 278.52,375.57 293.48,375.57 293.48,384.23 308.44,384.23 308.44,389.57 323.41,389.57 323.41,392.35 338.37,392.35 338.37,393.20 353.33,393.20 353.33,392.63 368.30,392.63 368.30,391.09 383.26,391.09 383.26,388.92 398.22,388.92 398.22,386.39 413.19,386.39 413.19,383.72 428.15,383.72 428.15,381.05 443.11,381.05 443.11,378.49 458.07,378.49 458.07,376.12 473.04,376.12 473.04,373.97 488.00,373.97 488.00,372.08 502.96,372.08 502.96,370.45 517.93,370.45 517.93,369.07 532.89,369.07 532.89,367.92 547.85,367.92 547.85,366.98 562.81,366.98 562.81,366.23 577.78,366.23 577.78,365.65 592.74,365.65 592.74,365.21 607.70,365.21 607.70,364.89 622.67,364.89 622.67,364.67 637.63,364.67 637.63,364.53 652.59,364.53 652.59,364.44 667.56,364.44 667.56,364.41 682.52,364.41 682.52,364.41 697.48,364.41 697.48,364.43 712.44,364.43 712.44,364.47 727.41,364.47 727.41,364.52 742.37,364.52 742.37,364.58 757.33,364.58 757.33,364.63 772.30,364.63 772.30,364.69 787.26,364.69 787.26,364.74 802.22,364.74 802.22,364.79 817.19,364.79 817.19,364.83 832.15,364.83 832.15,364.87 847.11,364.87 847.11,364.90 862.07,364.90 862.07,364.93 877.04,364.93 877.04,364.95 892.00,364.95 892.00,364.97 892.00,364.97" fill="none" stroke="#0C1521" stroke-width="2.20" stroke-linecap="round" stroke-linejoin="round" opacity="1.000"/><text x="76.00" y="294.00" font-size="12" fill="#0C1521" font-weight="600" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">control input  u(k)</text><text x="136.37" y="307.89" font-size="11" fill="#B23A2A" font-weight="600" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">input saturates while accelerating</text><line x1="84.00" y1="430.00" x2="892.00" y2="430.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><line x1="84.00" y1="430.00" x2="84.00" y2="435.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="84.00" y="449.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">0</text><line x1="233.63" y1="430.00" x2="233.63" y2="435.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="233.63" y="449.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1</text><line x1="383.26" y1="430.00" x2="383.26" y2="435.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="383.26" y="449.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">2</text><line x1="532.89" y1="430.00" x2="532.89" y2="435.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="532.89" y="449.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">3</text><line x1="682.52" y1="430.00" x2="682.52" y2="435.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="682.52" y="449.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">4</text><line x1="832.15" y1="430.00" x2="832.15" y2="435.00" stroke="#D6DDE4" stroke-width="1.00" stroke-linecap="butt" opacity="1.00"/><text x="832.15" y="449.00" font-size="10.5" fill="#8A96A2" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">5</text><text x="892.00" y="449.00" font-size="11" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">time (s)</text></svg><figcaption><span class="fig-n">Fig. 8</span><span class="fig-c">Closed-loop response of the double integrator under the controller listed above. The input saturates at its limit during acceleration; the velocity then rides exactly along its ceiling, an active state constraint; and the controller begins braking well before the setpoint because the horizon already contains the stop.</span></figcaption></figure>
+
+<p>The force saturates immediately and stays pinned at its limit while the mass
+accelerates. Velocity climbs to exactly \(0.6\) and then tracks that ceiling —
+the state constraint is active, and the optimiser has found the input that
+holds the trajectory precisely on the boundary rather than backing away from
+it. Then, while still short of the target and with no error signal yet
+suggesting trouble, the controller reverses the force and begins braking. It
+does this because the horizon is twenty steps long and already contains the
+stop; the plan that ignores it is more expensive. No reactive controller
+produces that behaviour, because the information that motivates it does not
+exist in the present error.</p>
+
+<p>The final position settles at 1.000 m with peak velocity 0.600 and peak
+force 1.000 — both limits reached, neither breached. That is the whole
+argument for the method in one plot: constraints treated as part of the
+problem, and the future treated as available information.</p>
+
+
+<h2 id="applications"><span class="sec-n">10</span>Where it actually runs</h2>
+
+<p>MPC's migration across engineering can be read as a single number falling:
+the sampling period at which the optimisation can be completed reliably. Each
+time that number dropped by an order of magnitude, a new domain came into
+range.</p>
+
+<figure class="fig breakout" id="fig-9"><svg viewBox="0 0 940 360" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, sans-serif" role="img"><rect x="0.00" y="0.00" width="940.00" height="360.00" fill="#FFFFFF" stroke="none" stroke-width="1.00" rx="0.00" opacity="1.000"/><line x1="132.00" y1="300.00" x2="800.00" y2="300.00" stroke="#D6DDE4" stroke-width="1.60" stroke-linecap="butt" opacity="1.00"/><line x1="132.00" y1="300.00" x2="132.00" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="132.00" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1 µs</text><line x1="299.00" y1="300.00" x2="299.00" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="299.00" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">100 µs</text><line x1="382.50" y1="300.00" x2="382.50" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="382.50" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1 ms</text><line x1="466.00" y1="300.00" x2="466.00" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="466.00" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">10 ms</text><line x1="549.50" y1="300.00" x2="549.50" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="549.50" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">100 ms</text><line x1="633.00" y1="300.00" x2="633.00" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="633.00" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">1 s</text><line x1="716.50" y1="300.00" x2="716.50" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="716.50" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">10 s</text><line x1="800.00" y1="300.00" x2="800.00" y2="306.00" stroke="#D6DDE4" stroke-width="1.10" stroke-linecap="butt" opacity="1.00"/><text x="800.00" y="321.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="middle" font-family="'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" style="">100 s</text><text x="800.00" y="340.00" font-size="11.5" fill="#8A96A2" font-weight="400" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">sample period  (log scale)  →  slower</text><text x="132.00" y="340.00" font-size="11.5" fill="#8A96A2" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">faster  ←</text><rect x="132.00" y="57.00" width="150.30" height="18.00" fill="#127C82" stroke="none" stroke-width="1.00" rx="9.00" opacity="0.160"/><rect x="132.00" y="57.00" width="150.30" height="18.00" fill="none" stroke="#127C82" stroke-width="1.40" rx="9.00" opacity="1.000"/><circle cx="207.15" cy="66.00" r="3.00" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="122.00" y="70.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Power electronics</text><text x="292.30" y="70.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">FCS-MPC on converters</text><line x1="207.15" y1="75.00" x2="207.15" y2="300.00" stroke="#127C82" stroke-width="0.90" stroke-linecap="butt" stroke-dasharray="2 3" opacity="0.50"/><rect x="357.45" y="91.00" width="108.55" height="18.00" fill="#C0871F" stroke="none" stroke-width="1.00" rx="9.00" opacity="0.160"/><rect x="357.45" y="91.00" width="108.55" height="18.00" fill="none" stroke="#C0871F" stroke-width="1.40" rx="9.00" opacity="1.000"/><circle cx="411.73" cy="100.00" r="3.00" fill="#C0871F" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="347.45" y="104.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Legged robotics</text><text x="476.00" y="104.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">MIT Cheetah 3, ~20–30 Hz</text><line x1="411.73" y1="109.00" x2="411.73" y2="300.00" stroke="#C0871F" stroke-width="0.90" stroke-linecap="butt" stroke-dasharray="2 3" opacity="0.50"/><rect x="415.90" y="125.00" width="100.20" height="18.00" fill="#0C1521" stroke="none" stroke-width="1.00" rx="9.00" opacity="0.160"/><rect x="415.90" y="125.00" width="100.20" height="18.00" fill="none" stroke="#0C1521" stroke-width="1.40" rx="9.00" opacity="1.000"/><circle cx="466.00" cy="134.00" r="3.00" fill="#0C1521" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="405.90" y="138.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Automotive</text><text x="526.10" y="138.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">engine, ADAS, chassis</text><line x1="466.00" y1="143.00" x2="466.00" y2="300.00" stroke="#0C1521" stroke-width="0.90" stroke-linecap="butt" stroke-dasharray="2 3" opacity="0.50"/><rect x="549.50" y="159.00" width="83.50" height="18.00" fill="#127C82" stroke="none" stroke-width="1.00" rx="9.00" opacity="0.160"/><rect x="549.50" y="159.00" width="83.50" height="18.00" fill="none" stroke="#127C82" stroke-width="1.40" rx="9.00" opacity="1.000"/><circle cx="591.25" cy="168.00" r="3.00" fill="#127C82" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="539.50" y="172.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Aerospace / landing</text><text x="643.00" y="172.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">descent, rendezvous</text><line x1="591.25" y1="177.00" x2="591.25" y2="300.00" stroke="#127C82" stroke-width="0.90" stroke-linecap="butt" stroke-dasharray="2 3" opacity="0.50"/><rect x="649.70" y="193.00" width="116.90" height="18.00" fill="#C0871F" stroke="none" stroke-width="1.00" rx="9.00" opacity="0.160"/><rect x="649.70" y="193.00" width="116.90" height="18.00" fill="none" stroke="#C0871F" stroke-width="1.40" rx="9.00" opacity="1.000"/><circle cx="708.15" cy="202.00" r="3.00" fill="#C0871F" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="639.70" y="206.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Process / refining</text><text x="776.60" y="206.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">the original home</text><line x1="708.15" y1="211.00" x2="708.15" y2="300.00" stroke="#C0871F" stroke-width="0.90" stroke-linecap="butt" stroke-dasharray="2 3" opacity="0.50"/><rect x="716.50" y="227.00" width="75.15" height="18.00" fill="#0C1521" stroke="none" stroke-width="1.00" rx="9.00" opacity="0.160"/><rect x="716.50" y="227.00" width="75.15" height="18.00" fill="none" stroke="#0C1521" stroke-width="1.40" rx="9.00" opacity="1.000"/><circle cx="754.08" cy="236.00" r="3.00" fill="#0C1521" stroke="none" stroke-width="1.00" opacity="1.000"/><text x="706.50" y="240.00" font-size="12.5" fill="#17222E" font-weight="600" text-anchor="end" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">Buildings / HVAC</text><text x="801.65" y="240.00" font-size="10.5" fill="#5A6672" font-weight="400" text-anchor="start" font-family="Inter, ui-sans-serif, system-ui, sans-serif" style="">thermal, energy</text><line x1="754.08" y1="245.00" x2="754.08" y2="300.00" stroke="#0C1521" stroke-width="0.90" stroke-linecap="butt" stroke-dasharray="2 3" opacity="0.50"/></svg><figcaption><span class="fig-n">Fig. 9</span><span class="fig-c">MPC by sampling period. The method began where computation was cheap relative to the dynamics — refineries sampling in minutes — and has worked steadily leftward as solvers, code generation and embedded hardware improved.</span></figcaption></figure>
+
+<p><strong>Process industries.</strong> The original and still the largest
+installed base. Refining, petrochemicals and chemicals account for the great
+majority of documented deployments, on multivariable problems with strong
+interaction and hard quality and safety limits, where operating nearer a
+constraint translates directly into margin.<sup class="cite">[<a href="#ref-2">2</a>]</sup></p>
+
+<p><strong>Automotive.</strong> Powertrain, chassis, and driver-assistance
+functions are natural MPC problems — multivariable, heavily constrained, with
+preview information available from route and sensor data. The industrial
+challenge has been less formulation than certification and cost: the algorithm
+must run on an inexpensive automotive-grade processor with a worst-case
+execution time that can be bounded and defended, which is one reason explicit
+and short-horizon formulations have been attractive here.<sup class="cite">[<a href="#ref-32">32</a>]</sup></p>
+
+<p><strong>Legged robotics.</strong> Balance is a constrained optimisation
+problem: contact forces must lie inside friction cones, feet may only push, and
+the centre of mass must remain dynamically supportable. The MIT Cheetah 3 team
+formulated locomotion as a convex MPC over simplified centroidal dynamics and
+solved it fast enough to run in the control loop, producing gaits and recovery
+behaviours that were not designed by hand but fell out of the
+optimisation.<sup class="cite">[<a href="#ref-33">33</a>]</sup></p>
+
+<p><strong>Aerospace.</strong> Attitude control, rendezvous and docking, entry
+and landing are all constrained trajectory-optimisation problems with hard
+safety limits and, often, a fuel budget as the natural cost. Spacecraft
+rendezvous adds line-of-sight and approach-cone constraints that MPC represents
+directly.<sup class="cite">[<a href="#ref-34">34</a>, <a href="#ref-35">35</a>]</sup> The most celebrated result in the area is the
+convexification of powered-descent guidance: what appears to be a nonconvex
+problem — a thrust magnitude bounded both below and above, plus pointing limits
+— can be transformed into an equivalent convex program whose global optimum is
+computable in bounded time, a property that matters when the solve happens
+during descent with no opportunity to retry.<sup class="cite">[<a href="#ref-36">36</a>, <a href="#ref-37">37</a>]</sup> That
+line of work, developed at NASA's Jet Propulsion Laboratory, underpins the
+modern approach to precision landing.</p>
+
+<p><strong>Power electronics.</strong> At the other end of the timescale,
+finite-control-set MPC exploits the fact that a converter's inputs are not
+continuous at all but a short list of switch configurations. The optimisation
+becomes an enumeration over that list, cheap enough to run every switching
+period, which allows the cost function to price things that are awkward to
+express in a cascaded linear design — torque ripple, switching losses,
+common-mode voltage — as explicit terms.<sup class="cite">[<a href="#ref-28">28</a>, <a href="#ref-38">38</a>]</sup></p>
+
+<p><strong>Buildings and energy.</strong> Building thermal dynamics are slow,
+constrained by comfort bands, and driven by weather and occupancy that can be
+forecast — close to an ideal MPC problem, with reported energy savings that are
+substantial and consistent across studies. The obstacle is economic rather than
+technical: every building needs its own model, and the cost of obtaining one
+has been the main barrier to deployment at scale.<sup class="cite">[<a href="#ref-39">39</a>]</sup> Related
+arguments apply on the grid, where distributed MPC has been used to coordinate
+generation across interconnected control areas,<sup class="cite">[<a href="#ref-27">27</a>]</sup> and in data
+centres, where learning-based predictive control of cooling plant has been
+demonstrated on operating facilities.<sup class="cite">[<a href="#ref-29">29</a>]</sup></p>
+
+
+<h2 id="limits"><span class="sec-n">11</span>What it costs, and what is unsolved</h2>
+
+<p>MPC's weaknesses follow directly from its strengths. It needs a model, and
+the model is usually the expensive part: identification effort dominates
+commissioning cost, and performance degrades as the plant drifts away from the
+model that was fitted to it. It needs an optimiser that converges within the
+sampling period every time, which constrains hardware and complicates
+certification in regulated domains. And it has more tuning knobs than a PID
+loop — horizon lengths, two or more weighting matrices, terminal conditions,
+softening penalties — that interact in ways which are not always intuitive.</p>
+
+<p>Several frontiers are active. <strong>Learning-based MPC</strong> attempts
+to use data where first-principles models are unavailable or too costly,
+whether by learning the dynamics, learning the residual between a nominal model
+and reality, or learning to approximate the control law itself; the open
+question is how to retain constraint satisfaction and stability guarantees when
+part of the controller is fitted rather than derived.<sup class="cite">[<a href="#ref-11">11</a>]</sup>
+<strong>Economic formulations</strong> optimise profit or energy directly
+rather than tracking a setpoint computed by a separate layer, which collapses
+two levels of the control hierarchy into one but forfeits the natural Lyapunov
+structure that tracking costs provide, requiring dissipativity conditions to
+recover stability guarantees.<sup class="cite">[<a href="#ref-26">26</a>]</sup> <strong>Scale</strong> remains
+hard: distributed formulations that recover centralised performance without
+centralised communication are still an area of active
+work.<sup class="cite">[<a href="#ref-27">27</a>, <a href="#ref-18">18</a>]</sup></p>
+
+<p>The oldest tension in the field has not gone away either. MPC was invented
+by practitioners, and the most-deployed formulations are still not the ones
+with the strongest guarantees; terminal sets and terminal costs, which do most
+of the theoretical work, are frequently omitted in industrial implementations in
+favour of a long horizon and operational experience. The gap has narrowed, but
+the field remains one where the theory explains the practice more often than it
+directs it.<sup class="cite">[<a href="#ref-11">11</a>, <a href="#ref-3">3</a>]</sup></p>
+
+<h2 id="coda"><span class="sec-n">12</span>Coda</h2>
+
+<p>What makes model predictive control durable is not any particular algorithm
+but a reframing. Classical control asks for a function from error to action, to
+be designed once and evaluated forever. MPC asks instead for a well-posed
+optimisation problem — a model, a cost, a set of things that must not happen —
+and delegates the design of the control law to a solver, at every instant,
+forever. The engineer's work moves from tuning gains to stating the problem
+correctly.</p>
+
+<p>That is a heavier computational contract and a stricter modelling one. In
+exchange it buys something no fixed gain can offer: a controller that knows
+what it is not allowed to do, and that plans around the future instead of
+reacting to the present. Nearly fifty years after the first refinery
+installations, the horizon is still receding, and the method keeps arriving
+in domains that could not previously afford it.</p>
+
+</article>
+
+<section class="refs" id="references">
+  <h2><span class="sec-n">&mdash;</span>References</h2>
+  <ol>
+<li id="ref-1" class="ref"><span class="ref-n">1</span><span class="ref-t">Rawlings JB, Mayne DQ, Diehl MM. Model predictive control: theory, computation, and design. 2nd ed. Madison (WI): Nob Hill Publishing; 2017.</span></li>
+<li id="ref-2" class="ref"><span class="ref-n">2</span><span class="ref-t">Qin SJ, Badgwell TA. A survey of industrial model predictive control technology. Control Engineering Practice. 2003;11(7):733&ndash;764.</span></li>
+<li id="ref-3" class="ref"><span class="ref-n">3</span><span class="ref-t">Morari M, Lee JH. Model predictive control: past, present and future. Computers &amp; Chemical Engineering. 1999;23(4&ndash;5):667&ndash;682.</span></li>
+<li id="ref-4" class="ref"><span class="ref-n">4</span><span class="ref-t">Borrelli F, Bemporad A, Morari M. Predictive control for linear and hybrid systems. Cambridge: Cambridge University Press; 2017.</span></li>
+<li id="ref-5" class="ref"><span class="ref-n">5</span><span class="ref-t">Mayne DQ, Rawlings JB, Rao CV, Scokaert POM. Constrained model predictive control: stability and optimality. Automatica. 2000;36(6):789&ndash;814.</span></li>
+<li id="ref-6" class="ref"><span class="ref-n">6</span><span class="ref-t">Richalet J, Rault A, Testud JL, Papon J. Model predictive heuristic control: applications to industrial processes. Automatica. 1978;14(5):413&ndash;428.</span></li>
+<li id="ref-7" class="ref"><span class="ref-n">7</span><span class="ref-t">Cutler CR, Ramaker BL. Dynamic matrix control&mdash;a computer control algorithm. In: Proceedings of the Joint Automatic Control Conference. San Francisco (CA); 1980.</span></li>
+<li id="ref-8" class="ref"><span class="ref-n">8</span><span class="ref-t">Garc&iacute;a CE, Morshedi AM. Quadratic programming solution of dynamic matrix control (QDMC). Chemical Engineering Communications. 1986;46(1&ndash;3):73&ndash;87.</span></li>
+<li id="ref-9" class="ref"><span class="ref-n">9</span><span class="ref-t">Clarke DW, Mohtadi C, Tuffs PS. Generalized predictive control&mdash;Part I. The basic algorithm. Automatica. 1987;23(2):137&ndash;148.</span></li>
+<li id="ref-10" class="ref"><span class="ref-n">10</span><span class="ref-t">Bemporad A, Morari M, Dua V, Pistikopoulos EN. The explicit linear quadratic regulator for constrained systems. Automatica. 2002;38(1):3&ndash;20.</span></li>
+<li id="ref-11" class="ref"><span class="ref-n">11</span><span class="ref-t">Mayne DQ. Model predictive control: recent developments and future promise. Automatica. 2014;50(12):2967&ndash;2986.</span></li>
+<li id="ref-12" class="ref"><span class="ref-n">12</span><span class="ref-t">Gr&uuml;ne L, Pannek J. Nonlinear model predictive control: theory and algorithms. 2nd ed. Cham: Springer; 2017.</span></li>
+<li id="ref-13" class="ref"><span class="ref-n">13</span><span class="ref-t">Wang Y, Boyd S. Fast model predictive control using online optimization. IEEE Transactions on Control Systems Technology. 2010;18(2):267&ndash;278.</span></li>
+<li id="ref-14" class="ref"><span class="ref-n">14</span><span class="ref-t">Blanchini F. Set invariance in control. Automatica. 1999;35(11):1747&ndash;1767.</span></li>
+<li id="ref-15" class="ref"><span class="ref-n">15</span><span class="ref-t">Mayne DQ, Seron MM, Rakovi&cacute; SV. Robust model predictive control of constrained linear systems with bounded disturbances. Automatica. 2005;41(2):219&ndash;224.</span></li>
+<li id="ref-16" class="ref"><span class="ref-n">16</span><span class="ref-t">Mayne DQ, Kerrigan EC, Van Wyk EJ, Falugi P. Tube-based robust nonlinear model predictive control. International Journal of Robust and Nonlinear Control. 2011;21(11):1341&ndash;1353.</span></li>
+<li id="ref-17" class="ref"><span class="ref-n">17</span><span class="ref-t">Mesbah A. Stochastic model predictive control: an overview and perspectives for future research. IEEE Control Systems Magazine. 2016;36(6):30&ndash;44.</span></li>
+<li id="ref-18" class="ref"><span class="ref-n">18</span><span class="ref-t">Kouvaritakis B, Cannon M. Model predictive control: classical, robust and stochastic. Cham: Springer; 2016.</span></li>
+<li id="ref-19" class="ref"><span class="ref-n">19</span><span class="ref-t">Ferreau HJ, Kirches C, Potschka A, Bock HG, Diehl M. qpOASES: a parametric active-set algorithm for quadratic programming. Mathematical Programming Computation. 2014;6(4):327&ndash;363.</span></li>
+<li id="ref-20" class="ref"><span class="ref-n">20</span><span class="ref-t">Stellato B, Banjac G, Goulart P, Bemporad A, Boyd S. OSQP: an operator splitting solver for quadratic programs. Mathematical Programming Computation. 2020;12(4):637&ndash;672.</span></li>
+<li id="ref-21" class="ref"><span class="ref-n">21</span><span class="ref-t">T&oslash;ndel P, Johansen TA, Bemporad A. An algorithm for multi-parametric quadratic programming and explicit MPC solutions. Automatica. 2003;39(3):489&ndash;497.</span></li>
+<li id="ref-22" class="ref"><span class="ref-n">22</span><span class="ref-t">Diehl M, Bock HG, Schl&ouml;der JP. A real-time iteration scheme for nonlinear optimization in optimal feedback control. SIAM Journal on Control and Optimization. 2005;43(5):1714&ndash;1736.</span></li>
+<li id="ref-23" class="ref"><span class="ref-n">23</span><span class="ref-t">Andersson JAE, Gillis J, Horn G, Rawlings JB, Diehl M. CasADi: a software framework for nonlinear optimization and optimal control. Mathematical Programming Computation. 2019;11(1):1&ndash;36.</span></li>
+<li id="ref-24" class="ref"><span class="ref-n">24</span><span class="ref-t">Verschueren R, Frison G, Kouzoupis D, Frey J, van Duijkeren N, Zanelli A, et al. acados&mdash;a modular open-source framework for fast embedded optimal control. Mathematical Programming Computation. 2022;14(1):147&ndash;183.</span></li>
+<li id="ref-25" class="ref"><span class="ref-n">25</span><span class="ref-t">Bemporad A, Morari M. Control of systems integrating logic, dynamics, and constraints. Automatica. 1999;35(3):407&ndash;427.</span></li>
+<li id="ref-26" class="ref"><span class="ref-n">26</span><span class="ref-t">Angeli D, Amrit R, Rawlings JB. On average performance and stability of economic model predictive control. IEEE Transactions on Automatic Control. 2012;57(7):1615&ndash;1626.</span></li>
+<li id="ref-27" class="ref"><span class="ref-n">27</span><span class="ref-t">Venkat AN, Hiskens IA, Rawlings JB, Wright SJ. Distributed MPC strategies with application to power system automatic generation control. IEEE Transactions on Control Systems Technology. 2008;16(6):1192&ndash;1206.</span></li>
+<li id="ref-28" class="ref"><span class="ref-n">28</span><span class="ref-t">Kouro S, Cort&eacute;s P, Vargas R, Ammann U, Rodr&iacute;guez J. Model predictive control&mdash;a simple and powerful method to control power converters. IEEE Transactions on Industrial Electronics. 2009;56(6):1826&ndash;1838.</span></li>
+<li id="ref-29" class="ref"><span class="ref-n">29</span><span class="ref-t">Lazic N, Boutilier C, Lu T, Wong E, Roy B, Ryu M, Imwalle G. Data center cooling using model-predictive control. In: Advances in Neural Information Processing Systems 31 (NeurIPS). 2018. p. 3814&ndash;3823.</span></li>
+<li id="ref-30" class="ref"><span class="ref-n">30</span><span class="ref-t">Houska B, Ferreau HJ, Diehl M. ACADO Toolkit&mdash;an open-source framework for automatic control and dynamic optimization. Optimal Control Applications and Methods. 2011;32(3):298&ndash;312.</span></li>
+<li id="ref-31" class="ref"><span class="ref-n">31</span><span class="ref-t">Fiedler F, Karg B, L&uuml;ken L, Brandner D, Heinlein M, Brabender F, Lucia S. do-mpc: towards FAIR nonlinear and robust model predictive control. Control Engineering Practice. 2023;140:105676.</span></li>
+<li id="ref-32" class="ref"><span class="ref-n">32</span><span class="ref-t">Hrovat D, Di Cairano S, Tseng HE, Kolmanovsky IV. The development of model predictive control in automotive industry: a survey. In: 2012 IEEE International Conference on Control Applications. IEEE; 2012. p. 295&ndash;302.</span></li>
+<li id="ref-33" class="ref"><span class="ref-n">33</span><span class="ref-t">Di Carlo J, Wensing PM, Katz B, Bledt G, Kim S. Dynamic locomotion in the MIT Cheetah 3 through convex model-predictive control. In: 2018 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). IEEE; 2018. p. 1&ndash;9.</span></li>
+<li id="ref-34" class="ref"><span class="ref-n">34</span><span class="ref-t">Weiss A, Baldwin M, Erwin RS, Kolmanovsky I. Model predictive control for spacecraft rendezvous and docking: strategies for handling constraints and case studies. IEEE Transactions on Control Systems Technology. 2015;23(4):1638&ndash;1647.</span></li>
+<li id="ref-35" class="ref"><span class="ref-n">35</span><span class="ref-t">Eren U, Prach A, Ko&ccedil;er BB, Rakovi&cacute; SV, Kayacan E, A&ccedil;&#305;kme&scedil;e B. Model predictive control in aerospace systems: current state and opportunities. Journal of Guidance, Control, and Dynamics. 2017;40(7):1541&ndash;1566.</span></li>
+<li id="ref-36" class="ref"><span class="ref-n">36</span><span class="ref-t">A&ccedil;&#305;kme&scedil;e B, Ploen SR. Convex programming approach to powered descent guidance for Mars landing. Journal of Guidance, Control, and Dynamics. 2007;30(5):1353&ndash;1366.</span></li>
+<li id="ref-37" class="ref"><span class="ref-n">37</span><span class="ref-t">A&ccedil;&#305;kme&scedil;e B, Carson JM, Blackmore L. Lossless convexification of nonconvex control bound and pointing constraints of the soft landing optimal control problem. IEEE Transactions on Control Systems Technology. 2013;21(6):2104&ndash;2113.</span></li>
+<li id="ref-38" class="ref"><span class="ref-n">38</span><span class="ref-t">Kouro S, Perez MA, Rodriguez J, Llor AM, Young HA. Model predictive control: MPC's role in the evolution of power electronics. IEEE Industrial Electronics Magazine. 2015;9(4):8&ndash;21.</span></li>
+<li id="ref-39" class="ref"><span class="ref-n">39</span><span class="ref-t">Drgo&ncaron;a J, Arroyo J, Cupeiro Figueroa I, Blum D, Arendt K, Kim D, et al. All you need to know about model predictive control for buildings. Annual Reviews in Control. 2020;50:190&ndash;232.</span></li>
+  </ol>
+</section>
+</main>
+
+<footer><div class="in">
+  Figures generated programmatically as SVG; the closed-loop response in Figure 8
+  was produced by running the listed controller. Citations follow the Vancouver
+  system, numbered by order of first appearance.
+</div></footer>
+
+</body>
+</html>

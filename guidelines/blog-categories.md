@@ -4,31 +4,38 @@ This document defines the current blog categories used in the site taxonomy. Cat
 
 ## Categories
 
-- **AI & Machine Learning**: Core artificial intelligence and machine learning topics, including model design, training, evaluation, inference, and applied ML systems.
+- **AI & ML**: Core artificial intelligence and machine learning topics, including model design, training, evaluation, inference, and applied ML systems.
 - **AI Agents**: Agent-based AI systems that use tools, workflows, memory, orchestration, multi-step reasoning, or protocol-driven integration.
+- **AI Security**: Security issues specific to AI and machine-learning systems, including model abuse, adversarial attacks, agent risk, governance controls, and defensive architecture around AI deployments.
 - **AI Strategy**: Organizational, operational, and governance questions around adopting AI in products, teams, or enterprises.
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
+- **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
+- **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
 - **Competitive Programming**: Algorithmic problem-solving techniques, coding interview-style patterns, data structures, and contest-oriented reasoning.
 - **Control Theory & Engineering**: Feedback systems, controller design, stability, sampled-data systems, implementation tradeoffs, and real-world control engineering.
 - **Cosmology**: The origin, structure, evolution, and fate of the universe, including major cosmological theories and debates.
 - **Cyber-Physical Systems**: Systems that tightly couple software with sensors, actuators, embedded computation, industrial control, or physical processes.
+- **Data Engineering**: Data pipelines, storage and processing architecture, orchestration, governance, quality, observability, and the engineering practices required to move and serve data reliably.
 - **DevSecOps**: Security integrated into delivery pipelines, infrastructure, developer workflows, automation, and cloud-native operations.
 - **Differential Equations**: Mathematical modeling and analysis centered on differential equations and the systems they describe.
 - **Django**: Django framework design, scaling, architecture, and Python web engineering specific to Django.
 - **Docker**: Docker images, containers, runtime behavior, persistence, security, and day-two operational practices.
 - **Earth Sciences**: Geology, planetary history, paleontology, and other sciences focused on the Earth and its long-term physical development.
+- **Electronics**: Circuits, components, analog and digital electronics, signal behavior, embedded electrical design, and practical hardware-level engineering topics.
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
+- **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.
 - **Mobile App Development**: Cross-cutting mobile engineering topics beyond one platform, including architecture, security, testing, and deployment.
 - **Networks**: Computer networking concepts, protocols, observability, troubleshooting, performance, and networked system design.
+- **Network Security**: Defensive and analytical security work focused on networks, including segmentation, traffic protection, protocol abuse, monitoring, and infrastructure hardening.
 - **Nmap**: Nmap-specific reconnaissance, scanning methods, workflows, and environment-specific usage.
 - **Operating Systems**: OS internals, isolation, process boundaries, system behavior, and platform-level computing abstractions.
 - **Pentesting**: Offensive security assessment methods, attack surface analysis, exploitation workflows, and environment-specific penetration testing practice.
@@ -45,6 +52,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Society & Civics**: Public life, institutions, citizenship, policy, and collective responsibility in relation to social or political systems.
 - **Society & Technology**: How technology interacts with culture, labor, institutions, incentives, and broader social outcomes.
 - **Software Design & Architecture**: System structure, modeling, requirements, design methods, architecture frameworks, and large-scale software organization.
+- **Software Security**: Secure software design, implementation, testing, and hardening work focused on application-level defenses and the security properties of software systems.
 - **Spring**: Spring ecosystem topics, including Spring Boot, caching, testing, and Java application architecture in the Spring stack.
 - **Veganism**: Animal ethics, vegan advocacy, organizing, movement strategy, and analysis of systems built on animal use.
 - **Web & UI**: Frontend development, interface architecture, browser performance, styling systems, and user-interface engineering.
