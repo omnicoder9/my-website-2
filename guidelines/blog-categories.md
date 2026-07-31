@@ -11,7 +11,10 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
+- **AWS**: Amazon Web Services topics, including AWS architecture, IAM, serverless services, managed infrastructure, cloud security, and provider-specific operational practice.
+- **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
+- **Cloud**: Cloud computing architecture, service models, cloud-native operations, managed infrastructure, serverless systems, hyperscaler platforms, and cloud security.
 - **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
 - **Competitive Programming**: Algorithmic problem-solving techniques, coding interview-style patterns, data structures, and contest-oriented reasoning.
 - **Control Theory & Engineering**: Feedback systems, controller design, stability, sampled-data systems, implementation tradeoffs, and real-world control engineering.
@@ -27,9 +30,11 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
+- **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
+- **Java**: Java language, JVM, Java standard libraries, Jakarta EE, Java tooling, Java performance, Java security, and Java ecosystem engineering.
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.

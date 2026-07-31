@@ -6,7 +6,10 @@ const blogCategoryLabels = [
   "ASP.NET",
   "Android",
   "Angular",
+  "AWS",
+  "Azure",
   "Business",
+  "Cloud",
   "Computer Graphics",
   "Competitive Programming",
   "Control Theory & Engineering",
@@ -22,9 +25,11 @@ const blogCategoryLabels = [
   "Engineering",
   "Ethics",
   "Finance",
+  "GCP",
   "Hardware",
   "ICS/OT",
   "IoT",
+  "Java",
   "Kubernetes",
   "Learning",
   "Math",
@@ -164,6 +169,168 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-07-16",
     summary: "A referenced technical portrait of Java, covering its design goals, runtime model, ecosystem, compatibility culture, and the engineering reasons it remains central in production systems.",
     title: "Java: a technical portrait of the language that refused to break"
+  },
+  {
+    path: "blog-articles/java/java-advanced-language-features.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to advanced Java language features: packages, imports, visibility, enums, records, sealed and nested classes, generics, annotations, reflection, and the Java Platform Module System.",
+    title: "Advanced Java Language Features: Packages, Types, Generics, Reflection, and Modules"
+  },
+  {
+    path: "blog-articles/java/java-collections-framework.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to the Java Collections Framework: interfaces, implementations, algorithms, iterators, ordering, equality, concurrent maps, testing, and performance.",
+    title: "Java Collections Framework: Interfaces, Implementations, Algorithms, and Ordering"
+  },
+  {
+    path: "blog-articles/java/java-exception-handling.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to exception handling in Java: checked and unchecked exceptions, Error, try/catch/finally, throw, throws, try-with-resources, custom exceptions, interruption, asynchronous failures, testing, and performance.",
+    title: "Exception Handling in Java: Checked and Unchecked Exceptions, Resources, and Custom Design"
+  },
+  {
+    path: "blog-articles/java/java-functional-programming.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to functional programming in Java: lambda expressions, functional interfaces, predicates, functions, consumers, suppliers, operators, method references, Optional, composition, testing, and performance.",
+    title: "Functional Programming in Java: Lambdas, Functional Interfaces, Method References, and Optional"
+  },
+  {
+    path: "blog-articles/java/java-language-basics.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to Java language basics: syntax, source files, classes, methods, statements, expressions, blocks, comments, variables, primitive types, operators, and control flow.",
+    title: "Java Language Basics: Syntax, Types, Operators, and Control Flow"
+  },
+  {
+    path: "blog-articles/java/java-oop.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to object-oriented programming in Java: classes, objects, fields, methods, constructors, references, static members, encapsulation, inheritance, polymorphism, abstraction, interfaces, Object contracts, cloning, and finalization.",
+    title: "Object-Oriented Programming in Java: Classes, Inheritance, Polymorphism, and Object Contracts"
+  },
+  {
+    path: "blog-articles/java/java-stream-api.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to the Java Stream API: creation, lazy pipelines, intermediate and terminal operations, collectors, parallel streams, primitive streams, spliterators, gatherers, testing, and performance.",
+    title: "Java Stream API: Creation, Operations, Collectors, Parallelism, and Primitive Streams"
+  },
+  {
+    path: "blog-articles/java/java-strings.html",
+    publishedAt: "2026-07-31",
+    summary: "Technical guide to strings in Java: String, StringBuilder, StringBuffer, the string pool, Unicode, normalization, locale-sensitive text, regular expressions, security, testing, and performance.",
+    title: "Strings in Java: String, Builders, the String Pool, Unicode, and Regular Expressions"
+  },
+  {
+    path: "blog-articles/java/jakarta-ee.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to Jakarta EE 11: Servlets, JSP/Jakarta Pages, JPA/Jakarta Persistence, CDI, Validation, REST/JAX-RS, and Messaging/JMS.",
+    title: "Jakarta EE: Servlets, JSP, JPA, CDI, Validation, REST, and Messaging"
+  },
+  {
+    path: "blog-articles/java/java-application-domains.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical guide to Java application domains: enterprise backends, web services, cloud-native systems, finance, Android, big data, messaging, desktop, scientific computing, and embedded systems.",
+    title: "Java Application Domains: Architecture, Fit, and Engineering Examples"
+  },
+  {
+    path: "blog-articles/java/java-best-practices.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical guide to modern Java best practices: SOLID, clean code, Effective Java, defensive and secure coding, API design, documentation, versioning, reviews, and CI/CD.",
+    title: "Modern Java Best Practices: From Design Principles to Secure Delivery"
+  },
+  {
+    path: "blog-articles/java/java-build-dependency-management.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to Java build and dependency management using Maven and Gradle: project structure, POMs, build scripts, plugins, tasks, multi-module builds, dependency platforms, locking, verification, caching, and reproducibility.",
+    title: "Build & Dependency Management in Java: Maven and Gradle"
+  },
+  {
+    path: "blog-articles/java/java-build-quality.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical guide to Java build quality using compiler diagnostics, SpotBugs, Checkstyle, PMD, SonarQube, and automated code formatting.",
+    title: "Java Build Quality: Static Analysis, Quality Gates, and Automated Formatting"
+  },
+  {
+    path: "blog-articles/java/java-concurrency.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to concurrency in Java: threads, the Java Memory Model, synchronization, locks, volatile, atomics, executors, futures, concurrent collections, fork/join, virtual threads, structured concurrency, testing, and diagnostics.",
+    title: "Concurrency in Java: Threads, Synchronization, Executors, Futures, and Virtual Threads"
+  },
+  {
+    path: "blog-articles/java/java-database-programming.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to database programming in Java: JDBC, drivers, connections, statements, PreparedStatement, transactions, batching, ORM, Jakarta Persistence, entity mapping, persistence contexts, and caching.",
+    title: "Database Programming in Java: JDBC, Transactions, ORM, Persistence, and Caching"
+  },
+  {
+    path: "blog-articles/java/java-date-time-api.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to the Java Date and Time API: LocalDate, LocalTime, LocalDateTime, ZonedDateTime, Instant, Duration, Period, formatting, parsing, time-zone rules, persistence, testing, and scheduling.",
+    title: "Date and Time API in Java: Local Types, Zoned Time, Duration, Period, Formatting, and Parsing"
+  },
+  {
+    path: "blog-articles/java/java-design-patterns.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical article on creational, structural, and behavioral design patterns in modern Java, with source code and Vancouver-style references.",
+    title: "Design Patterns in Java: Creational, Structural, and Behavioral Patterns"
+  },
+  {
+    path: "blog-articles/java/java-distributed-systems.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical guide to distributed systems in Java: REST, GraphQL, gRPC, microservices, service discovery, API gateways, circuit breakers, messaging, and event-driven architecture.",
+    title: "Distributed Systems in Java: APIs, Resilience, Messaging, and Event-Driven Architecture"
+  },
+  {
+    path: "blog-articles/java/java-input-output.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to input and output in Java: classic streams, readers and writers, NIO.2 paths and files, channels, byte buffers, memory mapping, serialization, security, testing, and performance.",
+    title: "Input and Output in Java: Classic I/O, NIO.2, Channels, Buffers, and Serialization"
+  },
+  {
+    path: "blog-articles/java/java-jvm-internals.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to JVM internals: architecture, class loading, bytecode, runtime data areas, HotSpot memory, heap, stacks, Metaspace, native memory, garbage collectors, JIT compilation, diagnostics, and tuning.",
+    title: "JVM Internals: Architecture, Memory, Garbage Collection, Bytecode, and JIT Compilation"
+  },
+  {
+    path: "blog-articles/java/java-logging.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to logging in Java: java.util.logging, SLF4J, Logback, Log4j 2, structured JSON logging, context propagation, performance, security, testing, and migration.",
+    title: "Logging in Java: JUL, SLF4J, Logback, Log4j 2, and Structured Logging"
+  },
+  {
+    path: "blog-articles/java/java-monitoring-observability.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical guide to Java monitoring and observability using metrics, Micrometer, Prometheus, Grafana, OpenTelemetry distributed tracing, structured logging, JMX, JFR, and alerting.",
+    title: "Java Monitoring & Observability: Metrics, Traces, Logs, Dashboards, and Alerting"
+  },
+  {
+    path: "blog-articles/java/java-networking.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to networking in Java: addresses, TCP and UDP sockets, NIO channels, virtual threads, HTTP Client API, SSL/TLS, certificates, WebSockets, security, testing, and performance.",
+    title: "Networking in Java: Sockets, TCP, UDP, HTTP, TLS, and WebSockets"
+  },
+  {
+    path: "blog-articles/java/java-performance.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to Java performance: profiling, JFR, JMH benchmarking, memory and CPU optimization, allocation, escape analysis, garbage collection, and JVM tuning.",
+    title: "Performance in Java: Profiling, JMH, Memory, CPU, Allocation, Escape Analysis, and JVM Tuning"
+  },
+  {
+    path: "blog-articles/java/java-security.html",
+    publishedAt: "2026-07-30",
+    summary: "Technical guide to security in Java: JCA cryptography, KeyStore, SecureRandom, MessageDigest, digital signatures, X.509 certificates, PKIX, TLS, JAAS authentication, and application authorization.",
+    title: "Security in Java: Cryptography, KeyStore, Certificates, JAAS, Authentication, and Authorization"
+  },
+  {
+    path: "blog-articles/java/modern-java-features-java-8-to-25.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical history and practical guide to modern Java features from Java 8 through Java 25, with source code and Vancouver-style references.",
+    title: "Modern Java Features, Java 8-25: History, Semantics, and Practice"
+  },
+  {
+    path: "blog-articles/java/native-java-graalvm-native-image-aot.html",
+    publishedAt: "2026-07-30",
+    summary: "A technical guide to Native Java, GraalVM, Native Image, and ahead-of-time compilation, including history, architecture, Maven and Gradle builds, reachability metadata, performance, diagnostics, and deployment.",
+    title: "Native Java: GraalVM, Native Image, and Ahead-of-Time Compilation"
   },
   {
     path: "blog-articles/veganism-and-mental-health.html",
@@ -1925,7 +2092,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
   "blog-articles/supply-chain-vulnerabilities.html": ["Security", "DevSecOps", "Programming & Software", "Engineering"],
   "blog-articles/impossibility.html": ["Philosophy", "Math", "Physics", "Engineering"],
-  "blog-articles/cloud-vulnerabilities.html": ["Security", "Networks", "DevSecOps"],
+  "blog-articles/cloud-vulnerabilities.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "DevSecOps"],
   "blog-articles/app-vulns.html": ["Security", "Programming & Software", "DevSecOps"],
   "blog-articles/curl-reference.html": ["Programming & Software", "Networks"],
   "blog-articles/net_troubleshooting_tools.html": ["Networks", "Security"],
@@ -1933,12 +2100,12 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/storage-devices.html": ["Engineering", "Hardware", "Operating Systems"],
   "blog-articles/cpu-fundamentals.html": ["Engineering", "Hardware", "Operating Systems"],
   "blog-articles/ram.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/spring-cache.html": ["Programming & Software", "DevSecOps", "Spring"],
+  "blog-articles/spring-cache.html": ["Java", "Programming & Software", "DevSecOps", "Spring"],
   "blog-articles/complexity-classes.html": ["Math", "Programming & Software"],
   "blog-articles/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
   "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
   "blog-articles/system-reliability-patterns.html": ["Engineering", "DevSecOps", "Programming & Software"],
-  "blog-articles/spring-cloud-devops.html": ["Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
+  "blog-articles/spring-cloud-devops.html": ["Java", "Cloud", "Programming & Software", "DevSecOps", "Kubernetes", "Networks", "Spring"],
   "blog-articles/secure-architecture.html": ["Security", "Engineering", "DevSecOps", "Software Design & Architecture"],
   "blog-articles/rust-programming-language.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Security"],
   "blog-articles/rlc-circuit-equation.html": ["Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
@@ -1946,7 +2113,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/interval-problems-playbook.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/greedy-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/django-architecture-scaling.html": ["Programming & Software", "Engineering", "DevSecOps", "Django"],
-  "blog-articles/devsecops-engineer.html": ["DevSecOps", "Security", "Programming & Software"],
+  "blog-articles/devsecops-engineer.html": ["DevSecOps", "Security", "Programming & Software", "Cloud"],
   "blog-articles/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
   "blog-articles/ai-cannot-compensate-for-natural-stupidity.html": ["AI & ML", "Philosophy", "Society & Civics"],
   "blog-articles/2d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
@@ -1958,7 +2125,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
   "blog-articles/dc-infrastructure-security.html": ["Security", "Networks", "DevSecOps", "Engineering"],
   "blog-articles/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/nmap-cloud-pentesting.html": ["Security", "Networks", "DevSecOps", "Nmap", "Pentesting"],
+  "blog-articles/nmap-cloud-pentesting.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "DevSecOps", "Nmap", "Pentesting"],
   "blog-articles/css-methodologies.html": ["Web & UI", "Programming & Software"],
   "blog-articles/code-review-best-practices.html": ["Programming & Software", "Engineering"],
   "blog-articles/backend-performance.html": ["Programming & Software", "Engineering", "DevSecOps"],
@@ -1996,7 +2163,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/docker-security.html": ["Docker", "Security", "DevSecOps", "Programming & Software"],
   "blog-articles/dockerfile.html": ["Docker", "Programming & Software", "DevSecOps"],
   "blog-articles/go-language.html": ["Programming & Software", "Programming Languages"],
-  "blog-articles/kubernetes-deployment-patterns.html": ["Programming & Software", "Engineering", "Networks", "Kubernetes", "DevSecOps"],
+  "blog-articles/kubernetes-deployment-patterns.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Engineering", "Networks", "Kubernetes", "DevSecOps"],
   "blog-articles/malware-analysis.html": ["Security"],
   "blog-articles/managing-docker-containers.html": ["Docker", "Programming & Software", "DevSecOps"],
   "blog-articles/mojo.html": ["Programming & Software", "Programming Languages", "AI & ML"],
@@ -2005,7 +2172,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/data-quality.html": ["AI & ML", "Data Engineering", "Engineering", "Programming & Software"],
   "blog-articles/container-orchestration-ecosystem.html": ["Docker", "Kubernetes", "DevSecOps", "Programming & Software"],
   "blog-articles/digital-control-systems.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering", "IoT"],
-  "blog-articles/efficient-edge-ai.html": ["AI & ML", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/efficient-edge-ai.html": ["AI & ML", "Cloud", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/vibe-coding-risk-framework.html": ["AI & ML", "AI Strategy", "Programming & Software", "Security", "DevSecOps"],
   "blog-articles/wireless-networking.html": ["Networks", "Security"],
   "blog-articles/api-authentication.html": ["Security", "Programming & Software", "DevSecOps"],
@@ -2014,7 +2181,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
   "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
   "blog-articles/purple-teamer-role.html": ["Security"],
-  "blog-articles/service-mesh.html": ["Networks", "Programming & Software", "Kubernetes", "DevSecOps"],
+  "blog-articles/service-mesh.html": ["Cloud", "Networks", "Programming & Software", "Kubernetes", "DevSecOps"],
   "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
   "blog-articles/lua-programming-language.html": ["Programming & Software", "Programming Languages"],
   "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
@@ -2028,11 +2195,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "IoT"],
   "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
   "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
-  "blog-articles/spring-testing-article.html": ["Programming & Software", "Security", "DevSecOps", "Docker", "Spring"],
+  "blog-articles/spring-testing-article.html": ["Java", "Programming & Software", "Security", "DevSecOps", "Docker", "Spring"],
   "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
   "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & ML", "Programming & Software", "Math"],
   "blog-articles/math-geometry-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/java-build-tools.html": ["Programming & Software"],
+  "blog-articles/java-build-tools.html": ["Java", "Programming & Software", "DevSecOps"],
   "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
   "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering", "IoT"],
   "blog-articles/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
@@ -2081,14 +2248,41 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/model-predictive-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/nonfunctional-requirements.html": ["Programming & Software", "Software Design & Architecture", "SDLC"],
   "blog-articles/rails-security.html": ["Security", "Software Security", "Programming & Software", "Programming Languages"],
-  "blog-articles/spring-framework-sec.html": ["Security", "Software Security", "Programming & Software", "Spring"],
+  "blog-articles/spring-framework-sec.html": ["Java", "Security", "Software Security", "Programming & Software", "Spring"],
   "blog-articles/ai-threat-landscape.html": ["AI Security", "Security", "AI & ML"],
   "blog-articles/ruby.html": ["Programming & Software", "Programming Languages"],
   "blog-articles/software-assurance.html": ["Security", "Software Security", "SDLC"],
   "blog-articles/product-security.html": ["Security", "Software Security", "SDLC"],
   "blog-articles/sse.html": ["Security", "Software Security", "SDLC"],
   "blog-articles/appsec.html": ["Security", "Software Security", "DevSecOps"],
-  "blog-articles/java.html": ["Programming & Software", "Programming Languages"],
+  "blog-articles/java.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/java/java-advanced-language-features.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/java/java-collections-framework.html": ["Java", "Programming & Software"],
+  "blog-articles/java/java-exception-handling.html": ["Java", "Programming & Software"],
+  "blog-articles/java/java-functional-programming.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/java/java-language-basics.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/java/java-oop.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/java/java-stream-api.html": ["Java", "Programming & Software"],
+  "blog-articles/java/java-strings.html": ["Java", "Programming & Software"],
+  "blog-articles/java/jakarta-ee.html": ["Java", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/java/java-application-domains.html": ["Java", "Programming & Software", "Engineering", "Cloud"],
+  "blog-articles/java/java-best-practices.html": ["Java", "Programming & Software", "Engineering", "SDLC", "Software Security"],
+  "blog-articles/java/java-build-dependency-management.html": ["Java", "Programming & Software", "DevSecOps"],
+  "blog-articles/java/java-build-quality.html": ["Java", "Programming & Software", "DevSecOps", "SDLC"],
+  "blog-articles/java/java-concurrency.html": ["Java", "Programming & Software"],
+  "blog-articles/java/java-database-programming.html": ["Java", "Programming & Software", "Data Engineering"],
+  "blog-articles/java/java-date-time-api.html": ["Java", "Programming & Software"],
+  "blog-articles/java/java-design-patterns.html": ["Java", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/java/java-distributed-systems.html": ["Java", "Programming & Software", "Networks", "Software Design & Architecture"],
+  "blog-articles/java/java-input-output.html": ["Java", "Programming & Software", "Operating Systems"],
+  "blog-articles/java/java-jvm-internals.html": ["Java", "Programming & Software", "Operating Systems"],
+  "blog-articles/java/java-logging.html": ["Java", "Programming & Software", "DevSecOps"],
+  "blog-articles/java/java-monitoring-observability.html": ["Java", "Programming & Software", "DevSecOps"],
+  "blog-articles/java/java-networking.html": ["Java", "Programming & Software", "Networks"],
+  "blog-articles/java/java-performance.html": ["Java", "Programming & Software", "DevSecOps"],
+  "blog-articles/java/java-security.html": ["Java", "Programming & Software", "Security", "Software Security"],
+  "blog-articles/java/modern-java-features-java-8-to-25.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/java/native-java-graalvm-native-image-aot.html": ["Java", "Programming & Software", "DevSecOps"],
   "blog-articles/veganism-and-mental-health.html": ["Veganism", "Society & Civics"],
   "blog-articles/data-architecture-patterns.html": ["Data Engineering", "Programming & Software", "Software Design & Architecture", "Engineering"],
   "blog-articles/data-engineering-lifecycle.html": ["Data Engineering", "Programming & Software", "Engineering"],
@@ -2125,7 +2319,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/vegan-infrastructure.html": ["Veganism", "Programming & Software", "Society & Civics"],
   "blog-articles/making-animal-use-obsolete.html": ["Veganism", "Engineering"],
   "blog-articles/network_topologies.html": ["Networks"],
-  "blog-articles/cloud-microservices-networking.html": ["Networks", "Programming & Software"],
+  "blog-articles/cloud-microservices-networking.html": ["Cloud", "Networks", "Programming & Software"],
   "blog-articles/mass-media-vegan-activism.html": ["Veganism", "Society & Civics"],
   "blog-articles/protocol-oriented-design.html": ["Networks", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/vegan-advocacy-interpersonal.html": ["Veganism", "Society & Civics"],
@@ -2151,13 +2345,13 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Physics", "Philosophy"],
   "blog-articles/especes_perdues.html": ["Earth Sciences", "Philosophy"],
   "blog-articles/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/cloud-service-models.html": ["Programming & Software", "Networks", "DevSecOps"],
+  "blog-articles/cloud-service-models.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Networks", "DevSecOps"],
   "blog-articles/heliocentrism-copernican-revolution.html": ["Physics", "Philosophy"],
   "blog-articles/phase-0-planning-feasibility.html": ["Programming & Software", "Engineering", "SDLC"],
   "blog-articles/python.html": ["Python", "Programming & Software", "Programming Languages"],
   "blog-articles/software-by-market-segment.html": ["Business", "Programming & Software", "Engineering"],
   "blog-articles/the-big-bang.html": ["Physics", "Philosophy", "Cosmology"],
-  "blog-articles/the-path-to-production.html": ["Programming & Software", "DevSecOps", "Networks", "Docker", "SDLC"],
+  "blog-articles/the-path-to-production.html": ["Cloud", "Programming & Software", "DevSecOps", "Networks", "Docker", "SDLC"],
   "blog-articles/the-replication-crisis.html": ["Learning", "Philosophy", "Society & Civics"],
   "blog-articles/anthropogenic-climate-change.html": ["Earth Sciences", "Society & Civics"],
   "blog-articles/nonlocality.html": ["Physics", "Philosophy"],
@@ -2167,7 +2361,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/the-integration-imperative.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "DevSecOps"],
   "blog-articles/webapp_pentesting.html": ["Security", "Web & UI", "Pentesting"],
   "blog-articles/api-security-testing.html": ["Security", "Programming & Software", "DevSecOps", "Pentesting"],
-  "blog-articles/cloud-penetration-testing.html": ["Security", "Networks", "DevSecOps", "Pentesting"],
+  "blog-articles/cloud-penetration-testing.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "DevSecOps", "Pentesting"],
   "blog-articles/wireless-penetration-testing.html": ["Security", "Networks", "Pentesting"],
   "blog-articles/mobile-app-penetration-testing.html": ["Security", "Mobile App Development", "Android", "Pentesting"],
   "blog-articles/thick-client-testing.html": ["Security", "Programming & Software", "Pentesting", "Operating Systems"],
