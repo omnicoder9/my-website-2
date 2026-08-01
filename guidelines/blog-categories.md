@@ -21,7 +21,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Cosmology**: The origin, structure, evolution, and fate of the universe, including major cosmological theories and debates.
 - **Cyber-Physical Systems**: Systems that tightly couple software with sensors, actuators, embedded computation, industrial control, or physical processes.
 - **Data Engineering**: Data pipelines, storage and processing architecture, orchestration, governance, quality, observability, and the engineering practices required to move and serve data reliably.
-- **DevSecOps**: Security integrated into delivery pipelines, infrastructure, developer workflows, automation, and cloud-native operations.
+- **Dev(Sec)Ops**: DevOps and DevSecOps topics, including delivery pipelines, infrastructure, platform engineering, developer workflows, automation, observability, reliability, cloud-native operations, and security integrated into delivery.
 - **Differential Equations**: Mathematical modeling and analysis centered on differential equations and the systems they describe.
 - **Django**: Django framework design, scaling, architecture, and Python web engineering specific to Django.
 - **Docker**: Docker images, containers, runtime behavior, persistence, security, and day-two operational practices.
