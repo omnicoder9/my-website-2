@@ -87,6 +87,36 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/spring/spring-aop.html",
+    publishedAt: "2026-08-02",
+    summary: "An expert-level technical treatment of Spring AOP: the join point model, pointcut language, advice types, weaving strategies, proxy mechanics, precedence, and the production concerns that run through the advisor chain.",
+    title: "Eleven Frames Deep — Spring AOP for people who have to operate it"
+  },
+  {
+    path: "blog-articles/swe/software-architecture.html",
+    publishedAt: "2026-08-02",
+    summary: "Sixteen architectural styles, from the monolith to event sourcing, compared by the boundaries they draw and the dependency directions they forbid.",
+    title: "Which Way Do the Arrows Point? — A field guide to software architecture"
+  },
+  {
+    path: "blog-articles/swe/systems-thinking-software-engineering.html",
+    publishedAt: "2026-08-02",
+    summary: "Systems thinking in software engineering: feedback, emergence, and the socio-technical whole that your components are only a part of.",
+    title: "The Loop Is the Unit of Analysis — systems thinking in software engineering"
+  },
+  {
+    path: "blog-articles/swe/security-in-swe.html",
+    publishedAt: "2026-08-01",
+    summary: "A long-form technical account of security engineering: threat modelling, risk, least privilege, defence in depth, secure defaults, authentication, authorization, input validation, output encoding, encryption, hashing, signatures, key and secrets management, and audit logging.",
+    title: "The Adversary Is Part of the Specification — security in software engineering"
+  },
+  {
+    path: "blog-articles/aws/aws-networking-services.html",
+    publishedAt: "2026-07-31",
+    summary: "A technical reference to AWS networking: VPC, CIDR, subnets, route tables, internet and NAT gateways, peering, Transit Gateway, VPN, Direct Connect, PrivateLink, load balancers, Route 53, and CloudFront.",
+    title: "Where Does This Packet Go Next? — A Field Guide to AWS Networking Services"
+  },
+  {
     path: "blog-articles/what-is-reason.html",
     publishedAt: "2026-07-29",
     summary: "A rigorous study of reason across logic, philosophy, theology, psychology, and cognitive science, asking what rational authority is and whether the standard of the reasonable is objective or conventional.",
@@ -2213,6 +2243,11 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/spring/spring-aop.html": ["Java", "Programming & Software", "Spring", "Software Design & Architecture"],
+  "blog-articles/swe/security-in-swe.html": ["Security", "Software Security", "Programming & Software", "SDLC"],
+  "blog-articles/swe/software-architecture.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/swe/systems-thinking-software-engineering.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/aws/aws-networking-services.html": ["Cloud", "AWS", "Networks", "Dev(Sec)Ops", "Security"],
   "blog-articles/chicxulub.html": ["Earth Sciences", "Physics", "Philosophy"],
   "blog-articles/commercial-facilities-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
   "blog-articles/the-self-in-question.html": ["Philosophy"],
