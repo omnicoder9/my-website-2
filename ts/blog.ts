@@ -87,6 +87,138 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/swe/distributed-systems.html",
+    publishedAt: "2026-08-05",
+    summary: "A technical treatment of distributed systems in software engineering, covering timeouts, retries, quorums, consensus, replication, partitioning, consistency, sagas, idempotency, and the failure semantics the network refuses to simplify.",
+    title: "You Cannot Tell Slow From Dead — distributed systems in software engineering"
+  },
+  {
+    path: "blog-articles/angular/enterprise-angular.html",
+    publishedAt: "2026-08-04",
+    summary: "An expert-level treatment of large-scale Angular architecture: domain-driven workspace organization, enforced module boundaries, API abstraction, error handling, logging, configuration, design systems, and accessibility.",
+    title: "What May Import What — Enterprise Angular in 2026"
+  },
+  {
+    path: "blog-articles/angular/angular-ecosystem.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to the Angular ecosystem: Angular DevTools, Material, CDK, NgRx, RxJS, Nx, Angular ESLint, Storybook, Cypress, Playwright, PrimeNG, AG Grid, testing, and upgrades.",
+    title: "The Angular Ecosystem: Tooling, State, UI, Testing, and Enterprise Architecture"
+  },
+  {
+    path: "blog-articles/angular/angular-components.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular components: metadata, lifecycle, templates, styles and encapsulation, standalone architecture, communication, dynamic rendering, deferred loading, testing, and production patterns.",
+    title: "Angular Components: Lifecycle, Metadata, Communication, Styles, and Dynamic Rendering"
+  },
+  {
+    path: "blog-articles/angular/angular-templates.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular templates: interpolation, property and event binding, two-way binding, template variables, structural and attribute directives, expressions, fragments, type checking, security, and production patterns.",
+    title: "Angular Templates: Binding, Variables, Expressions, Directives, and Modern Control Flow"
+  },
+  {
+    path: "blog-articles/angular/angular-data-binding.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular data binding: one-way and two-way binding, component inputs, outputs, EventEmitter, modern signals, model inputs, change detection, security, testing, and production patterns.",
+    title: "Angular Data Binding: Inputs, Outputs, Events, Two-Way Binding, and Signals"
+  },
+  {
+    path: "blog-articles/angular/angular-directives.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular directives: built-in directives, legacy ngIf/ngFor/ngSwitch, modern control flow, NgClass, NgStyle, custom attribute and structural directives, host bindings, directive composition, and testing.",
+    title: "Angular Directives: Built-In, Attribute, Structural, Host Bindings, and Custom Behavior"
+  },
+  {
+    path: "blog-articles/angular/angular-dependency-injection.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular dependency injection: injector hierarchies, providers, InjectionToken, tree-shakable providers, constructor and functional injection, service scopes, singleton semantics, testing, and production patterns.",
+    title: "Angular Dependency Injection: Injectors, Providers, Tokens, Scope, and Functional Injection"
+  },
+  {
+    path: "blog-articles/angular/angular-services.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular services: dependency injection, business logic, shared state, HTTP API clients, utilities, logging, authentication, provider scope, testing, and production architecture.",
+    title: "Angular Services: Business Logic, Shared State, APIs, Logging, and Authentication"
+  },
+  {
+    path: "blog-articles/angular/angular-routing.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular routing: route configuration, RouterOutlet, navigation, route and query parameters, lazy loading, guards, resolvers, nested routes, wildcard routes, testing, and deployment.",
+    title: "Routing in Angular: Configuration, Navigation, Guards, Resolvers, and Lazy Loading"
+  },
+  {
+    path: "blog-articles/angular/angular-forms.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular forms: template-driven forms, ngModel, validation, reactive forms, FormControl, FormGroup, FormArray, dynamic forms, and custom validators.",
+    title: "Forms in Angular: Template-Driven, Reactive, Dynamic, and Validated"
+  },
+  {
+    path: "blog-articles/angular/angular-http.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to HTTP communication in modern Angular using HttpClient, REST APIs, CRUD operations, request options, interceptors, error handling, authentication tokens, and file transfer.",
+    title: "HTTP Communication in Angular: HttpClient, REST, Interceptors, Errors, Authentication, and Files"
+  },
+  {
+    path: "blog-articles/angular/rxjs.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to RxJS: Observables, Observers, Subjects, BehaviorSubject, ReplaySubject, operators, higher-order mapping, error handling, subscription management, Angular AsyncPipe, signals interop, testing, and production architecture.",
+    title: "RxJS: Observables, Subjects, Operators, Error Handling, and Angular Integration"
+  },
+  {
+    path: "blog-articles/angular/angular-signals.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular signals, writable and computed state, effects, signal component contracts, linkedSignal, resources, RxJS interoperability, and signal-based state management.",
+    title: "Angular Signals: Reactive State, Effects, Component Contracts, and State Management"
+  },
+  {
+    path: "blog-articles/angular/angular-change-detection.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular change detection: Eager and historical Default strategies, OnPush, Zone.js, zoneless Angular, manual detection, signals, AsyncPipe, testing, debugging, and performance optimization.",
+    title: "Angular Change Detection: OnPush, Zones, Zoneless, Manual Control, and Performance"
+  },
+  {
+    path: "blog-articles/angular/angular-lifecycle-hooks.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular lifecycle hooks: ngOnInit, ngOnChanges, ngDoCheck, ngAfterContentInit, ngAfterViewInit, ngOnDestroy, DestroyRef, render callbacks, queries, cleanup, testing, and production patterns.",
+    title: "Angular Lifecycle Hooks: Initialization, Change Checks, Views, Content, and Cleanup"
+  },
+  {
+    path: "blog-articles/angular/angular-pipes.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular pipes: built-in and custom pipes, AsyncPipe, CurrencyPipe, DatePipe, PercentPipe, SlicePipe, JsonPipe, localization, purity, performance, testing, and architecture.",
+    title: "Angular Pipes: Built-in Formatting, AsyncPipe, Custom Pipes, and Purity"
+  },
+  {
+    path: "blog-articles/angular/angular-material.html",
+    publishedAt: "2026-08-04",
+    summary: "A comprehensive technical guide to Angular Material and the Angular CDK: Material Design, Material 3 themes, typography, buttons, forms, dialogs, navigation, tables, data sources, accessibility, testing, and architecture.",
+    title: "Angular Material: Material Design, Themes, Components, Data Tables, and CDK"
+  },
+  {
+    path: "blog-articles/swe/data-modeling.html",
+    publishedAt: "2026-08-03",
+    summary: "A technical account of data modeling in software engineering: entities, relationships, aggregates, normal forms, integrity, schemas, serialization, versioning, and the end of the lifecycle.",
+    title: "What the Schema Forbids — data modelling in software engineering"
+  },
+  {
+    path: "blog-articles/swe/requirements-engineering.html",
+    publishedAt: "2026-08-03",
+    summary: "A long-form technical account of requirements engineering: the world-machine frame, functional and quality requirements, stories, use cases, personas, acceptance criteria, business rules, elicitation, prioritization, traceability, scope, and MVP.",
+    title: "How Would We Know? — Requirements Engineering in Software"
+  },
+  {
+    path: "blog-articles/swe/api-design.html",
+    publishedAt: "2026-08-02",
+    summary: "A long-form technical treatment of API design: resource modeling, contracts, versioning, pagination, filtering, sorting, authentication, authorization, idempotency, errors, rate limiting, compatibility, and documentation across REST, GraphQL, and RPC.",
+    title: "Promises You Can't Take Back — API design in software engineering"
+  },
+  {
+    path: "blog-articles/swe/software-design.html",
+    publishedAt: "2026-08-02",
+    summary: "Software design as the act of deciding what to hide: architectural thinking, design principles, and the pattern catalog, with history, cross-domain examples, and cited sources.",
+    title: "What Each Part Is Allowed to Know — a field guide to software design"
+  },
+  {
     path: "blog-articles/spring/spring-aop.html",
     publishedAt: "2026-08-02",
     summary: "An expert-level technical treatment of Spring AOP: the join point model, pointcut language, advice types, weaving strategies, proxy mechanics, precedence, and the production concerns that run through the advisor chain.",
@@ -2243,6 +2375,28 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/swe/api-design.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "Security", "SDLC"],
+  "blog-articles/swe/data-modeling.html": ["Programming & Software", "Engineering", "Data Engineering", "Software Design & Architecture"],
+  "blog-articles/swe/distributed-systems.html": ["Programming & Software", "Engineering", "Networks", "Software Design & Architecture", "Dev(Sec)Ops"],
+  "blog-articles/swe/requirements-engineering.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/swe/software-design.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/angular/enterprise-angular.html": ["Web & UI", "Programming & Software", "Angular", "Software Design & Architecture", "SDLC"],
+  "blog-articles/angular/angular-ecosystem.html": ["Web & UI", "Programming & Software", "Angular", "Dev(Sec)Ops"],
+  "blog-articles/angular/angular-components.html": ["Web & UI", "Programming & Software", "Angular", "Software Design & Architecture"],
+  "blog-articles/angular/angular-templates.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-data-binding.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-directives.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-dependency-injection.html": ["Web & UI", "Programming & Software", "Angular", "Software Design & Architecture"],
+  "blog-articles/angular/angular-services.html": ["Web & UI", "Programming & Software", "Angular", "Software Design & Architecture"],
+  "blog-articles/angular/angular-routing.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-forms.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-http.html": ["Web & UI", "Programming & Software", "Angular", "Networks", "Security"],
+  "blog-articles/angular/rxjs.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-signals.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-change-detection.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-lifecycle-hooks.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-pipes.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/angular-material.html": ["Web & UI", "Programming & Software", "Angular"],
   "blog-articles/spring/spring-aop.html": ["Java", "Programming & Software", "Spring", "Software Design & Architecture"],
   "blog-articles/swe/security-in-swe.html": ["Security", "Software Security", "Programming & Software", "SDLC"],
   "blog-articles/swe/software-architecture.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
