@@ -87,6 +87,30 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/swe/software-quality.html",
+    publishedAt: "2026-08-08",
+    summary: "Software quality as twelve conditional claims, and the measures that make them possible to refute.",
+    title: "Compared to What? — software quality in software engineering"
+  },
+  {
+    path: "blog-articles/swe/testing-in-swe.html",
+    publishedAt: "2026-08-07",
+    summary: "A technical account of testing in software engineering: levels, techniques, history, cross-domain examples, and eight runnable experiments on what a green test suite actually licenses you to believe.",
+    title: "The Executions You Did Not Run — Testing in Software Engineering"
+  },
+  {
+    path: "blog-articles/swe/swe-collaboration.html",
+    publishedAt: "2026-08-07",
+    summary: "A technical account of collaboration in software engineering: code review, pair programming, documentation, architecture decision records, knowledge sharing, coding standards, design reviews, RFCs, and change management.",
+    title: "Everything Twice, Once for the Record — collaboration in software engineering"
+  },
+  {
+    path: "blog-articles/swe/software-maintenance.html",
+    publishedAt: "2026-08-06",
+    summary: "Software maintenance: the five types of ISO/IEC/IEEE 14764, legacy modernisation, migration, deprecation, versioning, and backward compatibility.",
+    title: "Nothing Ships Once — a technical article on software maintenance"
+  },
+  {
     path: "blog-articles/swe/distributed-systems.html",
     publishedAt: "2026-08-05",
     summary: "A technical treatment of distributed systems in software engineering, covering timeouts, retries, quorums, consensus, replication, partitioning, consistency, sagas, idempotency, and the failure semantics the network refuses to simplify.",
@@ -2379,7 +2403,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/swe/data-modeling.html": ["Programming & Software", "Engineering", "Data Engineering", "Software Design & Architecture"],
   "blog-articles/swe/distributed-systems.html": ["Programming & Software", "Engineering", "Networks", "Software Design & Architecture", "Dev(Sec)Ops"],
   "blog-articles/swe/requirements-engineering.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/swe/software-maintenance.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC", "Dev(Sec)Ops"],
+  "blog-articles/swe/software-quality.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
   "blog-articles/swe/software-design.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/swe/swe-collaboration.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/swe/testing-in-swe.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
   "blog-articles/angular/enterprise-angular.html": ["Web & UI", "Programming & Software", "Angular", "Software Design & Architecture", "SDLC"],
   "blog-articles/angular/angular-ecosystem.html": ["Web & UI", "Programming & Software", "Angular", "Dev(Sec)Ops"],
   "blog-articles/angular/angular-components.html": ["Web & UI", "Programming & Software", "Angular", "Software Design & Architecture"],
