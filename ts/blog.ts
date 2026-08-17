@@ -90,6 +90,36 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/competitive-programming/tries.html",
+    publishedAt: "2026-08-17",
+    summary: "A long-form, measured treatment of tries: the classic problems, six language implementations, node-layout economics, path compression, Aho-Corasick, and when not to use one.",
+    title: "The Key Is the Path — tries, measured"
+  },
+  {
+    path: "blog-articles/competitive-programming/backtracking.html",
+    publishedAt: "2026-08-17",
+    summary: "Backtracking is one template and three questions: where the next choice comes from, when you record, and what kills a branch. Subsets, permutations, combination sum, word search, N-Queens, and Sudoku in six languages, with a runnable lab.",
+    title: "What Are You Allowed to Choose Next? — Backtracking in Competitive Programming"
+  },
+  {
+    path: "blog-articles/engineering/metaphysics-of-engineering.html",
+    publishedAt: "2026-08-17",
+    summary: "A rigorous introduction to the metaphysics of engineering: thirty provisional axioms, seven canonical pathologies, a survey of the philosophy of technology, and a relational model of engineered being.",
+    title: "Foundations for a Metaphysics of Engineering"
+  },
+  {
+    path: "blog-articles/competitive-programming/the-root-is-the-only-promise.html",
+    publishedAt: "2026-08-17",
+    summary: "A heap maintains one local rule and answers one global question. Every classic priority-queue problem is a choice of what goes in, what stays out, and what to do when the root is a lie, with runnable implementations in Go, Java, C++, Rust, C#, and TypeScript.",
+    title: "The Root Is the Only Promise — heaps and priority queues in competitive programming"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/which-way-can-a-ripple-travel.html",
+    publishedAt: "2026-08-17",
+    summary: "Open-channel flow, from the Froude number to the hydraulic jump, organised around a single question about which way information moves.",
+    title: "Which Way Can a Ripple Travel? — open-channel flow"
+  },
+  {
     path: "blog-articles/ai/agi/what-would-tell-them-apart.html",
     publishedAt: "2026-08-16",
     summary: "A rigorous comparison of nine competing theories of the path to artificial general intelligence, stated as falsifiable claims and adjudicated against computed evidence.",
@@ -2450,6 +2480,11 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/competitive-programming/backtracking.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/competitive-programming/the-root-is-the-only-promise.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/competitive-programming/tries.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/engineering/metaphysics-of-engineering.html": ["Engineering", "Philosophy"],
+  "blog-articles/fluid-mechanics/which-way-can-a-ripple-travel.html": ["Fluid Mechanics", "Physics", "Engineering"],
   "blog-articles/ai/agi/what-would-tell-them-apart.html": ["AGI", "AI & ML", "AI Strategy", "Philosophy"],
   "blog-articles/ai/ai-security/ai-security-frameworks.html": ["AI Security", "Security", "AI & ML", "AI Strategy", "Software Security"],
   "blog-articles/competitive-programming/trees.html": ["Competitive Programming", "Programming & Software", "Math"],
