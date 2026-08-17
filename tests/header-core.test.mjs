@@ -7,9 +7,10 @@ import {
   getWallpaperTime
 } from "../dist/js/test-core/header-core.js";
 
-test("getSitePrefixFromPathname returns ../ for article pages only", () => {
+test("getSitePrefixFromPathname returns the root prefix for article pages only", () => {
   assert.equal(getSitePrefixFromPathname("/"), "");
-  assert.equal(getSitePrefixFromPathname("/blog-articles/privacy.html"), "../");
+  assert.equal(getSitePrefixFromPathname("/blog-articles/privacy/privacy.html"), "../../");
+  assert.equal(getSitePrefixFromPathname("/blog-articles/security/pentesting/webapp_pentesting.html"), "../../../");
   assert.equal(getSitePrefixFromPathname("/tutorial-articles/github-git-fundamentals.html"), "../");
 });
 

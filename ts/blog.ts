@@ -1,4 +1,5 @@
 const blogCategoryLabels = [
+  "AGI",
   "AI & ML",
   "AI Agents",
   "AI Security",
@@ -25,11 +26,13 @@ const blogCategoryLabels = [
   "Engineering",
   "Ethics",
   "Finance",
+  "Fluid Mechanics",
   "GCP",
   "Hardware",
   "ICS/OT",
   "IoT",
   "Java",
+  "JavaScript",
   "Kubernetes",
   "Learning",
   "Math",
@@ -87,6 +90,48 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/ai/agi/what-would-tell-them-apart.html",
+    publishedAt: "2026-08-16",
+    summary: "A rigorous comparison of nine competing theories of the path to artificial general intelligence, stated as falsifiable claims and adjudicated against computed evidence.",
+    title: "What Would Tell Them Apart? Competing Theories of the Path to AGI"
+  },
+  {
+    path: "blog-articles/competitive-programming/trees.html",
+    publishedAt: "2026-08-16",
+    summary: "Trees in competitive programming: the recursion is three lines and identical everywhere. What varies is what travels down, what travels up, and where the answer is recorded. Eleven problems in six languages, with a deterministic lab.",
+    title: "What Does the Child Tell the Parent? — trees in competitive programming"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/turbulence-and-the-closure-problem.html",
+    publishedAt: "2026-08-16",
+    summary: "A technical account of turbulent flow: the four characteristics, Reynolds decomposition, the RANS equations, the closure problem and Reynolds stresses, the Boussinesq eddy-viscosity hypothesis, Prandtl's mixing length and the k-epsilon model.",
+    title: "The Equation We Cannot Close — Turbulence, Reynolds Averaging and the Closure Problem"
+  },
+  {
+    path: "blog-articles/ai/ai-security/ai-security-frameworks.html",
+    publishedAt: "2026-08-09",
+    summary: "A technical survey of AI security frameworks and standards — NIST, ISO/IEC 42001, the EU AI Act, MITRE ATLAS, OWASP AISVS and the Top 10 lists — organised by the question each one actually answers.",
+    title: "What Question Does This Answer? — AI Security Frameworks and Standards"
+  },
+  {
+    path: "blog-articles/cloud/multicloud/multicloud-patterns.html",
+    publishedAt: "2026-08-10",
+    summary: "A technical treatment of the eight multicloud patterns — workload separation, disaster recovery, geographic distribution, best-of-breed, regulatory separation, migration, acquisition and active-active — analysed by what crosses the seam between providers.",
+    title: "What Crosses the Line — the eight multicloud patterns and the seams that define them"
+  },
+  {
+    path: "blog-articles/swe/configuration-management.html",
+    publishedAt: "2026-08-09",
+    summary: "Configuration management in software engineering: binding time, blast radius, and the pipeline that code got and configuration did not.",
+    title: "Decided Later, By Someone Else — configuration management in software engineering"
+  },
+  {
+    path: "blog-articles/swe/refactoring-in-swe.html",
+    publishedAt: "2026-08-08",
+    summary: "A technical article on refactoring: history, the named moves, code smells, technical debt, the test harness, large-scale change, and the empirical evidence — with a runnable lab.",
+    title: "Nothing Observable Changed — Refactoring in Software Engineering"
+  },
+  {
     path: "blog-articles/swe/software-quality.html",
     publishedAt: "2026-08-08",
     summary: "Software quality as twelve conditional claims, and the measures that make them possible to refute.",
@@ -115,6 +160,12 @@ const blogPosts: BlogDirectoryPost[] = [
     publishedAt: "2026-08-05",
     summary: "A technical treatment of distributed systems in software engineering, covering timeouts, retries, quorums, consensus, replication, partitioning, consistency, sagas, idempotency, and the failure semantics the network refuses to simplify.",
     title: "You Cannot Tell Slow From Dead — distributed systems in software engineering"
+  },
+  {
+    path: "blog-articles/swe/concurrency.html",
+    publishedAt: "2026-08-05",
+    summary: "A technical history and field guide to concurrency: processes, threads, locks, atomics, memory models, futures, actors, and the schedules they forbid.",
+    title: "Between Any Two Instructions — concurrency in software engineering"
   },
   {
     path: "blog-articles/angular/enterprise-angular.html",
@@ -267,49 +318,49 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "The Adversary Is Part of the Specification — security in software engineering"
   },
   {
-    path: "blog-articles/aws/aws-networking-services.html",
+    path: "blog-articles/cloud/aws/aws-networking-services.html",
     publishedAt: "2026-07-31",
     summary: "A technical reference to AWS networking: VPC, CIDR, subnets, route tables, internet and NAT gateways, peering, Transit Gateway, VPN, Direct Connect, PrivateLink, load balancers, Route 53, and CloudFront.",
     title: "Where Does This Packet Go Next? — A Field Guide to AWS Networking Services"
   },
   {
-    path: "blog-articles/what-is-reason.html",
+    path: "blog-articles/philosophy/what-is-reason.html",
     publishedAt: "2026-07-29",
     summary: "A rigorous study of reason across logic, philosophy, theology, psychology, and cognitive science, asking what rational authority is and whether the standard of the reasonable is objective or conventional.",
     title: "The Court of Reason - What Is Reason, and Whence Its Authority?"
   },
   {
-    path: "blog-articles/multi-agent-distributed-control.html",
+    path: "blog-articles/cyber-physical-systems/multi-agent-distributed-control.html",
     publishedAt: "2026-07-28",
     summary: "A technical guide to multi-agent and distributed control architectures, covering coordination, consensus, task allocation, communication constraints, and where decentralized control actually works.",
     title: "Multi-Agent & Distributed System Architectures in Control Engineering"
   },
   {
-    path: "blog-articles/ecosystem-convergence.html",
+    path: "blog-articles/networks/ecosystem-convergence.html",
     publishedAt: "2026-07-27",
     summary: "A technical briefing on how robotics, IoT, and 5G are converging in smart factories and cities, including the systems architecture, enabling standards, and operational constraints.",
     title: "Ecosystem Convergence - Robots, IoT and 5G in Autonomous Factories and Cities"
   },
   {
-    path: "blog-articles/model-predictive-control.html",
+    path: "blog-articles/cyber-physical-systems/model-predictive-control.html",
     publishedAt: "2026-07-26",
     summary: "A technical account of model predictive control, covering receding-horizon optimization, constraints, stability, solvers, and the industrial contexts where MPC earns its keep.",
     title: "Model Predictive Control - the receding horizon, constraints, and where it runs"
   },
   {
-    path: "blog-articles/nonfunctional-requirements.html",
+    path: "blog-articles/swe/nonfunctional-requirements.html",
     publishedAt: "2026-07-25",
     summary: "A practical guide to nonfunctional requirements, focused on replacing vague quality claims with measurable thresholds for performance, reliability, security, and operability.",
     title: "Everything Except What It Does - Nonfunctional Requirements and How to Quantify Them"
   },
   {
-    path: "blog-articles/rails-security.html",
+    path: "blog-articles/programming-languages/rails-security.html",
     publishedAt: "2026-07-24",
     summary: "A technical reference on Ruby on Rails security, covering framework defaults, CSRF, XSS, SQL injection, mass-assignment history, CSP, secrets handling, and secure deployment practice.",
     title: "Security in Ruby on Rails - mechanisms, history and practice"
   },
   {
-    path: "blog-articles/spring-framework-sec.html",
+    path: "blog-articles/spring/spring-framework-sec.html",
     publishedAt: "2026-07-23",
     summary: "A technical guide to security in the Spring ecosystem, covering the framework's protective defaults, common failure modes, and the operational realities of securing production services.",
     title: "Security in the Spring Framework"
@@ -459,49 +510,49 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Transactions in Spring: ACID, @Transactional, Propagation, Isolation, and Rollback"
   },
   {
-    path: "blog-articles/reactive-spring.html",
+    path: "blog-articles/spring/reactive-spring.html",
     publishedAt: "2026-07-31",
     summary: "An expert-level technical article on Reactive Spring: Spring WebFlux, Project Reactor, Mono and Flux, Reactive Streams, non-blocking I/O, functional endpoints, WebClient, reactive HTTP and error handling.",
     title: "Reactive Spring - Non-blocking web services with WebFlux, Project Reactor and the Reactive Streams contract"
   },
   {
-    path: "blog-articles/ai-threat-landscape.html",
+    path: "blog-articles/ai/ai-security/ai-threat-landscape.html",
     publishedAt: "2026-07-22",
     summary: "A technical survey of the AI threat landscape, from attacks on machine-learning systems and models to the infrastructure, tooling, and workflows that expose them.",
     title: "The AI Threat Landscape - a technical survey"
   },
   {
-    path: "blog-articles/ruby.html",
+    path: "blog-articles/programming-languages/ruby.html",
     publishedAt: "2026-07-21",
     summary: "A referenced technical survey of Ruby, covering its history, object model, runtime behavior, ecosystem, tradeoffs, and why it still matters in modern software.",
     title: "Ruby: A Technical Survey of the Language, Its Runtime, and Its Ecosystem"
   },
   {
-    path: "blog-articles/software-assurance.html",
+    path: "blog-articles/security/software-security/software-assurance.html",
     publishedAt: "2026-07-20",
     summary: "A technical account of software assurance, covering standards, certification, evidence, auditability, and the limits of what assurance artifacts can actually prove.",
     title: "Software Assurance - Evidence, argument, and the audit of trust"
   },
   {
-    path: "blog-articles/product-security.html",
+    path: "blog-articles/security/software-security/product-security.html",
     publishedAt: "2026-07-19",
     summary: "A technical reference on product security, covering scope, standards, PSIRTs, coordinated disclosure, vulnerability handling, and the emerging conformity regimes shaping software products.",
     title: "Product Security - scope, standards, PSIRTs and conformity"
   },
   {
-    path: "blog-articles/sse.html",
+    path: "blog-articles/security/software-security/sse.html",
     publishedAt: "2026-07-18",
     summary: "A technical history and practice guide to secure software engineering, from secure design principles and threat modeling to memory safety, verification, supply-chain integrity, and regulation.",
     title: "Secure Software Engineering: Building Security In"
   },
   {
-    path: "blog-articles/appsec.html",
+    path: "blog-articles/security/software-security/appsec.html",
     publishedAt: "2026-07-17",
     summary: "A technical field guide to application security, covering the major frameworks, testing methods, risk vocabularies, standards, and program metrics used to defend software.",
     title: "Application Security - testing, measuring and defending software"
   },
   {
-    path: "blog-articles/java.html",
+    path: "blog-articles/java/java.html",
     publishedAt: "2026-07-16",
     summary: "A referenced technical portrait of Java, covering its design goals, runtime model, ecosystem, compatibility culture, and the engineering reasons it remains central in production systems.",
     title: "Java: a technical portrait of the language that refused to break"
@@ -669,1729 +720,1729 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Native Java: GraalVM, Native Image, and Ahead-of-Time Compilation"
   },
   {
-    path: "blog-articles/aws-compute-services.html",
+    path: "blog-articles/cloud/aws/aws-compute-services.html",
     publishedAt: "2026-07-31",
     summary: "A technical guide to AWS compute services: EC2 and its primitives, ECS, EKS and Fargate, AWS Lambda, and the specialised services around them, with history, integration patterns and selection criteria.",
     title: "The Compute Ladder - A Technical Guide to AWS Compute Services"
   },
   {
-    path: "blog-articles/veganism-and-mental-health.html",
+    path: "blog-articles/veganism/veganism-and-mental-health.html",
     publishedAt: "2026-07-15",
     summary: "An evidence-focused review of veganism and mental health, separating what current research supports, what it only suggests, and where causality remains unresolved.",
     title: "Veganism and Mental Health - An honest reading of what the evidence supports, what it merely suggests, and what it cannot yet say"
   },
   {
-    path: "blog-articles/data-architecture-patterns.html",
+    path: "blog-articles/data-engineering/data-architecture-patterns.html",
     publishedAt: "2026-07-14",
     summary: "A field guide to data architecture patterns, comparing medallion, lambda, kappa, and data mesh as different answers to storage, computation, ownership, and organizational scale.",
     title: "Data Architecture Patterns: Medallion, Lambda, Kappa and the Mesh"
   },
   {
-    path: "blog-articles/data-engineering-lifecycle.html",
+    path: "blog-articles/data-engineering/data-engineering-lifecycle.html",
     publishedAt: "2026-07-13",
     summary: "A technical account of the data engineering lifecycle, covering generation, ingestion, storage, transformation, serving, and the decisions that shape each stage.",
     title: "The Data Engineering Lifecycle - generation, ingestion, storage, transformation, serving"
   },
   {
-    path: "blog-articles/data-engineering-tools-and-technologies.html",
+    path: "blog-articles/data-engineering/data-engineering-tools-and-technologies.html",
     publishedAt: "2026-07-12",
     summary: "A layered survey of data engineering tools and technologies, from storage engines and file formats to orchestration, transformation, streaming, and metadata systems.",
     title: "Data Engineering Tools and Technologies: A Layered Field Guide"
   },
   {
-    path: "blog-articles/data-governance-quality-observability.html",
+    path: "blog-articles/data-engineering/data-governance-quality-observability.html",
     publishedAt: "2026-07-11",
     summary: "A technical account of data governance, data quality, and observability, covering lineage, access control, privacy, monitoring, and the failures that made each discipline necessary.",
     title: "Data Governance, Quality, and Observability"
   },
   {
-    path: "blog-articles/critical-data-engineering-practices.html",
+    path: "blog-articles/data-engineering/critical-data-engineering-practices.html",
     publishedAt: "2026-07-10",
     summary: "A technical guide to the load-bearing practices of data engineering, focused on idempotency, immutability, partitioning, clustering, and CI/CD for data systems.",
     title: "Rerun It - Critical Practices in Data Engineering"
   },
   {
-    path: "blog-articles/declarative-pipelines.html",
+    path: "blog-articles/data-engineering/declarative-pipelines.html",
     publishedAt: "2026-07-09",
     summary: "A technical history and analysis of declarative pipelines, explaining the shift from imperative orchestration to systems that derive execution from stated dependencies and intent.",
     title: "Declarative Pipelines - from imperative orchestration to derived execution"
   },
   {
-    path: "blog-articles/data-engineering-rag.html",
+    path: "blog-articles/ai/data-engineering-rag.html",
     publishedAt: "2026-07-08",
     summary: "A technical guide to data engineering for generative AI, covering RAG architecture, chunking, embeddings, vector indexes, freshness, governance, evaluation, and cost.",
     title: "Data Engineering for GenAI: RAG Pipelines and Vector Databases - a data engineering guide"
   },
   {
-    path: "blog-articles/metaethics.html",
+    path: "blog-articles/philosophy/metaethics.html",
     publishedAt: "2026-07-17",
     summary: "A survey of metaethics covering moral realism, anti-realism, error theory, constructivism, and the problem of grounding moral truth without metaphysical shortcuts.",
     title: "Neither Bedrock nor Abyss — A Survey of Metaethics"
   },
   {
-    path: "blog-articles/machine-learning-lifecycle.html",
+    path: "blog-articles/ai/machine-learning-lifecycle.html",
     publishedAt: "2026-07-16",
     summary: "An end-to-end technical guide to the machine-learning lifecycle, from problem framing and data work through feature engineering, validation, deployment, and monitoring.",
     title: "The Machine Learning Lifecycle"
   },
   {
-    path: "blog-articles/ai-coding-agent-failures.html",
+    path: "blog-articles/ai/ai-agents/ai-coding-agent-failures.html",
     publishedAt: "2026-07-15",
     summary: "A field guide to where AI coding agents fail in practice, covering hallucinated changes, destructive actions, false success reports, and the reliability gap behind benchmark wins.",
     title: "The Reliability Gap — Where AI coding agents break, why, and whose fault it is"
   },
   {
-    path: "blog-articles/ai-in-robotics.html",
+    path: "blog-articles/robotics/ai-in-robotics.html",
     publishedAt: "2026-07-14",
     summary: "A technical survey of AI in robotics, from classic planning and reinforcement learning to foundation models, sim-to-real transfer, evaluation, and embodied-system constraints.",
     title: "Artificial Intelligence in Robotics: Foundation Models, Sim-to-Real, and the Body Problem"
   },
   {
-    path: "blog-articles/vulnerability-scanning.html",
+    path: "blog-articles/security/vulnerability-scanning.html",
     publishedAt: "2026-07-13",
     summary: "A technical history and reference on vulnerability scanning, covering scanner architecture, CVE and CVSS, major tools, detection tradeoffs, and the limits of automated coverage.",
     title: "Vulnerability Scanning: Automating the Search for Known Weakness"
   },
   {
-    path: "blog-articles/bayesian-statistics.html",
+    path: "blog-articles/math/bayesian-statistics.html",
     publishedAt: "2026-07-12",
     summary: "A technical primer on Bayesian statistics covering priors, likelihoods, posteriors, conjugate models, credible intervals, and Markov chain Monte Carlo intuition.",
     title: "Bayesian Statistics — A Technical Primer"
   },
   {
-    path: "blog-articles/phase-0-planning-feasibility.html",
+    path: "blog-articles/swe/phase-0-planning-feasibility.html",
     publishedAt: "2026-07-11",
     summary: "An expert-level treatment of Phase 0 in the software development life cycle, covering problem definition, feasibility analysis, estimation, and the decisions that shape the rest of delivery.",
     title: "Phase 0 — Planning & Feasibility Analysis"
   },
   {
-    path: "blog-articles/the-path-to-production.html",
+    path: "blog-articles/devops/docker/the-path-to-production.html",
     publishedAt: "2026-07-10",
     summary: "A field guide to how web software moves from a developer laptop to the public internet, spanning version control, environments, CI/CD, containers, orchestration, and DNS/TLS.",
     title: "The Path to Production — DevOps, Deployment & Infrastructure for the Web"
   },
   {
-    path: "blog-articles/site-reliability-engineering.html",
+    path: "blog-articles/swe/site-reliability-engineering.html",
     publishedAt: "2026-07-09",
     summary: "An expert-level treatment of site reliability engineering, focused on SLOs, error budgets, observability, toil reduction, incident response, and reliability as a managed property.",
     title: "Site Reliability Engineering: Reliability as an Engineered Quantity"
   },
   {
-    path: "blog-articles/container-orchestration-ecosystem.html",
+    path: "blog-articles/devops/docker/container-orchestration-ecosystem.html",
     publishedAt: "2026-07-08",
     summary: "An expert field guide to container orchestration covering Docker, Swarm, Kubernetes, the reconciliation model, runtime layers, and production operating tradeoffs.",
     title: "The Orchestrated Fleet — Docker, Swarm, Kubernetes and the Container Ecosystem"
   },
   {
-    path: "blog-articles/docker-security.html",
+    path: "blog-articles/devops/docker/docker-security.html",
     publishedAt: "2026-07-07",
     summary: "A technical field manual on Docker security covering container isolation primitives, common escape paths, kernel boundaries, and the layered controls required to trust the runtime.",
     title: "Docker Security: Everything Is a Process Pretending to Be a Machine"
   },
   {
-    path: "blog-articles/dockerfile.html",
+    path: "blog-articles/devops/docker/dockerfile.html",
     publishedAt: "2026-07-06",
     summary: "A deep dive into the Dockerfile covering the layered image model, BuildKit behavior, core instructions, multi-stage builds, caching strategy, and hardening practices.",
     title: "The Dockerfile: A Manifest for Machines"
   },
   {
-    path: "blog-articles/managing-docker-containers.html",
+    path: "blog-articles/devops/docker/managing-docker-containers.html",
     publishedAt: "2026-07-05",
     summary: "An operator's field guide to running Docker containers through their lifecycle, from state transitions and engine behavior to day-two operational practices in production.",
     title: "Managing Docker Containers — An Operator's Field Guide"
   },
   {
-    path: "blog-articles/python.html",
+    path: "blog-articles/python/python.html",
     publishedAt: "2026-07-04",
     summary: "A technical portrait of Python covering its origins, language design, technical strengths, ecosystem reach, and why it remains central across modern software stacks.",
     title: "Python: A Technical Portrait"
   },
   {
-    path: "blog-articles/digital-control-systems.html",
+    path: "blog-articles/cyber-physical-systems/digital-control-systems.html",
     publishedAt: "2026-07-03",
     summary: "A technical monograph on digital control systems, from sampled-data theory and z-domain stability to controller design, quantization, delay, and real-time implementation.",
     title: "Digital Control Systems — Sampled-Data Theory, Controller Design & Real-Time Implementation"
   },
   {
-    path: "blog-articles/javascript.html",
+    path: "blog-articles/javascript/javascript.html",
     publishedAt: "2026-07-02",
     summary: "A technical field guide to JavaScript covering its history, engines, runtimes, event loop, ecosystem, and why the web's accidental language became unavoidable.",
     title: "JavaScript — The Accidental Language of the Web"
   },
   {
-    path: "blog-articles/breach_attack_simulation.html",
+    path: "blog-articles/security/pentesting/breach_attack_simulation.html",
     publishedAt: "2026-07-01",
     summary: "A technical guide to breach and attack simulation covering ATT&CK-aligned validation, adversary emulation platforms, detection testing, control assurance, and BAS market evolution.",
     title: "Breach and Attack Simulation"
   },
   {
-    path: "blog-articles/the-language-of-things.html",
+    path: "blog-articles/networks/the-language-of-things.html",
     publishedAt: "2026-06-30",
     summary: "An engineering guide to IoT connectivity and communication protocols, comparing Wi-Fi, BLE, Zigbee, LoRaWAN, cellular IoT, and the messaging layers built on top of them.",
     title: "The Language of Things — IoT Connectivity & Communication Protocols"
   },
   {
-    path: "blog-articles/cognitive-layer-robotics.html",
+    path: "blog-articles/robotics/cognitive-layer-robotics.html",
     publishedAt: "2026-06-29",
     summary: "A technical survey of the cognitive layer in robotics, covering planning, decision-making, trajectory optimization, vision integration, and reinforcement-learning interfaces.",
     title: "The Cognitive Layer in Robotics"
   },
   {
-    path: "blog-articles/robotics-perception.html",
+    path: "blog-articles/robotics/robotics-perception.html",
     publishedAt: "2026-06-28",
     summary: "A field guide to robotics perception covering proprioception, exteroception, sensor fusion, state estimation, and SLAM across modern robotic systems.",
     title: "Robotics Perception: Proprioception, Exteroception, and SLAM"
   },
   {
-    path: "blog-articles/three-walls-robotics.html",
+    path: "blog-articles/robotics/three-walls-robotics.html",
     publishedAt: "2026-06-27",
     summary: "A technical account of the three constraints that still limit robotics, focusing on power density, dexterity, robustness, and the engineering realities behind the hype.",
     title: "Three Walls — The Technical Hurdles That Still Define Robotics"
   },
   {
-    path: "blog-articles/why-projects-run-late-and-over-budget.html",
+    path: "blog-articles/swe/why-projects-run-late-and-over-budget.html",
     publishedAt: "2026-06-26",
     summary: "A referenced account of why projects overrun on cost and schedule, covering optimism bias, political incentives, bad forecasting, lock-in, and the few practices that actually help.",
     title: "The Anatomy of the Overrun — Why Projects Run Late and Cost More Than Planned"
   },
   {
-    path: "blog-articles/engineering_is_philosophy.html",
+    path: "blog-articles/philosophy/engineering_is_philosophy.html",
     publishedAt: "2026-06-25",
     summary: "An essay arguing that engineering is a practical form of philosophy, where every design encodes assumptions about knowledge, evidence, uncertainty, and failure.",
     title: "Engineering Is Philosophy"
   },
   {
-    path: "blog-articles/sast-technical-field-guide.html",
+    path: "blog-articles/security/sast-technical-field-guide.html",
     publishedAt: "2026-06-24",
     summary: "A technical field guide to static application security testing, covering ASTs, control flow, taint analysis, semantic engines, tooling, and practical use in secure delivery.",
     title: "Static Application Security Testing — A Technical Field Guide"
   },
   {
-    path: "blog-articles/heliocentrism-copernican-revolution.html",
+    path: "blog-articles/physics/heliocentrism-copernican-revolution.html",
     publishedAt: "2026-07-02",
     summary: "An expert-level history of the Copernican revolution, tracing the geometry, physics, theology, and long scientific struggle that displaced Earth from the center.",
     title: "The Motion of the Earth — Heliocentrism and the Century That Rebuilt the Cosmos"
   },
   {
-    path: "blog-articles/non-euclidean-geometry.html",
+    path: "blog-articles/math/non-euclidean-geometry.html",
     publishedAt: "2026-07-01",
     summary: "A history of non-Euclidean geometry and the collapse of geometrical necessity, from the parallel postulate to the philosophical break between mathematical truth and physical space.",
     title: "Out of Nothing — Non-Euclidean Geometry and the End of Necessary Truth"
   },
   {
-    path: "blog-articles/especes_perdues.html",
+    path: "blog-articles/earth-sciences/especes_perdues.html",
     publishedAt: "2026-06-30",
     summary: "A history of how Cuvier established extinction as a scientific fact and helped break the older theological picture of nature as full, fixed, and complete.",
     title: "The Annihilation of Species — Cuvier, Lost Worlds, and the Breaking of the Great Chain of Being"
   },
   {
-    path: "blog-articles/where-new-things-come-from.html",
+    path: "blog-articles/philosophy/where-new-things-come-from.html",
     publishedAt: "2026-06-29",
     summary: "A long-form theory of innovation focused on recombination, exaptation, abstraction, selection, and the adjacent possible as engines of technological novelty.",
     title: "Where New Things Come From — A Theory of Innovation"
   },
   {
-    path: "blog-articles/software-by-market-segment.html",
+    path: "blog-articles/swe/software-by-market-segment.html",
     publishedAt: "2026-06-28",
     summary: "A history of how the software industry learned to classify itself, from IBM unbundling and analyst taxonomies to the structure of the cloud-era software stack.",
     title: "A Typology of Software by Market Segment"
   },
   {
-    path: "blog-articles/agno-framework.html",
+    path: "blog-articles/ai/agno-framework.html",
     publishedAt: "2026-07-05",
     summary: "A technical briefing on Agno as an AI-agent framework, focused on its runtime model, performance claims, production posture, and fit against competing orchestration stacks.",
     title: "Agno: An Agent Framework Rebuilt as a Production Runtime"
   },
   {
-    path: "blog-articles/enterprise-ai-agent-roadmap.html",
+    path: "blog-articles/ai/enterprise-ai-agent-roadmap.html",
     publishedAt: "2026-07-04",
     summary: "A phased roadmap for moving enterprise AI agents from pilot work to production, covering governance, architecture, risk control, and scaling decisions.",
     title: "From Pilot Purgatory to Production — An Enterprise AI-Agent Implementation Roadmap"
   },
   {
-    path: "blog-articles/chainlit.html",
+    path: "blog-articles/ai/chainlit.html",
     publishedAt: "2026-07-03",
     summary: "A field guide to Chainlit covering its decorator-driven Python model, conversational UI patterns, integrations, deployment tradeoffs, and where it fits in the AI tooling landscape.",
     title: "Chainlit: The Decorator-Driven Framework for Conversational AI — A Technical Field Guide"
   },
   {
-    path: "blog-articles/software-architecture-frameworks.html",
+    path: "blog-articles/swe/software-architecture-frameworks.html",
     publishedAt: "2026-07-02",
     summary: "A guide to architecture-description frameworks and viewpoints, focused on how teams document systems clearly without turning architecture into diagram theater.",
     title: "Drawing the System · A Field Guide to Architecture Description Frameworks"
   },
   {
-    path: "blog-articles/unified-modeling-language.html",
+    path: "blog-articles/swe/unified-modeling-language.html",
     publishedAt: "2026-07-01",
     summary: "A reference-grade guide to UML covering its history, core diagram types, practical uses, common failure modes, and where the notation still earns its keep.",
     title: "The Unified Modeling Language: A Field Guide to Software's Lingua Franca"
   },
   {
-    path: "blog-articles/software-requirements-specification.html",
+    path: "blog-articles/swe/software-requirements-specification.html",
     publishedAt: "2026-06-30",
     summary: "A long-form guide to the software requirements specification, from functional and non-functional requirements to standards, tooling, and disciplined scope definition.",
     title: "The Software Requirements Specification — What the System Must Do"
   },
   {
-    path: "blog-articles/public-key-infrastructure.html",
+    path: "blog-articles/security/public-key-infrastructure.html",
     publishedAt: "2026-06-29",
     summary: "A technical field guide to PKI covering certificate authorities, X.509, trust chains, revocation, validation, and the operational architecture of digital trust.",
     title: "Public Key Infrastructure — The Architecture of Digital Trust"
   },
   {
-    path: "blog-articles/telecommunications-attacks.html",
+    path: "blog-articles/security/telecommunications-attacks.html",
     publishedAt: "2026-06-28",
     summary: "A field reference on telecom attacks spanning SS7, Diameter, IMSI catchers, SIM swapping, baseband exploitation, VoIP abuse, and modern defensive considerations.",
     title: "Telecommunications Attacks: Signaling, Spectrum, and the Interconnect"
   },
   {
-    path: "blog-articles/cybersecurity-civic-responsibility.html",
+    path: "blog-articles/security/critical-infrastructure/cybersecurity-civic-responsibility.html",
     publishedAt: "2026-06-27",
     summary: "An argument that cybersecurity has become civic infrastructure, connecting everyday digital exposure to collective responsibility, institutional weakness, and public resilience.",
     title: "Everyone's Perimeter — Cybersecurity as Civic Infrastructure"
   },
   {
-    path: "blog-articles/control-engineering-implementation.html",
+    path: "blog-articles/cyber-physical-systems/control-engineering-implementation.html",
     publishedAt: "2026-06-26",
     summary: "A practitioner's guide to implementing control systems in the real world, covering toolchains, real-time constraints, embedded deployment, and the hard problems theory leaves out.",
     title: "Control Engineering in Practice: Tools, Real-Time Implementation, and the Hard Problems"
   },
   {
-    path: "blog-articles/hardware-troubleshooting.html",
+    path: "blog-articles/hardware/hardware-troubleshooting.html",
     publishedAt: "2026-06-25",
     summary: "A practical diagnostic guide to computer hardware troubleshooting, organized around systematic fault isolation for boot failures, performance problems, and component faults.",
     title: "Field Service: A Working Guide to Computer Hardware Troubleshooting"
   },
   {
-    path: "blog-articles/heat-death-of-the-universe.html",
+    path: "blog-articles/physics/cosmology/heat-death-of-the-universe.html",
     publishedAt: "2026-06-16",
     summary: "A long-form history of the heat-death idea, tracing thermodynamics, cosmology, entropy, and the philosophical resistance to a universe with a terminal state.",
     title: "The Heat Death of the Universe — Thermodynamic Destiny and Its Discontents"
   },
   {
-    path: "blog-articles/uncertainty-principle.html",
+    path: "blog-articles/physics/uncertainty-principle.html",
     publishedAt: "2026-06-14",
     summary: "A technical and historical account of the uncertainty principle, from matrix mechanics and wave theory to the interpretive fight over what quantum limits really mean.",
     title: "The Uncertainty Principle: Physics and the Fight Over What Nature Allows Us to Know"
   },
   {
-    path: "blog-articles/the-irrationality-of-sqrt2.html",
+    path: "blog-articles/math/the-irrationality-of-sqrt2.html",
     publishedAt: "2026-06-11",
     summary: "A history of the proof that the square root of two is irrational and the conceptual damage it did to ancient assumptions about number, ratio, and cosmic order.",
     title: "The Diagonal That Broke the Cosmos — The Irrationality of √2"
   },
   {
-    path: "blog-articles/Cantors-Paradise.html",
+    path: "blog-articles/math/Cantors-Paradise.html",
     publishedAt: "2026-06-10",
     summary: "A history of Cantor's transfinite numbers, the backlash against actual infinity, and the road from countability to the continuum hypothesis and undecidability.",
     title: "Cantor's Paradise, Cantor's Disease — The Transfinite Numbers and the War Over Infinity"
   },
   {
-    path: "blog-articles/deep-time.html",
+    path: "blog-articles/earth-sciences/deep-time.html",
     publishedAt: "2026-06-09",
     summary: "A history of how geology established deep time, shattered compressed chronologies of the Earth, and forced science to reckon with planetary age at a different scale.",
     title: "Deep Time: How Geology Broke the Biblical Clock"
   },
   {
-    path: "blog-articles/descent-with-modification.html",
+    path: "blog-articles/philosophy/descent-with-modification.html",
     publishedAt: "2026-06-08",
     summary: "A history of evolution by natural selection, from Darwin's argument for descent with modification to the social, scientific, and philosophical struggle that followed.",
     title: "Descent With Modification — Evolution by Natural Selection and the Long Reckoning"
   },
   {
-    path: "blog-articles/the-big-bang.html",
+    path: "blog-articles/physics/cosmology/the-big-bang.html",
     publishedAt: "2026-06-24",
     summary: "An expert-level history of the Big Bang theory and the scientific, philosophical, and ideological controversy over a universe with a beginning.",
     title: "The Universe That Refused to Be Eternal — The Big Bang and Its Discontents"
   },
   {
-    path: "blog-articles/the-replication-crisis.html",
+    path: "blog-articles/philosophy/the-replication-crisis.html",
     publishedAt: "2026-06-24",
     summary: "An expert-level technical account of the replication crisis in psychology, medicine, and beyond, covering its history, statistical machinery, large replication projects, fraud cases, and reform movement.",
     title: "The Decline Effect — A Field Report on the Replication Crisis"
   },
   {
-    path: "blog-articles/anthropogenic-climate-change.html",
+    path: "blog-articles/earth-sciences/anthropogenic-climate-change.html",
     publishedAt: "2026-06-23",
     summary: "An expert-level account of how human activity warmed the planet, how we came to know it, and why one of the best-supported findings in science became one of the most resisted.",
     title: "The Anomaly — Anthropogenic Climate Change and the Science the World Did Not Want"
   },
   {
-    path: "blog-articles/nonlocality.html",
+    path: "blog-articles/physics/nonlocality.html",
     publishedAt: "2026-06-23",
     summary: "An expert-level history and conceptual analysis of quantum nonlocality, from the EPR paradox and Bell's theorem to CHSH, Aspect, and the loophole-free Bell tests.",
     title: "Spooky Action at a Distance — Quantum Nonlocality from EPR to the Loophole-Free Tests"
   },
   {
-    path: "blog-articles/continental-drift-wegener.html",
+    path: "blog-articles/earth-sciences/continental-drift-wegener.html",
     publishedAt: "2026-06-22",
     summary: "A history of Wegener's continental-drift hypothesis, the decades-long backlash against it, and the plate-tectonic revolution that finally proved the continents move.",
     title: "The Ground That Would Not Stay Still — Wegener, Continental Drift, and the Fifty-Year War Over a Moving Earth"
   },
   {
-    path: "blog-articles/banach-tarski-paradox.html",
+    path: "blog-articles/math/banach-tarski-paradox.html",
     publishedAt: "2026-06-22",
     summary: "An expert account of the Banach-Tarski paradox, the mathematics behind duplicating a ball, and the long controversy surrounding the axiom of choice.",
     title: "Two From One — The Banach-Tarski Paradox"
   },
   {
-    path: "blog-articles/godel-incompleteness.html",
+    path: "blog-articles/math/godel-incompleteness.html",
     publishedAt: "2026-06-21",
     summary: "An expert account of Godel's incompleteness theorems, covering Hilbert's program, arithmetized syntax, diagonalization, and the philosophical fallout of formal limits.",
     title: "The Limits of Proof — Godel's Incompleteness Theorems"
   },
   {
-    path: "blog-articles/the-integration-imperative.html",
+    path: "blog-articles/ai/the-integration-imperative.html",
     publishedAt: "2026-06-21",
     summary: "A strategy article on enterprise AI agents arguing that integration with identity, permissions, schemas, and existing systems is what determines whether deployments survive.",
     title: "The Integration Imperative — Enterprise AI Agent Strategy"
   },
   {
-    path: "blog-articles/webapp_pentesting.html",
+    path: "blog-articles/security/pentesting/webapp_pentesting.html",
     publishedAt: "2026-06-20",
     summary: "A practical field guide to web application penetration testing, covering website and web API attack surfaces, common vulnerability classes, tooling, and assessment workflow.",
     title: "Web Application Penetration Testing — Websites & Web APIs"
   },
   {
-    path: "blog-articles/api-security-testing.html",
+    path: "blog-articles/security/pentesting/api-security-testing.html",
     publishedAt: "2026-06-20",
     summary: "An expert field manual on API security testing, covering REST and GraphQL, authentication weaknesses, BOLA and IDOR, rate-limit bypass, JWT attacks, OAuth abuse, and the OWASP API Top 10.",
     title: "API Security Testing — A Field Manual for Modern Backend Services"
   },
   {
-    path: "blog-articles/cloud-penetration-testing.html",
+    path: "blog-articles/cloud/multicloud/cloud-penetration-testing.html",
     publishedAt: "2026-06-19",
     summary: "A field guide to cloud penetration testing focused on attacking the control plane, exposed cloud services, identity paths, and provider-specific assessment constraints.",
     title: "Cloud Penetration Testing — Attacking the Control Plane"
   },
   {
-    path: "blog-articles/wireless-penetration-testing.html",
+    path: "blog-articles/security/pentesting/wireless-penetration-testing.html",
     publishedAt: "2026-06-19",
     summary: "A field manual for wireless penetration testing covering Wi-Fi attack surfaces, radio-layer weaknesses, rogue infrastructure, credential capture, and defensive validation.",
     title: "The Invisible Perimeter — A Field Manual for Wireless Penetration Testing"
   },
   {
-    path: "blog-articles/mobile-app-penetration-testing.html",
+    path: "blog-articles/mobile/android/mobile-app-penetration-testing.html",
     publishedAt: "2026-06-18",
     summary: "An expert field manual for testing Android and iOS apps, covering reverse engineering, local storage review, certificate-pinning bypass, runtime instrumentation, and mobile API security.",
     title: "Mobile Application Penetration Testing — A Field Manual"
   },
   {
-    path: "blog-articles/thick-client-testing.html",
+    path: "blog-articles/security/pentesting/thick-client-testing.html",
     publishedAt: "2026-06-18",
     summary: "An expert field guide to assessing installed desktop software, covering reverse engineering, protocol analysis, privilege escalation, license-control review, and binary exploitation.",
     title: "Thick Client & Desktop Application Penetration Testing — Reverse Engineering, Protocol Analysis, Privilege Escalation & Binary Exploitation"
   },
   {
-    path: "blog-articles/social-engineering-assessments.html",
+    path: "blog-articles/security/pentesting/social-engineering-assessments.html",
     publishedAt: "2026-06-17",
     summary: "An expert field guide to social engineering assessments, covering phishing, vishing, smishing, pretexting, physical intrusion scenarios, defensive controls, and program governance.",
     title: "The Human Operating System — A Field Guide to Social Engineering Assessments"
   },
   {
-    path: "blog-articles/hardware-embedded-pentesting.html",
+    path: "blog-articles/security/pentesting/hardware-embedded-pentesting.html",
     publishedAt: "2026-06-17",
     summary: "A deep technical field manual on hardware and embedded penetration testing, covering buses, firmware extraction, UART and JTAG access, and hardware reverse engineering workflows.",
     title: "Hardware & Embedded Pentesting — A Field Manual"
   },
   {
-    path: "blog-articles/chicxulub.html",
+    path: "blog-articles/physics/chicxulub.html",
     publishedAt: "2026-06-15",
     summary: "A technical article on the Chicxulub impact, the Alvarez hypothesis, the end-Cretaceous extinction, and the scientific controversy that reshaped geology and paleontology.",
     title: "The Cosmic Bullet at the K-Pg Boundary: Chicxulub, Alvarez, and the Catastrophe that Rewired Geology"
   },
   {
-    path: "blog-articles/commercial-facilities-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/commercial-facilities-cybersecurity.html",
     publishedAt: "2026-06-15",
     summary: "A technical briefing on cyber and information security in U.S. commercial facilities, covering building-control exposure, retail and hospitality risk, sector guidance, and practical defense priorities.",
     title: "The Sector With No Fence — Cyber and Information Security in U.S. Commercial Facilities"
   },
   {
-    path: "blog-articles/the-self-in-question.html",
+    path: "blog-articles/philosophy/the-self-in-question.html",
     publishedAt: "2026-06-15",
     summary: "A rigorous survey of models of the self across theology, philosophy, psychology, and cognitive science, from ancient soul theories to predictive processing and modern self-models.",
     title: "The Self in Question — Models of the Human Person from Antiquity to Cognitive Science"
   },
   {
-    path: "blog-articles/dams-cyber-security.html",
+    path: "blog-articles/security/critical-infrastructure/dams-cyber-security.html",
     publishedAt: "2026-06-15",
     summary: "An expert technical analysis of cyber and information security in the U.S. dams sector, covering control systems, threat scenarios, cascade risk, and the standards and controls shaping sector defense.",
     title: "Holding Back the Water: Cyber and Information Security in the U.S. Dams Sector"
   },
   {
-    path: "blog-articles/food-agriculture-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/food-agriculture-cybersecurity.html",
     publishedAt: "2026-06-15",
     summary: "An expert-level deep dive into cyber and information security across the U.S. food and agriculture sector, including industrial technology, incident patterns, supply-chain exposure, and mitigation frameworks.",
     title: "Farm to Foothold — Cyber & Information Security in the U.S. Food and Agriculture Sector"
   },
   {
-    path: "blog-articles/chaos-theory-butterfly-effect.html",
+    path: "blog-articles/physics/chaos-theory-butterfly-effect.html",
     publishedAt: "2026-06-15",
     summary: "A technical history of chaos theory and the butterfly effect, tracing Poincare, Lorenz, nonlinear dynamics, the Lorenz attractor, and the limits of long-range prediction.",
     title: "The Clockwork That Stopped — Chaos, the Butterfly Effect, and the Death of Perfect Prediction"
   },
   {
-    path: "blog-articles/communications-sector-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/communications-sector-cybersecurity.html",
     publishedAt: "2026-06-15",
     summary: "An expert technical briefing on cyber and information security in the U.S. communications sector, focused on carrier infrastructure, routing and signaling risk, national dependence, and defensive frameworks.",
     title: "The Enabling Layer: Cyber and Information Security in the U.S. Communications Sector"
   },
   {
-    path: "blog-articles/black-hole-singularities.html",
+    path: "blog-articles/physics/cosmology/black-hole-singularities.html",
     publishedAt: "2026-06-15",
     summary: "A technical history of black hole singularities, the Penrose-Hawking theorems, cosmic censorship, and the argument that general relativity predicts its own breakdown.",
     title: "The Edge of Predictability — Black Hole Singularities and the Theory That Foretold Its Own Collapse"
   },
   {
-    path: "blog-articles/defense-industrial-base-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/defense-industrial-base-cybersecurity.html",
     publishedAt: "2026-06-15",
     summary: "A technical reference on cyber and information security in the U.S. defense industrial base, covering contractor risk, regulatory obligations, espionage pressure, and the mitigation stack around NIST 800-171 and CMMC.",
     title: "Holding the Line — Cyber & Information Security of the U.S. Defense Industrial Base"
   },
   {
-    path: "blog-articles/libet-free-will.html",
+    path: "blog-articles/philosophy/libet-free-will.html",
     publishedAt: "2026-06-15",
     summary: "A technical history of Benjamin Libet's challenge to free will, covering the readiness potential, the 1983 experiment, later critiques, and the modern reinterpretations that reopened the debate.",
     title: "The Half-Second Gap — Libet, the Readiness Potential, and the Fight Over Free Will"
   },
   {
-    path: "blog-articles/nuclear-cyber-security.html",
+    path: "blog-articles/security/critical-infrastructure/nuclear-cyber-security.html",
     publishedAt: "2026-06-13",
     summary: "A technical examination of cyber and information security in the U.S. nuclear sector, covering reactor-adjacent industrial systems, cross-sector cascade risk, regulation, and layered engineering defenses.",
     title: "Defending the Atom: Cyber and Information Security in the U.S. Nuclear Sector"
   },
   {
-    path: "blog-articles/dark-energy-accelerating-universe.html",
+    path: "blog-articles/physics/cosmology/dark-energy-accelerating-universe.html",
     publishedAt: "2026-06-13",
     summary: "A physics-focused history of cosmic acceleration, tracing the 1998 supernova evidence for dark energy, the Lambda-CDM model, competing explanations, and the unresolved questions behind an expanding universe that speeds up.",
     title: "The Universe That Refused to Slow Down — Dark Energy and Cosmic Acceleration"
   },
   {
-    path: "blog-articles/hph-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/hph-cybersecurity.html",
     publishedAt: "2026-06-13",
     summary: "A technical reference on cyber and information security in the U.S. healthcare and public health sector, focused on clinical technology, patient-safety risk, sector interdependence, and practical defensive controls.",
     title: "Cyber Safety Is Patient Safety — Security in the U.S. Healthcare & Public Health Sector"
   },
   {
-    path: "blog-articles/financial-sector-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/financial-sector-cybersecurity.html",
     publishedAt: "2026-06-13",
     summary: "A technical brief on cyber and information security in the U.S. financial sector, covering payments infrastructure, systemic interdependence, regulatory pressure, resilience engineering, and collective defense.",
     title: "Securing the Ledger — Cyber and Information Security in the U.S. Financial Sector"
   },
   {
-    path: "blog-articles/many-worlds-interpretation.html",
+    path: "blog-articles/physics/many-worlds-interpretation.html",
     publishedAt: "2026-06-13",
     summary: "A technical history of Everett's many-worlds interpretation of quantum mechanics, covering relative states, decoherence, measurement, controversy, and the implications of taking the Schrodinger equation literally.",
     title: "The Many-Worlds Interpretation — Everett's Heresy"
   },
   {
-    path: "blog-articles/transportation-cyber-security.html",
+    path: "blog-articles/security/critical-infrastructure/transportation-cyber-security.html",
     publishedAt: "2026-06-13",
     summary: "A technical examination of cyber and information security in the U.S. transportation sector, covering cyber-physical exposure, national interdependencies, threat scenarios, and the frameworks shaping sector defense.",
     title: "The Lifeline That Everything Rides On — Cyber and Information Security in the U.S. Transportation Sector"
   },
   {
-    path: "blog-articles/water-cyber.html",
+    path: "blog-articles/security/critical-infrastructure/water-cyber.html",
     publishedAt: "2026-06-12",
     summary: "A technical and policy-focused analysis of cyber and information security in the U.S. water and wastewater sector, covering ICS exposure, weak segmentation, incident history, governance gaps, and practical defensive priorities.",
     title: "The Renegade Cursor: Cyber and Information Security in the U.S. Water and Wastewater Sector"
   },
   {
-    path: "blog-articles/energy-sector-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/energy-sector-cybersecurity.html",
     publishedAt: "2026-06-12",
     summary: "A deep dive into cybersecurity in the U.S. energy sector, covering OT and IT convergence, grid risk, ransomware, supply chain compromise, regulatory pressure, and the physical consequences of digital failure.",
     title: "When Code Becomes Kinetic — Cyber & Information Security in the U.S. Energy Sector"
   },
   {
-    path: "blog-articles/continuum-hypothesis.html",
+    path: "blog-articles/math/continuum-hypothesis.html",
     publishedAt: "2026-06-12",
     summary: "A mathematical and philosophical treatment of the continuum hypothesis, covering countability, cardinality, Godel and Cohen, independence from ZFC, and what undecidability means for the foundations of mathematics.",
     title: "The Silence of the Continuum: Independence of the Continuum Hypothesis"
   },
   {
-    path: "blog-articles/zero-click-attacks.html",
+    path: "blog-articles/security/zero-click-attacks.html",
     publishedAt: "2026-06-12",
     summary: "A security deep dive into zero-click exploitation, covering parser bugs, messaging surfaces, exploit chains, spyware tradecraft, mobile attack paths, and the defensive limits of modern platform hardening.",
     title: "Zero-Click: The Architecture of Interaction-Free Exploitation"
   },
   {
-    path: "blog-articles/the-nature-of-the-crime.html",
+    path: "blog-articles/philosophy/the-nature-of-the-crime.html",
     publishedAt: "2026-06-12",
     summary: "A forensic and philosophical essay on the nature of crime, examining cognitive weakness, impulse, self-deception, social context, and the psychological structure behind harmful human behavior.",
     title: "The Nature of the Crime — A Forensic Typology of Human Cognitive Weakness"
   },
   {
-    path: "blog-articles/timing-attacks.html",
+    path: "blog-articles/security/side-channel/timing-attacks.html",
     publishedAt: "2026-06-11",
     summary: "A technical deep dive into timing side channels, covering constant-time failures, remote and local measurement models, classic cryptographic breaks, microarchitectural leakage, and defensive design patterns.",
     title: "Timing Attacks: The Clock as Cryptanalyst"
   },
   {
-    path: "blog-articles/power-analysis-attacks.html",
+    path: "blog-articles/security/side-channel/power-analysis-attacks.html",
     publishedAt: "2026-06-11",
     summary: "A field guide to power analysis attacks, covering simple and differential power analysis, leakage models, trace collection, key extraction workflows, countermeasures, and hardware-security tradeoffs.",
     title: "Power Analysis Attacks: Extracting Secrets from Silicon"
   },
   {
-    path: "blog-articles/mobile-device-vulnerabilities.html",
+    path: "blog-articles/mobile/android/mobile-device-vulnerabilities.html",
     publishedAt: "2026-06-11",
     summary: "A technical reference on mobile device vulnerabilities, covering rooting and jailbreaking, outdated operating systems, radio-interface attacks, risky apps, and data-protection failures across modern phones.",
     title: "Mobile Device Vulnerabilities — A Field Guide to the Modern Handset Threat Model"
   },
   {
-    path: "blog-articles/windows-legacy-security.html",
+    path: "blog-articles/security/pentesting/windows-legacy-security.html",
     publishedAt: "2026-06-10",
     summary: "A security and penetration-testing guide to legacy Windows systems in critical infrastructure, covering end-of-life risk, common exploit paths, segmentation, compensating controls, and modernization tradeoffs.",
     title: "Dead Code Walking: Security and Penetration Testing of Legacy Windows Systems in Critical Infrastructure"
   },
   {
-    path: "blog-articles/cobol.html",
+    path: "blog-articles/programming-languages/cobol.html",
     publishedAt: "2026-06-10",
     summary: "A technical survey of COBOL covering its origins, language model, strengths in business processing, modernization pressure, tooling, mainframe reality, and why it still runs critical systems.",
     title: "COBOL: The Language That Runs the World — A Technical Survey"
   },
   {
-    path: "blog-articles/advanced-graph-problems.html",
+    path: "blog-articles/competitive-programming/advanced-graph-problems.html",
     publishedAt: "2026-06-10",
     summary: "A competitive programming field guide to advanced graph problems, including shortest paths, minimum spanning trees, constrained routing, bottleneck paths, Eulerian tours, and implementation pitfalls.",
     title: "Advanced Graph Problems — A Competitive Programming Field Guide"
   },
   {
-    path: "blog-articles/cache-invalidation.html",
+    path: "blog-articles/swe/cache-invalidation.html",
     publishedAt: "2026-06-10",
     summary: "A deep dive into cache invalidation across CPUs, distributed systems, CDNs, and application stacks, covering coherence, consistency, TTLs, event-driven invalidation, and failure modes.",
     title: "Cache Invalidation: The Problem That Ate Computer Science"
   },
   {
-    path: "blog-articles/its-always-dns.html",
+    path: "blog-articles/security/its-always-dns.html",
     publishedAt: "2026-06-10",
     summary: "A technical guide to DNS failure modes, history, and security, covering recursive resolution, delegation, caching behavior, outages, poisoning, hijacking, and defensive operations.",
     title: "It's Always DNS — Domain Name System Failure Modes, History, and Security"
   },
   {
-    path: "blog-articles/printer-troubleshooting.html",
+    path: "blog-articles/operating-systems/printer-troubleshooting.html",
     publishedAt: "2026-06-10",
     summary: "A technical printer troubleshooting reference covering print paths, drivers, spoolers, network queues, laser and inkjet hardware faults, maintenance, and field diagnostics.",
     title: "Printer Troubleshooting: A Technical Reference — TechOps Series"
   },
   {
-    path: "blog-articles/ping.html",
+    path: "blog-articles/networks/ping.html",
     publishedAt: "2026-06-09",
     summary: "A practical guide to advanced ping usage, covering controlled probes, IPv4 and IPv6 selection, path MTU testing, source interfaces, TTL, QoS markings, Windows options, and troubleshooting playbooks.",
     title: "Advanced Use of the Ping Utility: Options, Examples, and Troubleshooting Scenarios"
   },
   {
-    path: "blog-articles/cpp.html",
+    path: "blog-articles/programming-languages/cpp.html",
     publishedAt: "2026-06-09",
     summary: "A technical deep dive into C++ covering language evolution, performance, memory management, templates, tooling, libraries, safety tradeoffs, and where C++ still matters.",
     title: "C++: The Enduring Colossus — A Technical Deep Dive"
   },
   {
-    path: "blog-articles/graph-problems.html",
+    path: "blog-articles/competitive-programming/graph-problems.html",
     publishedAt: "2026-06-09",
     summary: "Seven foundational graph problems with reusable DFS and BFS patterns, covering grids, islands, rotting oranges, water flow, clone graph, course scheduling, and word ladders across six languages.",
     title: "Every Grid Is a Graph — Seven Foundational Graph Problems"
   },
   {
-    path: "blog-articles/supply-chain-vulnerabilities.html",
+    path: "blog-articles/security/supply-chain-vulnerabilities.html",
     publishedAt: "2026-06-08",
     summary: "A technical reference on software and hardware supply chain risk, covering malicious updates, dependency confusion, vendor access, CI/CD compromise, code signing, SBOMs, SLSA, and defensive governance.",
     title: "Supply Chain Vulnerabilities: Attack Vectors, Threat Actors, and Defence Strategies"
   },
   {
-    path: "blog-articles/impossibility.html",
+    path: "blog-articles/physics/impossibility.html",
     publishedAt: "2026-06-07",
     summary: "A philosophical and technical essay on impossibility claims across logic, physics, computation, engineering, and the limits of what human systems can prove or achieve.",
     title: "Impossibility: Logic, Physics, Computation, and the Limits of Human Claims"
   },
   {
-    path: "blog-articles/cloud-vulnerabilities.html",
+    path: "blog-articles/cloud/multicloud/cloud-vulnerabilities.html",
     publishedAt: "2026-06-07",
     summary: "A technical deep dive into cloud-specific vulnerability patterns, including identity failures, metadata exposure, storage mistakes, network boundaries, supply chains, and shared-responsibility gaps.",
     title: "Cloud-Specific Vulnerabilities: A Technical Deep Dive"
   },
   {
-    path: "blog-articles/app-vulns.html",
+    path: "blog-articles/security/app-vulns.html",
     publishedAt: "2026-06-07",
     summary: "A comprehensive application-security reference covering injection, XSS, broken access control, authentication flaws, deserialization, SSRF, dependency risk, and defensive testing.",
     title: "Application Vulnerabilities: A Comprehensive Technical Reference"
   },
   {
-    path: "blog-articles/curl-reference.html",
+    path: "blog-articles/networks/curl-reference.html",
     publishedAt: "2026-06-07",
     summary: "A practical curl reference covering options, request construction, authentication, uploads, debugging, redirects, TLS behavior, scripting patterns, and command-line examples.",
     title: "curl Reference — Options, Internals & Examples"
   },
   {
-    path: "blog-articles/net_troubleshooting_tools.html",
+    path: "blog-articles/security/net_troubleshooting_tools.html",
     publishedAt: "2026-06-07",
     summary: "A networking troubleshooting guide covering diagnostic method, packet paths, DNS, routing, latency, throughput, packet capture, and common command-line tools.",
     title: "Networking Troubleshooting Fundamentals: Tools, Methods, and Field Examples"
   },
   {
-    path: "blog-articles/hardware-installation-best-practices.html",
+    path: "blog-articles/hardware/hardware-installation-best-practices.html",
     publishedAt: "2026-06-06",
     summary: "A field guide to hardware installation practices, covering planning, ESD control, component handling, cabling, verification, diagnostics, documentation, and operational handoff.",
     title: "Hardware Installation Best Practices — A Field Guide for Engineers & Technicians"
   },
   {
-    path: "blog-articles/storage-devices.html",
+    path: "blog-articles/hardware/storage-devices.html",
     publishedAt: "2026-06-06",
     summary: "A technical field guide to storage devices, covering HDDs, SSDs, flash memory, interfaces, performance characteristics, reliability, filesystems, and selection tradeoffs.",
     title: "Inside the Machine: A Technical Field Guide to Storage Devices"
   },
   {
-    path: "blog-articles/cpu-fundamentals.html",
+    path: "blog-articles/hardware/cpu-fundamentals.html",
     publishedAt: "2026-06-06",
     summary: "A technical guide to modern CPUs, covering cores, threads, cache, sockets, thermals, integrated graphics, firmware, installation, performance tuning, and troubleshooting.",
     title: "Inside the Machine: A Technical Guide to Modern CPUs"
   },
   {
-    path: "blog-articles/ram.html",
+    path: "blog-articles/hardware/ram.html",
     publishedAt: "2026-06-06",
     summary: "A complete technical guide to RAM, covering DDR generations, timings, channels, capacity planning, ECC, installation, overclocking profiles, diagnostics, and compatibility.",
     title: "RAM (Memory): A Complete Technical Guide"
   },
   {
-    path: "blog-articles/spring-cache.html",
+    path: "blog-articles/spring/spring-cache.html",
     publishedAt: "2026-06-06",
     summary: "A Spring caching field guide covering Caffeine, Redis, cache annotations, invalidation strategies, latency tradeoffs, event-driven updates, and production cache design.",
     title: "The Heat Map of Latency — A Field Guide to Spring Cache, Caffeine, Redis & Event-Driven Invalidation"
   },
   {
-    path: "blog-articles/complexity-classes.html",
+    path: "blog-articles/swe/complexity-classes.html",
     publishedAt: "2026-06-05",
     summary: "A guide to computational complexity classes, covering P, NP, NP-completeness, reductions, hardness, verification, open problems, and the frontier of tractability.",
     title: "The Architecture of Hardness — P, NP, and the Frontier of Computation"
   },
   {
-    path: "blog-articles/memory-unsafe-c-cpp.html",
+    path: "blog-articles/security/memory-unsafe-c-cpp.html",
     publishedAt: "2026-06-05",
     summary: "A security-focused article on memory-unsafe C and C++ failure modes, including buffer overflows, use-after-free, null dereferences, data races, and mitigation strategies.",
     title: "Memory Unsafe — Buffer Overflows, Use-After-Free, Null Dereferences & Data Races in C/C++"
   },
   {
-    path: "blog-articles/systems-engineering-methodologies.html",
+    path: "blog-articles/cyber-physical-systems/systems-engineering-methodologies.html",
     publishedAt: "2026-06-05",
     summary: "A systems engineering guide to disciplined practice, covering lifecycle models, MBSE, V-model reasoning, requirements, verification, validation, trade studies, and program governance.",
     title: "Engineering the Whole — Systems Engineering: Methodologies, Frameworks & the Architecture of Disciplined Practice"
   },
   {
-    path: "blog-articles/system-reliability-patterns.html",
+    path: "blog-articles/swe/system-reliability-patterns.html",
     publishedAt: "2026-06-05",
     summary: "A reliability engineering reference on timeouts, retries, circuit breakers, bulkheads, rate limits, graceful degradation, idempotency, observability, and recovery patterns.",
     title: "System Reliability Patterns — A Practitioner's Reference"
   },
   {
-    path: "blog-articles/spring-cloud-devops.html",
+    path: "blog-articles/spring/spring-cloud-devops.html",
     publishedAt: "2026-06-05",
     summary: "A cloud-native Spring operations guide covering microservice deployment, configuration, containers, Kubernetes, service discovery, CI/CD, observability, resilience, and delivery tradeoffs.",
     title: "From Code to Cluster: Deploying Spring Microservices in the Cloud-Native Era"
   },
   {
-    path: "blog-articles/secure-architecture.html",
+    path: "blog-articles/security/secure-architecture.html",
     publishedAt: "2026-06-05",
     summary: "A secure architecture field manual covering threat modeling, identity boundaries, segmentation, secrets, encryption, logging, hardening, resilience, and governance for defended enterprises.",
     title: "Secure Architecture — A Field Manual for the Defended Enterprise"
   },
   {
-    path: "blog-articles/rust-programming-language.html",
+    path: "blog-articles/programming-languages/rust-programming-language.html",
     publishedAt: "2026-06-05",
     summary: "A technical portrait of Rust, explaining ownership, borrowing, lifetimes, traits, async, unsafe code, tooling, ecosystem growth, and its role in modern systems programming.",
     title: "Rust: The Language That Rewrote Systems Programming"
   },
   {
-    path: "blog-articles/rlc-circuit-equation.html",
+    path: "blog-articles/physics/rlc-circuit-equation.html",
     publishedAt: "2026-06-05",
     summary: "A long-form technical treatment of the series RLC differential equation, covering derivation, damping regimes, resonance, physical intuition, applications, tools, and code.",
     title: "The RLC Circuit Equation — The Grammar of Linear Dynamics"
   },
   {
-    path: "blog-articles/ot-ics-scada-pentesting.html",
+    path: "blog-articles/security/pentesting/ot-ics-scada-pentesting.html",
     publishedAt: "2026-06-05",
     summary: "An availability-first review of authorized OT, ICS, and SCADA penetration testing, covering safety constraints, passive discovery, protocol risk, segmentation, reporting, and governance.",
     title: "Penetration Testing OT, ICS & SCADA — A Field Review"
   },
   {
-    path: "blog-articles/interval-problems-playbook.html",
+    path: "blog-articles/competitive-programming/interval-problems-playbook.html",
     publishedAt: "2026-06-05",
     summary: "A competitive programming playbook for interval problems, covering sorting, sweeping, merging, meeting rooms, stabbing queries, heap patterns, proofs, and multilingual implementations.",
     title: "The Interval Playbook — Sorting, Sweeping & Stabbing"
   },
   {
-    path: "blog-articles/greedy-competitive-programming.html",
+    path: "blog-articles/competitive-programming/greedy-competitive-programming.html",
     publishedAt: "2026-06-05",
     summary: "A rigorous guide to greedy algorithms in competitive programming, covering local-choice proofs, exchange arguments, Jump Game, Gas Station, Partition Labels, and interval scheduling.",
     title: "The Greedy Contract — A Field Guide to Greedy Algorithms for Competitive Programming"
   },
   {
-    path: "blog-articles/django-architecture-scaling.html",
+    path: "blog-articles/swe/django-architecture-scaling.html",
     publishedAt: "2026-06-05",
     summary: "A Django scaling handbook covering project structure, data access, caching, async work, deployment topology, database pressure, observability, security, and operational growth.",
     title: "Django Architecture & Scaling — Engineering Handbook"
   },
   {
-    path: "blog-articles/devsecops-engineer.html",
+    path: "blog-articles/cloud/devsecops-engineer.html",
     publishedAt: "2026-06-05",
     summary: "A role-focused guide to DevSecOps engineering, covering secure pipelines, SAST, DAST, dependency scanning, IaC controls, policy as code, cloud security, and incident feedback.",
     title: "The DevSecOps Engineer: Automating Security Into the Pipeline"
   },
   {
-    path: "blog-articles/angular-security-testing.html",
+    path: "blog-articles/angular/angular-security-testing.html",
     publishedAt: "2026-06-05",
     summary: "A practical Angular security testing guide covering static analysis, dependency review, XSS prevention, auth flows, CSP, dynamic testing, penetration testing, and CI guardrails.",
     title: "Security Testing for Angular — Static Analysis, Dynamic Testing & Penetration Testing"
   },
   {
-    path: "blog-articles/ai-cannot-compensate-for-natural-stupidity.html",
+    path: "blog-articles/ai/ai-cannot-compensate-for-natural-stupidity.html",
     publishedAt: "2026-06-05",
     summary: "An essay on the problems computation does not solve by itself: weak judgment, biological limits, deception, scarcity, incentives, social failure, and the continued need for agency.",
     title: "Artificial Intelligence Cannot Compensate for Natural Stupidity"
   },
   {
-    path: "blog-articles/2d-dynamic-programming.html",
+    path: "blog-articles/competitive-programming/2d-dynamic-programming.html",
     publishedAt: "2026-06-05",
     summary: "A competitive programming field guide to two-dimensional dynamic programming, covering grids, subsequences, edit distance, paths, knapsack variants, state transitions, and table design.",
     title: "The Matrix Fills Itself — A Field Guide to 2D Dynamic Programming"
   },
   {
-    path: "blog-articles/automotive-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/automotive-cybersecurity.html",
     publishedAt: "2026-06-05",
     summary: "A technical reference on automotive cybersecurity covering vehicle E/E architecture, CAN buses, ECUs, telematics, autonomous systems, firmware analysis, in-vehicle attacks, secure boot, and OTA update security.",
     title: "Automotive Cybersecurity: A Field Reference for the Connected Car"
   },
   {
-    path: "blog-articles/the-map-is-not-the-territory.html",
+    path: "blog-articles/security/the-map-is-not-the-territory.html",
     publishedAt: "2026-06-03",
     summary: "A philosophical and security-minded essay on abstraction failure, threat models, formal systems, machine learning, and why engineered models never perfectly capture reality.",
     title: "The Map Is Not the Territory — Why Every Engineered System Can Be Hacked"
   },
   {
-    path: "blog-articles/stacks-in-competitive-programming.html",
+    path: "blog-articles/competitive-programming/stacks-in-competitive-programming.html",
     publishedAt: "2026-06-03",
     summary: "A competitive programming guide to stack-based reasoning, covering deferred resolution, monotonic stacks, delimiter matching, expression parsing, amortized analysis, and common implementation traps.",
     title: "The Stack — Deferred Resolution & Monotonic Frontiers in Competitive Programming"
   },
   {
-    path: "blog-articles/privilege-separation.html",
+    path: "blog-articles/security/privilege-separation.html",
     publishedAt: "2026-06-03",
     summary: "A systems-security deep dive into privilege separation, covering least privilege, Unix users, capabilities, MAC, seccomp, pledge, unveil, microkernels, containers, and sandbox design.",
     title: "The Architecture of Trust: Privilege Separation in Modern Systems"
   },
   {
-    path: "blog-articles/models-of-reality.html",
+    path: "blog-articles/physics/models-of-reality.html",
     publishedAt: "2026-06-03",
     summary: "A wide-ranging taxonomy of reality models, from metaphysics and scientific laws to simulations, statistics, machine learning, causal models, and the limits of representation.",
     title: "Models of Reality — From A Priori Metaphysics to Machine Learning"
   },
   {
-    path: "blog-articles/mobile-security-architecture.html",
+    path: "blog-articles/mobile/android/mobile-security-architecture.html",
     publishedAt: "2026-06-03",
     summary: "A technical mobile security architecture survey covering Android, iOS, app sandboxes, secure boot, hardware roots of trust, key storage, exploit chains, and enterprise controls.",
     title: "Phantom Protocol — Mobile Platform Security: A Technical Deep Dive"
   },
   {
-    path: "blog-articles/dc-infrastructure-security.html",
+    path: "blog-articles/security/dc-infrastructure-security.html",
     publishedAt: "2026-06-03",
     summary: "A data center infrastructure security deep dive spanning physical controls, firmware, BMCs, supply chains, management networks, virtualization, storage, side channels, and operational defense.",
     title: "Data Center Infrastructure Security: A Technical Deep Dive"
   },
   {
-    path: "blog-articles/nmap-mainframe-pentesting.html",
+    path: "blog-articles/security/nmap/nmap-mainframe-pentesting.html",
     publishedAt: "2026-06-01",
     summary: "A specialized guide to using Nmap in authorized mainframe penetration testing, covering TN3270, service discovery, enumeration restraint, legacy protocols, and operational safety.",
     title: "Green Screen Reconnaissance — Nmap Against the Mainframe"
   },
   {
-    path: "blog-articles/nmap-cloud-pentesting.html",
+    path: "blog-articles/cloud/multicloud/nmap-cloud-pentesting.html",
     publishedAt: "2026-06-01",
     summary: "A cloud-focused Nmap penetration testing guide for authorized assessment, covering asset discovery, exposed services, provider boundaries, timing discipline, and reconnaissance workflows.",
     title: "The Mapmaker in the Mist — Nmap for Cloud Penetration Testing"
   },
   {
-    path: "blog-articles/css-methodologies.html",
+    path: "blog-articles/web-ui/css-methodologies.html",
     publishedAt: "2026-06-01",
     summary: "A technical guide to CSS at scale, covering Sass, PostCSS, BEM, CSS Modules, CSS-in-JS, cascade layers, scoping, and maintainable stylesheet architecture.",
     title: "CSS at Scale: Methodologies for the Modern Web"
   },
   {
-    path: "blog-articles/code-review-best-practices.html",
+    path: "blog-articles/swe/code-review-best-practices.html",
     publishedAt: "2026-06-01",
     summary: "A practical software engineering guide to code review, covering review goals, reviewer behavior, author preparation, review depth, tooling, culture, and quality outcomes.",
     title: "The Discipline of Peer Review: Code Review Best Practices"
   },
   {
-    path: "blog-articles/backend-performance.html",
+    path: "blog-articles/swe/backend-performance.html",
     publishedAt: "2026-06-01",
     summary: "An expert-level backend performance guide covering caching, APIs, databases, asynchronous systems, scaling, code optimization, observability, networking, security, and performance testing.",
     title: "Backend Performance Engineering: Caching, APIs, Databases, Asynchronism, Scaling, Code, Security, Observability, Networks, and Testing"
   },
   {
-    path: "blog-articles/arrays-and-hashing-cp.html",
+    path: "blog-articles/competitive-programming/arrays-and-hashing-cp.html",
     publishedAt: "2026-06-01",
     summary: "A competitive programming guide to arrays and hashing patterns, focused on one-pass maps, frequency counting, complements, grouping, prefix states, and replacing nested loops.",
     title: "Arrays & Hashing — Competitive Programming Patterns"
   },
   {
-    path: "blog-articles/two-pointers.html",
+    path: "blog-articles/competitive-programming/two-pointers.html",
     publishedAt: "2026-06-01",
     summary: "A competitive programming guide to the two-pointers pattern, covering convergence, sliding windows, sorted arrays, linked-list runners, partitioning, and implementation traps.",
     title: "Two Pointers: The Art of Convergence"
   },
   {
-    path: "blog-articles/trusted-hardware.html",
+    path: "blog-articles/security/trusted-hardware.html",
     publishedAt: "2026-06-01",
     summary: "A technical reference on hardware-rooted trust, covering TPMs, Secure Boot, remote attestation, Intel SGX, AMD SEV, ARM TrustZone, HSMs, side channels, and confidential computing.",
     title: "Foundations of Hardware Trust — TPM, SGX, SEV, TrustZone, HSMs & Confidential Computing"
   },
   {
-    path: "blog-articles/nmap-red-team.html",
+    path: "blog-articles/security/nmap/nmap-red-team.html",
     publishedAt: "2026-06-01",
     summary: "A red-team-oriented Nmap guide focused on precision scanning, OPSEC tradeoffs, detection-aware reconnaissance, NSE usage, timing controls, and authorized adversary emulation.",
     title: "Nmap for Red Teams — Precision, OPSEC, and the Art of Staying Invisible"
   },
   {
-    path: "blog-articles/1d-dynamic-programming.html",
+    path: "blog-articles/competitive-programming/1d-dynamic-programming.html",
     publishedAt: "2026-05-31",
     summary: "A competitive programmer's field guide to one-dimensional dynamic programming patterns, from climbing stairs and house robber to coin change, LIS, word break, and recurrence design.",
     title: "Along a Single Axis — A Field Guide to 1-D Dynamic Programming"
   },
   {
-    path: "blog-articles/angular-performance.html",
+    path: "blog-articles/angular/angular-performance.html",
     publishedAt: "2026-05-31",
     summary: "A technical Angular performance guide covering deferrable views, image optimization, zone pollution, slow-computation profiling, hydration, and Core Web Vitals tradeoffs.",
     title: "Performance in Angular: Deferrable Views, Image Optimisation, Zone Pollution, Slow Computations & Hydration"
   },
   {
-    path: "blog-articles/animation-angular.html",
+    path: "blog-articles/angular/animation-angular.html",
     publishedAt: "2026-05-31",
     summary: "A technical guide to animation in Angular, covering transitions, triggers, enter and leave behavior, reusable sequences, complex choreography, and route transitions.",
     title: "Animation in Angular: Transitions, Triggers, Complex Sequences, Reuse, and Route Transitions"
   },
   {
-    path: "blog-articles/internationalization-angular.html",
+    path: "blog-articles/angular/internationalization-angular.html",
     publishedAt: "2026-05-31",
     summary: "A practical guide to Angular internationalization with @angular/localize, covering locale identifiers, translation extraction, multi-locale builds, and localized application bundles.",
     title: "Comprehensive Internationalization in Angular with @angular/localize"
   },
   {
-    path: "blog-articles/nmap-active-directory.html",
+    path: "blog-articles/security/nmap/nmap-active-directory.html",
     publishedAt: "2026-05-31",
     summary: "A defensive guide to using Nmap for network-layer reconnaissance in Windows domain environments, focused on service discovery, domain exposure, and Active Directory attack surface mapping.",
     title: "Nmap for Active Directory — Network-Layer Reconnaissance of the Windows Domain"
   },
   {
-    path: "blog-articles/nmap-advanced.html",
+    path: "blog-articles/security/nmap/nmap-advanced.html",
     publishedAt: "2026-05-31",
     summary: "An advanced Nmap deep dive covering scan anatomy, timing, scripting, evasion limits, service fingerprinting, and the engineering details behind reliable network reconnaissance.",
     title: "The Anatomy of a Scan — Nmap at Depth"
   },
   {
-    path: "blog-articles/nmap-fundamentals.html",
+    path: "blog-articles/security/nmap/nmap-fundamentals.html",
     publishedAt: "2026-05-31",
     summary: "A foundational guide to ethical host discovery and port scanning with Nmap, covering scan types, service detection, output interpretation, lab setup, and safe operating boundaries.",
     title: "Nmap Fundamentals: Ethical Host Discovery & Port Scanning"
   },
   {
-    path: "blog-articles/nmap-ics-ot-pentesting.html",
+    path: "blog-articles/security/nmap/nmap-ics-ot-pentesting.html",
     publishedAt: "2026-05-31",
     summary: "An availability-first guide to Nmap in ICS and OT penetration testing, explaining fragile devices, passive-first workflows, careful probing, industrial protocols, and safety constraints.",
     title: "Mapping Without Breaking — Nmap in ICS/OT Penetration Testing"
   },
   {
-    path: "blog-articles/nmap-reconnaissance-platform.html",
+    path: "blog-articles/security/nmap/nmap-reconnaissance-platform.html",
     publishedAt: "2026-05-31",
     summary: "A guide to Nmap as a reconnaissance platform beyond basic SYN scans, covering NSE, service and version detection, output pipelines, and repeatable assessment workflows.",
     title: "Beyond the SYN Scan — Nmap as a Reconnaissance Platform"
   },
   {
-    path: "blog-articles/version_control.html",
+    path: "blog-articles/swe/version_control.html",
     publishedAt: "2026-05-29",
     summary: "A comprehensive technical guide to Git fundamentals, repository hosting platforms, and the integrations that connect version control to CI/CD, project management, and team communication.",
     title: "Mastering Modern Version Control: Git & Repository Hosting Services"
   },
   {
-    path: "blog-articles/soft-robotics.html",
+    path: "blog-articles/cyber-physical-systems/soft-robotics.html",
     publishedAt: "2026-05-29",
     summary: "A technical field guide to compliant robots, soft actuators, underactuation, sensing, modeling, control, fabrication, and applications in messy physical environments.",
     title: "Soft Robotics: Underactuation, Compliance, Actuation, Sensing, and Control"
   },
   {
-    path: "blog-articles/sfi.html",
+    path: "blog-articles/security/sfi.html",
     publishedAt: "2026-05-29",
     summary: "A systems-security deep dive into Software Fault Isolation, from address masking and inline reference monitors to Native Client, WebAssembly, control-flow integrity, and bypasses.",
     title: "The Sandbox in the Same Address Space — Software Fault Isolation"
   },
   {
-    path: "blog-articles/rewriting_history_git.html",
+    path: "blog-articles/swe/rewriting_history_git.html",
     publishedAt: "2026-05-29",
     summary: "A practical guide to reshaping Git history safely, including force-with-lease workflows, autosquash, stacked pull requests, reflog recovery, and repository safety rails.",
     title: "Rewriting History Without Losing Your Team (or Your Mind)"
   },
   {
-    path: "blog-articles/os-vm-isolation.html",
+    path: "blog-articles/security/os-vm-isolation.html",
     publishedAt: "2026-05-29",
     summary: "A field guide to operating-system and virtual-machine isolation, covering address spaces, privilege rings, hypervisors, containers, VM escapes, and microarchitectural side channels.",
     title: "The Walls Between Us — A Field Guide to OS and VM Isolation"
   },
   {
-    path: "blog-articles/network-observability.html",
+    path: "blog-articles/security/network-observability.html",
     publishedAt: "2026-05-29",
     summary: "A practitioner-oriented survey of network observability, from packet capture and flow telemetry to SNMP, Prometheus, Grafana, commercial platforms, eBPF, and encrypted traffic.",
     title: "The Transparent Wire: A Field Guide to Network Observability"
   },
   {
-    path: "blog-articles/mlops.html",
+    path: "blog-articles/ai/mlops.html",
     publishedAt: "2026-05-29",
     summary: "A field guide to MLOps and LLMOps, covering production ML infrastructure, lifecycle automation, CI/CD/CT, model observability, governance, feature stores, and platform tooling.",
     title: "The Operations of Learning — A Field Guide to MLOps"
   },
   {
-    path: "blog-articles/messaging-security.html",
+    path: "blog-articles/security/messaging-security.html",
     publishedAt: "2026-05-29",
     summary: "A cryptographic architecture guide to secure messaging, including threat modeling, the Signal Protocol, Double Ratchet, X3DH, group key agreement, MLS, metadata protection, and key transparency.",
     title: "Messaging Security: Cryptographic Architecture from Signal to MLS"
   },
   {
-    path: "blog-articles/csharp.html",
+    path: "blog-articles/programming-languages/csharp.html",
     publishedAt: "2026-05-29",
     summary: "A technical portrait of C#, covering its history, runtime architecture, language design, ecosystem, frameworks, tooling, open-source position, and future direction.",
     title: "C# — The Language of a Generation"
   },
   {
-    path: "blog-articles/concurrency_python.html",
+    path: "blog-articles/python/concurrency_python.html",
     publishedAt: "2026-05-29",
     summary: "A technical guide to Python concurrency, including the GIL, multithreading, multiprocessing, asyncio, decision tradeoffs, ecosystem tools, and the impact of PEP 703 free-threading.",
     title: "Concurrency in Python: A Comprehensive Technical Guide"
   },
   {
-    path: "blog-articles/aspnet-orm.html",
+    path: "blog-articles/dotnet/aspnet-orm.html",
     publishedAt: "2026-05-29",
     summary: "A technical guide to data-access choices in ASP.NET Core, comparing Entity Framework Core, Dapper, RepoDB, and NHibernate across architecture, performance, testing, and operations.",
     title: "ASP.NET Core Object-Relational Mapping with Entity Framework Core, Dapper, RepoDB, and NHibernate"
   },
   {
-    path: "blog-articles/aspnet-core-testing.html",
+    path: "blog-articles/dotnet/aspnet-core-testing.html",
     publishedAt: "2026-05-29",
     summary: "A field guide to ASP.NET Core testing, from unit tests and assertions through fakes, mocks, integration testing, BDD workflows, and browser-driven end-to-end coverage.",
     title: "The Discipline of Doubt — A Field Guide to Testing in ASP.NET Core"
   },
   {
-    path: "blog-articles/anonymous_comm.html",
+    path: "blog-articles/privacy/anonymous_comm.html",
     publishedAt: "2026-05-29",
     summary: "An expert guide to anonymous communication systems, covering onion routing, Tor internals, onion services, mix networks, traffic analysis, pluggable transports, and unlinkability limits.",
     title: "Anonymous Communication: Onion Routing, Mix Networks, Traffic Analysis, and the Engineering Limits of Unlinkability"
   },
   {
-    path: "blog-articles/aspnet-dependency-injection.html",
+    path: "blog-articles/dotnet/aspnet-dependency-injection.html",
     publishedAt: "2026-05-28",
     summary: "A technical guide to ASP.NET Core dependency injection, covering built-in service lifetimes, composition roots, Scrutor assembly scanning, decoration, interception, and practical registration patterns.",
     title: "ASP.NET Core Dependency Injection: Lifetimes, Scrutor, and Beyond"
   },
   {
-    path: "blog-articles/android-app-components.html",
+    path: "blog-articles/mobile/android/android-app-components.html",
     publishedAt: "2026-05-23",
     summary: "A technical deep dive into Android's core app model, covering activities, services, broadcast receivers, content providers, intents, manifests, lifecycle behavior, and process boundaries.",
     title: "Android App Components: A Technical Deep Dive"
   },
   {
-    path: "blog-articles/control_pyramid.html",
+    path: "blog-articles/networks/control_pyramid.html",
     publishedAt: "2026-05-23",
     summary: "A long-form survey of the industrial control pyramid, from PLC and DCS history to vendor lock-in, industrial protocols, SCADA, OPC UA, and the modernization pressures reshaping plant-floor systems.",
     title: "The Control Pyramid — Vendors, Protocols, and Power on the Plant Floor"
   },
   {
-    path: "blog-articles/docker-data-persistence.html",
+    path: "blog-articles/devops/docker/docker-data-persistence.html",
     publishedAt: "2026-05-23",
     summary: "An infrastructure article on Docker persistence, explaining volumes, bind mounts, tmpfs, storage drivers, CSI, backups, security boundaries, and the operational tradeoffs behind stateful containers.",
     title: "The Persistence Problem — Data Outside the Container"
   },
   {
-    path: "blog-articles/go-language.html",
+    path: "blog-articles/programming-languages/go-language.html",
     publishedAt: "2026-05-23",
     summary: "A technical profile of Go's design, history, concurrency model, standard library, cloud-native ecosystem, adoption patterns, and the engineering philosophy behind its deliberate simplicity.",
     title: "The Go Programming Language: Engineering Simplicity at Scale"
   },
   {
-    path: "blog-articles/kubernetes-deployment-patterns.html",
+    path: "blog-articles/cloud/multicloud/kubernetes-deployment-patterns.html",
     publishedAt: "2026-05-23",
     summary: "A technical reference for Kubernetes deployment patterns, including rolling updates, blue-green releases, canaries, Helm, GitOps, CI/CD integration, rollback strategy, and production tradeoffs.",
     title: "Kubernetes Deployment Patterns — A Technical Reference"
   },
   {
-    path: "blog-articles/malware-analysis.html",
+    path: "blog-articles/security/malware-analysis.html",
     publishedAt: "2026-05-23",
     summary: "A defensive field guide to malware analysis, covering static and dynamic techniques, sandboxing, reverse engineering, indicators, YARA, anti-analysis behavior, and machine-learning-based classification.",
     title: "Reverse Engineering the Adversary — A Field Guide to Malware Analysis"
   },
   {
-    path: "blog-articles/mojo.html",
+    path: "blog-articles/programming-languages/mojo.html",
     publishedAt: "2026-05-23",
     summary: "A language profile of Mojo, examining its Python-shaped syntax, MLIR foundation, GPU programming goals, performance model, ecosystem status, and the open question of AI infrastructure adoption.",
     title: "Mojo: The Pythonic Language That Wants to Talk to Your GPU"
   },
   {
-    path: "blog-articles/autonomous-vehicles.html",
+    path: "blog-articles/ai/autonomous-vehicles.html",
     publishedAt: "2026-05-21",
     summary: "An engineering analysis of why fully autonomous driving still fails at the edge cases that matter, from perception and long-tail uncertainty to embodied reasoning in open-world traffic.",
     title: "The Hardest Robotics Problem on Earth — Why Fully Autonomous Driving Has Resisted Five Decades of Engineering"
   },
   {
-    path: "blog-articles/building-developer-communities.html",
+    path: "blog-articles/swe/building-developer-communities.html",
     publishedAt: "2026-05-21",
     summary: "A practitioner's field manual on identifying audiences, choosing platforms, drafting governance, and cultivating the conditions in which developer communities actually thrive.",
     title: "The Architecture of Belonging — Building, Managing, and Engaging Developer Communities"
   },
   {
-    path: "blog-articles/data-quality.html",
+    path: "blog-articles/ai/data-quality.html",
     publishedAt: "2026-05-21",
     summary: "A comprehensive examination of what makes data fit for purpose, from the roots of quality management through dimensions, tools, governance frameworks, and operational practice.",
     title: "Data Quality: Foundations, Dimensions, and Practice"
   },
   {
-    path: "blog-articles/efficient-edge-ai.html",
+    path: "blog-articles/ai/efficient-edge-ai.html",
     publishedAt: "2026-05-21",
     summary: "A technical essay on the shift from cloud-centralized AI toward on-device and edge intelligence, driven by latency, bandwidth, privacy, and deployment economics.",
     title: "Efficient & Edge AI — From Cloud Centralization to Intelligence at the Edge"
   },
   {
-    path: "blog-articles/vibe-coding-risk-framework.html",
+    path: "blog-articles/ai/vibe-coding-risk-framework.html",
     publishedAt: "2026-05-21",
     summary: "A risk-management framework for AI-assisted software development, focused on distinguishing productive low-stakes use from the cases where governance, ownership, and controls are non-negotiable.",
     title: "A Risk Management Framework for Vibe Coding"
   },
   {
-    path: "blog-articles/wireless-networking.html",
+    path: "blog-articles/security/wireless-networking.html",
     publishedAt: "2026-05-21",
     summary: "A field manual for wireless networking, covering radio fundamentals, standards, deployment craft, and the security posture required to operate on a shared and physically constrained medium.",
     title: "The Invisible Wire — A Field Manual for Wireless Networking"
   },
   {
-    path: "blog-articles/api-authentication.html",
+    path: "blog-articles/security/api-authentication.html",
     publishedAt: "2026-05-19",
     summary: "A technical guide to API authentication, covering identity, API keys, bearer tokens, JWT, OAuth 2.0, mutual TLS, session design, and the tradeoffs behind each approach.",
     title: "Proof of Identity — A Technical Guide to API Authentication"
   },
   {
-    path: "blog-articles/bit-manipulation.html",
+    path: "blog-articles/competitive-programming/bit-manipulation.html",
     publishedAt: "2026-05-19",
     summary: "A competitive programmer's field guide to bitwise thinking, including masks, XOR patterns, popcount, range tricks, and the problem-solving habits that make bit manipulation useful.",
     title: "Thinking in Bits — A Competitive Programmer's Field Guide"
   },
   {
-    path: "blog-articles/error-prevention-high-stakes.html",
+    path: "blog-articles/engineering/error-prevention-high-stakes.html",
     publishedAt: "2026-05-19",
     summary: "A long-form essay on error prevention in high-stakes systems, from high-reliability organizations and Swiss-cheese defenses to software failures, drift, and safety culture.",
     title: "When Failure Is Not an Option — The Science of Averting Catastrophe"
   },
   {
-    path: "blog-articles/Farm_Bill_2026.html",
+    path: "blog-articles/veganism/Farm_Bill_2026.html",
     publishedAt: "2026-05-19",
     summary: "An analysis of the 2026 Farm Bill, focusing on subsidies, SNAP, climate politics, animal welfare, and the legislative struggle over food and agricultural power.",
     title: "The 2026 Farm Bill: A High-Stakes Battle Over Food, Farming, and Welfare"
   },
   {
-    path: "blog-articles/frontend-performance.html",
+    path: "blog-articles/web-ui/frontend-performance.html",
     publishedAt: "2026-05-19",
     summary: "A practitioner's guide to frontend performance, spanning rendering internals, Core Web Vitals, bottlenecks, optimization tactics, tooling, and performance budgets.",
     title: "The Performance Ledger — A Practitioner's Guide to Frontend Speed"
   },
   {
-    path: "blog-articles/purple-teamer-role.html",
+    path: "blog-articles/security/purple-teamer-role.html",
     publishedAt: "2026-05-19",
     summary: "A role profile of the purple teamer, examining how offensive and defensive security are fused into collaborative validation, detection tuning, and continuous improvement.",
     title: "The Purple Teamer: Adversary Empathy at the Heart of Modern Defence"
   },
   {
-    path: "blog-articles/service-mesh.html",
+    path: "blog-articles/cloud/kubernetes/service-mesh.html",
     publishedAt: "2026-05-19",
     summary: "A technical deep dive into service meshes, including sidecars, control planes, mTLS, observability, routing policy, operational tradeoffs, and mesh implementation choices.",
     title: "The Service Mesh — An Infrastructure Layer for the Age of Microservices"
   },
   {
-    path: "blog-articles/system-design-interview-prep.html",
+    path: "blog-articles/swe/system-design-interview-prep.html",
     publishedAt: "2026-05-19",
     summary: "A practical system design interview guide covering requirements, scale estimation, tradeoffs, bottlenecks, architecture communication, and common application patterns.",
     title: "System Design Interview Preparation: Requirements, Scale, Tradeoffs, and Common Architectures"
   },
   {
-    path: "blog-articles/lua-programming-language.html",
+    path: "blog-articles/programming-languages/lua-programming-language.html",
     publishedAt: "2026-05-17",
     summary: "A technical portrait of Lua, examining its embedded-language design, unusual influence, and the engineering reasons it quietly powers games, servers, tools, and scripting-heavy systems.",
     title: "Lua: The Language That Hides in Plain Sight"
   },
   {
-    path: "blog-articles/cyber-defense-forensics-analyst.html",
+    path: "blog-articles/security/cyber-defense-forensics-analyst.html",
     publishedAt: "2026-05-17",
     summary: "A role profile of the cyber defense forensics analyst, covering evidence handling, incident reconstruction, host and disk analysis, reporting, and the place of forensics in modern security operations.",
     title: "Cyber Defense Forensics Analyst"
   },
   {
-    path: "blog-articles/vgn-pressure-campaigns.html",
+    path: "blog-articles/veganism/vgn-pressure-campaigns.html",
     publishedAt: "2026-05-17",
     summary: "A strategic analysis of vegan pressure campaigns, focusing on escalation, leverage, corporate and institutional targets, movement discipline, and the conditions under which pressure tactics work.",
     title: "The Art and Science of the Pressure Campaign"
   },
   {
-    path: "blog-articles/threat-hunter-role.html",
+    path: "blog-articles/security/threat-hunter-role.html",
     publishedAt: "2026-05-16",
     summary: "A technical role guide to threat hunting, covering investigative workflows, detection strategy, threat intelligence use, tooling, and the organizational function of proactive adversary pursuit.",
     title: "The Threat Hunter: Proactive Pursuit in the Age of Advanced Adversaries"
   },
   {
-    path: "blog-articles/swift-programming-language.html",
+    path: "blog-articles/programming-languages/swift-programming-language.html",
     publishedAt: "2026-05-16",
     summary: "A comprehensive technical portrait of Swift, tracing its design philosophy, language evolution, performance model, ecosystem position, and growing reach beyond Apple platforms.",
     title: "Swift: Safe, Fast, and Expressive by Design"
   },
   {
-    path: "blog-articles/senior-engineer-thinking.html",
+    path: "blog-articles/swe/senior-engineer-thinking.html",
     publishedAt: "2026-05-16",
     summary: "A practical essay on senior engineer judgment across architecture, tradeoffs, scalability, maintainability, leadership, mentoring, and build-vs-buy decision-making.",
     title: "Senior Engineer Thinking: Architecture, Tradeoffs, Growth, and Technical Leadership"
   },
   {
-    path: "blog-articles/red-teamer-infosec.html",
+    path: "blog-articles/security/red-teamer-infosec.html",
     publishedAt: "2026-05-16",
     summary: "An inside look at professional red teaming, including adversary emulation, offensive methodology, tooling, credentials, and how red teams test whether security defenses truly hold.",
     title: "The Red Teamer: Thinking Like the Adversary"
   },
   {
-    path: "blog-articles/mcp.html",
+    path: "blog-articles/ai/mcp.html",
     publishedAt: "2026-05-16",
     summary: "A deep technical review of the Model Context Protocol, covering its architecture, deployment patterns, security risks, ecosystem evolution, and why it matters for modern AI agents.",
     title: "Model Context Protocol: Architecture, Deployment, and the Agentic Future"
   },
   {
-    path: "blog-articles/info-access-debate.html",
+    path: "blog-articles/philosophy/info-access-debate.html",
     publishedAt: "2026-05-16",
     summary: "A historical and economic analysis of the access-to-knowledge debate, from open access and scholarly publishing to shadow libraries and new community-owned information commons.",
     title: "Information Wants to Be Free… Or Should It?"
   },
   {
-    path: "blog-articles/embedded-firmware-layer.html",
+    path: "blog-articles/cyber-physical-systems/embedded-firmware-layer.html",
     publishedAt: "2026-05-16",
     summary: "A systems-level survey of the embedded software and firmware layer in cyber-physical systems, from bare-metal programming and RTOS design to embedded Linux and secure boot.",
     title: "The Embedded Software & Firmware Layer"
   },
   {
-    path: "blog-articles/edge-computing-layer.html",
+    path: "blog-articles/networks/edge-computing-layer.html",
     publishedAt: "2026-05-16",
     summary: "A technical guide to the edge computing layer of cyber-physical systems, focusing on local processing, protocol translation, resilience, orchestration, and real-time operational constraints.",
     title: "The Edge Computing Layer of Cyber-Physical Systems"
   },
   {
-    path: "blog-articles/device-drivers-cps.html",
+    path: "blog-articles/networks/device-drivers-cps.html",
     publishedAt: "2026-05-16",
     summary: "A technical survey of device drivers and hardware interfaces in cyber-physical systems, spanning bus protocols, driver architecture, and the tradeoffs behind hardware-software integration.",
     title: "Device Drivers & Hardware Interfaces"
   },
   {
-    path: "blog-articles/spring-testing-article.html",
+    path: "blog-articles/spring/spring-testing-article.html",
     publishedAt: "2026-05-14",
     summary: "A practical technical guide to testing Spring applications across unit, slice, integration, security, persistence, and Testcontainers-based workflows.",
     title: "Testing Spring Applications: A Comprehensive Technical Guide"
   },
   {
-    path: "blog-articles/signal-conditioning-hardware.html",
+    path: "blog-articles/cyber-physical-systems/signal-conditioning-hardware.html",
     publishedAt: "2026-05-14",
     summary: "A hardware-focused deep dive into amplification, filtering, isolation, bridge circuits, ADC interfacing, and the analog front-end techniques that turn noisy measurements into usable data.",
     title: "Signal Conditioning Hardware — From Raw Noise to Reliable Data"
   },
   {
-    path: "blog-articles/planning-reduction-sat-modelchecking.html",
+    path: "blog-articles/ai/planning-reduction-sat-modelchecking.html",
     publishedAt: "2026-05-14",
     summary: "A technical article on automated planning by reduction, explaining how SAT encodings, SATplan, bounded horizons, and model-checking ideas solve planning problems.",
     title: "Automated Planning by Reduction: SAT and Model Checking"
   },
   {
-    path: "blog-articles/math-geometry-competitive-programming.html",
+    path: "blog-articles/competitive-programming/math-geometry-competitive-programming.html",
     publishedAt: "2026-05-14",
     summary: "A competitive programming guide to geometric reasoning, numeric techniques, line and polygon operations, and the mathematical patterns that show up in contest problems.",
     title: "Math & Geometry in Competitive Programming"
   },
   {
-    path: "blog-articles/java-build-tools.html",
+    path: "blog-articles/java/java-build-tools.html",
     publishedAt: "2026-05-14",
     summary: "A technical deep dive into Java build tools, covering Maven, Gradle, Ant, dependency management, build lifecycles, and the trade-offs between ecosystem approaches.",
     title: "Java Build Tools: A Technical Deep Dive"
   },
   {
-    path: "blog-articles/entertainment-sport-spectacle.html",
+    path: "blog-articles/veganism/entertainment-sport-spectacle.html",
     publishedAt: "2026-05-14",
     summary: "An analysis of how animals are used in entertainment, sport, and public spectacle, with attention to cultural normalization, welfare rhetoric, and structural harm.",
     title: "The Spectacle of Suffering: Animals in Entertainment, Sport, and Display"
   },
   {
-    path: "blog-articles/embedded-compute-layer.html",
+    path: "blog-articles/cyber-physical-systems/embedded-compute-layer.html",
     publishedAt: "2026-05-14",
     summary: "A systems-level look at embedded compute platforms, covering MCUs, MPUs, memory, real-time constraints, sensor interfaces, and the processing layer behind connected devices.",
     title: "The Embedded Compute Layer: The Brain Behind the Sensor"
   },
   {
-    path: "blog-articles/cps-physical-layer.html",
+    path: "blog-articles/cyber-physical-systems/cps-physical-layer.html",
     publishedAt: "2026-05-14",
     summary: "A technical article on the physical layer of cyber-physical systems, connecting sensors, actuators, transducers, timing, and real-world signal behavior to higher-level system design.",
     title: "The Physical Layer of Cyber-Physical Systems"
   },
   {
-    path: "blog-articles/ai-model-vulnerabilities.html",
+    path: "blog-articles/ai/ai-model-vulnerabilities.html",
     publishedAt: "2026-05-14",
     summary: "A field guide to AI model vulnerabilities, covering prompt injection, jailbreaks, data leakage, tool abuse, adversarial behavior, and practical red-team thinking for model security.",
     title: "Model Vulnerabilities: An AI Red Teamer's Field Guide"
   },
   {
-    path: "blog-articles/animal-research-science-education.html",
+    path: "blog-articles/veganism/animal-research-science-education.html",
     publishedAt: "2026-05-14",
     summary: "An analysis of animal use in biomedical research, product testing, and education, examining scientific claims, institutional incentives, ethics, and alternatives.",
     title: "The Scientific Use of Animals: Biomedical Research, Testing, and Education"
   },
   {
-    path: "blog-articles/humane-ethical-small-scale-animal-use.html",
+    path: "blog-articles/veganism/humane-ethical-small-scale-animal-use.html",
     publishedAt: "2026-05-11",
     summary: "A critical analysis of welfare branding, humanewashing, and small-scale animal use, arguing that 'humane' and 'ethical' framing relieves moral pressure without changing the underlying structure of exploitation.",
     title: "The Moral Escape Valve: \"Humane,\" \"Ethical,\" and Small-Scale Animal Use"
   },
   {
-    path: "blog-articles/api-security-best-practices.html",
+    path: "blog-articles/security/api-security-best-practices.html",
     publishedAt: "2026-05-10",
     summary: "A technical reference on API security covering the OWASP API Top 10, authentication, JWT, OAuth 2.0, access control, input validation, rate limiting, and runtime monitoring.",
     title: "API Security Best Practices — A Technical Reference"
   },
   {
-    path: "blog-articles/newtons_second_law_dynamics.html",
+    path: "blog-articles/physics/newtons_second_law_dynamics.html",
     publishedAt: "2026-05-10",
     summary: "A dynamics-focused technical article on Newton's second law for particles and systems, connecting force balances, coordinate frames, free-body diagrams, and structural dynamics formulations.",
     title: "Newton's Second Law for a Particle & System — The Cornerstone Equation of Dynamics"
   },
   {
-    path: "blog-articles/drl-humanoid-robotics.html",
+    path: "blog-articles/ai/drl-humanoid-robotics.html",
     publishedAt: "2026-05-10",
     summary: "A technical review of deep reinforcement learning for humanoid robotics, covering actor-critic methods, sim-to-real transfer, locomotion, manipulation, and emerging embodied AI paradigms.",
     title: "Deep Reinforcement Learning for Humanoid Robotics"
   },
   {
-    path: "blog-articles/causal_ai.html",
+    path: "blog-articles/ai/causal_ai.html",
     publishedAt: "2026-05-10",
     summary: "A technical essay on causal AI, tracing the shift from correlational machine learning toward structural causal models, interventions, counterfactuals, and mechanism-aware intelligence.",
     title: "Causal AI: From Association to Mechanism"
   },
   {
-    path: "blog-articles/cache-timing-attacks.html",
+    path: "blog-articles/security/side-channel/cache-timing-attacks.html",
     publishedAt: "2026-05-10",
     summary: "A technical deep dive into cache timing attacks, covering CPU cache architecture, Prime+Probe and Flush+Reload techniques, Spectre and Meltdown, and defense strategies across hardware and software.",
     title: "Cache Timing Attacks: A Technical Deep Dive"
   },
   {
-    path: "blog-articles/hidden-animal-ingredients.html",
+    path: "blog-articles/veganism/hidden-animal-ingredients.html",
     publishedAt: "2026-05-10",
     summary: "A reference guide to hidden animal-derived ingredients in food, pharmaceuticals, cosmetics, and consumer goods, with labeling pitfalls and activist strategy implications.",
     title: "Animal Ingredients Hidden in Plain Sight"
   },
   {
-    path: "blog-articles/action-model-learning.html",
+    path: "blog-articles/ai/action-model-learning.html",
     publishedAt: "2026-05-08",
     summary: "A technical survey of action model learning in automated planning, covering STRIPS and PDDL model induction, observability constraints, symbolic and neural methods, and open research challenges.",
     title: "Action Model Learning in Automated Planning"
   },
   {
-    path: "blog-articles/explainable-ai-lime-shap.html",
+    path: "blog-articles/ai/explainable-ai-lime-shap.html",
     publishedAt: "2026-05-08",
     summary: "A technical deep dive into LIME and SHAP, covering local explanation methods, Shapley-value foundations, implementation trade-offs, failure modes, and regulated use cases.",
     title: "Explainable AI: LIME & SHAP — A Technical Deep Dive"
   },
   {
-    path: "blog-articles/insects-and-small-animals.html",
+    path: "blog-articles/veganism/insects-and-small-animals.html",
     publishedAt: "2026-05-08",
     summary: "An ethics-focused examination of insect sentience, small-animal exploitation, pest control, and how vegan advocacy should reason about trillions of overlooked animals.",
     title: "The Overlooked Trillions: Insects, Small Animals, and the Frontiers of Vegan Ethics"
   },
   {
-    path: "blog-articles/automated-planning.html",
+    path: "blog-articles/ai/automated-planning.html",
     publishedAt: "2026-05-07",
     summary: "A technical survey of classical AI planning and scheduling, covering state-space search, regression, partial-order planning, STRIPS, PDDL, and modern research directions.",
     title: "Automated Planning and Scheduling Algorithms"
   },
   {
-    path: "blog-articles/digital-privacy-levels.html",
+    path: "blog-articles/privacy/digital-privacy-levels.html",
     publishedAt: "2026-05-07",
     summary: "An editorial guide to four practical privacy levels, from default exposure and basic hygiene to browser compartmentation and targeted-risk protection.",
     title: "The Four Levels of Digital Privacy"
   },
   {
-    path: "blog-articles/digital-privacy-l4-l5.html",
+    path: "blog-articles/privacy/digital-privacy-l4-l5.html",
     publishedAt: "2026-05-07",
     summary: "A long-form analysis of high-risk digital privacy practice, covering metadata exposure, hardened endpoints, adversarial environments, and the defensive lessons of Level 4 and Level 5 tradecraft.",
     title: "Hostile Terrain: Digital Privacy at Levels 4 and 5"
   },
   {
-    path: "blog-articles/grc-enterprise-ai-data-governance.html",
+    path: "blog-articles/ai/grc-enterprise-ai-data-governance.html",
     publishedAt: "2026-05-06",
     summary: "A long-form analysis of how enterprise GRC models need to adapt for AI, with emphasis on data governance, model accountability, monitoring, and regulatory readiness.",
     title: "GRC for Enterprise AI: Rethinking Data Governance from the Ground Up"
   },
   {
-    path: "blog-articles/sdn-ibn-article.html",
+    path: "blog-articles/networks/sdn-ibn-article.html",
     publishedAt: "2026-05-06",
     summary: "A long-form technical survey of software-defined networking and intent-based networking, from control-plane separation and OpenFlow to policy automation and programmable data planes.",
     title: "The Programmable Network: SDN and Intent-Based Networking"
   },
   {
-    path: "blog-articles/market-based-vegan-activism.html",
+    path: "blog-articles/veganism/market-based-vegan-activism.html",
     publishedAt: "2026-05-06",
     summary: "A strategy essay on venture capital, price parity, procurement, and market-shaping tactics as mechanisms for scaling vegan change beyond persuasion alone.",
     title: "The Market Is the Message: Market-Based Vegan Activism"
   },
   {
-    path: "blog-articles/investigations-exposure-article.html",
+    path: "blog-articles/veganism/investigations-exposure-article.html",
     publishedAt: "2026-04-27",
     summary: "A long-form analysis of undercover investigations, whistleblowers, ag-gag laws, and exposure tactics as one of the movement's most effective tools against factory farming secrecy.",
     title: "Eyes Behind the Wall: Investigations and Exposure in Animal Activism"
   },
   {
-    path: "blog-articles/vegan_cultural_change.html",
+    path: "blog-articles/veganism/vegan_cultural_change.html",
     publishedAt: "2026-04-26",
     summary: "An essay on narrative, documentary film, identity, norms, language, and religion as the slow but durable machinery of vegan cultural change.",
     title: "The Long Game: How Culture Becomes the Most Powerful Engine of Vegan Change"
   },
   {
-    path: "blog-articles/network-layered-models.html",
+    path: "blog-articles/networks/network-layered-models.html",
     publishedAt: "2026-04-26",
     summary: "A long-form history and comparison of the OSI and TCP/IP models, from ARPANET and standards politics to modern cloud and SDN abstractions.",
     title: "The Architecture of Everything: Network Layered Models Explained"
   },
   {
-    path: "blog-articles/vegan-behavioral-interventions.html",
+    path: "blog-articles/veganism/vegan-behavioral-interventions.html",
     publishedAt: "2026-04-26",
     summary: "A research synthesis on defaults, nudges, product placement, habits, commitment devices, and framing as behavioral levers for plant-based eating.",
     title: "The Architecture of Choice: Behavioral Science and Plant-Based Eating"
   },
   {
-    path: "blog-articles/zero-trust-architecture.html",
+    path: "blog-articles/security/zero-trust-architecture.html",
     publishedAt: "2026-04-26",
     summary: "A long-form analysis of zero trust architecture, from the collapse of perimeter security to identity-centric access control and microsegmentation.",
     title: "The Death of the Moat: Zero Trust and the End of the Perimeter"
   },
   {
-    path: "blog-articles/edge-iot-networking.html",
+    path: "blog-articles/networks/edge-iot-networking.html",
     publishedAt: "2026-04-25",
     summary: "A technical survey of edge and IoT networking, from MQTT's origins and brokered messaging to device-gateway-cloud architecture and current design trade-offs.",
     title: "Edge & IoT Networking Models: The Architecture of the Always-On World"
   },
   {
-    path: "blog-articles/vegan_business_models.html",
+    path: "blog-articles/veganism/vegan_business_models.html",
     publishedAt: "2026-04-24",
     summary: "A strategy essay on venture infrastructure, institutional defaults, subsidy reform, insurance, and investor pressure as business levers against factory farming.",
     title: "The Market for Mercy: How Business Is Ending Factory Farming"
   },
   {
-    path: "blog-articles/learning-modalities.html",
+    path: "blog-articles/society-civics/learning-modalities.html",
     publishedAt: "2026-04-24",
     summary: "A research-heavy comparison of lectures, webinars, video, print, digital reading, hands-on learning, and audio through cognitive load and retention evidence.",
     title: "How We Learn: A Scientific Reckoning with Every Major Learning Medium"
   },
   {
-    path: "blog-articles/corporate-vegan-pressure.html",
+    path: "blog-articles/veganism/corporate-vegan-pressure.html",
     publishedAt: "2026-04-24",
     summary: "An evidence-driven look at corporate campaigns, shareholder activism, institutional defaults, and supply-chain pressure as scalable vegan advocacy tactics.",
     title: "The Corporate Lever: Vegan Activism Beyond the Individual"
   },
   {
-    path: "blog-articles/smart-grid-challenges.html",
+    path: "blog-articles/security/critical-infrastructure/smart-grid-challenges.html",
     publishedAt: "2026-04-24",
     summary: "A systems-level survey of renewable integration, interoperability, cybersecurity, data management, aging infrastructure, and regulation in smart grid engineering.",
     title: "Powering the Future, Securing the Present: Smart Grid Engineering Challenges"
   },
   {
-    path: "blog-articles/vegan-activism-incentives.html",
+    path: "blog-articles/veganism/vegan-activism-incentives.html",
     publishedAt: "2026-04-23",
     summary: "A case for shifting vegan activism toward incentives, procurement, defaults, price signals, and market competition rather than moral persuasion alone.",
     title: "Don't Ask Nicely. Win the Market: A New Theory of Vegan Activism"
   },
   {
-    path: "blog-articles/industrial-protocol-design.html",
+    path: "blog-articles/security/critical-infrastructure/industrial-protocol-design.html",
     publishedAt: "2026-04-22",
     summary: "A protocol-engineering essay on determinism, interoperability, security debt, TSN, OPC UA, MQTT, and the trade-offs behind industrial automation networks.",
     title: "The Wiring Problem: Industrial Protocol Design"
   },
   {
-    path: "blog-articles/medical_device_engineering_challenges.html",
+    path: "blog-articles/security/critical-infrastructure/medical_device_engineering_challenges.html",
     publishedAt: "2026-04-21",
     summary: "A systems-level tour of reliability, safety, power, software, cybersecurity, and regulatory constraints in electronic medical device engineering.",
     title: "Engineering Challenges in Electronic Medical Device Design"
   },
   {
-    path: "blog-articles/us-citizen-politics-guide.html",
+    path: "blog-articles/society-civics/us-citizen-politics-guide.html",
     publishedAt: "2026-04-20",
     summary: "A practical guide to political leverage for U.S. citizens, from voting and constituent contact to local elections and legislative tracking.",
     title: "Your Voice, Your Government: A Citizen's Guide to Political Power"
   },
   {
-    path: "blog-articles/vegan-legislative-activism.html",
+    path: "blog-articles/veganism/vegan-legislative-activism.html",
     publishedAt: "2026-04-19",
     summary: "A long-game view of vegan legislative and political activism through ballot measures, lobbying, litigation, and regulatory engagement.",
     title: "The Long Game: Vegan Legislative and Political Activism"
   },
   {
-    path: "blog-articles/suffering_humans_vs_animals.html",
+    path: "blog-articles/veganism/suffering_humans_vs_animals.html",
     publishedAt: "2026-04-16",
     summary: "A scientific and philosophical inquiry into pain, consciousness, emotional depth, and moral scale across humans and other animals.",
     title: "Who Suffers More? Humans vs. Animals"
   },
   {
-    path: "blog-articles/fraud-and-ai.html",
+    path: "blog-articles/ai/fraud-and-ai.html",
     publishedAt: "2026-04-15",
     summary: "A history of fraud from ancient scams to AI-enabled deception, deepfakes, synthetic identities, and the future of trust.",
     title: "The Oldest Game: Fraud in the Age of AI"
   },
   {
-    path: "blog-articles/outages-are-inevitable.html",
+    path: "blog-articles/philosophy/outages-are-inevitable.html",
     publishedAt: "2026-04-14",
     summary: "The physics, mathematics, and organizational science that make failure unavoidable in sufficiently complex systems.",
     title: "Outages Are Inevitable. Here's the Proof."
   },
   {
-    path: "blog-articles/limits-of-knowledge.html",
+    path: "blog-articles/philosophy/limits-of-knowledge.html",
     publishedAt: "2026-04-13",
     summary: "A tour of the theorems, paradoxes, and epistemic boundaries that constrain human and machine intelligence.",
     title: "The Walls of Reason: On the Limits of Knowledge and Intelligence"
   },
   {
-    path: "blog-articles/biology-engineering-challenge.html",
+    path: "blog-articles/philosophy/biology-engineering-challenge.html",
     publishedAt: "2026-04-10",
     summary: "A comparison between human-made complexity and the microscopic machinery of living systems.",
     title: "Life's Impossible Machine: Biology as the Ultimate Engineering Challenge"
   },
   {
-    path: "blog-articles/know-your-rights.html",
+    path: "blog-articles/society-civics/know-your-rights.html",
     publishedAt: "2026-04-07",
     summary: "A civic reference guide to constitutional protections, police encounters, and the rights Americans carry with them.",
     title: "Know Your Rights: A Citizen's Field Guide"
   },
   {
-    path: "blog-articles/mental_health_blog.html",
+    path: "blog-articles/society-civics/mental_health_blog.html",
     publishedAt: "2026-04-06",
     summary: "A long-form look at the human, economic, and moral costs of untreated mental health problems.",
     title: "The Elephant in the Room and the Trillion-Dollar Problem No One Is Trying to Solve"
   },
   {
-    path: "blog-articles/information-security-for-everyone.html",
+    path: "blog-articles/security/information-security-for-everyone.html",
     publishedAt: "2026-03-14",
     summary: "A practical baseline for protecting your accounts, identity, money, and reputation.",
     title: "What Everyone Should Know About Information Security"
   },
   {
-    path: "blog-articles/levels-of-digital-privacy.html",
+    path: "blog-articles/privacy/levels-of-digital-privacy.html",
     publishedAt: "2026-03-11",
     summary: "A threat-model view of privacy, from basic hygiene through high-effort operational security.",
     title: "Levels of Digital Privacy: From No Precautions to Maximum-Effort OPSEC"
   },
   {
-    path: "blog-articles/why-digital-privacy-is-important.html",
+    path: "blog-articles/privacy/why-digital-privacy-is-important.html",
     publishedAt: "2026-03-07",
     summary: "Why privacy matters in ordinary life, security, autonomy, and real-world decision-making.",
     title: "Why Digital Privacy Is Important"
   },
   {
-    path: "blog-articles/event-driven-networks.html",
+    path: "blog-articles/networks/event-driven-networks.html",
     publishedAt: "2026-04-30",
     summary: "How event-driven and messaging networks rewrote the rules of distributed computing, from early pub/sub systems through Kafka-scale event streaming.",
     title: "The Architecture of Asynchrony"
   },
   {
-    path: "blog-articles/networks-performance-reliability.html",
+    path: "blog-articles/networks/networks-performance-reliability.html",
     publishedAt: "2026-04-28",
     summary: "An examination of latency, throughput, caching, redundancy, failover, and the design patterns that make modern networks fast and resilient.",
     title: "Performance & Reliability Models in Computer Networks"
   },
   {
-    path: "blog-articles/ui-structure-concepts.html",
+    path: "blog-articles/web-ui/ui-structure-concepts.html",
     publishedAt: "2026-05-04",
     summary: "A practitioner's guide to the structural concepts that determine how pages are organized, layered, and delivered across the modern web.",
     title: "The Architecture of the Visible Web"
   },
   {
-    path: "blog-articles/vegan-activism-frmwrk.html",
+    path: "blog-articles/veganism/vegan-activism-frmwrk.html",
     publishedAt: "2026-05-03",
     summary: "A cross-cutting strategy model for vegan activism that maps how legislation, markets, culture, and interpersonal persuasion reinforce one another.",
     title: "The Architecture of Change: A Cross-Cutting Framework for Vegan Activism"
   },
   {
-    path: "blog-articles/vegan-education.html",
+    path: "blog-articles/veganism/vegan-education.html",
     publishedAt: "2026-05-02",
     summary: "Why education, research literacy, curriculum design, and myth-busting are foundational long-term levers for plant-based cultural change.",
     title: "The Knowledge Revolution: Education as the Engine of Vegan Change"
   },
   {
-    path: "blog-articles/vegan-infrastructure.html",
+    path: "blog-articles/swe/vegan-infrastructure.html",
     publishedAt: "2026-05-01",
     summary: "How apps, databases, certification systems, and product-discovery tools reduce friction and make vegan choices easier at scale.",
     title: "The Infrastructure of Choice"
   },
   {
-    path: "blog-articles/making-animal-use-obsolete.html",
+    path: "blog-articles/veganism/making-animal-use-obsolete.html",
     publishedAt: "2026-04-17",
     summary: "A strategic survey of plant-based meat, cultivated meat, precision fermentation, and next-generation materials as technologies that can make animal exploitation obsolete.",
     title: "Making Animal Use Obsolete"
   },
   {
-    path: "blog-articles/network_topologies.html",
+    path: "blog-articles/networks/network_topologies.html",
     publishedAt: "2026-04-29",
     summary: "The physical and logical frameworks that determine how data moves, from bus and ring networks to leaf-spine fabrics in modern data centers.",
     title: "Network Topologies: The Architecture of Connectivity"
   },
   {
-    path: "blog-articles/cloud-microservices-networking.html",
+    path: "blog-articles/cloud/cloud-microservices-networking.html",
     publishedAt: "2026-04-16",
     summary: "A technical survey of VPCs, subnet design, API gateways, service meshes, and the east-west and north-south flows of cloud-native systems.",
     title: "Cloud & Microservices Networking: Architecture, Patterns, and Frontiers"
   },
   {
-    path: "blog-articles/mass-media-vegan-activism.html",
+    path: "blog-articles/veganism/mass-media-vegan-activism.html",
     publishedAt: "2026-04-22",
     summary: "An analysis of documentaries, advertising, influencers, investigative journalism, and other mass-media channels for vegan advocacy.",
     title: "Reaching Millions: The Promise and Limits of Mass Persuasion"
   },
   {
-    path: "blog-articles/protocol-oriented-design.html",
+    path: "blog-articles/networks/protocol-oriented-design.html",
     publishedAt: "2026-04-27",
     summary: "From TCP handshakes to QUIC and HTTP/3, a long-form look at how protocol design decisions shape the internet's performance and behavior.",
     title: "Protocol-Oriented Design: How Communication Rules Shape the Internet"
   },
   {
-    path: "blog-articles/vegan-advocacy-interpersonal.html",
+    path: "blog-articles/veganism/vegan-advocacy-interpersonal.html",
     publishedAt: "2026-04-21",
     summary: "A research-grounded guide to one-on-one vegan advocacy, including street outreach, personal conversations, and the psychology of persuasion.",
     title: "The Art of the Conversation"
   },
   {
-    path: "blog-articles/vegan-community.html",
+    path: "blog-articles/veganism/vegan-community.html",
     publishedAt: "2026-04-20",
     summary: "Why meetups, mentorship, online communities, and shared identity are central to helping people stay vegan over time.",
     title: "Together We Root: Making Veganism Socially Sustainable"
   },
   {
-    path: "blog-articles/ui-components-article.html",
+    path: "blog-articles/web-ui/ui-components-article.html",
     publishedAt: "2026-04-26",
     summary: "A practitioner's guide to component taxonomy, interaction patterns, and the design theory behind robust user interfaces.",
     title: "The Anatomy of a User Interface"
   },
   {
-    path: "blog-articles/privacy.html",
+    path: "blog-articles/privacy/privacy.html",
     publishedAt: "2026-05-06",
     summary: "A practical guide to reducing browser tracking, mobile telemetry, identity correlation, and common forms of quiet data leakage.",
     title: "Practical Defenses Against Tracking and Data Leakage"
   },
   {
-    path: "blog-articles/distributed-systems-networks.html",
+    path: "blog-articles/networks/distributed-systems-networks.html",
     publishedAt: "2026-05-06",
     summary: "A distributed-systems view of computer networks, covering coordination, failure, service discovery, CAP trade-offs, and the architecture of resilient communication.",
     title: "The Network as a System: A Distributed Computing Perspective"
   },
   {
-    path: "blog-articles/pl-philosophy.html",
+    path: "blog-articles/swe/pl-philosophy.html",
     publishedAt: "2026-05-05",
     summary: "A long-form essay on how logic, ideology, abstraction, and language design shape the philosophy of programming languages.",
     title: "The Art of Language: Philosophy, Ideology, and the Design of Programming Languages"
   },
   {
-    path: "blog-articles/graph-theory-networks.html",
+    path: "blog-articles/networks/graph-theory-networks.html",
     publishedAt: "2026-05-05",
     summary: "An extended exploration of nodes, edges, paths, spanning structures, and why graph theory is the mathematical grammar of networking.",
     title: "The Graph Behind the Network: A Mathematical Anatomy of Routing"
   },
   {
-    path: "blog-articles/hierarchical-network-design.html",
+    path: "blog-articles/networks/hierarchical-network-design.html",
     publishedAt: "2026-05-05",
     summary: "A history and analysis of hierarchical enterprise network design, from classic three-tier campus models to spine-leaf fabrics and SDN-era adaptations.",
     title: "Hierarchical Design Models in Enterprise Networking"
   },
   {
-    path: "blog-articles/halting-problem.html",
+    path: "blog-articles/swe/halting-problem.html",
     publishedAt: "2026-06-19",
     summary: "A history of Turing's 1936 halting proof, explaining why no general procedure can decide for every program and input whether computation will ever stop.",
     title: "Halt, or Run Forever — Turing and the Halting Problem"
   },
   {
-    path: "blog-articles/authorized-adversary.html",
+    path: "blog-articles/security/pentesting/authorized-adversary.html",
     publishedAt: "2026-06-19",
     summary: "An end-to-end field manual for network penetration testing, covering reconnaissance, enumeration, exploitation, lateral movement, segmentation testing, and engagement discipline.",
     title: "Authorized Adversary — A Field Manual for Network Penetration Testing"
   },
   {
-    path: "blog-articles/active-directory-pentesting.html",
+    path: "blog-articles/security/pentesting/active-directory-pentesting.html",
     publishedAt: "2026-06-18",
     summary: "An expert field manual on Active Directory penetration testing, covering Kerberoasting, delegation abuse, AD CS attack paths, privilege escalation, and domain compromise.",
     title: "Active Directory Pentesting — A Field Manual for Enterprise Windows Environments"
   },
   {
-    path: "blog-articles/semmelweis-childbed-fever.html",
+    path: "blog-articles/philosophy/semmelweis-childbed-fever.html",
     publishedAt: "2026-06-18",
     summary: "A historical account of Ignaz Semmelweis, childbed fever, handwashing, and the institutional resistance that delayed one of medicine's most important breakthroughs.",
     title: "The Indigestible Truth — Semmelweis, Childbed Fever, and the Birth of Germ Theory"
   },
   {
-    path: "blog-articles/phasor-measurement-units.html",
+    path: "blog-articles/networks/phasor-measurement-units.html",
     publishedAt: "2026-06-18",
     summary: "A technical briefing on phasor measurement units, synchrophasor protocols, deployment architecture, data quality, and the real-time grid dynamics PMUs make visible.",
     title: "Phasor Measurement Units — Deployment, Data Quality, and Real-Time Grid Dynamics"
   },
   {
-    path: "blog-articles/it-sector-security.html",
+    path: "blog-articles/security/critical-infrastructure/it-sector-security.html",
     publishedAt: "2026-06-17",
     summary: "An expert technical reference on cybersecurity in the U.S. Information Technology sector, covering sector dependencies, attack surfaces, mitigation frameworks, and systemic risk.",
     title: "The Load-Bearing Layer: Cyber and Information Security in the U.S. Information Technology Sector"
   },
   {
-    path: "blog-articles/aether.html",
+    path: "blog-articles/physics/aether.html",
     publishedAt: "2026-06-17",
     summary: "A physics history of the luminiferous aether, the Michelson-Morley experiment, and the null result that helped force a reconstruction of space and time.",
     title: "The Wind That Was Never There — Michelson, Morley, and the Death of the Aether"
   },
   {
-    path: "blog-articles/government-services-facilities-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/government-services-facilities-cybersecurity.html",
     publishedAt: "2026-06-17",
     summary: "An expert technical briefing on cybersecurity in U.S. government services and facilities, spanning the public-sector technology estate, threat landscape, and defensive priorities.",
     title: "Defending the State — Cyber and Information Security in U.S. Government Services and Facilities"
   },
   {
-    path: "blog-articles/critical-manufacturing-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/critical-manufacturing-cybersecurity.html",
     publishedAt: "2026-06-16",
     summary: "An in-depth technical report on cyber and information security in U.S. critical manufacturing, including OT exposure, cascade risk, mitigation frameworks, and open challenges.",
     title: "The Sector That Builds the Others: Cyber and Information Security in U.S. Critical Manufacturing"
   },
   {
-    path: "blog-articles/commons.html",
+    path: "blog-articles/philosophy/commons.html",
     publishedAt: "2026-06-16",
     summary: "A field guide to tragedy-of-the-commons problems, collective-action failure, governance strategies, and the modern shared resources now under pressure.",
     title: "The Tragedy of the Commons — A Field Guide to Collective-Action Failure"
   },
   {
-    path: "blog-articles/emergency-services-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/emergency-services-cybersecurity.html",
     publishedAt: "2026-06-16",
     summary: "A technical briefing on cybersecurity in the U.S. Emergency Services Sector, including dispatch, radio, responder systems, sector interdependence, and resilience priorities.",
     title: "When the Call for Help Can't Get Through — Cybersecurity in the U.S. Emergency Services Sector"
   },
   {
-    path: "blog-articles/chemical-sector-cybersecurity.html",
+    path: "blog-articles/security/critical-infrastructure/chemical-sector-cybersecurity.html",
     publishedAt: "2026-06-14",
     summary: "A technical study of cyber and information security in the U.S. chemical sector, with emphasis on industrial control, safety systems, cascade potential, and mitigation frameworks.",
     title: "The Last Line of Defense — Cyber and Information Security in the U.S. Chemical Sector"
   },
   {
-    path: "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html",
+    path: "blog-articles/physics/cutting-the-uncuttable-radioactivity-1896-1902.html",
     publishedAt: "2026-06-14",
     summary: "A scientific history of radioactivity from 1896 to 1902, showing how Becquerel and the Curies shattered the idea of the eternal, indivisible atom.",
     title: "Cutting the Uncuttable — Radioactivity and the End of the Eternal Atom (1896–1902)"
   },
   {
-    path: "blog-articles/grassroots-vegan-activism.html",
+    path: "blog-articles/veganism/grassroots-vegan-activism.html",
     publishedAt: "2026-06-14",
     summary: "A research-driven study of grassroots vegan activism, covering movement structure, local tactics, coalition-building, strategic limits, and open questions.",
     title: "From the Roots Up — The Theory and Practice of Grassroots Vegan Activism"
   },
   {
-    path: "blog-articles/cloud-service-models.html",
+    path: "blog-articles/cloud/multicloud/cloud-service-models.html",
     publishedAt: "2026-06-14",
     summary: "A technical breakdown of IaaS, PaaS, and SaaS, comparing control boundaries, operational responsibilities, security tradeoffs, and architecture implications.",
     title: "Cloud Service Models: IaaS, PaaS, and SaaS – A Deeper Look"
@@ -2399,9 +2450,17 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/ai/agi/what-would-tell-them-apart.html": ["AGI", "AI & ML", "AI Strategy", "Philosophy"],
+  "blog-articles/ai/ai-security/ai-security-frameworks.html": ["AI Security", "Security", "AI & ML", "AI Strategy", "Software Security"],
+  "blog-articles/competitive-programming/trees.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/fluid-mechanics/turbulence-and-the-closure-problem.html": ["Fluid Mechanics", "Physics", "Engineering", "Differential Equations"],
+  "blog-articles/cloud/multicloud/multicloud-patterns.html": ["Cloud", "AWS", "Azure", "GCP", "Networks", "Dev(Sec)Ops", "Software Design & Architecture"],
   "blog-articles/swe/api-design.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "Security", "SDLC"],
+  "blog-articles/swe/configuration-management.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC", "Dev(Sec)Ops", "Security"],
+  "blog-articles/swe/concurrency.html": ["Programming & Software", "Engineering", "Operating Systems", "Software Design & Architecture"],
   "blog-articles/swe/data-modeling.html": ["Programming & Software", "Engineering", "Data Engineering", "Software Design & Architecture"],
   "blog-articles/swe/distributed-systems.html": ["Programming & Software", "Engineering", "Networks", "Software Design & Architecture", "Dev(Sec)Ops"],
+  "blog-articles/swe/refactoring-in-swe.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
   "blog-articles/swe/requirements-engineering.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
   "blog-articles/swe/software-maintenance.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC", "Dev(Sec)Ops"],
   "blog-articles/swe/software-quality.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
@@ -2429,200 +2488,200 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/swe/security-in-swe.html": ["Security", "Software Security", "Programming & Software", "SDLC"],
   "blog-articles/swe/software-architecture.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
   "blog-articles/swe/systems-thinking-software-engineering.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
-  "blog-articles/aws/aws-networking-services.html": ["Cloud", "AWS", "Networks", "Dev(Sec)Ops", "Security"],
-  "blog-articles/chicxulub.html": ["Earth Sciences", "Physics", "Philosophy"],
-  "blog-articles/commercial-facilities-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/the-self-in-question.html": ["Philosophy"],
-  "blog-articles/dams-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/food-agriculture-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/chaos-theory-butterfly-effect.html": ["Math", "Physics", "Philosophy"],
-  "blog-articles/communications-sector-cybersecurity.html": ["Security", "Networks", "Engineering"],
-  "blog-articles/black-hole-singularities.html": ["Physics", "Philosophy", "Cosmology"],
-  "blog-articles/defense-industrial-base-cybersecurity.html": ["Security", "Engineering", "Society & Civics"],
-  "blog-articles/libet-free-will.html": ["Philosophy"],
-  "blog-articles/nuclear-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/dark-energy-accelerating-universe.html": ["Physics", "Cosmology"],
-  "blog-articles/hph-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/financial-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering", "Finance"],
-  "blog-articles/many-worlds-interpretation.html": ["Physics", "Philosophy"],
-  "blog-articles/transportation-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/water-cyber.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/energy-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/continuum-hypothesis.html": ["Math", "Philosophy"],
-  "blog-articles/zero-click-attacks.html": ["Security", "Mobile App Development", "Operating Systems"],
-  "blog-articles/the-nature-of-the-crime.html": ["Philosophy", "Society & Civics"],
-  "blog-articles/timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
-  "blog-articles/power-analysis-attacks.html": ["Security", "Engineering", "Side-Channel Attacks"],
-  "blog-articles/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
-  "blog-articles/windows-legacy-security.html": ["Security", "Operating Systems", "Pentesting", "Cyber-Physical Systems"],
-  "blog-articles/cobol.html": ["Programming & Software", "Programming Languages", "Engineering"],
-  "blog-articles/advanced-graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
-  "blog-articles/cache-invalidation.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops"],
-  "blog-articles/its-always-dns.html": ["Networks", "Security"],
-  "blog-articles/printer-troubleshooting.html": ["Engineering", "Operating Systems"],
-  "blog-articles/ping.html": ["Networks"],
-  "blog-articles/cpp.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Engineering"],
-  "blog-articles/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
-  "blog-articles/supply-chain-vulnerabilities.html": ["Security", "Dev(Sec)Ops", "Programming & Software", "Engineering"],
-  "blog-articles/impossibility.html": ["Philosophy", "Math", "Physics", "Engineering"],
-  "blog-articles/cloud-vulnerabilities.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops"],
-  "blog-articles/aws-compute-services.html": ["Cloud", "AWS", "Programming & Software", "Dev(Sec)Ops", "Kubernetes"],
-  "blog-articles/app-vulns.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/curl-reference.html": ["Programming & Software", "Networks"],
-  "blog-articles/net_troubleshooting_tools.html": ["Networks", "Security"],
-  "blog-articles/hardware-installation-best-practices.html": ["Engineering", "Hardware"],
-  "blog-articles/storage-devices.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/cpu-fundamentals.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/ram.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/spring-cache.html": ["Java", "Programming & Software", "Dev(Sec)Ops", "Spring"],
-  "blog-articles/complexity-classes.html": ["Math", "Programming & Software"],
-  "blog-articles/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
-  "blog-articles/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
-  "blog-articles/system-reliability-patterns.html": ["Engineering", "Dev(Sec)Ops", "Programming & Software"],
-  "blog-articles/spring-cloud-devops.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Kubernetes", "Networks", "Spring"],
-  "blog-articles/secure-architecture.html": ["Security", "Engineering", "Dev(Sec)Ops", "Software Design & Architecture"],
-  "blog-articles/rust-programming-language.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Security"],
-  "blog-articles/rlc-circuit-equation.html": ["Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
-  "blog-articles/ot-ics-scada-pentesting.html": ["Security", "Cyber-Physical Systems", "Networks", "Pentesting"],
-  "blog-articles/interval-problems-playbook.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/greedy-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/django-architecture-scaling.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops", "Django"],
-  "blog-articles/devsecops-engineer.html": ["Dev(Sec)Ops", "Security", "Programming & Software", "Cloud"],
-  "blog-articles/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
-  "blog-articles/ai-cannot-compensate-for-natural-stupidity.html": ["AI & ML", "Philosophy", "Society & Civics"],
-  "blog-articles/2d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/automotive-cybersecurity.html": ["Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
-  "blog-articles/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
-  "blog-articles/stacks-in-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
-  "blog-articles/models-of-reality.html": ["Philosophy", "AI & ML", "Math", "Physics"],
-  "blog-articles/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
-  "blog-articles/dc-infrastructure-security.html": ["Security", "Networks", "Dev(Sec)Ops", "Engineering"],
-  "blog-articles/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/nmap-cloud-pentesting.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops", "Nmap", "Pentesting"],
-  "blog-articles/css-methodologies.html": ["Web & UI", "Programming & Software"],
-  "blog-articles/code-review-best-practices.html": ["Programming & Software", "Engineering"],
-  "blog-articles/backend-performance.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops"],
-  "blog-articles/arrays-and-hashing-cp.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/two-pointers.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/trusted-hardware.html": ["Security", "Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/nmap-red-team.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/1d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/angular-performance.html": ["Web & UI", "Programming & Software", "Angular"],
-  "blog-articles/animation-angular.html": ["Web & UI", "Programming & Software", "Angular"],
-  "blog-articles/internationalization-angular.html": ["Web & UI", "Programming & Software", "Angular"],
-  "blog-articles/nmap-active-directory.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/nmap-advanced.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/nmap-fundamentals.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/nmap-ics-ot-pentesting.html": ["Security", "Networks", "Cyber-Physical Systems", "Nmap", "Pentesting"],
-  "blog-articles/nmap-reconnaissance-platform.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/version_control.html": ["Programming & Software"],
-  "blog-articles/soft-robotics.html": ["Cyber-Physical Systems", "Engineering"],
-  "blog-articles/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
-  "blog-articles/rewriting_history_git.html": ["Programming & Software"],
-  "blog-articles/site-reliability-engineering.html": ["Engineering", "Dev(Sec)Ops", "Programming & Software", "SDLC"],
-  "blog-articles/os-vm-isolation.html": ["Operating Systems", "Security", "Programming & Software"],
-  "blog-articles/network-observability.html": ["Networks", "Security"],
-  "blog-articles/mlops.html": ["AI & ML", "Engineering", "Programming & Software"],
-  "blog-articles/messaging-security.html": ["Security", "Privacy", "Programming & Software"],
-  "blog-articles/csharp.html": ["Programming & Software", "Programming Languages"],
-  "blog-articles/concurrency_python.html": ["Python", "Programming & Software"],
-  "blog-articles/aspnet-orm.html": ["ASP.NET", "Programming & Software"],
-  "blog-articles/aspnet-core-testing.html": ["ASP.NET", "Programming & Software", "SDLC"],
-  "blog-articles/anonymous_comm.html": ["Privacy", "Security", "Networks"],
-  "blog-articles/aspnet-dependency-injection.html": ["ASP.NET", "Programming & Software"],
-  "blog-articles/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
-  "blog-articles/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
-  "blog-articles/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "Dev(Sec)Ops"],
-  "blog-articles/docker-security.html": ["Docker", "Security", "Dev(Sec)Ops", "Programming & Software"],
-  "blog-articles/dockerfile.html": ["Docker", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/go-language.html": ["Programming & Software", "Programming Languages"],
-  "blog-articles/kubernetes-deployment-patterns.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Engineering", "Networks", "Kubernetes", "Dev(Sec)Ops"],
-  "blog-articles/malware-analysis.html": ["Security"],
-  "blog-articles/managing-docker-containers.html": ["Docker", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/mojo.html": ["Programming & Software", "Programming Languages", "AI & ML"],
-  "blog-articles/autonomous-vehicles.html": ["AI & ML", "Cyber-Physical Systems", "Engineering", "Robotics"],
-  "blog-articles/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
-  "blog-articles/data-quality.html": ["AI & ML", "Data Engineering", "Engineering", "Programming & Software"],
-  "blog-articles/container-orchestration-ecosystem.html": ["Docker", "Kubernetes", "Dev(Sec)Ops", "Programming & Software"],
-  "blog-articles/digital-control-systems.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering", "IoT"],
-  "blog-articles/efficient-edge-ai.html": ["AI & ML", "Cloud", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/vibe-coding-risk-framework.html": ["AI & ML", "AI Strategy", "Programming & Software", "Security", "Dev(Sec)Ops"],
-  "blog-articles/wireless-networking.html": ["Networks", "Security"],
-  "blog-articles/api-authentication.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/bit-manipulation.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/error-prevention-high-stakes.html": ["Engineering"],
-  "blog-articles/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
-  "blog-articles/frontend-performance.html": ["Web & UI", "Programming & Software"],
-  "blog-articles/purple-teamer-role.html": ["Security"],
-  "blog-articles/service-mesh.html": ["Cloud", "Networks", "Programming & Software", "Kubernetes", "Dev(Sec)Ops"],
-  "blog-articles/system-design-interview-prep.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
-  "blog-articles/lua-programming-language.html": ["Programming & Software", "Programming Languages"],
-  "blog-articles/cyber-defense-forensics-analyst.html": ["Security"],
-  "blog-articles/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
-  "blog-articles/threat-hunter-role.html": ["Security"],
-  "blog-articles/swift-programming-language.html": ["Programming & Software", "Programming Languages", "Mobile App Development"],
-  "blog-articles/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
-  "blog-articles/red-teamer-infosec.html": ["Security"],
-  "blog-articles/mcp.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "Security"],
-  "blog-articles/info-access-debate.html": ["Society & Civics", "Philosophy"],
-  "blog-articles/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "IoT"],
-  "blog-articles/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
-  "blog-articles/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
-  "blog-articles/spring-testing-article.html": ["Java", "Programming & Software", "Security", "Dev(Sec)Ops", "Docker", "Spring"],
-  "blog-articles/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
-  "blog-articles/planning-reduction-sat-modelchecking.html": ["AI & ML", "Programming & Software", "Math"],
-  "blog-articles/math-geometry-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/java-build-tools.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
-  "blog-articles/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering", "IoT"],
-  "blog-articles/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
-  "blog-articles/ai-model-vulnerabilities.html": ["AI & ML", "Security", "Dev(Sec)Ops"],
-  "blog-articles/animal-research-science-education.html": ["Veganism", "Society & Civics"],
-  "blog-articles/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
-  "blog-articles/api-security-best-practices.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/newtons_second_law_dynamics.html": ["Physics", "Engineering", "Differential Equations"],
-  "blog-articles/non-euclidean-geometry.html": ["Math", "Philosophy"],
-  "blog-articles/drl-humanoid-robotics.html": ["AI & ML", "Cyber-Physical Systems", "Engineering", "Robotics"],
-  "blog-articles/causal_ai.html": ["AI & ML"],
-  "blog-articles/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
-  "blog-articles/hidden-animal-ingredients.html": ["Veganism"],
-  "blog-articles/action-model-learning.html": ["AI & ML", "Programming & Software"],
-  "blog-articles/explainable-ai-lime-shap.html": ["AI & ML"],
-  "blog-articles/insects-and-small-animals.html": ["Veganism", "Philosophy"],
-  "blog-articles/automated-planning.html": ["AI & ML", "Programming & Software"],
-  "blog-articles/digital-privacy-levels.html": ["Privacy", "Security"],
-  "blog-articles/digital-privacy-l4-l5.html": ["Privacy", "Security"],
-  "blog-articles/grc-enterprise-ai-data-governance.html": ["AI & ML", "AI Strategy", "Security", "Society & Civics"],
-  "blog-articles/sdn-ibn-article.html": ["Networks", "Programming & Software"],
-  "blog-articles/market-based-vegan-activism.html": ["Business", "Veganism", "Society & Civics"],
-  "blog-articles/investigations-exposure-article.html": ["Veganism", "Society & Civics"],
-  "blog-articles/vegan_cultural_change.html": ["Veganism", "Society & Civics"],
-  "blog-articles/network-layered-models.html": ["Networks"],
-  "blog-articles/vegan-behavioral-interventions.html": ["Veganism", "Society & Civics"],
-  "blog-articles/zero-trust-architecture.html": ["Security", "Networks", "Dev(Sec)Ops"],
-  "blog-articles/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems", "IoT"],
-  "blog-articles/vegan_business_models.html": ["Business", "Veganism", "Society & Civics"],
-  "blog-articles/learning-modalities.html": ["Learning", "Society & Civics"],
-  "blog-articles/corporate-vegan-pressure.html": ["Veganism", "Society & Civics"],
-  "blog-articles/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "Control Theory & Engineering"],
-  "blog-articles/vegan-activism-incentives.html": ["Veganism", "Society & Civics"],
-  "blog-articles/industrial-protocol-design.html": ["Cyber-Physical Systems", "Networks", "Security"],
-  "blog-articles/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "IoT"],
-  "blog-articles/us-citizen-politics-guide.html": ["Society & Civics"],
-  "blog-articles/vegan-legislative-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/suffering_humans_vs_animals.html": ["Veganism", "Philosophy"],
-  "blog-articles/fraud-and-ai.html": ["AI & ML", "Security", "Society & Civics"],
-  "blog-articles/outages-are-inevitable.html": ["Engineering", "Philosophy"],
-  "blog-articles/limits-of-knowledge.html": ["Philosophy", "AI & ML"],
-  "blog-articles/biology-engineering-challenge.html": ["Engineering", "Philosophy"],
-  "blog-articles/what-is-reason.html": ["Philosophy"],
-  "blog-articles/multi-agent-distributed-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/ecosystem-convergence.html": ["Cyber-Physical Systems", "Robotics", "IoT", "Networks"],
-  "blog-articles/model-predictive-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/nonfunctional-requirements.html": ["Programming & Software", "Software Design & Architecture", "SDLC"],
-  "blog-articles/rails-security.html": ["Security", "Software Security", "Programming & Software", "Programming Languages"],
-  "blog-articles/spring-framework-sec.html": ["Java", "Security", "Software Security", "Programming & Software", "Spring"],
+  "blog-articles/cloud/aws/aws-networking-services.html": ["Cloud", "AWS", "Networks", "Dev(Sec)Ops", "Security"],
+  "blog-articles/physics/chicxulub.html": ["Earth Sciences", "Physics", "Philosophy"],
+  "blog-articles/security/critical-infrastructure/commercial-facilities-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/philosophy/the-self-in-question.html": ["Philosophy"],
+  "blog-articles/security/critical-infrastructure/dams-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/security/critical-infrastructure/food-agriculture-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/physics/chaos-theory-butterfly-effect.html": ["Math", "Physics", "Philosophy"],
+  "blog-articles/security/critical-infrastructure/communications-sector-cybersecurity.html": ["Security", "Networks", "Engineering"],
+  "blog-articles/physics/cosmology/black-hole-singularities.html": ["Physics", "Philosophy", "Cosmology"],
+  "blog-articles/security/critical-infrastructure/defense-industrial-base-cybersecurity.html": ["Security", "Engineering", "Society & Civics"],
+  "blog-articles/philosophy/libet-free-will.html": ["Philosophy"],
+  "blog-articles/security/critical-infrastructure/nuclear-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/physics/cosmology/dark-energy-accelerating-universe.html": ["Physics", "Cosmology"],
+  "blog-articles/security/critical-infrastructure/hph-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/security/critical-infrastructure/financial-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering", "Finance"],
+  "blog-articles/physics/many-worlds-interpretation.html": ["Physics", "Philosophy"],
+  "blog-articles/security/critical-infrastructure/transportation-cyber-security.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/security/critical-infrastructure/water-cyber.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/security/critical-infrastructure/energy-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/math/continuum-hypothesis.html": ["Math", "Philosophy"],
+  "blog-articles/security/zero-click-attacks.html": ["Security", "Mobile App Development", "Operating Systems"],
+  "blog-articles/philosophy/the-nature-of-the-crime.html": ["Philosophy", "Society & Civics"],
+  "blog-articles/security/side-channel/timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
+  "blog-articles/security/side-channel/power-analysis-attacks.html": ["Security", "Engineering", "Side-Channel Attacks"],
+  "blog-articles/mobile/android/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
+  "blog-articles/security/pentesting/windows-legacy-security.html": ["Security", "Operating Systems", "Pentesting", "Cyber-Physical Systems"],
+  "blog-articles/programming-languages/cobol.html": ["Programming & Software", "Programming Languages", "Engineering"],
+  "blog-articles/competitive-programming/advanced-graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/swe/cache-invalidation.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops"],
+  "blog-articles/security/its-always-dns.html": ["Networks", "Security"],
+  "blog-articles/operating-systems/printer-troubleshooting.html": ["Engineering", "Operating Systems"],
+  "blog-articles/networks/ping.html": ["Networks"],
+  "blog-articles/programming-languages/cpp.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Engineering"],
+  "blog-articles/competitive-programming/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/security/supply-chain-vulnerabilities.html": ["Security", "Dev(Sec)Ops", "Programming & Software", "Engineering"],
+  "blog-articles/physics/impossibility.html": ["Philosophy", "Math", "Physics", "Engineering"],
+  "blog-articles/cloud/multicloud/cloud-vulnerabilities.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops"],
+  "blog-articles/cloud/aws/aws-compute-services.html": ["Cloud", "AWS", "Programming & Software", "Dev(Sec)Ops", "Kubernetes"],
+  "blog-articles/security/app-vulns.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/networks/curl-reference.html": ["Programming & Software", "Networks"],
+  "blog-articles/security/net_troubleshooting_tools.html": ["Networks", "Security"],
+  "blog-articles/hardware/hardware-installation-best-practices.html": ["Engineering", "Hardware"],
+  "blog-articles/hardware/storage-devices.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/hardware/cpu-fundamentals.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/hardware/ram.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/spring/spring-cache.html": ["Java", "Programming & Software", "Dev(Sec)Ops", "Spring"],
+  "blog-articles/swe/complexity-classes.html": ["Math", "Programming & Software"],
+  "blog-articles/security/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
+  "blog-articles/cyber-physical-systems/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
+  "blog-articles/swe/system-reliability-patterns.html": ["Engineering", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/spring/spring-cloud-devops.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Kubernetes", "Networks", "Spring"],
+  "blog-articles/security/secure-architecture.html": ["Security", "Engineering", "Dev(Sec)Ops", "Software Design & Architecture"],
+  "blog-articles/programming-languages/rust-programming-language.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Security"],
+  "blog-articles/physics/rlc-circuit-equation.html": ["Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
+  "blog-articles/security/pentesting/ot-ics-scada-pentesting.html": ["Security", "Cyber-Physical Systems", "Networks", "Pentesting"],
+  "blog-articles/competitive-programming/interval-problems-playbook.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/greedy-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/swe/django-architecture-scaling.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops", "Django"],
+  "blog-articles/cloud/devsecops-engineer.html": ["Dev(Sec)Ops", "Security", "Programming & Software", "Cloud"],
+  "blog-articles/angular/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
+  "blog-articles/ai/ai-cannot-compensate-for-natural-stupidity.html": ["AI & ML", "Philosophy", "Society & Civics"],
+  "blog-articles/competitive-programming/2d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/security/critical-infrastructure/automotive-cybersecurity.html": ["Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
+  "blog-articles/security/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
+  "blog-articles/competitive-programming/stacks-in-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/security/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
+  "blog-articles/physics/models-of-reality.html": ["Philosophy", "AI & ML", "Math", "Physics"],
+  "blog-articles/mobile/android/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
+  "blog-articles/security/dc-infrastructure-security.html": ["Security", "Networks", "Dev(Sec)Ops", "Engineering"],
+  "blog-articles/security/nmap/nmap-mainframe-pentesting.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/cloud/multicloud/nmap-cloud-pentesting.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops", "Nmap", "Pentesting"],
+  "blog-articles/web-ui/css-methodologies.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/swe/code-review-best-practices.html": ["Programming & Software", "Engineering"],
+  "blog-articles/swe/backend-performance.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops"],
+  "blog-articles/competitive-programming/arrays-and-hashing-cp.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/two-pointers.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/security/trusted-hardware.html": ["Security", "Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/security/nmap/nmap-red-team.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/competitive-programming/1d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/angular/angular-performance.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/animation-angular.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/angular/internationalization-angular.html": ["Web & UI", "Programming & Software", "Angular"],
+  "blog-articles/security/nmap/nmap-active-directory.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/security/nmap/nmap-advanced.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/security/nmap/nmap-fundamentals.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/security/nmap/nmap-ics-ot-pentesting.html": ["Security", "Networks", "Cyber-Physical Systems", "Nmap", "Pentesting"],
+  "blog-articles/security/nmap/nmap-reconnaissance-platform.html": ["Security", "Networks", "Nmap", "Pentesting"],
+  "blog-articles/swe/version_control.html": ["Programming & Software"],
+  "blog-articles/cyber-physical-systems/soft-robotics.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/security/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
+  "blog-articles/swe/rewriting_history_git.html": ["Programming & Software"],
+  "blog-articles/swe/site-reliability-engineering.html": ["Engineering", "Dev(Sec)Ops", "Programming & Software", "SDLC"],
+  "blog-articles/security/os-vm-isolation.html": ["Operating Systems", "Security", "Programming & Software"],
+  "blog-articles/security/network-observability.html": ["Networks", "Security"],
+  "blog-articles/ai/mlops.html": ["AI & ML", "Engineering", "Programming & Software"],
+  "blog-articles/security/messaging-security.html": ["Security", "Privacy", "Programming & Software"],
+  "blog-articles/programming-languages/csharp.html": ["Programming & Software", "Programming Languages"],
+  "blog-articles/python/concurrency_python.html": ["Python", "Programming & Software"],
+  "blog-articles/dotnet/aspnet-orm.html": ["ASP.NET", "Programming & Software"],
+  "blog-articles/dotnet/aspnet-core-testing.html": ["ASP.NET", "Programming & Software", "SDLC"],
+  "blog-articles/privacy/anonymous_comm.html": ["Privacy", "Security", "Networks"],
+  "blog-articles/dotnet/aspnet-dependency-injection.html": ["ASP.NET", "Programming & Software"],
+  "blog-articles/mobile/android/android-app-components.html": ["Programming & Software", "Engineering", "Android", "Mobile App Development"],
+  "blog-articles/networks/control_pyramid.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
+  "blog-articles/devops/docker/docker-data-persistence.html": ["Programming & Software", "Engineering", "Docker", "Dev(Sec)Ops"],
+  "blog-articles/devops/docker/docker-security.html": ["Docker", "Security", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/devops/docker/dockerfile.html": ["Docker", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/go-language.html": ["Programming & Software", "Programming Languages"],
+  "blog-articles/cloud/multicloud/kubernetes-deployment-patterns.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Engineering", "Networks", "Kubernetes", "Dev(Sec)Ops"],
+  "blog-articles/security/malware-analysis.html": ["Security"],
+  "blog-articles/devops/docker/managing-docker-containers.html": ["Docker", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/mojo.html": ["Programming & Software", "Programming Languages", "AI & ML"],
+  "blog-articles/ai/autonomous-vehicles.html": ["AI & ML", "Cyber-Physical Systems", "Engineering", "Robotics"],
+  "blog-articles/swe/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
+  "blog-articles/ai/data-quality.html": ["AI & ML", "Data Engineering", "Engineering", "Programming & Software"],
+  "blog-articles/devops/docker/container-orchestration-ecosystem.html": ["Docker", "Kubernetes", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/cyber-physical-systems/digital-control-systems.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering", "IoT"],
+  "blog-articles/ai/efficient-edge-ai.html": ["AI & ML", "Cloud", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/ai/vibe-coding-risk-framework.html": ["AI & ML", "AI Strategy", "Programming & Software", "Security", "Dev(Sec)Ops"],
+  "blog-articles/security/wireless-networking.html": ["Networks", "Security"],
+  "blog-articles/security/api-authentication.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/competitive-programming/bit-manipulation.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/engineering/error-prevention-high-stakes.html": ["Engineering"],
+  "blog-articles/veganism/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
+  "blog-articles/web-ui/frontend-performance.html": ["Web & UI", "Programming & Software"],
+  "blog-articles/security/purple-teamer-role.html": ["Security"],
+  "blog-articles/cloud/kubernetes/service-mesh.html": ["Cloud", "Networks", "Programming & Software", "Kubernetes", "Dev(Sec)Ops"],
+  "blog-articles/swe/system-design-interview-prep.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/programming-languages/lua-programming-language.html": ["Programming & Software", "Programming Languages"],
+  "blog-articles/security/cyber-defense-forensics-analyst.html": ["Security"],
+  "blog-articles/veganism/vgn-pressure-campaigns.html": ["Veganism", "Society & Civics"],
+  "blog-articles/security/threat-hunter-role.html": ["Security"],
+  "blog-articles/programming-languages/swift-programming-language.html": ["Programming & Software", "Programming Languages", "Mobile App Development"],
+  "blog-articles/swe/senior-engineer-thinking.html": ["Programming & Software", "Engineering"],
+  "blog-articles/security/red-teamer-infosec.html": ["Security"],
+  "blog-articles/ai/mcp.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "Security"],
+  "blog-articles/philosophy/info-access-debate.html": ["Society & Civics", "Philosophy"],
+  "blog-articles/cyber-physical-systems/embedded-firmware-layer.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "IoT"],
+  "blog-articles/networks/edge-computing-layer.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Programming & Software"],
+  "blog-articles/networks/device-drivers-cps.html": ["Cyber-Physical Systems", "Engineering", "Programming & Software", "Networks"],
+  "blog-articles/spring/spring-testing-article.html": ["Java", "Programming & Software", "Security", "Dev(Sec)Ops", "Docker", "Spring"],
+  "blog-articles/cyber-physical-systems/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
+  "blog-articles/ai/planning-reduction-sat-modelchecking.html": ["AI & ML", "Programming & Software", "Math"],
+  "blog-articles/competitive-programming/math-geometry-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/java/java-build-tools.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/veganism/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
+  "blog-articles/cyber-physical-systems/embedded-compute-layer.html": ["Cyber-Physical Systems", "Engineering", "IoT"],
+  "blog-articles/cyber-physical-systems/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/ai/ai-model-vulnerabilities.html": ["AI & ML", "Security", "Dev(Sec)Ops"],
+  "blog-articles/veganism/animal-research-science-education.html": ["Veganism", "Society & Civics"],
+  "blog-articles/veganism/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
+  "blog-articles/security/api-security-best-practices.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/physics/newtons_second_law_dynamics.html": ["Physics", "Engineering", "Differential Equations"],
+  "blog-articles/math/non-euclidean-geometry.html": ["Math", "Philosophy"],
+  "blog-articles/ai/drl-humanoid-robotics.html": ["AI & ML", "Cyber-Physical Systems", "Engineering", "Robotics"],
+  "blog-articles/ai/causal_ai.html": ["AI & ML"],
+  "blog-articles/security/side-channel/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
+  "blog-articles/veganism/hidden-animal-ingredients.html": ["Veganism"],
+  "blog-articles/ai/action-model-learning.html": ["AI & ML", "Programming & Software"],
+  "blog-articles/ai/explainable-ai-lime-shap.html": ["AI & ML"],
+  "blog-articles/veganism/insects-and-small-animals.html": ["Veganism", "Philosophy"],
+  "blog-articles/ai/automated-planning.html": ["AI & ML", "Programming & Software"],
+  "blog-articles/privacy/digital-privacy-levels.html": ["Privacy", "Security"],
+  "blog-articles/privacy/digital-privacy-l4-l5.html": ["Privacy", "Security"],
+  "blog-articles/ai/grc-enterprise-ai-data-governance.html": ["AI & ML", "AI Strategy", "Security", "Society & Civics"],
+  "blog-articles/networks/sdn-ibn-article.html": ["Networks", "Programming & Software"],
+  "blog-articles/veganism/market-based-vegan-activism.html": ["Business", "Veganism", "Society & Civics"],
+  "blog-articles/veganism/investigations-exposure-article.html": ["Veganism", "Society & Civics"],
+  "blog-articles/veganism/vegan_cultural_change.html": ["Veganism", "Society & Civics"],
+  "blog-articles/networks/network-layered-models.html": ["Networks"],
+  "blog-articles/veganism/vegan-behavioral-interventions.html": ["Veganism", "Society & Civics"],
+  "blog-articles/security/zero-trust-architecture.html": ["Security", "Networks", "Dev(Sec)Ops"],
+  "blog-articles/networks/edge-iot-networking.html": ["Networks", "Cyber-Physical Systems", "IoT"],
+  "blog-articles/veganism/vegan_business_models.html": ["Business", "Veganism", "Society & Civics"],
+  "blog-articles/society-civics/learning-modalities.html": ["Learning", "Society & Civics"],
+  "blog-articles/veganism/corporate-vegan-pressure.html": ["Veganism", "Society & Civics"],
+  "blog-articles/security/critical-infrastructure/smart-grid-challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "Control Theory & Engineering"],
+  "blog-articles/veganism/vegan-activism-incentives.html": ["Veganism", "Society & Civics"],
+  "blog-articles/security/critical-infrastructure/industrial-protocol-design.html": ["Cyber-Physical Systems", "Networks", "Security"],
+  "blog-articles/security/critical-infrastructure/medical_device_engineering_challenges.html": ["Cyber-Physical Systems", "Engineering", "Security", "IoT"],
+  "blog-articles/society-civics/us-citizen-politics-guide.html": ["Society & Civics"],
+  "blog-articles/veganism/vegan-legislative-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/veganism/suffering_humans_vs_animals.html": ["Veganism", "Philosophy"],
+  "blog-articles/ai/fraud-and-ai.html": ["AI & ML", "Security", "Society & Civics"],
+  "blog-articles/philosophy/outages-are-inevitable.html": ["Engineering", "Philosophy"],
+  "blog-articles/philosophy/limits-of-knowledge.html": ["Philosophy", "AI & ML"],
+  "blog-articles/philosophy/biology-engineering-challenge.html": ["Engineering", "Philosophy"],
+  "blog-articles/philosophy/what-is-reason.html": ["Philosophy"],
+  "blog-articles/cyber-physical-systems/multi-agent-distributed-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/networks/ecosystem-convergence.html": ["Cyber-Physical Systems", "Robotics", "IoT", "Networks"],
+  "blog-articles/cyber-physical-systems/model-predictive-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/swe/nonfunctional-requirements.html": ["Programming & Software", "Software Design & Architecture", "SDLC"],
+  "blog-articles/programming-languages/rails-security.html": ["Security", "Software Security", "Programming & Software", "Programming Languages"],
+  "blog-articles/spring/spring-framework-sec.html": ["Java", "Security", "Software Security", "Programming & Software", "Spring"],
   "blog-articles/spring/spring-asynchronous-programming.html": ["Java", "Programming & Software", "Spring", "Dev(Sec)Ops"],
   "blog-articles/spring/spring-bean-validation.html": ["Java", "Programming & Software", "Spring", "Software Security"],
   "blog-articles/spring/spring-best-practices.html": ["Java", "Programming & Software", "Spring", "Dev(Sec)Ops", "Software Security", "SDLC"],
@@ -2647,14 +2706,14 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring/spring-rest-apis.html": ["Java", "Programming & Software", "Spring", "Web & UI", "Software Design & Architecture"],
   "blog-articles/spring/spring-scheduling.html": ["Java", "Programming & Software", "Spring", "Dev(Sec)Ops"],
   "blog-articles/spring/spring-transactions.html": ["Java", "Programming & Software", "Spring", "Data Engineering"],
-  "blog-articles/reactive-spring.html": ["Java", "Programming & Software", "Spring", "Web & UI", "Networks"],
-  "blog-articles/ai-threat-landscape.html": ["AI Security", "Security", "AI & ML"],
-  "blog-articles/ruby.html": ["Programming & Software", "Programming Languages"],
-  "blog-articles/software-assurance.html": ["Security", "Software Security", "SDLC"],
-  "blog-articles/product-security.html": ["Security", "Software Security", "SDLC"],
-  "blog-articles/sse.html": ["Security", "Software Security", "SDLC"],
-  "blog-articles/appsec.html": ["Security", "Software Security", "Dev(Sec)Ops"],
-  "blog-articles/java.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/spring/reactive-spring.html": ["Java", "Programming & Software", "Spring", "Web & UI", "Networks"],
+  "blog-articles/ai/ai-security/ai-threat-landscape.html": ["AI Security", "Security", "AI & ML"],
+  "blog-articles/programming-languages/ruby.html": ["Programming & Software", "Programming Languages"],
+  "blog-articles/security/software-security/software-assurance.html": ["Security", "Software Security", "SDLC"],
+  "blog-articles/security/software-security/product-security.html": ["Security", "Software Security", "SDLC"],
+  "blog-articles/security/software-security/sse.html": ["Security", "Software Security", "SDLC"],
+  "blog-articles/security/software-security/appsec.html": ["Security", "Software Security", "Dev(Sec)Ops"],
+  "blog-articles/java/java.html": ["Java", "Programming & Software", "Programming Languages"],
   "blog-articles/java/java-advanced-language-features.html": ["Java", "Programming & Software", "Programming Languages"],
   "blog-articles/java/java-collections-framework.html": ["Java", "Programming & Software"],
   "blog-articles/java/java-exception-handling.html": ["Java", "Programming & Software"],
@@ -2682,108 +2741,108 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/java/java-security.html": ["Java", "Programming & Software", "Security", "Software Security"],
   "blog-articles/java/modern-java-features-java-8-to-25.html": ["Java", "Programming & Software", "Programming Languages"],
   "blog-articles/java/native-java-graalvm-native-image-aot.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/veganism-and-mental-health.html": ["Veganism", "Society & Civics"],
-  "blog-articles/data-architecture-patterns.html": ["Data Engineering", "Programming & Software", "Software Design & Architecture", "Engineering"],
-  "blog-articles/data-engineering-lifecycle.html": ["Data Engineering", "Programming & Software", "Engineering"],
-  "blog-articles/data-engineering-tools-and-technologies.html": ["Data Engineering", "Programming & Software", "Engineering"],
-  "blog-articles/data-governance-quality-observability.html": ["Data Engineering", "Programming & Software", "Engineering", "Security"],
-  "blog-articles/critical-data-engineering-practices.html": ["Data Engineering", "Programming & Software", "Engineering"],
-  "blog-articles/declarative-pipelines.html": ["Data Engineering", "Programming & Software", "Engineering", "Software Design & Architecture"],
-  "blog-articles/data-engineering-rag.html": ["AI & ML", "Data Engineering", "Programming & Software", "Engineering"],
-  "blog-articles/metaethics.html": ["Philosophy", "Ethics"],
-  "blog-articles/machine-learning-lifecycle.html": ["AI & ML", "Engineering"],
-  "blog-articles/ai-coding-agent-failures.html": ["AI Agents", "Programming & Software"],
-  "blog-articles/ai-in-robotics.html": ["Robotics", "AI & ML"],
-  "blog-articles/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
-  "blog-articles/bayesian-statistics.html": ["Math", "AI & ML"],
-  "blog-articles/javascript.html": ["Programming & Software", "Programming Languages", "Web & UI"],
-  "blog-articles/breach_attack_simulation.html": ["Security", "Pentesting"],
-  "blog-articles/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
-  "blog-articles/cognitive-layer-robotics.html": ["Robotics", "AI & ML"],
-  "blog-articles/robotics-perception.html": ["Robotics", "Engineering"],
-  "blog-articles/three-walls-robotics.html": ["Robotics", "Engineering"],
-  "blog-articles/why-projects-run-late-and-over-budget.html": ["Business", "Engineering", "SDLC"],
-  "blog-articles/engineering_is_philosophy.html": ["Engineering", "Philosophy"],
-  "blog-articles/sast-technical-field-guide.html": ["Security", "Dev(Sec)Ops"],
-  "blog-articles/know-your-rights.html": ["Society & Civics"],
-  "blog-articles/mental_health_blog.html": ["Society & Civics"],
-  "blog-articles/information-security-for-everyone.html": ["Security", "Privacy"],
-  "blog-articles/levels-of-digital-privacy.html": ["Privacy", "Security"],
-  "blog-articles/why-digital-privacy-is-important.html": ["Privacy", "Security"],
-  "blog-articles/event-driven-networks.html": ["Networks", "Programming & Software"],
-  "blog-articles/networks-performance-reliability.html": ["Networks", "Engineering"],
-  "blog-articles/ui-structure-concepts.html": ["Web & UI", "Programming & Software", "Software Design & Architecture"],
-  "blog-articles/vegan-activism-frmwrk.html": ["Veganism", "Society & Civics"],
-  "blog-articles/vegan-education.html": ["Veganism", "Learning", "Society & Civics"],
-  "blog-articles/vegan-infrastructure.html": ["Veganism", "Programming & Software", "Society & Civics"],
-  "blog-articles/making-animal-use-obsolete.html": ["Veganism", "Engineering"],
-  "blog-articles/network_topologies.html": ["Networks"],
-  "blog-articles/cloud-microservices-networking.html": ["Cloud", "Networks", "Programming & Software"],
-  "blog-articles/mass-media-vegan-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/protocol-oriented-design.html": ["Networks", "Programming & Software", "Software Design & Architecture"],
-  "blog-articles/vegan-advocacy-interpersonal.html": ["Veganism", "Society & Civics"],
-  "blog-articles/vegan-community.html": ["Veganism", "Society & Civics"],
-  "blog-articles/ui-components-article.html": ["Web & UI", "Programming & Software", "Software Design & Architecture"],
-  "blog-articles/privacy.html": ["Privacy", "Security"],
-  "blog-articles/distributed-systems-networks.html": ["Networks", "Programming & Software"],
-  "blog-articles/pl-philosophy.html": ["Programming & Software", "Philosophy"],
-  "blog-articles/graph-theory-networks.html": ["Networks", "Math"],
-  "blog-articles/hierarchical-network-design.html": ["Networks"],
-  "blog-articles/halting-problem.html": ["Programming & Software", "Math", "Philosophy"],
-  "blog-articles/authorized-adversary.html": ["Security", "Networks", "Pentesting"],
-  "blog-articles/active-directory-pentesting.html": ["Security", "Networks", "Pentesting", "Operating Systems"],
-  "blog-articles/semmelweis-childbed-fever.html": ["Philosophy", "Society & Civics"],
-  "blog-articles/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
-  "blog-articles/it-sector-security.html": ["Security", "Networks", "Engineering", "Society & Civics"],
-  "blog-articles/aether.html": ["Physics", "Philosophy"],
-  "blog-articles/government-services-facilities-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
-  "blog-articles/critical-manufacturing-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
-  "blog-articles/commons.html": ["Society & Civics", "Philosophy"],
-  "blog-articles/emergency-services-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
-  "blog-articles/chemical-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Engineering"],
-  "blog-articles/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Physics", "Philosophy"],
-  "blog-articles/especes_perdues.html": ["Earth Sciences", "Philosophy"],
-  "blog-articles/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
-  "blog-articles/cloud-service-models.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Networks", "Dev(Sec)Ops"],
-  "blog-articles/heliocentrism-copernican-revolution.html": ["Physics", "Philosophy"],
-  "blog-articles/phase-0-planning-feasibility.html": ["Programming & Software", "Engineering", "SDLC"],
-  "blog-articles/python.html": ["Python", "Programming & Software", "Programming Languages"],
-  "blog-articles/software-by-market-segment.html": ["Business", "Programming & Software", "Engineering"],
-  "blog-articles/the-big-bang.html": ["Physics", "Philosophy", "Cosmology"],
-  "blog-articles/the-path-to-production.html": ["Cloud", "Programming & Software", "Dev(Sec)Ops", "Networks", "Docker", "SDLC"],
-  "blog-articles/the-replication-crisis.html": ["Learning", "Philosophy", "Society & Civics"],
-  "blog-articles/anthropogenic-climate-change.html": ["Earth Sciences", "Society & Civics"],
-  "blog-articles/nonlocality.html": ["Physics", "Philosophy"],
-  "blog-articles/continental-drift-wegener.html": ["Earth Sciences", "Philosophy"],
-  "blog-articles/banach-tarski-paradox.html": ["Math", "Philosophy"],
-  "blog-articles/godel-incompleteness.html": ["Math", "Philosophy"],
-  "blog-articles/the-integration-imperative.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/webapp_pentesting.html": ["Security", "Web & UI", "Pentesting"],
-  "blog-articles/api-security-testing.html": ["Security", "Programming & Software", "Dev(Sec)Ops", "Pentesting"],
-  "blog-articles/cloud-penetration-testing.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops", "Pentesting"],
-  "blog-articles/wireless-penetration-testing.html": ["Security", "Networks", "Pentesting"],
-  "blog-articles/mobile-app-penetration-testing.html": ["Security", "Mobile App Development", "Android", "Pentesting"],
-  "blog-articles/thick-client-testing.html": ["Security", "Programming & Software", "Pentesting", "Operating Systems"],
-  "blog-articles/social-engineering-assessments.html": ["Security", "Pentesting", "Society & Civics"],
-  "blog-articles/hardware-embedded-pentesting.html": ["Security", "Engineering", "Cyber-Physical Systems", "Pentesting"],
-  "blog-articles/agno-framework.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software"],
-  "blog-articles/Cantors-Paradise.html": ["Math", "Philosophy"],
-  "blog-articles/chainlit.html": ["AI & ML", "AI Agents", "Programming & Software", "Python"],
-  "blog-articles/control-engineering-implementation.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
-  "blog-articles/cybersecurity-civic-responsibility.html": ["Security", "Society & Civics"],
-  "blog-articles/deep-time.html": ["Earth Sciences", "Philosophy"],
-  "blog-articles/descent-with-modification.html": ["Philosophy", "Learning"],
-  "blog-articles/enterprise-ai-agent-roadmap.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/hardware-troubleshooting.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/heat-death-of-the-universe.html": ["Physics", "Philosophy", "Cosmology"],
-  "blog-articles/public-key-infrastructure.html": ["Security", "Networks", "Programming & Software"],
-  "blog-articles/software-architecture-frameworks.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
-  "blog-articles/software-requirements-specification.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
-  "blog-articles/telecommunications-attacks.html": ["Security", "Networks"],
-  "blog-articles/the-irrationality-of-sqrt2.html": ["Math", "Philosophy"],
-  "blog-articles/uncertainty-principle.html": ["Physics", "Philosophy"],
-  "blog-articles/unified-modeling-language.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
-  "blog-articles/where-new-things-come-from.html": ["Engineering", "Philosophy"]
+  "blog-articles/veganism/veganism-and-mental-health.html": ["Veganism", "Society & Civics"],
+  "blog-articles/data-engineering/data-architecture-patterns.html": ["Data Engineering", "Programming & Software", "Software Design & Architecture", "Engineering"],
+  "blog-articles/data-engineering/data-engineering-lifecycle.html": ["Data Engineering", "Programming & Software", "Engineering"],
+  "blog-articles/data-engineering/data-engineering-tools-and-technologies.html": ["Data Engineering", "Programming & Software", "Engineering"],
+  "blog-articles/data-engineering/data-governance-quality-observability.html": ["Data Engineering", "Programming & Software", "Engineering", "Security"],
+  "blog-articles/data-engineering/critical-data-engineering-practices.html": ["Data Engineering", "Programming & Software", "Engineering"],
+  "blog-articles/data-engineering/declarative-pipelines.html": ["Data Engineering", "Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/ai/data-engineering-rag.html": ["AI & ML", "Data Engineering", "Programming & Software", "Engineering"],
+  "blog-articles/philosophy/metaethics.html": ["Philosophy", "Ethics"],
+  "blog-articles/ai/machine-learning-lifecycle.html": ["AI & ML", "Engineering"],
+  "blog-articles/ai/ai-agents/ai-coding-agent-failures.html": ["AI Agents", "Programming & Software"],
+  "blog-articles/robotics/ai-in-robotics.html": ["Robotics", "AI & ML"],
+  "blog-articles/security/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
+  "blog-articles/math/bayesian-statistics.html": ["Math", "AI & ML"],
+  "blog-articles/javascript/javascript.html": ["JavaScript", "Programming & Software", "Programming Languages", "Web & UI"],
+  "blog-articles/security/pentesting/breach_attack_simulation.html": ["Security", "Pentesting"],
+  "blog-articles/networks/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
+  "blog-articles/robotics/cognitive-layer-robotics.html": ["Robotics", "AI & ML"],
+  "blog-articles/robotics/robotics-perception.html": ["Robotics", "Engineering"],
+  "blog-articles/robotics/three-walls-robotics.html": ["Robotics", "Engineering"],
+  "blog-articles/swe/why-projects-run-late-and-over-budget.html": ["Business", "Engineering", "SDLC"],
+  "blog-articles/philosophy/engineering_is_philosophy.html": ["Engineering", "Philosophy"],
+  "blog-articles/security/sast-technical-field-guide.html": ["Security", "Dev(Sec)Ops"],
+  "blog-articles/society-civics/know-your-rights.html": ["Society & Civics"],
+  "blog-articles/society-civics/mental_health_blog.html": ["Society & Civics"],
+  "blog-articles/security/information-security-for-everyone.html": ["Security", "Privacy"],
+  "blog-articles/privacy/levels-of-digital-privacy.html": ["Privacy", "Security"],
+  "blog-articles/privacy/why-digital-privacy-is-important.html": ["Privacy", "Security"],
+  "blog-articles/networks/event-driven-networks.html": ["Networks", "Programming & Software"],
+  "blog-articles/networks/networks-performance-reliability.html": ["Networks", "Engineering"],
+  "blog-articles/web-ui/ui-structure-concepts.html": ["Web & UI", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/veganism/vegan-activism-frmwrk.html": ["Veganism", "Society & Civics"],
+  "blog-articles/veganism/vegan-education.html": ["Veganism", "Learning", "Society & Civics"],
+  "blog-articles/swe/vegan-infrastructure.html": ["Veganism", "Programming & Software", "Society & Civics"],
+  "blog-articles/veganism/making-animal-use-obsolete.html": ["Veganism", "Engineering"],
+  "blog-articles/networks/network_topologies.html": ["Networks"],
+  "blog-articles/cloud/cloud-microservices-networking.html": ["Cloud", "Networks", "Programming & Software"],
+  "blog-articles/veganism/mass-media-vegan-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/networks/protocol-oriented-design.html": ["Networks", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/veganism/vegan-advocacy-interpersonal.html": ["Veganism", "Society & Civics"],
+  "blog-articles/veganism/vegan-community.html": ["Veganism", "Society & Civics"],
+  "blog-articles/web-ui/ui-components-article.html": ["Web & UI", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/privacy/privacy.html": ["Privacy", "Security"],
+  "blog-articles/networks/distributed-systems-networks.html": ["Networks", "Programming & Software"],
+  "blog-articles/swe/pl-philosophy.html": ["Programming & Software", "Philosophy"],
+  "blog-articles/networks/graph-theory-networks.html": ["Networks", "Math"],
+  "blog-articles/networks/hierarchical-network-design.html": ["Networks"],
+  "blog-articles/swe/halting-problem.html": ["Programming & Software", "Math", "Philosophy"],
+  "blog-articles/security/pentesting/authorized-adversary.html": ["Security", "Networks", "Pentesting"],
+  "blog-articles/security/pentesting/active-directory-pentesting.html": ["Security", "Networks", "Pentesting", "Operating Systems"],
+  "blog-articles/philosophy/semmelweis-childbed-fever.html": ["Philosophy", "Society & Civics"],
+  "blog-articles/networks/phasor-measurement-units.html": ["Cyber-Physical Systems", "Engineering", "Networks", "Control Theory & Engineering"],
+  "blog-articles/security/critical-infrastructure/it-sector-security.html": ["Security", "Networks", "Engineering", "Society & Civics"],
+  "blog-articles/physics/aether.html": ["Physics", "Philosophy"],
+  "blog-articles/security/critical-infrastructure/government-services-facilities-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
+  "blog-articles/security/critical-infrastructure/critical-manufacturing-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Networks", "Engineering"],
+  "blog-articles/philosophy/commons.html": ["Society & Civics", "Philosophy"],
+  "blog-articles/security/critical-infrastructure/emergency-services-cybersecurity.html": ["Security", "Networks", "Engineering", "Society & Civics"],
+  "blog-articles/security/critical-infrastructure/chemical-sector-cybersecurity.html": ["Security", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/physics/cutting-the-uncuttable-radioactivity-1896-1902.html": ["Physics", "Philosophy"],
+  "blog-articles/earth-sciences/especes_perdues.html": ["Earth Sciences", "Philosophy"],
+  "blog-articles/veganism/grassroots-vegan-activism.html": ["Veganism", "Society & Civics"],
+  "blog-articles/cloud/multicloud/cloud-service-models.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Networks", "Dev(Sec)Ops"],
+  "blog-articles/physics/heliocentrism-copernican-revolution.html": ["Physics", "Philosophy"],
+  "blog-articles/swe/phase-0-planning-feasibility.html": ["Programming & Software", "Engineering", "SDLC"],
+  "blog-articles/python/python.html": ["Python", "Programming & Software", "Programming Languages"],
+  "blog-articles/swe/software-by-market-segment.html": ["Business", "Programming & Software", "Engineering"],
+  "blog-articles/physics/cosmology/the-big-bang.html": ["Physics", "Philosophy", "Cosmology"],
+  "blog-articles/devops/docker/the-path-to-production.html": ["Cloud", "Programming & Software", "Dev(Sec)Ops", "Networks", "Docker", "SDLC"],
+  "blog-articles/philosophy/the-replication-crisis.html": ["Learning", "Philosophy", "Society & Civics"],
+  "blog-articles/earth-sciences/anthropogenic-climate-change.html": ["Earth Sciences", "Society & Civics"],
+  "blog-articles/physics/nonlocality.html": ["Physics", "Philosophy"],
+  "blog-articles/earth-sciences/continental-drift-wegener.html": ["Earth Sciences", "Philosophy"],
+  "blog-articles/math/banach-tarski-paradox.html": ["Math", "Philosophy"],
+  "blog-articles/math/godel-incompleteness.html": ["Math", "Philosophy"],
+  "blog-articles/ai/the-integration-imperative.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/security/pentesting/webapp_pentesting.html": ["Security", "Web & UI", "Pentesting"],
+  "blog-articles/security/pentesting/api-security-testing.html": ["Security", "Programming & Software", "Dev(Sec)Ops", "Pentesting"],
+  "blog-articles/cloud/multicloud/cloud-penetration-testing.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops", "Pentesting"],
+  "blog-articles/security/pentesting/wireless-penetration-testing.html": ["Security", "Networks", "Pentesting"],
+  "blog-articles/mobile/android/mobile-app-penetration-testing.html": ["Security", "Mobile App Development", "Android", "Pentesting"],
+  "blog-articles/security/pentesting/thick-client-testing.html": ["Security", "Programming & Software", "Pentesting", "Operating Systems"],
+  "blog-articles/security/pentesting/social-engineering-assessments.html": ["Security", "Pentesting", "Society & Civics"],
+  "blog-articles/security/pentesting/hardware-embedded-pentesting.html": ["Security", "Engineering", "Cyber-Physical Systems", "Pentesting"],
+  "blog-articles/ai/agno-framework.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software"],
+  "blog-articles/math/Cantors-Paradise.html": ["Math", "Philosophy"],
+  "blog-articles/ai/chainlit.html": ["AI & ML", "AI Agents", "Programming & Software", "Python"],
+  "blog-articles/cyber-physical-systems/control-engineering-implementation.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
+  "blog-articles/security/critical-infrastructure/cybersecurity-civic-responsibility.html": ["Security", "Society & Civics"],
+  "blog-articles/earth-sciences/deep-time.html": ["Earth Sciences", "Philosophy"],
+  "blog-articles/philosophy/descent-with-modification.html": ["Philosophy", "Learning"],
+  "blog-articles/ai/enterprise-ai-agent-roadmap.html": ["AI & ML", "AI Agents", "AI Strategy", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/hardware/hardware-troubleshooting.html": ["Engineering", "Hardware", "Operating Systems"],
+  "blog-articles/physics/cosmology/heat-death-of-the-universe.html": ["Physics", "Philosophy", "Cosmology"],
+  "blog-articles/security/public-key-infrastructure.html": ["Security", "Networks", "Programming & Software"],
+  "blog-articles/swe/software-architecture-frameworks.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/swe/software-requirements-specification.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC"],
+  "blog-articles/security/telecommunications-attacks.html": ["Security", "Networks"],
+  "blog-articles/math/the-irrationality-of-sqrt2.html": ["Math", "Philosophy"],
+  "blog-articles/physics/uncertainty-principle.html": ["Physics", "Philosophy"],
+  "blog-articles/swe/unified-modeling-language.html": ["Programming & Software", "Engineering", "Software Design & Architecture"],
+  "blog-articles/philosophy/where-new-things-come-from.html": ["Engineering", "Philosophy"]
 };
 
 function formatBlogDate(dateString: string): string {

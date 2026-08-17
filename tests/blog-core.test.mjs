@@ -33,7 +33,7 @@ test("sortBlogPostsNewestFirst orders by newest date and preserves tie order", (
 });
 
 test("getBlogFilenameLabel extracts the final path segment", () => {
-  assert.equal(getBlogFilenameLabel({ path: "blog-articles/python.html" }), "python.html");
+  assert.equal(getBlogFilenameLabel({ path: "blog-articles/python/python.html" }), "python.html");
 });
 
 test("normalizeBlogSearchTerm preserves spaces, strips control characters, and enforces the length cap", () => {
@@ -67,7 +67,7 @@ test("normalizeBlogDirectoryViewState keeps valid categories and sanitizes inval
 
 test("blogMatchesSearch checks both titles and filenames", () => {
   const post = {
-    path: "blog-articles/the-path-to-production.html",
+    path: "blog-articles/devops/docker/the-path-to-production.html",
     title: "The Path to Production"
   };
 

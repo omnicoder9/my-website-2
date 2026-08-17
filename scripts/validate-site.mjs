@@ -104,9 +104,9 @@ function articleUsesSharedShell(html) {
   return (
     /<body[^>]*class=["'][^"']*\bblog-article-page\b/.test(html) ||
     /id=["']site-header["']/.test(html) ||
-    /<script[^>]+src=["']\.\.\/dist\/js\/header\.js["']/.test(html) ||
-    /<script[^>]+src=["']\.\.\/dist\/js\/site-core\.js["']/.test(html) ||
-    /<script[^>]+src=["']\.\.\/dist\/js\/theme\.js["']/.test(html)
+    /<script[^>]+src=["'](?:\.\.\/)+dist\/js\/header\.js["']/.test(html) ||
+    /<script[^>]+src=["'](?:\.\.\/)+dist\/js\/site-core\.js["']/.test(html) ||
+    /<script[^>]+src=["'](?:\.\.\/)+dist\/js\/theme\.js["']/.test(html)
   );
 }
 
@@ -187,7 +187,7 @@ function validateSharedArticleShell() {
     const html = readFile(articleFile);
     const hasBodyClass = /<body[^>]*class=["'][^"']*\bblog-article-page\b/.test(html);
     const hasSiteHeader = /id=["']site-header["']/.test(html);
-    const hasHeaderScript = /<script[^>]+src=["']\.\.\/dist\/js\/header\.js["']/.test(html);
+    const hasHeaderScript = /<script[^>]+src=["'](?:\.\.\/)+dist\/js\/header\.js["']/.test(html);
 
     if (!hasBodyClass) {
       addError(`Article is missing body.blog-article-page: ${articleFile}`);
@@ -196,7 +196,7 @@ function validateSharedArticleShell() {
       addError(`Article is missing #site-header mount: ${articleFile}`);
     }
     if (!hasHeaderScript) {
-      addError(`Article is missing ../dist/js/header.js: ${articleFile}`);
+      addError(`Article is missing a relative dist/js/header.js reference: ${articleFile}`);
     }
   }
 
@@ -230,7 +230,7 @@ function validateCoreInternalLinks() {
     "tutorials.html",
     "tools.html",
     "games.html",
-    "blog-articles/privacy.html"
+    "blog-articles/privacy/privacy.html"
   ];
   const relevantTags = [
     ["a", "href"],

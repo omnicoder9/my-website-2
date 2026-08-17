@@ -31,8 +31,8 @@ Highest-risk parts of the app:
 - `ts/index.ts`: shared page behavior, sticky header behavior, resource loading, mission control UI
 - `ts/tools.ts`: converters, generators, file handling, password analysis, username generation
 - `ts/games.ts`: localStorage-backed behavior and interactive state
-- `blog-articles/privacy.html`, `blog.html`, `tools.html`, `index.html`: key landing pages with shared UI and cross-links
-- `blog-articles/*.html`: many static documents that can drift from shared conventions
+- `blog-articles/privacy/privacy.html`, `blog.html`, `tools.html`, `index.html`: key landing pages with shared UI and cross-links
+- `blog-articles/**/*.html`: many static documents that can drift from shared conventions
 
 ## Test Pyramid
 
@@ -89,7 +89,7 @@ Before release, verify:
 
 - `index.html`
 - `blog.html`
-- `blog-articles/privacy.html`
+- `blog-articles/privacy/privacy.html`
 - `tools.html`
 - `games.html`
 
@@ -268,7 +268,7 @@ Test:
 
 Test:
 
-- `blog-articles/privacy.html` loads with all major sections present
+- `blog-articles/privacy/privacy.html` loads with all major sections present
 - linked blog articles open successfully
 
 #### Tools
@@ -302,7 +302,7 @@ Run `axe` on at least:
 
 - `index.html`
 - `blog.html`
-- `blog-articles/privacy.html`
+- `blog-articles/privacy/privacy.html`
 - `tools.html`
 - `games.html`
 - one representative blog article
@@ -360,7 +360,7 @@ Focus pages:
 - `index.html`
 - `blog.html`
 - `tools.html`
-- `blog-articles/privacy.html`
+- `blog-articles/privacy/privacy.html`
 - representative article pages with long text and references
 
 ## Phase 7: Content Quality Checks

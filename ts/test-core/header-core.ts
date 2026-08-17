@@ -2,7 +2,14 @@ export type EnhancementTier = "basic" | "enhanced" | "absurd";
 export type WallpaperTime = "dawn" | "day" | "dusk" | "night";
 
 export function getSitePrefixFromPathname(pathname: string): string {
-  return /\/(?:blog|tutorial)-articles\//.test(pathname) ? "../" : "";
+  const articlePathMatch = pathname.match(/\/(?:blog|tutorial)-articles\/(.+)$/);
+  if (!articlePathMatch) {
+    return "";
+  }
+
+  const articleRelativePath = articlePathMatch[1].replace(/\/+$/, "");
+  const articleDirectoryDepth = articleRelativePath.split("/").filter(Boolean).length;
+  return "../".repeat(articleDirectoryDepth);
 }
 
 export function classifyEnhancementTier(

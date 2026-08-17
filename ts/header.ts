@@ -7,7 +7,15 @@ const fallbackHeaderMarkup = `
       <span class="site-brand__tagline">Engineering notes, tools, experiments, and reference material</span>
     </span>
   </a>
-  <nav class="site-nav" aria-label="Primary">
+  <button class="site-nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav-menu">
+    <span class="site-nav-toggle__icon" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
+    <span class="site-nav-toggle__text">Menu</span>
+  </button>
+  <nav class="site-nav" id="site-nav-menu" aria-label="Primary">
     <ul>
       <li><a href="cheatsheets.html">Cheat Sheets</a></li>
       <li><a href="stylingpg.html">Styling</a></li>
@@ -56,8 +64,19 @@ const enhancementTierSummaries: Record<EnhancementTier, string> = {
   absurd: "Extra browser APIs are online. The theatrical upgrades can run."
 };
 
+function getSitePrefixFromPathname(pathname: string): string {
+  const articlePathMatch = pathname.match(/\/(?:blog|tutorial)-articles\/(.+)$/);
+  if (!articlePathMatch) {
+    return "";
+  }
+
+  const articleRelativePath = articlePathMatch[1].replace(/\/+$/, "");
+  const articleDirectoryDepth = articleRelativePath.split("/").filter(Boolean).length;
+  return "../".repeat(articleDirectoryDepth);
+}
+
 function getSitePrefix(): string {
-  return /\/(?:blog|tutorial)-articles\//.test(window.location.pathname) ? "../" : "";
+  return getSitePrefixFromPathname(window.location.pathname);
 }
 
 function canUseLocalStorage(): boolean {
@@ -207,6 +226,42 @@ function normalizeHeaderLinks(mountNode: HTMLElement): void {
   });
 }
 
+function initializeMobileNavigation(mountNode: HTMLElement): void {
+  const header = mountNode.querySelector<HTMLElement>(".site-header");
+  const toggle = mountNode.querySelector<HTMLButtonElement>(".site-nav-toggle");
+  const nav = mountNode.querySelector<HTMLElement>(".site-nav");
+  const mobileQuery = window.matchMedia("(max-width: 760px)");
+
+  if (!header || !toggle || !nav) {
+    return;
+  }
+
+  const setMenuOpen = (isOpen: boolean): void => {
+    header.dataset.navOpen = isOpen ? "true" : "false";
+    toggle.setAttribute("aria-expanded", String(isOpen));
+  };
+
+  header.dataset.mobileNavReady = "true";
+  setMenuOpen(false);
+
+  toggle.addEventListener("click", () => {
+    setMenuOpen(toggle.getAttribute("aria-expanded") !== "true");
+  });
+
+  nav.addEventListener("click", (event) => {
+    if (mobileQuery.matches && event.target instanceof Element && event.target.closest("a")) {
+      setMenuOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && header.dataset.navOpen === "true") {
+      setMenuOpen(false);
+      toggle.focus();
+    }
+  });
+}
+
 function getWallpaperTime(date: Date): WallpaperTime {
   const hour = date.getHours();
 
@@ -269,12 +324,14 @@ function initializeWallpaperEngine(): void {
 
     mountNode.innerHTML = await response.text();
     normalizeHeaderLinks(mountNode);
+    initializeMobileNavigation(mountNode);
     renderEnhancementTier(mountNode);
     document.dispatchEvent(new Event("header:loaded"));
   } catch (error) {
     console.error("Unable to load shared header:", error);
     mountNode.innerHTML = fallbackHeaderMarkup;
     normalizeHeaderLinks(mountNode);
+    initializeMobileNavigation(mountNode);
     renderEnhancementTier(mountNode);
     document.dispatchEvent(new Event("header:loaded"));
   }
