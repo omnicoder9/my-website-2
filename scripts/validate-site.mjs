@@ -229,6 +229,7 @@ function validateCoreInternalLinks() {
     "infographics.html",
     "tutorials.html",
     "tools.html",
+    "flashcards.html",
     "games.html",
     "blog-articles/privacy/privacy.html"
   ];

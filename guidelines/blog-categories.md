@@ -4,7 +4,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 
 ## Categories
 
-- **AI & ML**: Core artificial intelligence and machine learning topics, including model design, training, evaluation, inference, and applied ML systems.
+- **Machine Learning**: Core artificial intelligence and machine learning topics, including model design, training, evaluation, inference, and applied ML systems.
 - **AI Agents**: Agent-based AI systems that use tools, workflows, memory, orchestration, multi-step reasoning, or protocol-driven integration.
 - **AI Security**: Security issues specific to AI and machine-learning systems, including model abuse, adversarial attacks, agent risk, governance controls, and defensive architecture around AI deployments.
 - **AI Strategy**: Organizational, operational, and governance questions around adopting AI in products, teams, or enterprises.
@@ -16,6 +16,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
 - **Cloud**: Cloud computing architecture, service models, cloud-native operations, managed infrastructure, serverless systems, hyperscaler platforms, and cloud security.
 - **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
+- **Computer Vision**: Image understanding, visual perception, object detection, SLAM, visual sensor fusion, and AI systems that interpret pixels or camera-derived signals.
 - **Competitive Programming**: Algorithmic problem-solving techniques, coding interview-style patterns, data structures, and contest-oriented reasoning.
 - **Control Theory & Engineering**: Feedback systems, controller design, stability, sampled-data systems, implementation tradeoffs, and real-world control engineering.
 - **Cosmology**: The origin, structure, evolution, and fate of the universe, including major cosmological theories and debates.
@@ -31,7 +32,9 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
+- **Generative AI**: Systems that generate text, code, images, media, plans, or structured outputs, including RAG, conversational AI, foundation-model applications, and production GenAI workflows.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
+- **High-Performance Computing**: Accelerated, parallel, throughput-oriented, or low-level performance work involving CPUs, GPUs, memory hierarchy, numerical workloads, and performance-focused programming systems.
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
 - **Java**: Java language, JVM, Java standard libraries, Jakarta EE, Java tooling, Java performance, Java security, and Java ecosystem engineering.

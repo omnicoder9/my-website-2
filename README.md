@@ -250,3 +250,36 @@ If this gets built out, the highest-return ridiculous additions are probably:
   - Inline the shared header instead of fetching partials/header.html on every page.
   - Fingerprint js/css assets and switch from revalidation to long-lived immutable caching in server.go:112.
   - If the common path is home -> blog, prefetch blog.html and blog.js on hover or when the blog link becomes visible.
+
+  ---
+  For this site, the simplest credible path is:
+
+  Use a hosted identity provider. Do not build passwords yourself.
+
+  Best options by need:
+
+  1. Simplest access gate: Cloudflare Zero Trust Access
+     Protect the whole site or paths like /admin/* without changing app code. Authorization is configured by email, domain, group, or IdP policy.
+     Cloudflare supports path-specific Access policies, so this is the lowest-effort answer if you just want “only these people can view/use this area.”
+     Source: Cloudflare Access app paths docs: https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/
+
+  2. Simplest real app login for this repo: Auth0 with Go server-side sessions
+     Your site already has server.go, so add /login, /callback, /logout, and a requireAuth middleware. Auth0 handles passwords, social login, MFA,
+     recovery, etc. Your Go server stores only a secure session cookie and user ID. Source: Auth0 Go quickstart:
+     https://auth0.com/docs/quickstart/webapp/golang
+
+  3. Simplest frontend UI: Clerk
+     Clerk is very fast for drop-in sign-in UI, but for true authorization you still need the Go server to verify tokens before serving protected APIs
+     or private data. Source: Clerk JavaScript quickstart: https://clerk.com/docs/js-frontend/getting-started/quickstart
+
+  For this codebase, I’d choose Auth0 + Go sessions if users will own data, like private flashcard decks. The shape would be:
+
+  - Public static pages stay as-is.
+  - Add auth routes to server.go: /login, /callback, /logout, /me.
+  - Use secure, HttpOnly, SameSite=Lax cookies.
+  - Add middleware for protected routes, for example /api/flashcards/*.
+  - Store user data in SQLite or Postgres keyed by the provider user id, usually the OIDC sub.
+  - Authorization starts simple: user, admin, maybe editor, checked in middleware.
+
+  Important distinction: client-side login alone can hide UI, but it cannot protect anything sensitive. Real authorization has to happen on the Go
+  server or at the edge via something like Cloudflare Access.
