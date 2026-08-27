@@ -8,6 +8,7 @@ import {
   normalizeBlogDirectoryViewState,
   normalizeBlogDirectoryVisibleCount,
   normalizeBlogSearchTerm,
+  sortBlogCategoriesMostSpecificFirst,
   sortBlogPostsNewestFirst
 } from "../dist/js/test-core/blog-core.js";
 
@@ -34,6 +35,24 @@ test("sortBlogPostsNewestFirst orders by newest date and preserves tie order", (
 
 test("getBlogFilenameLabel extracts the final path segment", () => {
   assert.equal(getBlogFilenameLabel({ path: "blog-articles/python/python.html" }), "python.html");
+});
+
+test("sortBlogCategoriesMostSpecificFirst moves narrow categories before catch-all categories", () => {
+  assert.deepEqual(
+    sortBlogCategoriesMostSpecificFirst([
+      "Programming & Software",
+      "Engineering",
+      "Generative AI",
+      "Machine Learning",
+      "Data Engineering"
+    ]),
+    ["Generative AI", "Data Engineering", "Machine Learning", "Programming & Software", "Engineering"]
+  );
+
+  assert.deepEqual(
+    sortBlogCategoriesMostSpecificFirst(["Security", "Society & Civics", "Pentesting", "Networks"]),
+    ["Pentesting", "Networks", "Security", "Society & Civics"]
+  );
 });
 
 test("normalizeBlogSearchTerm preserves spaces, strips control characters, and enforces the length cap", () => {

@@ -4,6 +4,7 @@ const blogCategoryLabels = [
   "AI Agents",
   "AI Security",
   "AI Strategy",
+  "Artificial Intelligence",
   "ASP.NET",
   "Android",
   "Angular",
@@ -60,6 +61,8 @@ const blogCategoryLabels = [
   "Software Design & Architecture",
   "Software Security",
   "Spring",
+  "Stylometry",
+  "Technical Writing",
   "Veganism",
   "Web & UI"
 ] as const;
@@ -84,6 +87,34 @@ type PreparedBlogDirectoryPost = {
 
 const BLOG_PAGE_SIZE = 24;
 const BLOG_DIRECTORY_HISTORY_STATE_KEY = "blogDirectory";
+const BLOG_SPECIFIC_CATEGORY_RANK = 10;
+const blogCategorySpecificityRanks: Partial<Record<BlogCategory, number>> = {
+  "Earth Sciences": 20,
+  "Mobile App Development": 20,
+  "Operating Systems": 20,
+  "Programming Languages": 20,
+  "Artificial Intelligence": 30,
+  Business: 30,
+  Cloud: 30,
+  "Cyber-Physical Systems": 30,
+  "Dev(Sec)Ops": 30,
+  Ethics: 30,
+  Finance: 30,
+  Learning: 30,
+  "Machine Learning": 30,
+  Math: 30,
+  Networks: 30,
+  Physics: 30,
+  Privacy: 30,
+  SDLC: 30,
+  Veganism: 30,
+  Engineering: 90,
+  Philosophy: 90,
+  "Programming & Software": 90,
+  Security: 90,
+  "Society & Civics": 90,
+  "Society & Technology": 90
+};
 
 type BlogDirectoryViewState = {
   categoryValue: string;
@@ -92,6 +123,36 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/stylometry/history-stylometry.html",
+    publishedAt: "2026-08-27",
+    summary: "Nine centuries of counting words, and the one assumption every method has had to make about the writer.",
+    title: "What Did They Count? — a history of stylometry"
+  },
+  {
+    path: "blog-articles/ai/genai/tool-use-function-calling.html",
+    publishedAt: "2026-08-26",
+    summary: "Tool use and function calling read as a two-way contract: what a language model is made to guarantee on the way out, and what it must take on faith on the way back.",
+    title: "Where Does the Guarantee Come From?"
+  },
+  {
+    path: "blog-articles/ai/genai/emerging-genai.html",
+    publishedAt: "2026-08-25",
+    summary: "A technical reading of fifteen emerging directions in generative AI as claims on the supply of ground truth, with a deterministic lab, an auditable check-set ledger and a fully validated Vancouver reference list.",
+    title: "Who Checks the Work? Fifteen emerging directions in generative AI, read as bids on a supply of verification"
+  },
+  {
+    path: "blog-articles/ai/genai/generative-ai-science-engineering.html",
+    publishedAt: "2026-08-25",
+    summary: "A technical survey of generative AI across eleven application areas in science and engineering, organised by the cost of verifying one generated candidate.",
+    title: "What Does It Cost to Check? — Generative AI in Science and Engineering"
+  },
+  {
+    path: "blog-articles/hpc/hpc-aiml.html",
+    publishedAt: "2026-08-23",
+    summary: "A rigorous technical treatment of GPU-accelerated and distributed training: data, tensor, pipeline, sequence and expert parallelism read as cuts through a training step's iteration space, with the communication cost of each cut measured.",
+    title: "Where Do You Cut? — high-performance computing for AI and machine learning"
+  },
   {
     path: "blog-articles/ai/agi/what-makes-it-true.html",
     publishedAt: "2026-08-24",
@@ -873,7 +934,7 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "The Machine Learning Lifecycle"
   },
   {
-    path: "blog-articles/ai/ai-agents/ai-coding-agent-failures.html",
+    path: "blog-articles/ai/genai/ai-agents/ai-coding-agent-failures.html",
     publishedAt: "2026-07-15",
     summary: "A field guide to where AI coding agents fail in practice, covering hallucinated changes, destructive actions, false success reports, and the reliability gap behind benchmark wins.",
     title: "The Reliability Gap — Where AI coding agents break, why, and whose fault it is"
@@ -2537,6 +2598,11 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/stylometry/history-stylometry.html": ["Stylometry", "Machine Learning", "Generative AI", "Technical Writing", "Privacy"],
+  "blog-articles/ai/genai/tool-use-function-calling.html": ["Generative AI", "AI Agents", "Programming & Software", "Security", "Artificial Intelligence"],
+  "blog-articles/ai/genai/emerging-genai.html": ["Generative AI", "AI Strategy", "Machine Learning", "Artificial Intelligence"],
+  "blog-articles/ai/genai/generative-ai-science-engineering.html": ["Generative AI", "Machine Learning", "Engineering", "Artificial Intelligence"],
+  "blog-articles/hpc/hpc-aiml.html": ["High-Performance Computing", "Generative AI", "Machine Learning", "Hardware", "Networks"],
   "blog-articles/ai/agi/what-makes-it-true.html": ["AGI", "Machine Learning", "Philosophy", "AI Strategy"],
   "blog-articles/ai/agi/what-is-supposed-to-stay-the-same.html": ["AGI", "Machine Learning", "AI Strategy", "Engineering"],
   "blog-articles/ai/agi/what-changes-and-how-fast.html": ["AGI", "Machine Learning", "AI Strategy", "Software Design & Architecture"],
@@ -2852,7 +2918,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/ai/data-engineering-rag.html": ["Machine Learning", "Generative AI", "Data Engineering", "Programming & Software", "Engineering"],
   "blog-articles/philosophy/metaethics.html": ["Philosophy", "Ethics"],
   "blog-articles/ai/machine-learning-lifecycle.html": ["Machine Learning", "Engineering"],
-  "blog-articles/ai/ai-agents/ai-coding-agent-failures.html": ["AI Agents", "Generative AI", "Programming & Software"],
+  "blog-articles/ai/genai/ai-agents/ai-coding-agent-failures.html": ["AI Agents", "Generative AI", "Programming & Software"],
   "blog-articles/robotics/ai-in-robotics.html": ["Robotics", "Machine Learning", "Computer Vision"],
   "blog-articles/security/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
   "blog-articles/math/bayesian-statistics.html": ["Math", "Machine Learning"],
@@ -2987,8 +3053,29 @@ function getFilenameLabel(post: BlogDirectoryPost): string {
   return segments[segments.length - 1] || post.path;
 }
 
+function getBlogCategorySpecificityRank(category: BlogCategory): number {
+  const rank = blogCategorySpecificityRanks[category];
+  return typeof rank === "number" ? rank : BLOG_SPECIFIC_CATEGORY_RANK;
+}
+
+function getBlogCategoriesMostSpecificFirst(categories: BlogCategory[]): BlogCategory[] {
+  return categories
+    .map((category, index) => ({ category, index }))
+    .sort((left, right) => {
+      const rankDelta =
+        getBlogCategorySpecificityRank(left.category) - getBlogCategorySpecificityRank(right.category);
+
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ category }) => category);
+}
+
 function getBlogPostCategories(post: BlogDirectoryPost): BlogCategory[] {
-  return blogPostCategoriesByPath[post.path] || [];
+  return getBlogCategoriesMostSpecificFirst(blogPostCategoriesByPath[post.path] || []);
 }
 
 function isBlogCategory(value: string): value is BlogCategory {

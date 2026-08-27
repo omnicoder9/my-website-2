@@ -13,6 +13,39 @@ export type BlogDirectoryViewState = {
 };
 
 const BLOG_PAGE_SIZE = 24;
+const BLOG_SPECIFIC_CATEGORY_RANK = 10;
+const BLOG_CATEGORY_SPECIFICITY_RANKS: Record<string, number> = {
+  "Earth Sciences": 20,
+  "Mobile App Development": 20,
+  "Operating Systems": 20,
+  "Programming Languages": 20,
+  "Artificial Intelligence": 30,
+  Business: 30,
+  Cloud: 30,
+  "Cyber-Physical Systems": 30,
+  "Dev(Sec)Ops": 30,
+  Ethics: 30,
+  Finance: 30,
+  Learning: 30,
+  "Machine Learning": 30,
+  Math: 30,
+  Networks: 30,
+  Physics: 30,
+  Privacy: 30,
+  SDLC: 30,
+  Veganism: 30,
+  Engineering: 90,
+  Philosophy: 90,
+  "Programming & Software": 90,
+  Security: 90,
+  "Society & Civics": 90,
+  "Society & Technology": 90
+};
+
+function getBlogCategorySpecificityRank(category: string): number {
+  const rank = BLOG_CATEGORY_SPECIFICITY_RANKS[category];
+  return typeof rank === "number" ? rank : BLOG_SPECIFIC_CATEGORY_RANK;
+}
 
 export function formatBlogDate(dateString: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -46,6 +79,22 @@ export function sortBlogPostsNewestFirst(posts: BlogDirectoryPost[]): BlogDirect
 export function getBlogFilenameLabel(post: Pick<BlogDirectoryPost, "path">): string {
   const segments = post.path.split("/");
   return segments[segments.length - 1] || post.path;
+}
+
+export function sortBlogCategoriesMostSpecificFirst(categories: readonly string[]): string[] {
+  return categories
+    .map((category, index) => ({ category, index }))
+    .sort((left, right) => {
+      const rankDelta =
+        getBlogCategorySpecificityRank(left.category) - getBlogCategorySpecificityRank(right.category);
+
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+
+      return left.index - right.index;
+    })
+    .map(({ category }) => category);
 }
 
 export function normalizeBlogSearchTerm(value: string): string {

@@ -2,12 +2,16 @@
 
 This document defines the current blog categories used in the site taxonomy. Category names should match the labels in [`ts/blog.ts`](/home/nick1/repos/my-website-2/ts/blog.ts) exactly.
 
+When an article has multiple categories, list the most specific category first. Broad catch-all categories such as **Programming & Software**, **Engineering**, **Security**, **Philosophy**, **Society & Civics**, and **Society & Technology** should come after narrower framework, discipline, tool, provider, or method categories.
+
 ## Categories
 
+- **AGI**: Artificial general intelligence topics, including generality, transfer, cognitive capability scope, architectures, evaluation, and philosophical or technical questions specific to AGI.
 - **Machine Learning**: Core artificial intelligence and machine learning topics, including model design, training, evaluation, inference, and applied ML systems.
 - **AI Agents**: Agent-based AI systems that use tools, workflows, memory, orchestration, multi-step reasoning, or protocol-driven integration.
 - **AI Security**: Security issues specific to AI and machine-learning systems, including model abuse, adversarial attacks, agent risk, governance controls, and defensive architecture around AI deployments.
 - **AI Strategy**: Organizational, operational, and governance questions around adopting AI in products, teams, or enterprises.
+- **Artificial Intelligence**: Broad artificial intelligence topics, including symbolic AI, search, planning, reasoning systems, machine intelligence concepts, and AI work that is not limited to model training or generative systems.
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
@@ -31,6 +35,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
+- **Fluid Mechanics**: Fluid flow, turbulence, hydraulics, Reynolds effects, open-channel behavior, and mathematical or engineering analysis of liquids and gases in motion.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Generative AI**: Systems that generate text, code, images, media, plans, or structured outputs, including RAG, conversational AI, foundation-model applications, and production GenAI workflows.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
@@ -38,6 +43,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
 - **Java**: Java language, JVM, Java standard libraries, Jakarta EE, Java tooling, Java performance, Java security, and Java ecosystem engineering.
+- **JavaScript**: JavaScript language behavior, browser and server-side runtimes, asynchronous programming, web platform integration, and JavaScript ecosystem engineering.
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.
@@ -62,5 +68,7 @@ This document defines the current blog categories used in the site taxonomy. Cat
 - **Software Design & Architecture**: System structure, modeling, requirements, design methods, architecture frameworks, and large-scale software organization.
 - **Software Security**: Secure software design, implementation, testing, and hardening work focused on application-level defenses and the security properties of software systems.
 - **Spring**: Spring ecosystem topics, including Spring Boot, caching, testing, and Java application architecture in the Spring stack.
+- **Stylometry**: Quantitative authorship analysis, writing-style measurement, attribution methods, linguistic fingerprints, and computational approaches to textual identity or similarity.
+- **Technical Writing**: Documentation, explanatory writing, developer education, information architecture, reference material, tutorials, API docs, and communication practices for technical subjects.
 - **Veganism**: Animal ethics, vegan advocacy, organizing, movement strategy, and analysis of systems built on animal use.
 - **Web & UI**: Frontend development, interface architecture, browser performance, styling systems, and user-interface engineering.
