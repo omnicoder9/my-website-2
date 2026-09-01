@@ -15,6 +15,7 @@ When an article has multiple categories, list the most specific category first. 
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
+- **Automotive Engineering**: Vehicle systems engineering, including vehicle dynamics, powertrain and chassis control, autonomous driving, in-vehicle networks, safety constraints, and connected-car platforms.
 - **AWS**: Amazon Web Services topics, including AWS architecture, IAM, serverless services, managed infrastructure, cloud security, and provider-specific operational practice.
 - **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
@@ -44,6 +45,7 @@ When an article has multiple categories, list the most specific category first. 
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
 - **Java**: Java language, JVM, Java standard libraries, Jakarta EE, Java tooling, Java performance, Java security, and Java ecosystem engineering.
 - **JavaScript**: JavaScript language behavior, browser and server-side runtimes, asynchronous programming, web platform integration, and JavaScript ecosystem engineering.
+- **Kinematics**: Motion geometry, coordinate frames, degrees of freedom, forward and inverse kinematics, pose, odometry, and trajectory geometry independent of force modeling.
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.

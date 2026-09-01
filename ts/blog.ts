@@ -8,6 +8,7 @@ const blogCategoryLabels = [
   "ASP.NET",
   "Android",
   "Angular",
+  "Automotive Engineering",
   "AWS",
   "Azure",
   "Business",
@@ -37,6 +38,7 @@ const blogCategoryLabels = [
   "IoT",
   "Java",
   "JavaScript",
+  "Kinematics",
   "Kubernetes",
   "Learning",
   "Math",
@@ -123,6 +125,42 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/technical-writing/technical-descriptions-and-explanations.html",
+    publishedAt: "2026-09-01",
+    summary: "Technical description and explanation, read as fourteen acceptance tests.",
+    title: "What Can the Reader Do Afterwards? — Technical description and explanation, read as fourteen acceptance tests"
+  },
+  {
+    path: "blog-articles/programming-languages/who-pays-and-when.html",
+    publishedAt: "2026-09-01",
+    summary: "Programming language selection as a choice of cost schedule, not a choice of capability.",
+    title: "Who Pays, and When? — Programming language selection as a choice of cost schedule, not a choice of capability"
+  },
+  {
+    path: "blog-articles/philosophy/what-is-the-category-for.html",
+    publishedAt: "2026-09-01",
+    summary: "What is this category for — and what does it cost the thing being classified?",
+    title: "What Is the Category For? — Reality contains phenomena and structures. Everything above that is ours, and it is not therefore arbitrary."
+  },
+  {
+    path: "blog-articles/philosophy/the-resistance-interval.html",
+    publishedAt: "2026-09-01",
+    summary: "Eighteen famous errors, dated by when the answer became available and by how long it took to be read.",
+    title: "The Resistance Interval — Eighteen famous errors, dated by when the answer became available and by how long it took to be read"
+  },
+  {
+    path: "blog-articles/kinematics/kinematics-in-robotics.html",
+    publishedAt: "2026-09-01",
+    summary: "A structural reading of robot kinematics: seventeen standard constructs, seventeen defects none of them can remove, and the place each one parks its own.",
+    title: "Where Does the Defect Go? — a structural reading of robot kinematics"
+  },
+  {
+    path: "blog-articles/automotive-engineering/vehicle-architecture.html",
+    publishedAt: "2026-09-01",
+    summary: "Road-vehicle architecture read as the management of hard points: twenty-seven plates, nine experiments and one ledger.",
+    title: "What Is Fixed, and What Has to Move Around It? — road-vehicle architecture"
+  },
   {
     path: "blog-articles/stylometry/history-stylometry.html",
     publishedAt: "2026-08-27",
@@ -2598,6 +2636,12 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/technical-writing/technical-descriptions-and-explanations.html": ["Technical Writing", "Learning", "Philosophy", "Engineering"],
+  "blog-articles/programming-languages/who-pays-and-when.html": ["Programming Languages", "Programming & Software", "Business", "Engineering"],
+  "blog-articles/philosophy/what-is-the-category-for.html": ["Philosophy", "Learning", "Society & Civics"],
+  "blog-articles/philosophy/the-resistance-interval.html": ["Philosophy", "Learning", "Society & Civics"],
+  "blog-articles/kinematics/kinematics-in-robotics.html": ["Kinematics", "Robotics", "Engineering", "Math"],
+  "blog-articles/automotive-engineering/vehicle-architecture.html": ["Automotive Engineering", "Engineering", "Cyber-Physical Systems", "Hardware"],
   "blog-articles/stylometry/history-stylometry.html": ["Stylometry", "Machine Learning", "Generative AI", "Technical Writing", "Privacy"],
   "blog-articles/ai/genai/tool-use-function-calling.html": ["Generative AI", "AI Agents", "Programming & Software", "Security", "Artificial Intelligence"],
   "blog-articles/ai/genai/emerging-genai.html": ["Generative AI", "AI Strategy", "Machine Learning", "Artificial Intelligence"],
@@ -2717,7 +2761,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/angular/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
   "blog-articles/ai/ai-cannot-compensate-for-natural-stupidity.html": ["Machine Learning", "Philosophy", "Society & Civics"],
   "blog-articles/competitive-programming/2d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/security/critical-infrastructure/automotive-cybersecurity.html": ["Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
+  "blog-articles/security/critical-infrastructure/automotive-cybersecurity.html": ["Automotive Engineering", "Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
   "blog-articles/security/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
   "blog-articles/competitive-programming/stacks-in-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
   "blog-articles/security/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
@@ -2743,7 +2787,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/nmap/nmap-ics-ot-pentesting.html": ["ICS/OT", "Security", "Networks", "Cyber-Physical Systems", "Nmap", "Pentesting"],
   "blog-articles/security/nmap/nmap-reconnaissance-platform.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/swe/version_control.html": ["Programming & Software"],
-  "blog-articles/cyber-physical-systems/soft-robotics.html": ["Cyber-Physical Systems", "Engineering"],
+  "blog-articles/cyber-physical-systems/soft-robotics.html": ["Kinematics", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/security/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
   "blog-articles/swe/rewriting_history_git.html": ["Programming & Software"],
   "blog-articles/swe/site-reliability-engineering.html": ["Engineering", "Dev(Sec)Ops", "Programming & Software", "SDLC"],
@@ -2767,7 +2811,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/malware-analysis.html": ["Security"],
   "blog-articles/devops/docker/managing-docker-containers.html": ["Docker", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/programming-languages/mojo.html": ["Programming & Software", "Programming Languages", "Machine Learning", "High-Performance Computing"],
-  "blog-articles/ai/autonomous-vehicles.html": ["Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics", "Computer Vision"],
+  "blog-articles/ai/autonomous-vehicles.html": ["Automotive Engineering", "Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics", "Computer Vision"],
   "blog-articles/swe/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
   "blog-articles/ai/data-quality.html": ["Machine Learning", "Data Engineering", "Engineering", "Programming & Software"],
   "blog-articles/devops/docker/container-orchestration-ecosystem.html": ["Docker", "Kubernetes", "Dev(Sec)Ops", "Programming & Software"],
@@ -2809,7 +2853,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/api-security-best-practices.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/physics/newtons_second_law_dynamics.html": ["Physics", "Engineering", "Differential Equations"],
   "blog-articles/math/non-euclidean-geometry.html": ["Math", "Philosophy"],
-  "blog-articles/ai/drl-humanoid-robotics.html": ["Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
+  "blog-articles/ai/drl-humanoid-robotics.html": ["Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/ai/causal_ai.html": ["Machine Learning"],
   "blog-articles/security/side-channel/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
   "blog-articles/veganism/hidden-animal-ingredients.html": ["Veganism"],
@@ -2845,7 +2889,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/philosophy/what-is-reason.html": ["Philosophy"],
   "blog-articles/cyber-physical-systems/multi-agent-distributed-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/networks/ecosystem-convergence.html": ["Cyber-Physical Systems", "Robotics", "IoT", "Networks"],
-  "blog-articles/cyber-physical-systems/model-predictive-control.html": ["Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/cyber-physical-systems/model-predictive-control.html": ["Automotive Engineering", "Control Theory & Engineering", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/swe/nonfunctional-requirements.html": ["Programming & Software", "Software Design & Architecture", "SDLC"],
   "blog-articles/programming-languages/rails-security.html": ["Security", "Software Security", "Programming & Software", "Programming Languages"],
   "blog-articles/spring/spring-framework-sec.html": ["Java", "Security", "Software Security", "Programming & Software", "Spring"],
@@ -2919,15 +2963,15 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/philosophy/metaethics.html": ["Philosophy", "Ethics"],
   "blog-articles/ai/machine-learning-lifecycle.html": ["Machine Learning", "Engineering"],
   "blog-articles/ai/genai/ai-agents/ai-coding-agent-failures.html": ["AI Agents", "Generative AI", "Programming & Software"],
-  "blog-articles/robotics/ai-in-robotics.html": ["Robotics", "Machine Learning", "Computer Vision"],
+  "blog-articles/robotics/ai-in-robotics.html": ["Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
   "blog-articles/security/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
   "blog-articles/math/bayesian-statistics.html": ["Math", "Machine Learning"],
   "blog-articles/javascript/javascript.html": ["JavaScript", "Programming & Software", "Programming Languages", "Web & UI"],
   "blog-articles/security/pentesting/breach_attack_simulation.html": ["Security", "Pentesting"],
   "blog-articles/networks/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
-  "blog-articles/robotics/cognitive-layer-robotics.html": ["Robotics", "Machine Learning", "Computer Vision"],
-  "blog-articles/robotics/robotics-perception.html": ["Robotics", "Engineering", "Computer Vision"],
-  "blog-articles/robotics/three-walls-robotics.html": ["Robotics", "Engineering"],
+  "blog-articles/robotics/cognitive-layer-robotics.html": ["Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
+  "blog-articles/robotics/robotics-perception.html": ["Kinematics", "Robotics", "Engineering", "Computer Vision"],
+  "blog-articles/robotics/three-walls-robotics.html": ["Kinematics", "Robotics", "Engineering"],
   "blog-articles/swe/why-projects-run-late-and-over-budget.html": ["Business", "Engineering", "SDLC"],
   "blog-articles/philosophy/engineering_is_philosophy.html": ["Engineering", "Philosophy"],
   "blog-articles/security/sast-technical-field-guide.html": ["Security", "Dev(Sec)Ops"],
