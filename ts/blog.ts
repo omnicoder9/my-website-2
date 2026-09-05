@@ -126,6 +126,54 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/swe/koine-meta-model.html",
+    publishedAt: "2026-09-05",
+    summary: "A proposal for Koine, a general semantic meta-model of software engineering: fifteen primitives, nine relation families, thirteen facets, a task frame and a compositional task grammar, built for expressiveness rather than exhaustiveness, with a runnable lab and 108 references.",
+    title: "What Must a Vocabulary Be Able to Say? Koine, a general semantic meta-model of software engineering"
+  },
+  {
+    path: "blog-articles/swe/privacy-by-design.html",
+    publishedAt: "2026-09-05",
+    summary: "Privacy by design as an engineering discipline: eighteen decisions, the rung each one is claimed at, and the rung a mechanism actually holds.",
+    title: "What Would Have to Be Impossible? · privacy by design for software engineers"
+  },
+  {
+    path: "blog-articles/web-ui/when-does-it-tell-you.html",
+    publishedAt: "2026-09-04",
+    summary: "Java/Spring, .NET, Node/TypeScript, Python, PHP, Ruby and Go compared by when each settles the same eighteen decisions, with a deterministic lab and Vancouver references.",
+    title: "When Does It Tell You? — seven web stacks read as schedules of discovery"
+  },
+  {
+    path: "blog-articles/business/contemporary-business-issues.html",
+    publishedAt: "2026-09-03",
+    summary: "Sixteen contemporary business issues, read as one question about where the firm ends.",
+    title: "Who Answers for the Part You Don't Own?"
+  },
+  {
+    path: "blog-articles/swe/relational-database-engines.html",
+    publishedAt: "2026-09-03",
+    summary: "All five are ACID relational engines. All five speak SQL. The differences that decide projects are not features but defaults: the answers each engine supplies when your statement is silent, and how loudly it tells you which answer it picked.",
+    title: "What Happens When You Are Wrong? — comparing relational database engines"
+  },
+  {
+    path: "blog-articles/ai/ai-organisational-roles.html",
+    publishedAt: "2026-09-02",
+    summary: "Twelve new artificial-intelligence job titles, read not as descriptions of work but as claims about authority: where each one came from, what it actually decides, what tools and processes it runs, what holds it in place when the organisation chart is redrawn next, and what it takes to be hired into it.",
+    title: "What Can This Role Stop?"
+  },
+  {
+    path: "blog-articles/ai/what-crosses-the-boundary.html",
+    publishedAt: "2026-09-02",
+    summary: "Forward-deployed engineers and the other new customer-facing AI roles: where they came from, what they actually do, and whether the distinctions between them are real.",
+    title: "What Crosses the Boundary? — new AI product and customer-facing roles"
+  },
+  {
+    path: "blog-articles/ai/which-term-do-you-own.html",
+    publishedAt: "2026-09-02",
+    summary: "Every one of these titles is a bid on one factor of the fraction of a purchased accelerator-second that becomes work somebody wanted. The way to tell them apart is to ask which factor the holder can move, which they can only measure, and which they must accept as given.",
+    title: "Which Term Do You Own?"
+  },
+  {
     path: "blog-articles/technical-writing/technical-descriptions-and-explanations.html",
     publishedAt: "2026-09-01",
     summary: "Technical description and explanation, read as fourteen acceptance tests.",
@@ -2636,6 +2684,14 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/swe/koine-meta-model.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "Philosophy"],
+  "blog-articles/swe/privacy-by-design.html": ["Privacy", "Security", "Software Security", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/web-ui/when-does-it-tell-you.html": ["Web & UI", "Programming & Software", "Programming Languages", "Software Design & Architecture"],
+  "blog-articles/business/contemporary-business-issues.html": ["Business", "Society & Technology", "Society & Civics"],
+  "blog-articles/swe/relational-database-engines.html": ["Data Engineering", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/ai/ai-organisational-roles.html": ["Artificial Intelligence", "AI Strategy", "Business", "Machine Learning"],
+  "blog-articles/ai/what-crosses-the-boundary.html": ["Artificial Intelligence", "AI Strategy", "Business", "Programming & Software"],
+  "blog-articles/ai/which-term-do-you-own.html": ["Artificial Intelligence", "AI Strategy", "Machine Learning", "High-Performance Computing", "Dev(Sec)Ops"],
   "blog-articles/technical-writing/technical-descriptions-and-explanations.html": ["Technical Writing", "Learning", "Philosophy", "Engineering"],
   "blog-articles/programming-languages/who-pays-and-when.html": ["Programming Languages", "Programming & Software", "Business", "Engineering"],
   "blog-articles/philosophy/what-is-the-category-for.html": ["Philosophy", "Learning", "Society & Civics"],
