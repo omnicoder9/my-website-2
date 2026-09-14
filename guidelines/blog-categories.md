@@ -15,6 +15,7 @@ When an article has multiple categories, list the most specific category first. 
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
+- **Architecture**: Building architecture and architectural design, including spatial organization, materials, typologies, building programs, precedents, and the relationship between buildings, people, and sites.
 - **Automotive Engineering**: Vehicle systems engineering, including vehicle dynamics, powertrain and chassis control, autonomous driving, in-vehicle networks, safety constraints, and connected-car platforms.
 - **AWS**: Amazon Web Services topics, including AWS architecture, IAM, serverless services, managed infrastructure, cloud security, and provider-specific operational practice.
 - **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
@@ -23,6 +24,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
 - **Computer Vision**: Image understanding, visual perception, object detection, SLAM, visual sensor fusion, and AI systems that interpret pixels or camera-derived signals.
 - **Competitive Programming**: Algorithmic problem-solving techniques, coding interview-style patterns, data structures, and contest-oriented reasoning.
+- **Construction**: Built-environment topics, including construction methods, project delivery, building systems, site constraints, safety, estimating, and construction-sector engineering practice.
 - **Control Theory & Engineering**: Feedback systems, controller design, stability, sampled-data systems, implementation tradeoffs, and real-world control engineering.
 - **Cosmology**: The origin, structure, evolution, and fate of the universe, including major cosmological theories and debates.
 - **Cyber-Physical Systems**: Systems that tightly couple software with sensors, actuators, embedded computation, industrial control, or physical processes.
@@ -35,6 +37,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Electronics**: Circuits, components, analog and digital electronics, signal behavior, embedded electrical design, and practical hardware-level engineering topics.
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
+- **Firearms Engineering**: Firearms as engineered systems, including mechanisms, materials, ballistics, reliability, safety constraints, manufacturing, and design tradeoffs.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
 - **Fluid Mechanics**: Fluid flow, turbulence, hydraulics, Reynolds effects, open-channel behavior, and mathematical or engineering analysis of liquids and gases in motion.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
@@ -47,6 +50,7 @@ When an article has multiple categories, list the most specific category first. 
 - **JavaScript**: JavaScript language behavior, browser and server-side runtimes, asynchronous programming, web platform integration, and JavaScript ecosystem engineering.
 - **Kinematics**: Motion geometry, coordinate frames, degrees of freedom, forward and inverse kinematics, pose, odometry, and trajectory geometry independent of force modeling.
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
+- **Law**: Legal systems, rights, regulation, legal institutions, compliance, and the interaction between law, technology, policy, and civic life.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.
 - **Mobile App Development**: Cross-cutting mobile engineering topics beyond one platform, including architecture, security, testing, and deployment.

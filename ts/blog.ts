@@ -8,6 +8,7 @@ const blogCategoryLabels = [
   "ASP.NET",
   "Android",
   "Angular",
+  "Architecture",
   "Automotive Engineering",
   "AWS",
   "Azure",
@@ -16,6 +17,7 @@ const blogCategoryLabels = [
   "Computer Graphics",
   "Computer Vision",
   "Competitive Programming",
+  "Construction",
   "Control Theory & Engineering",
   "Cosmology",
   "Cyber-Physical Systems",
@@ -28,6 +30,7 @@ const blogCategoryLabels = [
   "Electronics",
   "Engineering",
   "Ethics",
+  "Firearms Engineering",
   "Finance",
   "Fluid Mechanics",
   "GCP",
@@ -40,6 +43,7 @@ const blogCategoryLabels = [
   "JavaScript",
   "Kinematics",
   "Kubernetes",
+  "Law",
   "Learning",
   "Math",
   "Mobile App Development",
@@ -125,6 +129,102 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/firearms/functional-architecture-of-firearms.html",
+    publishedAt: "2026-09-13",
+    summary: "A firearm is an open-loop, self-timed machine. Thirty-five coded events, eight deterministic experiments, and the finding that every event with no timing authority is uncontained.",
+    title: "What says when? The functional architecture of firearms"
+  },
+  {
+    path: "blog-articles/law/emerging-issues-in-law.html",
+    publishedAt: "2026-09-13",
+    summary: "Thirty-four acts in and around legal practice, read against the instrument a tribunal would actually reach for.",
+    title: "What Rule Is Actually Doing the Work?"
+  },
+  {
+    path: "blog-articles/operating-systems/how-do-you-know-thats-still-true.html",
+    publishedAt: "2026-09-12",
+    summary: "The operating system network stack read as a catalogue of remembered facts: interfaces, addressing, ARP and neighbour discovery, routing, TCP, UDP, sockets, DNS, DHCP, firewalls, namespaces, virtual interfaces and VPNs, placed on a six-rung revalidation ladder.",
+    title: "How do you know that's still true? — the operating system's network stack as a filing cabinet"
+  },
+  {
+    path: "blog-articles/operating-systems/interprocess-communication.html",
+    publishedAt: "2026-09-12",
+    summary: "Interprocess communication read as a ladder of retention: what the kernel object still knows between the sender's action and the receiver's observation, and why everything above a byte stream stops at the edge of the machine.",
+    title: "Who Remembers the Message? — interprocess communication in operating systems"
+  },
+  {
+    path: "blog-articles/ai/genai/ai-agents/production-engineering-for-ai-agents.html",
+    publishedAt: "2026-09-11",
+    summary: "Production engineering for AI agents, read as a question about custody: for each thing that decides what the agent does, where is the copy that governs the next request, and whose hand is on it.",
+    title: "What Moves When You Deploy? — production engineering for AI agents"
+  },
+  {
+    path: "blog-articles/operating-systems/os-security-and-protection.html",
+    publishedAt: "2026-09-11",
+    summary: "Thirty-two operating-system protection mechanisms read as dependency claims and ranked by the least privileged component whose compromise voids each one.",
+    title: "What Has to Be Right for This to Hold? — security and protection in operating systems"
+  },
+  {
+    path: "blog-articles/ai/genai/ai-agents/agent-observability.html",
+    publishedAt: "2026-09-10",
+    summary: "Observability for AI agents, read as a schedule of commitments: what has to be decided before a run for its record to answer the question you will only think to ask afterwards.",
+    title: "What Did You Have to Know in Advance? — observability for AI agents"
+  },
+  {
+    path: "blog-articles/ai/genai/ai-agents/agent-reliability-safety-engineering.html",
+    publishedAt: "2026-09-10",
+    summary: "Reliability and safety engineering for AI agents, read as a single question about the cost of undoing a step.",
+    title: "What Can Still Be Taken Back? — reliability and safety engineering for AI agents"
+  },
+  {
+    path: "blog-articles/ai/genai/ai-agents/cheaper-per-what.html",
+    publishedAt: "2026-09-10",
+    summary: "A technical article on cost and performance engineering for AI agents: token economics, caching, routing, batching, speculative decoding, parallelism and agent unit economics, with a deterministic lab.",
+    title: "Cheaper Per What? Cost and performance engineering for AI agents"
+  },
+  {
+    path: "blog-articles/ai/genai/ai-agents/evaluating-ai-agents.html",
+    publishedAt: "2026-09-09",
+    summary: "A technical treatment of AI agent evaluation: metrics, methods and benchmarks placed on two axes: where in a run a verdict can land, and how many runs the number needs.",
+    title: "What Does One Run Tell You? — the evaluation of AI agents"
+  },
+  {
+    path: "blog-articles/engineering/philosophy-of-engineering.html",
+    publishedAt: "2026-09-08",
+    summary: "A rigorous introduction to the philosophy of engineering: its history, literature, subfields and neighbouring disciplines, organised around the question of what brings an engineering claim to an end.",
+    title: "Who Settles It? A Philosophy of Engineering"
+  },
+  {
+    path: "blog-articles/industries/tech-industry/technology-verticals.html",
+    publishedAt: "2026-09-08",
+    summary: "A rigorous, fully cited analysis of nineteen vertical technology industries, coded against a five-door ladder of permission from private scheme to artefact authorisation.",
+    title: "Who Has to Say Yes? Nineteen technology verticals read as permission structures"
+  },
+  {
+    path: "blog-articles/web-ui/browser-web-platform-internals.html",
+    publishedAt: "2026-09-08",
+    summary: "Browser and web platform internals read as a map of boundaries: process architecture, the rendering pipeline, the event loop, the origin, storage, workers, WebAssembly, streams, WebSockets and WebRTC, placed on a six-rung crossing ladder.",
+    title: "Who Waits? Browser and web platform internals"
+  },
+  {
+    path: "blog-articles/stylometry/levels-of-stylometric-analysis.html",
+    publishedAt: "2026-09-07",
+    summary: "The seven levels of stylometric analysis re-read as a scale of derivation depth: twenty-seven feature families, ten experiments on annotated corpora, and what each level costs in machinery, observations and transfer.",
+    title: "The Levels of Stylometric Analysis — What Has to Be True Before You Can Count It?"
+  },
+  {
+    path: "blog-articles/ai/ai-security/ai-security-roles.html",
+    publishedAt: "2026-09-06",
+    summary: "A rigorous account of the AI security engineer, red team engineer, security architect, governance engineer, safety engineer, risk engineer and security researcher roles: history, responsibilities, tooling, processes, qualifications and credentials.",
+    title: "What Would Falsify It? Seven AI security roles and the claims they sign"
+  },
+  {
+    path: "blog-articles/stylometry/characterising-writing-style.html",
+    publishedAt: "2026-09-06",
+    summary: "What a writing style is, how stylometry measures one, and how the measurement is defended against topic, genre, medium, editing, period and community.",
+    title: "Characterising a Writing Style — What else could have moved that number?"
+  },
   {
     path: "blog-articles/swe/koine-meta-model.html",
     publishedAt: "2026-09-05",
@@ -2684,6 +2784,22 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/firearms/functional-architecture-of-firearms.html": ["Firearms Engineering", "Engineering", "Hardware", "Physics"],
+  "blog-articles/law/emerging-issues-in-law.html": ["Law", "Society & Civics", "Society & Technology", "Artificial Intelligence"],
+  "blog-articles/operating-systems/how-do-you-know-thats-still-true.html": ["Operating Systems", "Networks", "Security"],
+  "blog-articles/operating-systems/interprocess-communication.html": ["Operating Systems", "Programming & Software", "Networks"],
+  "blog-articles/ai/genai/ai-agents/production-engineering-for-ai-agents.html": ["AI Agents", "Generative AI", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/operating-systems/os-security-and-protection.html": ["Operating Systems", "Security", "Software Security"],
+  "blog-articles/ai/genai/ai-agents/agent-observability.html": ["AI Agents", "Generative AI", "Dev(Sec)Ops", "Artificial Intelligence"],
+  "blog-articles/ai/genai/ai-agents/agent-reliability-safety-engineering.html": ["AI Agents", "Generative AI", "AI Security", "Engineering", "Dev(Sec)Ops"],
+  "blog-articles/ai/genai/ai-agents/cheaper-per-what.html": ["AI Agents", "Generative AI", "AI Strategy", "High-Performance Computing", "Dev(Sec)Ops"],
+  "blog-articles/ai/genai/ai-agents/evaluating-ai-agents.html": ["AI Agents", "Generative AI", "Machine Learning", "Artificial Intelligence"],
+  "blog-articles/engineering/philosophy-of-engineering.html": ["Engineering", "Philosophy"],
+  "blog-articles/industries/tech-industry/technology-verticals.html": ["Business", "Society & Technology", "Engineering"],
+  "blog-articles/web-ui/browser-web-platform-internals.html": ["Web & UI", "Programming & Software", "Operating Systems", "Networks"],
+  "blog-articles/stylometry/levels-of-stylometric-analysis.html": ["Stylometry", "Machine Learning", "Technical Writing"],
+  "blog-articles/ai/ai-security/ai-security-roles.html": ["AI Security", "Security", "Machine Learning", "AI Strategy"],
+  "blog-articles/stylometry/characterising-writing-style.html": ["Stylometry", "Machine Learning", "Technical Writing", "Privacy"],
   "blog-articles/swe/koine-meta-model.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "Philosophy"],
   "blog-articles/swe/privacy-by-design.html": ["Privacy", "Security", "Software Security", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/web-ui/when-does-it-tell-you.html": ["Web & UI", "Programming & Software", "Programming Languages", "Software Design & Architecture"],
