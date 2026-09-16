@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL JSON and semi-structured data: json, jsonb, operators, SQL/JSON path, nested documents, GIN indexes, containment, hybrid modeling, and normalization trade-offs.">
+<title>PostgreSQL JSON & Semi-Structured Data</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1000px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:820px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL JSON &amp; Semi-Structured Data</h1>
+  <p class="dek">An expert guide to <code>json</code>, <code>jsonb</code>, JSON operators, SQL/JSON path, nested documents, containment, GIN indexing, expression indexes, document mutation, JSON-to-relational projection, hybrid schema design, and deciding when JSONB should—or should not—replace normalized tables.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL treats JSON as a first-class part of the relational database rather than as a separate storage engine. It provides two principal JSON storage types: <code>json</code>, which preserves the original JSON text, and <code>jsonb</code>, which stores a parsed binary representation designed for efficient processing and indexing. PostgreSQL also implements SQL/JSON facilities, a <code>jsonpath</code> type, JSON construction and decomposition functions, SQL/JSON query functions, and <code>JSON_TABLE</code> for projecting nested JSON data into relational rows and columns.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+<p>
+For most application data that must be queried, filtered, updated, or indexed, PostgreSQL recommends <code>jsonb</code>. The trade-off is semantic: <code>jsonb</code> normalizes the representation, discarding insignificant whitespace, object-key ordering, and duplicate keys, while <code>json</code> preserves the original textual form. <code>jsonb</code> adds containment/existence operators and GIN index support, enabling document-oriented access patterns while retaining PostgreSQL transactions, joins, constraints, row security, and ordinary relational indexes.<sup><a href="#r1">[1]</a><a href="#r3">[3]</a></sup>
+</p>
+<p>
+The strongest PostgreSQL schemas usually do not choose between “relational” and “JSON” globally. Instead, they normalize stable identifiers, relationships, constraints, and frequently queried scalar dimensions while using JSONB for attributes whose keys genuinely vary by entity, source, or version. PostgreSQL's own design guidance recommends keeping JSON documents reasonably structured and notes that large JSON documents remain subject to row-level concurrency: changing any part of a document updates and locks the containing row.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">Semi-structured data in PostgreSQL</a></li>
+<li><a href="#json-v-jsonb">json vs jsonb</a></li>
+<li><a href="#construction">Constructing JSON</a></li>
+<li><a href="#operators">JSON operators</a></li>
+<li><a href="#nested">Nested documents</a></li>
+<li><a href="#mutation">Updating JSONB</a></li>
+<li><a href="#containment">JSONB containment and existence</a></li>
+<li><a href="#jsonpath">SQL/JSON path</a></li>
+<li><a href="#sqljson">SQL/JSON query functions</a></li>
+<li><a href="#json-table">JSON_TABLE</a></li>
+<li><a href="#expansion">Expanding arrays and objects</a></li>
+<li><a href="#gin">GIN indexes</a></li>
+<li><a href="#opclasses">jsonb_ops vs jsonb_path_ops</a></li>
+<li><a href="#expression">Expression and scalar indexes</a></li>
+<li><a href="#hybrid">Relational + JSON hybrid modeling</a></li>
+<li><a href="#constraints">Constraining JSON documents</a></li>
+<li><a href="#generated">Generated columns</a></li>
+<li><a href="#normalization">JSONB vs normalized tables</a></li>
+<li><a href="#applications">Application patterns</a></li>
+<li><a href="#performance">Performance engineering</a></li>
+<li><a href="#evolution">Schema evolution</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. Semi-structured data in PostgreSQL</h2>
+<p>
+Relational tables describe a stable schema through typed columns, keys, constraints, and relationships. Semi-structured data instead carries some of its schema inside each value: one document may contain optional keys, nested arrays, variable objects, or source-specific properties that another document omits. PostgreSQL supports both models in the same transaction and query plan. JSON values can be joined to relational tables, filtered with ordinary predicates, converted to records, aggregated into JSON responses, protected by row-level security, and indexed using both scalar and GIN strategies.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<div class="diagram">                    PostgreSQL row
++-----------------------------------------------------------+
+| product_id bigint          <- relational primary key      |
+| tenant_id bigint           <- relational security/filter  |
+| sku text                   <- relational uniqueness       |
+| name text                  <- stable searchable scalar    |
+| price numeric              <- typed/range queries         |
+| attributes jsonb           <- variable product attributes |
++-----------------------------------------------------------+
+                 |                         |
+                 | B-tree / constraints    | GIN / JSON path
+                 v                         v
+        relational query model      document query model
+                 \                         /
+                  +-------- JOIN ----------+
+                           |
+                           v
+                     one SQL query</div>
+
+<p>
+This coexistence is central to effective PostgreSQL JSON design. JSONB is not an escape from relational modeling; it is another data type with specialized operators and indexes. The design question is therefore usually which fields belong in JSON, not whether the entire application should be “relational” or “document-oriented.”<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="json-v-jsonb">
+<h2>2. <code>json</code> versus <code>jsonb</code></h2>
+<p>
+Both <code>json</code> and <code>jsonb</code> validate JSON input, but they store it differently. <code>json</code> stores an exact copy of the input text and must reparse that text for processing operations. <code>jsonb</code> parses input into a decomposed binary representation, making insertion somewhat more expensive but processing substantially faster and enabling indexing.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Property</th><th><code>json</code></th><th><code>jsonb</code></th></tr></thead>
+<tbody>
+<tr><td>Input validation</td><td>Valid JSON required</td><td>Valid JSON required, with some stricter representability checks</td></tr>
+<tr><td>Storage form</td><td>Original input text</td><td>Parsed/decomposed binary representation</td></tr>
+<tr><td>Whitespace preservation</td><td>Yes</td><td>No</td></tr>
+<tr><td>Object-key order preservation</td><td>Yes</td><td>No</td></tr>
+<tr><td>Duplicate object keys</td><td>Preserved in stored text</td><td>Only the last value is retained</td></tr>
+<tr><td>Processing</td><td>Requires reparsing</td><td>Designed for efficient processing</td></tr>
+<tr><td>Containment/existence operators</td><td>No JSONB-style containment family</td><td>Yes</td></tr>
+<tr><td>GIN indexing</td><td>No native JSON GIN opclass</td><td>Yes</td></tr>
+<tr><td>Typical application choice</td><td>Exact textual preservation/interchange</td><td>Queryable application documents</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.1 Representation differences</h3>
+<pre><code>SELECT
+    '{"b": 2, "a": 1, "a": 3}'::json  AS as_json,
+    '{"b": 2, "a": 1, "a": 3}'::jsonb AS as_jsonb;</code></pre>
+
+<p>
+The <code>json</code> value preserves the source ordering and duplicate keys. The <code>jsonb</code> value canonicalizes the object representation and keeps only the last value for duplicate keys. Applications that depend on exact serialization, duplicate-key retention, or original key order should not silently change that payload to <code>jsonb</code>.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>2.2 JSON null is not SQL NULL</h3>
+<pre><code>SELECT
+    NULL::jsonb             AS sql_null,
+    'null'::jsonb           AS json_null,
+    '{"x": null}'::jsonb    AS object_with_json_null;</code></pre>
+
+<p>
+SQL <code>NULL</code> represents absence/unknown at the SQL value level. JSON <code>null</code> is a JSON scalar stored inside a JSON value. Confusing them can produce subtle API and filtering bugs.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="callout ok">
+<strong>Default choice:</strong> use <code>jsonb</code> when the database needs to query or index the contents. Use <code>json</code> when preserving the exact incoming JSON representation is itself a requirement.
+</div>
+</section>
+
+<section id="construction">
+<h2>3. Constructing JSON safely</h2>
+<p>
+PostgreSQL provides JSON constructors that convert typed SQL values into correctly escaped JSON values. Prefer these functions to hand-concatenating JSON strings. <code>to_jsonb</code> recursively converts SQL arrays and composite rows, while <code>jsonb_build_object</code> and <code>jsonb_build_array</code> build objects and arrays from SQL expressions.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>3.1 Build an object</h3>
+<pre><code>SELECT jsonb_build_object(
+    'product_id', 42,
+    'name', 'Mechanical Keyboard',
+    'price', 129.99,
+    'active', true,
+    'tags', jsonb_build_array('keyboard', 'usb-c', 'wireless')
+);</code></pre>
+
+<h3>3.2 Convert a row</h3>
+<pre><code>SELECT to_jsonb(p)
+FROM catalog.product AS p
+WHERE p.product_id = 42;</code></pre>
+
+<h3>3.3 Aggregate relational rows into JSON</h3>
+<pre><code>SELECT jsonb_build_object(
+    'customer_id', c.customer_id,
+    'name', c.display_name,
+    'orders',
+        COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'order_id', o.order_id,
+                    'total', o.total,
+                    'created_at', o.created_at
+                )
+                ORDER BY o.created_at DESC
+            ) FILTER (WHERE o.order_id IS NOT NULL),
+            '[]'::jsonb
+        )
+)
+FROM app.customer AS c
+LEFT JOIN app.orders AS o
+  ON o.customer_id = c.customer_id
+WHERE c.customer_id = $1
+GROUP BY c.customer_id, c.display_name;</code></pre>
+
+<p>
+JSON aggregation is often an excellent API-output pattern: the database keeps normalized relational storage but returns a nested response shape. PostgreSQL provides <code>json_agg</code>/<code>jsonb_agg</code> and object aggregates specifically for this purpose.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>3.4 SQL/JSON constructors</h3>
+<pre><code>SELECT json_object(
+    'code' VALUE 'P-100',
+    'active' VALUE true,
+    'description' VALUE NULL
+    ABSENT ON NULL
+    RETURNING jsonb
+);</code></pre>
+
+<p>
+PostgreSQL 18 implements SQL/JSON constructors that support options such as <code>ABSENT ON NULL</code>, uniqueness rules for object keys, and explicit return types.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="operators">
+<h2>4. JSON extraction and operators</h2>
+<p>
+The extraction operators <code>-></code> and <code>#></code> preserve JSON/JSONB values, while <code>->></code> and <code>#>></code> convert the extracted value to SQL <code>text</code>. Array indexes are zero-based for JSON access, and negative indexes count from the end. If the requested path does not match the structure, extraction operators return SQL <code>NULL</code> instead of raising an error.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>4.1 Sample document</h3>
+<pre><code>{
+  "name": "Workstation",
+  "manufacturer": {
+    "name": "Acme",
+    "country": "US"
+  },
+  "dimensions": {
+    "width_mm": 420,
+    "height_mm": 460
+  },
+  "tags": ["computer", "workstation", "linux"],
+  "variants": [
+    {"sku": "WS-32", "ram_gb": 32, "price": 1899.00},
+    {"sku": "WS-64", "ram_gb": 64, "price": 2299.00}
+  ]
+}</code></pre>
+
+<h3>4.2 Extract JSON values</h3>
+<pre><code>SELECT
+    attributes -&gt; 'manufacturer' AS manufacturer_object,
+    attributes -&gt; 'tags'         AS tags_array,
+    attributes -&gt; 'variants' -&gt; 0 AS first_variant
+FROM catalog.product;</code></pre>
+
+<h3>4.3 Extract SQL text</h3>
+<pre><code>SELECT
+    attributes -&gt;&gt; 'name' AS name,
+    attributes #&gt;&gt; '{manufacturer,country}' AS country,
+    attributes #&gt;&gt; '{variants,0,sku}' AS first_sku
+FROM catalog.product;</code></pre>
+
+<h3>4.4 Cast after extraction</h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE (attributes #&gt;&gt; '{dimensions,width_mm}')::integer &gt;= 400;</code></pre>
+
+<p>
+Because <code>->></code>/<code>#>></code> return text, numeric/date semantics require an explicit cast. If that field is frequently filtered or joined, moving it to a typed relational/generated column can improve validation, statistics, and indexing clarity.
+</p>
+</section>
+
+<section id="nested">
+<h2>5. Modeling nested documents</h2>
+<p>
+PostgreSQL allows JSON arrays and objects to nest arbitrarily. The important modeling question is whether the nested element is an inseparable part of one atomic datum or an independently identifiable entity that should participate in relational constraints and concurrent updates. PostgreSQL's documentation explicitly recommends keeping JSON documents to a manageable size and treating a JSON document as an atomic datum where possible because an update locks the whole containing row.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>5.1 Good nested use case: immutable source payload</h3>
+<pre><code>CREATE TABLE integrations.webhook_event (
+    event_id uuid PRIMARY KEY,
+    source text NOT NULL,
+    event_type text NOT NULL,
+    received_at timestamptz NOT NULL DEFAULT now(),
+    payload jsonb NOT NULL
+);</code></pre>
+
+<p>
+Third-party webhook payloads naturally vary by event version and provider and often need to be preserved as one source record. Stable routing fields such as <code>source</code>, <code>event_type</code>, and <code>received_at</code> remain relational for filtering and operational queries.
+</p>
+
+<h3>5.2 Risky nested use case: independent child entities</h3>
+<pre><code>-- Tempting, but usually problematic if line items are independently
+-- updated, constrained, referenced, or aggregated:
+{
+  "order_id": 123,
+  "items": [
+    {"product_id": 10, "quantity": 2, "unit_price": 12.50},
+    {"product_id": 11, "quantity": 1, "unit_price": 99.00}
+  ]
+}</code></pre>
+
+<p>
+If each line needs a foreign key to a product, independent updates, per-line uniqueness, reporting, or joins, an <code>order_item</code> table usually provides stronger guarantees and better statistics than embedding the lines in JSONB.
+</p>
+</section>
+
+<section id="mutation">
+<h2>6. Updating JSONB documents</h2>
+<p>
+Because <code>jsonb</code> is a value, JSON update operations conceptually produce a new JSONB value for the column. PostgreSQL provides concatenation/deletion operators, <code>jsonb_set</code>, <code>jsonb_set_lax</code>, <code>jsonb_insert</code>, and subscripting assignment for targeted document changes.<sup><a href="#r2">[2]</a><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>6.1 Replace or add a nested value</h3>
+<pre><code>UPDATE catalog.product
+SET attributes = jsonb_set(
+    attributes,
+    '{manufacturer,country}',
+    to_jsonb('CA'::text),
+    true
+)
+WHERE product_id = 42;</code></pre>
+
+<p>
+<code>jsonb_set</code> replaces the target path and, by default, creates the final item when it is missing. Earlier path steps must already exist; otherwise the target value is returned unchanged.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>6.2 Subscript assignment</h3>
+<pre><code>UPDATE catalog.product
+SET attributes['dimensions']['width_mm'] = '440'::jsonb
+WHERE product_id = 42;</code></pre>
+
+<p>
+JSONB subscripting can create missing intermediate object/array structures where traversal is possible. If an existing intermediate value is a scalar that cannot be traversed, PostgreSQL raises an error.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>6.3 Delete a top-level key</h3>
+<pre><code>UPDATE catalog.product
+SET attributes = attributes - 'legacy_code'
+WHERE product_id = 42;</code></pre>
+
+<h3>6.4 Delete a nested path</h3>
+<pre><code>UPDATE catalog.product
+SET attributes = attributes #- '{manufacturer,legacy_id}'
+WHERE product_id = 42;</code></pre>
+
+<h3>6.5 Merge is top-level, not recursive</h3>
+<pre><code>SELECT
+    '{"a": {"x": 1}, "b": 2}'::jsonb
+    ||
+    '{"a": {"y": 3}}'::jsonb;</code></pre>
+
+<p>
+The <code>||</code> operator merges only at the top level; it does not recursively merge nested objects. When duplicate object keys occur, the right operand wins.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="containment">
+<h2>7. JSONB containment and existence</h2>
+<p>
+Containment is one of the defining advantages of <code>jsonb</code>. <code>A @> B</code> asks whether JSONB value A contains JSONB value B according to PostgreSQL's structural containment rules. Object containment matches key/value subsets recursively; array containment ignores array order and duplicate elements for containment purposes. The related <code>?</code>, <code>?|</code>, and <code>?&</code> operators test top-level keys or string array elements.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>7.1 Object containment</h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE attributes @> '{
+  "manufacturer": {
+    "country": "US"
+  }
+}'::jsonb;</code></pre>
+
+<h3>7.2 Array containment</h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE attributes @> '{
+  "tags": ["linux", "workstation"]
+}'::jsonb;</code></pre>
+
+<h3>7.3 Top-level key existence</h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE attributes ? 'warranty';</code></pre>
+
+<h3>7.4 Any/all top-level keys</h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE attributes ?| ARRAY['warranty', 'dimensions'];
+
+SELECT *
+FROM catalog.product
+WHERE attributes ?& ARRAY['manufacturer', 'tags'];</code></pre>
+
+<div class="callout">
+<strong>Containment is structural; existence is top-level.</strong> The <code>?</code> operator does not recursively search nested objects. Use containment, extraction, an expression index, or JSON path for nested conditions.<sup><a href="#r1">[1]</a></sup>
+</div>
+</section>
+
+<section id="jsonpath">
+<h2>8. SQL/JSON path and the <code>jsonpath</code> type</h2>
+<p>
+PostgreSQL's <code>jsonpath</code> type stores parsed SQL/JSON path expressions. Path expressions navigate nested structures using member access (<code>.</code>), array access (<code>[]</code>), wildcards, filters, variables, predicates, methods, and arithmetic. JSON path array indexes are zero-based.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>8.1 Find nested variants by numeric condition</h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE attributes @? '$.variants[*] ? (@.ram_gb &gt;= 64)';</code></pre>
+
+<h3>8.2 Boolean predicate with <code>@@</code></h3>
+<pre><code>SELECT *
+FROM catalog.product
+WHERE attributes @@ '$.dimensions.width_mm &gt;= 400';</code></pre>
+
+<p>
+<code>@?</code> asks whether a SQL-standard path expression returns any item. <code>@@</code> evaluates a predicate-check expression and expects a single Boolean-like result. Both operators suppress several structural/type/numeric errors by design, which makes them useful across heterogeneous document collections.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>8.3 Variables instead of string-building</h3>
+<pre><code>SELECT jsonb_path_query(
+    attributes,
+    '$.variants[*] ? (@.price &gt;= $min &amp;&amp; @.price &lt;= $max)',
+    jsonb_build_object(
+        'min', to_jsonb($1::numeric),
+        'max', to_jsonb($2::numeric)
+    )
+)
+FROM catalog.product;</code></pre>
+
+<p>
+Passing path variables separately avoids embedding application values into the path expression text and makes dynamic filters easier to reason about.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>8.4 Lax versus strict mode</h3>
+<pre><code>SELECT jsonb_path_query(
+    '{"groups":[{"values":[1,2]},{"values":[3,4]}]}'::jsonb,
+    'lax $.groups.values'
+);
+
+SELECT jsonb_path_query(
+    '{"groups":[{"values":[1,2]},{"values":[3,4]}]}'::jsonb,
+    'strict $.groups[*].values'
+);</code></pre>
+
+<p>
+Lax mode can automatically unwrap arrays and adapt some structural mismatches, while strict mode requires the path to match structure explicitly. PostgreSQL warns that automatic unwrapping can produce surprising results in some paths—particularly recursive descent—so strict mode is valuable when exact document shape matters.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="sqljson">
+<h2>9. SQL/JSON query functions</h2>
+<p>
+PostgreSQL implements SQL/JSON facilities for querying JSON values with explicit behavior for empty/error cases, wrappers, and return types. These complement PostgreSQL-specific functions such as <code>jsonb_path_query</code> and operators such as <code>@?</code>/<code>@@</code>.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>9.1 Path query family</h3>
+<pre><code>SELECT jsonb_path_query(
+    '{"a":[1,2,3,4,5]}'::jsonb,
+    '$.a[*] ? (@ &gt;= $min &amp;&amp; @ &lt;= $max)',
+    '{"min":2,"max":4}'::jsonb
+);
+
+SELECT jsonb_path_query_array(
+    '{"a":[1,2,3,4,5]}'::jsonb,
+    '$.a[*] ? (@ &gt;= 2)'
+);
+
+SELECT jsonb_path_query_first(
+    '{"a":[1,2,3]}'::jsonb,
+    '$.a[*] ? (@ &gt; 1)'
+);</code></pre>
+
+<h3>9.2 Test input JSON text</h3>
+<pre><code>SELECT
+    payload_text IS JSON AS is_json,
+    payload_text IS JSON OBJECT AS is_object,
+    payload_text IS JSON WITH UNIQUE KEYS AS unique_keys
+FROM staging.ingest;</code></pre>
+
+<p>
+The SQL/JSON <code>IS JSON</code> predicate can validate generic text/byte input and optionally test whether the value is a scalar, object, or array and whether object keys are unique.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="json-table">
+<h2>10. <code>JSON_TABLE</code>: project documents into relational rows</h2>
+<p>
+<code>JSON_TABLE</code> is an SQL/JSON facility that turns JSON data into a relational table expression. A row path selects source items, the <code>COLUMNS</code> clause assigns typed SQL columns, and <code>NESTED PATH</code> can expand nested arrays. PostgreSQL permits <code>JSON_TABLE</code> in the <code>FROM</code> clause of <code>SELECT</code>, <code>UPDATE</code>, and <code>DELETE</code>, and as a source for <code>MERGE</code>.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.1 Flatten product variants</h3>
+<pre><code>SELECT
+    p.product_id,
+    jt.variant_no,
+    jt.sku,
+    jt.ram_gb,
+    jt.price
+FROM catalog.product AS p,
+JSON_TABLE(
+    p.attributes,
+    '$.variants[*]'
+    COLUMNS (
+        variant_no FOR ORDINALITY,
+        sku text PATH '$.sku',
+        ram_gb integer PATH '$.ram_gb',
+        price numeric(12,2) PATH '$.price'
+    )
+) AS jt;</code></pre>
+
+<h3>10.2 Nested projection</h3>
+<pre><code>SELECT
+    e.event_id,
+    jt.order_no,
+    jt.line_no,
+    jt.sku,
+    jt.quantity
+FROM integrations.webhook_event AS e,
+JSON_TABLE(
+    e.payload,
+    '$.orders[*]'
+    COLUMNS (
+        order_no text PATH '$.orderNumber',
+        NESTED PATH '$.lines[*]'
+        COLUMNS (
+            line_no FOR ORDINALITY,
+            sku text PATH '$.sku',
+            quantity integer PATH '$.quantity'
+        )
+    )
+) AS jt
+WHERE e.event_type = 'batch.orders';</code></pre>
+
+<p>
+This is particularly useful for ETL/staging workflows: ingest a source payload as JSONB, project it into typed rows, validate it, then load stable application entities into normalized tables.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="expansion">
+<h2>11. Expanding arrays and objects</h2>
+<p>
+PostgreSQL also provides set-returning functions for decomposing documents. <code>jsonb_array_elements</code> expands a top-level array, <code>jsonb_each</code> expands an object into key/value rows, and record-population functions map objects into existing PostgreSQL composite types.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>11.1 Array elements with <code>LATERAL</code></h3>
+<pre><code>SELECT
+    p.product_id,
+    v.variant -&gt;&gt; 'sku' AS sku,
+    (v.variant -&gt;&gt; 'price')::numeric AS price
+FROM catalog.product AS p
+CROSS JOIN LATERAL
+    jsonb_array_elements(
+        p.attributes -&gt; 'variants'
+    ) AS v(variant);</code></pre>
+
+<h3>11.2 Object key/value expansion</h3>
+<pre><code>SELECT
+    p.product_id,
+    kv.key,
+    kv.value
+FROM catalog.product AS p
+CROSS JOIN LATERAL
+    jsonb_each(
+        p.attributes -&gt; 'specifications'
+    ) AS kv(key, value);</code></pre>
+
+<h3>11.3 Populate a typed record</h3>
+<pre><code>CREATE TYPE staging.variant_input AS (
+    sku text,
+    ram_gb integer,
+    price numeric(12,2)
+);
+
+SELECT *
+FROM jsonb_populate_record(
+    NULL::staging.variant_input,
+    '{"sku":"WS-64","ram_gb":64,"price":2299}'::jsonb
+);</code></pre>
+
+<p>
+Typed projection is useful because PostgreSQL conversion then enforces the target SQL type. PostgreSQL 18 also exposes <code>jsonb_populate_record_valid</code> for checking whether a document can populate a composite value without raising a conversion error.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="gin">
+<h2>12. GIN indexes for JSONB</h2>
+<p>
+GIN is an inverted index access method suited to values containing multiple searchable components. PostgreSQL provides two built-in JSONB GIN operator classes: <code>jsonb_ops</code> (default) and <code>jsonb_path_ops</code>. A single JSONB GIN index can accelerate containment and JSON-path searches over many keys/values inside documents.<sup><a href="#r3">[3]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>12.1 Default JSONB GIN index</h3>
+<pre><code>CREATE INDEX product_attributes_gin
+ON catalog.product
+USING GIN (attributes);</code></pre>
+
+<p>
+The default <code>jsonb_ops</code> operator class supports the key-existence operators <code>?</code>, <code>?|</code>, <code>?&amp;</code>, containment <code>@&gt;</code>, and JSON-path match operators <code>@?</code> and <code>@@</code>.<sup><a href="#r3">[3]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>12.2 Indexed containment</h3>
+<pre><code>SELECT
+    product_id,
+    name
+FROM catalog.product
+WHERE attributes @&gt; '{
+  "manufacturer": {"country": "US"},
+  "tags": ["linux"]
+}'::jsonb;</code></pre>
+
+<h3>12.3 Indexed JSON path</h3>
+<pre><code>SELECT
+    product_id,
+    name
+FROM catalog.product
+WHERE attributes @? '$.variants[*] ? (@.ram_gb &gt;= 64)';</code></pre>
+
+<p>
+For indexable JSON-path patterns, PostgreSQL extracts equality clauses involving accessor chains and constants and uses those keys/values for GIN lookup. The exact path forms supported differ between JSONB GIN operator classes.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>12.4 GIN write amplification</h3>
+<p>
+One JSONB value can contribute many index entries, so a single row insert/update can require substantial GIN work. PostgreSQL's index-locking documentation explicitly notes that GIN insertion can produce several index-key insertions for one row. Benchmark write-heavy document tables with realistic payload sizes before indexing every JSONB column indiscriminately.<sup><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="opclasses">
+<h2>13. <code>jsonb_ops</code> versus <code>jsonb_path_ops</code></h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Capability</th><th><code>jsonb_ops</code></th><th><code>jsonb_path_ops</code></th></tr></thead>
+<tbody>
+<tr><td>Default</td><td>Yes</td><td>No</td></tr>
+<tr><td><code>@&gt;</code> containment</td><td>Yes</td><td>Yes</td></tr>
+<tr><td><code>@?</code> / <code>@@</code> JSON path</td><td>Yes</td><td>Yes</td></tr>
+<tr><td><code>?</code>, <code>?|</code>, <code>?&amp;</code></td><td>Yes</td><td>No</td></tr>
+<tr><td>Index representation</td><td>Independent keys and values</td><td>Path/value hashes</td></tr>
+<tr><td>Typical size for containment workloads</td><td>Larger</td><td>Often smaller</td></tr>
+<tr><td>Containment specificity</td><td>General/flexible</td><td>Often more specific/faster</td></tr>
+<tr><td>Empty structures such as <code>{"a":{}}</code></td><td>Represented via keys</td><td>No value entry; such searches can be poor</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>13.1 Path-optimized index</h3>
+<pre><code>CREATE INDEX product_attributes_path_gin
+ON catalog.product
+USING GIN (attributes jsonb_path_ops);</code></pre>
+
+<p>
+PostgreSQL documents <code>jsonb_path_ops</code> indexes as typically much smaller and more specific for supported containment/path searches, especially when keys appear frequently. The trade-off is reduced operator coverage and inability to index value-less structures effectively.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>13.2 Choose from the actual query workload</h3>
+<p>
+If the application frequently asks whether arbitrary keys exist, use <code>jsonb_ops</code>. If the dominant workload is containment and path/value search and key-existence is unimportant, test <code>jsonb_path_ops</code>. It is also possible to create targeted expression indexes rather than indexing every key/value in a large document.
+</p>
+</section>
+
+<section id="expression">
+<h2>14. Targeted expression and scalar indexes</h2>
+<p>
+A whole-document GIN index is flexible but stores search information for every indexed key/value. When one nested field is queried frequently, an expression index can be smaller and more precise. PostgreSQL supports indexes over scalar expressions, and the JSON documentation specifically demonstrates indexing nested JSON expressions.<sup><a href="#r3">[3]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>14.1 GIN index on one nested array</h3>
+<pre><code>CREATE INDEX product_tags_gin
+ON catalog.product
+USING GIN ((attributes -&gt; 'tags'));
+
+SELECT *
+FROM catalog.product
+WHERE attributes -&gt; 'tags' ? 'linux';</code></pre>
+
+<h3>14.2 B-tree index on extracted scalar</h3>
+<pre><code>CREATE INDEX product_country_idx
+ON catalog.product (
+    (attributes #&gt;&gt; '{manufacturer,country}')
+);
+
+SELECT *
+FROM catalog.product
+WHERE attributes #&gt;&gt; '{manufacturer,country}' = 'US';</code></pre>
+
+<h3>14.3 Typed numeric expression index</h3>
+<pre><code>CREATE INDEX product_width_idx
+ON catalog.product (
+    ((attributes #&gt;&gt; '{dimensions,width_mm}')::integer)
+);
+
+SELECT *
+FROM catalog.product
+WHERE (attributes #&gt;&gt; '{dimensions,width_mm}')::integer
+      BETWEEN 400 AND 500;</code></pre>
+
+<p>
+Expression indexes move expression computation to writes and index maintenance rather than indexed reads. PostgreSQL notes that this improves retrieval at the cost of extra insertion/non-HOT-update work.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>14.4 Partial expression index</h3>
+<pre><code>CREATE INDEX product_active_warranty_idx
+ON catalog.product (
+    (attributes -&gt;&gt; 'warranty_code')
+)
+WHERE active
+  AND attributes ? 'warranty_code';</code></pre>
+
+<p>
+Partial indexes contain only rows satisfying a predicate. They can reduce index size and write maintenance when the indexed condition is selective, but PostgreSQL can use them only when it can prove the query predicate implies the index predicate at planning time.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="hybrid">
+<h2>15. Relational + JSON hybrid modeling</h2>
+<p>
+A hybrid model keeps stable semantics in normal columns and reserves JSONB for variable or source-specific structure. This makes primary keys, foreign keys, uniqueness, typed comparisons, statistics, and common indexes straightforward while preserving document flexibility where it is genuinely useful.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>15.1 Product catalog</h3>
+<pre><code>CREATE TABLE catalog.product (
+    product_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    tenant_id bigint NOT NULL
+        REFERENCES app.tenant(tenant_id),
+
+    sku text NOT NULL,
+    name text NOT NULL,
+    category_id bigint NOT NULL
+        REFERENCES catalog.category(category_id),
+
+    price numeric(12,2) NOT NULL
+        CHECK (price &gt;= 0),
+
+    active boolean NOT NULL DEFAULT true,
+
+    -- Manufacturer/category-specific optional attributes.
+    attributes jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+    UNIQUE (tenant_id, sku)
+);</code></pre>
+
+<p>
+Stable business identity and integrity are relational: tenant, SKU, category, price, active state. JSONB stores variable product characteristics such as dimensions, connector lists, material properties, or manufacturer metadata that differ widely by category.
+</p>
+
+<h3>15.2 Why price should not be JSON here</h3>
+<p>
+Putting <code>price</code> inside JSONB would make type validation, range checks, statistics, sorting, ordinary indexes, and application-wide consistency less direct. If almost every row has a field with the same meaning and type and it drives common predicates or constraints, that is strong evidence it belongs in a normal column.
+</p>
+
+<h3>15.3 Event envelope pattern</h3>
+<pre><code>CREATE TABLE app.event (
+    event_id uuid PRIMARY KEY,
+    tenant_id bigint NOT NULL,
+    aggregate_type text NOT NULL,
+    aggregate_id text NOT NULL,
+    event_type text NOT NULL,
+    schema_version integer NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    payload jsonb NOT NULL
+);
+
+CREATE INDEX event_aggregate_time_idx
+ON app.event (
+    tenant_id,
+    aggregate_type,
+    aggregate_id,
+    occurred_at
+);
+
+CREATE INDEX event_payload_gin
+ON app.event
+USING GIN (payload jsonb_path_ops);</code></pre>
+
+<p>
+The envelope remains relational for ordering, partitioning, tenancy, routing, and event identity; the event-specific payload remains JSONB.
+</p>
+</section>
+
+<section id="constraints">
+<h2>16. Constraining JSON documents</h2>
+<p>
+JSONB validates JSON syntax but does not automatically enforce an application-level schema. PostgreSQL recommends keeping documents reasonably predictable, and ordinary <code>CHECK</code> constraints can enforce selected invariants that matter to database correctness.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>16.1 Require an object</h3>
+<pre><code>ALTER TABLE catalog.product
+ADD CONSTRAINT product_attributes_object
+CHECK (
+    jsonb_typeof(attributes) = 'object'
+);</code></pre>
+
+<h3>16.2 Require a nested key when another condition applies</h3>
+<pre><code>ALTER TABLE catalog.product
+ADD CONSTRAINT product_dimensions_if_hardware
+CHECK (
+    category_id &lt;&gt; 10
+    OR (
+        attributes ? 'dimensions'
+        AND jsonb_typeof(
+            attributes -&gt; 'dimensions'
+        ) = 'object'
+    )
+);</code></pre>
+
+<h3>16.3 Constrain scalar type and range</h3>
+<pre><code>ALTER TABLE catalog.product
+ADD CONSTRAINT product_optional_weight_valid
+CHECK (
+    NOT (attributes ? 'weight_kg')
+    OR (
+        jsonb_typeof(attributes -&gt; 'weight_kg') = 'number'
+        AND (attributes -&gt;&gt; 'weight_kg')::numeric &gt; 0
+    )
+);</code></pre>
+
+<h3>16.4 What checks should not become</h3>
+<p>
+A large JSON schema reimplemented as dozens of complicated SQL checks can become harder to maintain than normalized columns or application/ingestion validation. Use database constraints for invariants whose violation would make persisted state invalid; use application/domain validation for richer presentation and workflow rules.
+</p>
+</section>
+
+<section id="generated">
+<h2>17. Promote important JSON fields with generated columns</h2>
+<p>
+PostgreSQL 18 supports stored and virtual generated columns. A stored generated column is computed on write and stored like a normal column; a virtual generated column is computed on read. Generated expressions are constrained to immutable logic and cannot query other rows. This makes generated columns useful for surfacing stable scalar values from JSONB while retaining the original document.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>17.1 Extract a stable scalar</h3>
+<pre><code>CREATE TABLE integrations.partner_record (
+    record_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    payload jsonb NOT NULL,
+
+    external_id text
+    GENERATED ALWAYS AS (
+        payload -&gt;&gt; 'id'
+    ) STORED,
+
+    event_type text
+    GENERATED ALWAYS AS (
+        payload -&gt;&gt; 'type'
+    ) STORED
+);
+
+CREATE INDEX partner_record_external_id_idx
+ON integrations.partner_record(external_id);</code></pre>
+
+<p>
+This pattern can simplify frequently used predicates and gives the planner normal column statistics. It also makes it easier to constrain the extracted value without discarding the original source document.
+</p>
+
+<h3>17.2 Generated numeric field</h3>
+<pre><code>ALTER TABLE catalog.product
+ADD COLUMN width_mm integer
+GENERATED ALWAYS AS (
+    (attributes #&gt;&gt; '{dimensions,width_mm}')::integer
+) STORED;
+
+CREATE INDEX product_width_generated_idx
+ON catalog.product(width_mm);</code></pre>
+
+<p>
+If a generated field becomes fundamental to application identity or integrity, consider eventually migrating it to an ordinary relational column instead of preserving JSONB as its authoritative source.
+</p>
+</section>
+
+<section id="normalization">
+<h2>18. When to use JSONB versus normalized tables</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Characteristic</th><th>Prefer JSONB</th><th>Prefer normalized columns/tables</th></tr></thead>
+<tbody>
+<tr><td>Shape varies substantially by row</td><td>Strong fit</td><td>Can lead to many sparse/conditional columns</td></tr>
+<tr><td>Field exists on nearly every row with one meaning/type</td><td>Usually unnecessary</td><td>Strong fit</td></tr>
+<tr><td>Need foreign key</td><td>Poor fit</td><td>Strong fit</td></tr>
+<tr><td>Need uniqueness</td><td>Possible through expression index, but less direct</td><td>Strong fit</td></tr>
+<tr><td>Frequent range/order queries</td><td>Possible with extraction/expression indexes</td><td>Usually simpler and more statistically visible</td></tr>
+<tr><td>Nested data is atomically updated with parent</td><td>Strong fit</td><td>Either</td></tr>
+<tr><td>Nested child updated independently</td><td>Whole row/document update can contend</td><td>Strong fit</td></tr>
+<tr><td>External payload must be preserved</td><td>Strong fit</td><td>Often store envelope columns + JSONB payload</td></tr>
+<tr><td>Ad hoc search over unpredictable keys</td><td>GIN JSONB can be valuable</td><td>Hard to model if keys truly vary</td></tr>
+<tr><td>Heavy aggregation by child element</td><td>Requires expansion/JSON_TABLE</td><td>Normalized child table often simpler</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.1 Normalize when the database needs to understand the field deeply</h3>
+<p>
+A value usually deserves a relational column when PostgreSQL must understand it as a stable concept: enforce its type, reference it with a foreign key, make it unique, build multicolumn indexes around it, collect useful statistics, partition by it, grant column-specific privileges, or update it independently under concurrency.
+</p>
+
+<h3>18.2 Use JSONB when variation is intrinsic</h3>
+<p>
+JSONB is strongest for polymorphic attributes, third-party source payloads, sparse optional metadata, versioned event bodies, per-category specifications, configuration documents, and data whose nested structure is itself part of the domain.
+</p>
+
+<h3>18.3 Avoid the EAV trap in either direction</h3>
+<p>
+An entity-attribute-value table can turn every field into rows and lose straightforward typing; an undisciplined JSONB blob can turn every field into invisible schema. A hybrid model usually provides a better boundary: stable semantics become relational, variable semantics remain in JSONB.
+</p>
+
+<div class="callout ok">
+<strong>Rule of thumb:</strong> if a property is important enough that you regularly join, sort, constrain, group, partition, or authorize by it, strongly consider making it relational.
+</div>
+</section>
+
+<section id="applications">
+<h2>19. Application patterns</h2>
+
+<h3>19.1 Flexible product specifications</h3>
+<pre><code>SELECT
+    product_id,
+    sku,
+    name,
+    attributes #&gt;&gt; '{dimensions,width_mm}' AS width_mm,
+    attributes -&gt; 'ports' AS ports
+FROM catalog.product
+WHERE category_id = $1
+  AND attributes @&gt; $2::jsonb;</code></pre>
+
+<h3>19.2 Third-party API response cache</h3>
+<pre><code>CREATE TABLE integrations.api_response (
+    provider text NOT NULL,
+    cache_key text NOT NULL,
+    fetched_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    response jsonb NOT NULL,
+    PRIMARY KEY (provider, cache_key)
+);</code></pre>
+
+<p>
+The cache key, provider, and expiration are stable operational dimensions; provider-specific response content remains JSONB.
+</p>
+
+<h3>19.3 User preferences</h3>
+<pre><code>CREATE TABLE app.user_preferences (
+    user_id bigint PRIMARY KEY
+        REFERENCES app.user_account(user_id)
+        ON DELETE CASCADE,
+    preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+    CHECK (jsonb_typeof(preferences) = 'object')
+);</code></pre>
+
+<p>
+Preferences are often a good JSONB use case because optional UI settings evolve rapidly and are usually updated/retrieved as one logical unit. Security-sensitive authorization state should generally remain in normal roles/columns rather than being hidden inside a preferences document.
+</p>
+
+<h3>19.4 API response from normalized data</h3>
+<pre><code>SELECT jsonb_build_object(
+    'id', o.order_id,
+    'status', o.status,
+    'total', o.total,
+    'customer', jsonb_build_object(
+        'id', c.customer_id,
+        'name', c.display_name
+    ),
+    'lines', (
+        SELECT jsonb_agg(
+            jsonb_build_object(
+                'sku', p.sku,
+                'quantity', oi.quantity,
+                'unit_price', oi.unit_price
+            )
+            ORDER BY oi.order_item_id
+        )
+        FROM app.order_item AS oi
+        JOIN catalog.product AS p
+          ON p.product_id = oi.product_id
+        WHERE oi.order_id = o.order_id
+    )
+)
+FROM app.orders AS o
+JOIN app.customer AS c
+  ON c.customer_id = o.customer_id
+WHERE o.order_id = $1;</code></pre>
+
+<p>
+Generating nested JSON at the query boundary lets storage remain normalized while serving JSON APIs efficiently.
+</p>
+</section>
+
+<section id="performance">
+<h2>20. Performance engineering</h2>
+
+<h3>20.1 Measure the actual predicates</h3>
+<p>
+A “JSONB table” is not one workload. A query testing arbitrary containment has different indexing needs from one filtering a known scalar path, expanding large arrays, or sorting by a nested numeric value. Capture production SQL with <code>pg_stat_statements</code> and examine representative plans with <code>EXPLAIN (ANALYZE, BUFFERS)</code> before choosing indexes.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS
+)
+SELECT product_id
+FROM catalog.product
+WHERE attributes @&gt; '{"tags":["linux"]}'::jsonb;</code></pre>
+
+<h3>20.2 Whole-document GIN versus targeted indexes</h3>
+<p>
+A broad GIN index buys query flexibility but indexes many keys/values that might never be searched. PostgreSQL's JSON documentation notes that targeted expression indexes can be smaller and faster when a particular nested path is frequently queried.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>20.3 Row size and update contention</h3>
+<p>
+Updating one nested property still updates the JSONB column value in the containing row. PostgreSQL documentation warns that large documents can increase lock contention because the entire row is locked for update. Separate independently changing entities into their own rows when concurrency requires it.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>20.4 Planner visibility</h3>
+<p>
+The PostgreSQL planner relies on statistics to estimate selectivity. Stable frequently queried scalar columns typically expose clearer single-column statistics than arbitrary paths inside heterogeneous JSONB. Generated columns or expression indexes can help when a nested scalar becomes operationally important.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>20.5 Avoid repeated expansion of large arrays</h3>
+<pre><code>SELECT ...
+FROM events e
+CROSS JOIN LATERAL jsonb_array_elements(e.payload-&gt;'items') AS item
+WHERE ...;</code></pre>
+
+<p>
+Set-returning expansion creates one SQL row per JSON element. If an embedded array is routinely exploded for reporting across millions of parent rows, that nested collection is behaving like a relation and may belong in a child table or materialized derived structure.
+</p>
+
+<h3>20.6 Index write cost</h3>
+<p>
+Expression indexes must recompute indexed expressions on inserts and non-HOT updates, while GIN can generate many key insertions per JSONB datum. Do not build every plausible JSON index; index the workload that actually exists.<sup><a href="#r7">[7]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>20.7 Keep indexes compatible with predicates</h3>
+<pre><code>-- This expression index:
+CREATE INDEX product_country_idx
+ON catalog.product (
+    (attributes #&gt;&gt; '{manufacturer,country}')
+);
+
+-- naturally supports this predicate:
+WHERE attributes #&gt;&gt; '{manufacturer,country}' = 'US'</code></pre>
+
+<p>
+Index design and query expression shape must align. A semantically similar query that invokes different operators or casts may not match the intended expression index.
+</p>
+</section>
+
+<section id="evolution">
+<h2>21. Schema evolution and JSON migrations</h2>
+<p>
+JSONB permits documents of different versions to coexist, but versionless semi-structured data can become difficult to interpret. External payloads and long-lived documents benefit from an explicit schema/version marker plus migration logic that can distinguish old and new structures.
+</p>
+
+<h3>21.1 Version documents explicitly</h3>
+<pre><code>{
+  "schema_version": 3,
+  "manufacturer": {
+    "id": "m-42",
+    "name": "Acme"
+  },
+  "dimensions": {
+    "width_mm": 420
+  }
+}</code></pre>
+
+<h3>21.2 Backfill one version</h3>
+<pre><code>UPDATE catalog.product
+SET attributes =
+    jsonb_set(
+        attributes,
+        '{schema_version}',
+        '3'::jsonb,
+        true
+    )
+WHERE COALESCE(
+    (attributes -&gt;&gt; 'schema_version')::integer,
+    0
+) &lt; 3;</code></pre>
+
+<h3>21.3 Promote a JSON property to a real column</h3>
+<pre><code>ALTER TABLE catalog.product
+ADD COLUMN manufacturer_id bigint;
+
+UPDATE catalog.product
+SET manufacturer_id =
+    (attributes #&gt;&gt; '{manufacturer,id}')::bigint
+WHERE attributes #&gt; '{manufacturer,id}' IS NOT NULL;
+
+ALTER TABLE catalog.product
+ADD CONSTRAINT product_manufacturer_fk
+FOREIGN KEY (manufacturer_id)
+REFERENCES catalog.manufacturer(manufacturer_id);</code></pre>
+
+<p>
+A pragmatic JSON architecture allows the boundary to move. Early variable fields can live in JSONB; fields that later become core business dimensions can be migrated into typed relational columns without abandoning the rest of the document.
+</p>
+</section>
+
+<section id="pitfalls">
+<h2>22. Common pitfalls</h2>
+
+<h3>22.1 Storing identifiers as inconsistent JSON types</h3>
+<pre><code>{"customer_id": 42}
+{"customer_id": "42"}</code></pre>
+
+<p>
+JSON distinguishes numbers from strings. Mixed representations make containment and typed extraction inconsistent. Define a document contract even when the database does not enforce every field.
+</p>
+
+<h3>22.2 Forgetting duplicate-key semantics</h3>
+<pre><code>SELECT '{"role":"user","role":"admin"}'::jsonb;</code></pre>
+
+<p>
+Only the last duplicate object-key value survives in JSONB. If duplicate keys carry semantic meaning in an upstream format, preserve the raw input separately or model the data differently.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.3 Treating JSON values as text too early</h3>
+<pre><code>-- Preserves JSON type:
+attributes -&gt; 'price'
+
+-- Becomes text:
+attributes -&gt;&gt; 'price'</code></pre>
+
+<p>
+Use JSON-returning operators while navigating documents and convert to text/typed SQL values at the boundary where relational comparison is required.
+</p>
+
+<h3>22.4 Using string LIKE instead of JSON semantics</h3>
+<pre><code>-- Avoid:
+WHERE attributes::text LIKE '%"country":"US"%'
+
+-- Prefer:
+WHERE attributes @&gt; '{"country":"US"}'::jsonb</code></pre>
+
+<p>
+Text formatting is not JSON structure. JSONB containment or JSON path expresses structural intent and can use appropriate indexes.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>22.5 Putting an entire relational graph into one document</h3>
+<p>
+A large document may look convenient initially but weakens foreign-key enforcement, independent concurrency, targeted statistics, and relational querying. PostgreSQL's JSON design guidance specifically recommends atomic/manageable documents rather than uncontrolled document growth.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.6 Assuming GIN makes every JSON expression fast</h3>
+<p>
+GIN indexes support defined operators/opclasses. A predicate that extracts a value, casts it, and performs a range comparison usually needs a scalar expression index or generated column rather than expecting a whole-document GIN index to act as a universal JSON accelerator.
+</p>
+
+<h3>22.7 Storing authorization rules in opaque JSON</h3>
+<p>
+If authorization depends on a field, make sure PostgreSQL can enforce that rule reliably through relational columns, role privileges, or row-level security. Application-only interpretation of an opaque document is a weak substitute for database authorization controls.
+</p>
+</section>
+
+<section id="checklist">
+<h2>23. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Choose the storage type deliberately.</strong> Prefer <code>jsonb</code> for queryable documents; use <code>json</code> only when preserving source representation matters.</li>
+<li><strong>Define a document contract.</strong> Flexible does not mean structureless.</li>
+<li><strong>Keep stable identity relational.</strong> Primary keys, tenant IDs, foreign keys, status, timestamps, and other core fields usually belong in columns.</li>
+<li><strong>Keep independently changing entities separate.</strong> Large nested arrays can become concurrency and reporting liabilities.</li>
+<li><strong>Use containment for structural subset search.</strong> Use JSON path for more expressive nested predicates.</li>
+<li><strong>Select the GIN opclass from workload needs.</strong> <code>jsonb_ops</code> is flexible; <code>jsonb_path_ops</code> can be smaller/faster for containment/path queries.</li>
+<li><strong>Use targeted expression indexes</strong> for frequently queried nested paths.</li>
+<li><strong>Promote hot scalar fields</strong> to generated or ordinary columns when range/sort/join/statistics behavior matters.</li>
+<li><strong>Use CHECK constraints</strong> for document invariants whose violation would corrupt persistent state.</li>
+<li><strong>Use JSON_TABLE or record expansion</strong> for controlled JSON-to-relational projection.</li>
+<li><strong>Generate API JSON from relational rows</strong> instead of denormalizing storage solely to match response shape.</li>
+<li><strong>Parameterize SQL and JSON path variables.</strong> Never concatenate untrusted values into SQL source.</li>
+<li><strong>Benchmark write cost.</strong> JSONB GIN and expression indexes amplify updates.</li>
+<li><strong>Version long-lived document formats.</strong> Plan migrations from JSON fields into relational columns when semantics stabilize.</li>
+<li><strong>Verify plans.</strong> Use <code>EXPLAIN (ANALYZE, BUFFERS)</code> on representative containment, path, extraction, and expansion queries.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Modeling principle:</strong> JSONB is most valuable when variability is intrinsic to the data. Normalize what the database must understand strongly; keep flexible what the domain truly allows to vary.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. JSON Types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-json.html">https://www.postgresql.org/docs/18/datatype-json.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. JSON Functions and Operators [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html">https://www.postgresql.org/docs/18/functions-json.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. JSONB indexing [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-json.html#JSON-INDEXING">https://www.postgresql.org/docs/18/datatype-json.html#JSON-INDEXING</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Aggregate functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-aggregate.html">https://www.postgresql.org/docs/18/functions-aggregate.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. JSON_TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-SQLJSON-TABLE">https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-SQLJSON-TABLE</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. GIN indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/gin.html">https://www.postgresql.org/docs/18/gin.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Locking and indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/locking-indexes.html">https://www.postgresql.org/docs/18/locking-indexes.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Indexes on expressions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-expressional.html">https://www.postgresql.org/docs/18/indexes-expressional.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Partial indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-partial.html">https://www.postgresql.org/docs/18/indexes-partial.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Constraints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Generated columns [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-generated-columns.html">https://www.postgresql.org/docs/18/ddl-generated-columns.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. pg_stat_statements — track statistics of SQL planning and execution [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Statistics used by the planner [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Index types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-types.html">https://www.postgresql.org/docs/18/indexes-types.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Row security policies [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-rowsecurity.html">https://www.postgresql.org/docs/18/ddl-rowsecurity.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. SQL/JSON path language [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-SQLJSON-PATH">https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-SQLJSON-PATH</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. JSONB containment and existence [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-json.html#JSON-CONTAINMENT">https://www.postgresql.org/docs/18/datatype-json.html#JSON-CONTAINMENT</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. JSONB subscripting [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-json.html#JSONB-SUBSCRIPTING">https://www.postgresql.org/docs/18/datatype-json.html#JSONB-SUBSCRIPTING</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Data definition [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl.html">https://www.postgresql.org/docs/18/ddl.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createindex.html">https://www.postgresql.org/docs/18/sql-createindex.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. JSON creation and processing functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-CREATION-TABLE">https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-CREATION-TABLE</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. JSON processing functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-PROCESSING-TABLE">https://www.postgresql.org/docs/18/functions-json.html#FUNCTIONS-JSON-PROCESSING-TABLE</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. SQL/JSON testing functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html">https://www.postgresql.org/docs/18/functions-json.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. JSON schema shape, data distribution, update patterns, indexing strategy, concurrency, PostgreSQL version, and application query patterns materially affect the correct design. Benchmark representative containment, path, scalar-filter, expansion, and update workloads before committing to a document schema or index portfolio.
+</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL transactions and concurrency: ACID, transaction control, savepoints, isolation levels, MVCC, snapshots, transaction IDs, tuple visibility, locks, deadlocks, serialization failures, advisory locks, and two-phase commit.">
+<title>PostgreSQL Transactions &amp; Concurrency</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1050px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.formula{
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:17px 19px;margin:18px 0;font-family:"SFMono-Regular",Consolas,monospace;
+  overflow-x:auto
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Transactions &amp; Concurrency</h1>
+  <p class="dek">An expert guide to PostgreSQL transaction semantics and multiuser concurrency: ACID, transaction blocks and savepoints, isolation levels, MVCC snapshots, transaction IDs and tuple visibility, row/table/advisory locks, deadlocks, serialization failures and retry design, and distributed two-phase commit.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL transactions group one or more SQL operations into an atomic unit that either commits as a whole or is rolled back as a whole. Statements issued outside an explicit transaction block are still transactional: PostgreSQL implicitly executes each such statement in its own transaction. Explicit blocks created with <code>BEGIN</code> or <code>START TRANSACTION</code> allow applications to coordinate multiple reads and writes under one transaction boundary and one set of transaction characteristics.<sup><a href="#r1">[1]</a>-<a href="#r3">[3]</a></sup>
+</p>
+<p>
+Concurrency is built primarily on multiversion concurrency control (MVCC), not on read locks that exclude writers. PostgreSQL retains multiple physical tuple versions and evaluates their visibility against a snapshot. Readers normally do not block writers and writers normally do not block readers merely because they access the same rows. Explicit row/table locks remain available where applications need stronger coordination, while Serializable isolation adds Serializable Snapshot Isolation (SSI) to detect dangerous read/write dependency structures without turning ordinary reads into blocking locks.<sup><a href="#r4">[4]</a><a href="#r5">[5]</a></sup>
+</p>
+<p>
+PostgreSQL implements three distinct isolation behaviors: Read Committed, Repeatable Read, and Serializable; a request for Read Uncommitted behaves as Read Committed. Read Committed obtains a new snapshot for each command, Repeatable Read holds a stable transaction snapshot and provides snapshot-isolation behavior, and Serializable adds conflict tracking so only executions consistent with some serial order can commit. Repeatable Read and Serializable applications must be designed to retry transactions that fail with serialization error SQLSTATE <code>40001</code>.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+<p>
+Locks and retries are application-level concurrency tools, not failures of MVCC. Row locks serialize modifications to specific rows; table locks protect broader resources and DDL interactions; advisory locks represent application-defined resources. Deadlocks can arise whenever transactions acquire mutually incompatible resources in inconsistent order, in which case PostgreSQL detects the cycle and aborts one participant. Two-phase commit extends transaction atomicity to external transaction managers by allowing a transaction to enter a durable prepared state before a later global commit/rollback decision.<sup><a href="#r7">[7]</a>-<a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#transactions">Transactions</a></li>
+<li><a href="#acid">ACID</a></li>
+<li><a href="#atomicity">Atomicity</a></li>
+<li><a href="#consistency">Consistency</a></li>
+<li><a href="#isolation">Isolation</a></li>
+<li><a href="#durability">Durability</a></li>
+<li><a href="#control">BEGIN, COMMIT, ROLLBACK</a></li>
+<li><a href="#savepoints">Savepoints and subtransactions</a></li>
+<li><a href="#levels">Isolation levels</a></li>
+<li><a href="#read-committed">Read Committed</a></li>
+<li><a href="#repeatable-read">Repeatable Read</a></li>
+<li><a href="#serializable">Serializable</a></li>
+<li><a href="#mvcc">MVCC</a></li>
+<li><a href="#snapshots">Snapshots</a></li>
+<li><a href="#xids">Transaction IDs</a></li>
+<li><a href="#visibility">Tuple visibility</a></li>
+<li><a href="#versions">Tuple versions</a></li>
+<li><a href="#row-locks">Row-level locking</a></li>
+<li><a href="#table-locks">Table-level locking</a></li>
+<li><a href="#advisory">Advisory locks</a></li>
+<li><a href="#lock-monitoring">Monitoring locks</a></li>
+<li><a href="#deadlocks">Deadlocks</a></li>
+<li><a href="#serialization">Serialization failures</a></li>
+<li><a href="#retry">Retry architecture</a></li>
+<li><a href="#consistency-checks">Application consistency</a></li>
+<li><a href="#twophase">Two-phase commit</a></li>
+<li><a href="#patterns">Production patterns</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="transactions">
+<h2>1. Transactions</h2>
+<p>
+A transaction bundles database operations into a single logical unit. Intermediate states are not made visible to other transactions as committed states, and an aborted transaction's database changes are discarded. PostgreSQL starts an implicit transaction around every command that is not already inside an explicit transaction block, so transactional behavior exists even when an application never writes <code>BEGIN</code> itself.<sup><a href="#r1">[1]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<pre><code>BEGIN;
+
+UPDATE bank.account
+SET balance = balance - 100
+WHERE account_id = 10;
+
+UPDATE bank.account
+SET balance = balance + 100
+WHERE account_id = 20;
+
+INSERT INTO bank.transfer(
+    from_account_id,
+    to_account_id,
+    amount
+)
+VALUES (10, 20, 100);
+
+COMMIT;</code></pre>
+
+<p>
+If any required operation fails and the application rolls back instead of committing, the database changes made by the block do not become permanent. PostgreSQL additionally puts a transaction block into an aborted state after most statement errors; subsequent commands are rejected until the application executes <code>ROLLBACK</code> or rolls back to a valid savepoint.<sup><a href="#r1">[1]</a><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>1.1 Transaction boundaries are semantic boundaries</h3>
+<p>
+Keeping a transaction open is not merely a syntactic choice. The boundary controls snapshot lifetime, row/table lock lifetime, transaction-ID horizons, resource retention, and when other sessions can observe committed effects. Transactions should cover one coherent unit of work and should generally not remain idle while waiting for human input, HTTP calls, or other unpredictable external work.
+</p>
+</section>
+
+<section id="acid">
+<h2>2. ACID in PostgreSQL</h2>
+<p>
+ACID is a conventional model for transaction guarantees: atomicity, consistency, isolation, and durability. PostgreSQL implements these properties through transaction state, constraints and SQL semantics, MVCC/isolation and locking, and WAL/crash recovery respectively. “Consistency” deserves special care: PostgreSQL can enforce constraints and transactional semantics, but it cannot infer arbitrary application business rules that were never encoded in the schema or protected by a correct concurrency protocol.<sup><a href="#r1">[1]</a><a href="#r13">[13]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Property</th><th>Operational meaning</th><th>Representative PostgreSQL mechanism</th></tr></thead>
+<tbody>
+<tr><td>Atomicity</td><td>A transaction's database effects commit together or are aborted together.</td><td>Transaction state, WAL, rollback, subtransactions/savepoints.</td></tr>
+<tr><td>Consistency</td><td>Committed state obeys declared database rules; application invariants require appropriate constraints/protocols.</td><td>Constraints, triggers, Serializable transactions, explicit locking.</td></tr>
+<tr><td>Isolation</td><td>Concurrent transactions observe controlled views and interactions.</td><td>MVCC snapshots, isolation levels, row/table/predicate locks.</td></tr>
+<tr><td>Durability</td><td>Under durable settings, a successfully committed transaction survives server/system failure according to the configured commit contract.</td><td>WAL, flush/fsync ordering, crash recovery.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="atomicity">
+<h2>3. Atomicity</h2>
+<p>
+Atomicity means the transaction boundary is all-or-nothing with respect to committed database effects. PostgreSQL does not expose a partially committed transaction merely because the transaction contains many SQL statements. <code>ROLLBACK</code> aborts the active transaction and discards its updates.<sup><a href="#r1">[1]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<pre><code>BEGIN;
+
+UPDATE inventory.product
+SET quantity = quantity - 1
+WHERE product_id = 501;
+
+INSERT INTO sales.order_line(order_id, product_id, quantity)
+VALUES (9001, 501, 1);
+
+-- application discovers an invariant violation
+ROLLBACK;</code></pre>
+
+<h3>3.1 Savepoints provide nested partial recovery, not partial commit</h3>
+<p>
+A savepoint lets an application undo work back to a point inside the transaction and continue. Releasing a savepoint merges its surviving effects into the enclosing transaction; those effects still do not become durable/visible as a committed transaction until the top-level transaction commits.<sup><a href="#r12">[12]</a><a href="#r16">[16]</a></sup>
+</p>
+</section>
+
+<section id="consistency">
+<h2>4. Consistency</h2>
+<p>
+PostgreSQL can enforce declarative integrity rules such as <code>NOT NULL</code>, <code>CHECK</code>, uniqueness, primary keys, foreign keys and exclusion constraints. Such constraints prevent transactions from committing states that violate their defined rules. However, ACID consistency is not a magical inference engine: if the application requires “there must always be at least one on-call physician” or “credits must equal debits across several relations,” the application must encode and enforce that rule using an appropriate combination of constraints, Serializable isolation, locks, triggers or other well-designed transactional logic.<sup><a href="#r13">[13]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE ledger.entry (
+    entry_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_id bigint NOT NULL,
+    amount numeric(18,2) NOT NULL,
+    CHECK (amount &lt;&gt; 0)
+);</code></pre>
+
+<div class="callout warn">
+<strong>Read Committed is not sufficient for every business-rule check.</strong> Two statements in one Read Committed transaction can see different committed worlds, and a “check then write” sequence can race with another transaction. Use a unique/exclusion constraint when the invariant maps to one, or use Serializable/explicit locking for broader invariants.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a></sup>
+</div>
+</section>
+
+<section id="isolation">
+<h2>5. Isolation</h2>
+<p>
+Isolation defines which effects of concurrent transactions a transaction may observe and how conflicting writes are handled. PostgreSQL's MVCC architecture means ordinary reads operate from snapshots rather than acquiring locks that conflict with ordinary writers. Explicit row/table locks are layered on top for coordination that MVCC snapshots alone do not provide.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<p>
+The SQL standard describes dirty reads, nonrepeatable reads, phantom reads and serialization anomalies. PostgreSQL's implemented isolation behavior is stronger than the minimum standard in some places: Read Uncommitted behaves as Read Committed, and PostgreSQL Repeatable Read prevents phantom reads even though the standard permits them at that level.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="durability">
+<h2>6. Durability</h2>
+<p>
+PostgreSQL uses write-ahead logging to make committed changes recoverable. Under normal synchronous durable settings, the WAL records needed to represent a transaction—including the commit—are flushed to durable storage before success is returned to the client. Dirty table/index pages can be written later because crash recovery can redo the changes from WAL.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<div class="diagram">transaction changes heap/index pages
+             |
+             v
+        WAL records
+             |
+             v
+WAL flush through commit record
+             |
+             +--> COMMIT success
+             |
+             v
+data pages may be flushed later
+
+crash after acknowledged durable commit:
+replay WAL -> reconstruct committed changes</div>
+
+<p>
+Durability is configurable. For example, <code>synchronous_commit=off</code> can acknowledge transactions before their WAL is durably flushed, risking loss of recent acknowledged transactions after a crash while preserving database consistency. More radical non-durable settings such as <code>fsync=off</code> have much stronger corruption risks and change the durability contract for the whole instance.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="control">
+<h2>7. <code>BEGIN</code>, <code>COMMIT</code>, and <code>ROLLBACK</code></h2>
+
+<h3>7.1 Start explicitly</h3>
+<pre><code>BEGIN;
+
+-- equivalent style:
+START TRANSACTION;</code></pre>
+
+<p>
+<code>BEGIN</code> starts a transaction block; PostgreSQL otherwise wraps individual statements in implicit transactions.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>7.2 Commit</h3>
+<pre><code>COMMIT;</code></pre>
+
+<p>
+<code>COMMIT</code> makes the current transaction's successful effects permanent according to the configured durability contract and releases transaction-level locks/resources.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>7.3 Roll back</h3>
+<pre><code>ROLLBACK;</code></pre>
+
+<p>
+<code>ROLLBACK</code> aborts the current transaction and discards its updates.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>7.4 Transaction characteristics</h3>
+<pre><code>BEGIN
+    ISOLATION LEVEL SERIALIZABLE
+    READ WRITE;
+
+-- or early in the block:
+SET TRANSACTION
+    ISOLATION LEVEL REPEATABLE READ,
+    READ ONLY;</code></pre>
+
+<p>
+Transaction isolation, read/write mode and deferrability are transaction characteristics. Serializable read-only transactions can optionally be <code>DEFERRABLE</code>, allowing PostgreSQL to delay snapshot acquisition until it can obtain a snapshot that is safe from serialization failures under defined conditions.<sup><a href="#r5">[5]</a><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="savepoints">
+<h2>8. Savepoints and subtransactions</h2>
+<p>
+Savepoints divide a transaction into recoverable subunits. <code>ROLLBACK TO SAVEPOINT</code> discards commands executed after the savepoint and establishes a new subtransaction at the same nesting level while retaining the named savepoint. <code>RELEASE SAVEPOINT</code> removes the savepoint and merges surviving changes into its enclosing transaction context.<sup><a href="#r12">[12]</a><a href="#r16">[16]</a></sup>
+</p>
+
+<pre><code>BEGIN;
+
+INSERT INTO billing.invoice(customer_id, amount)
+VALUES (42, 150.00);
+
+SAVEPOINT optional_audit;
+
+INSERT INTO audit.event(event_type, payload)
+VALUES ('invoice-created', '{"customer_id":42}');
+
+-- Suppose this optional portion must be abandoned:
+ROLLBACK TO SAVEPOINT optional_audit;
+
+-- Continue the outer transaction.
+UPDATE billing.customer
+SET last_invoice_at = clock_timestamp()
+WHERE customer_id = 42;
+
+COMMIT;</code></pre>
+
+<h3>8.1 Error recovery</h3>
+<p>
+After an error aborts the current subtransaction, rolling back to a savepoint is the mechanism for regaining a usable state without abandoning the entire outer transaction. This behavior is why client libraries and ORMs sometimes implement nested transactional scopes with savepoints.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>8.2 Internal subtransactions</h3>
+<p>
+PostgreSQL internally calls these nested units subtransactions or subxacts. They can be created explicitly through <code>SAVEPOINT</code> and implicitly by procedural-language exception handling. Deep or extremely numerous subtransactions have bookkeeping costs, so savepoints should represent real recovery boundaries rather than wrap every trivial statement unnecessarily.<sup><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="levels">
+<h2>9. Isolation levels</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Requested level</th><th>PostgreSQL behavior</th><th>Dirty read</th><th>Nonrepeatable read</th><th>Phantom read</th><th>Serialization anomaly</th></tr></thead>
+<tbody>
+<tr><td>Read Uncommitted</td><td>Same as Read Committed</td><td>No</td><td>Possible</td><td>Possible</td><td>Possible</td></tr>
+<tr><td>Read Committed</td><td>Statement snapshots</td><td>No</td><td>Possible</td><td>Possible</td><td>Possible</td></tr>
+<tr><td>Repeatable Read</td><td>Snapshot isolation / transaction snapshot</td><td>No</td><td>No</td><td>No</td><td>Possible</td></tr>
+<tr><td>Serializable</td><td>Serializable Snapshot Isolation</td><td>No</td><td>No</td><td>No</td><td>No for committed transactions; conflicting transactions may be aborted</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+PostgreSQL implements only three distinct isolation behaviors because Read Uncommitted maps to Read Committed. PostgreSQL's Repeatable Read is stronger than the minimum SQL-standard requirement because it does not permit phantom reads.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="read-committed">
+<h2>10. Read Committed</h2>
+<p>
+Read Committed is PostgreSQL's default isolation level. A normal <code>SELECT</code> sees rows committed before that statement began plus the transaction's own prior changes. A later statement in the same transaction obtains a new snapshot and may therefore see transactions that committed since the prior statement.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<div class="diagram">Session A                    Session B
+---------                    ---------
+BEGIN;
+SELECT balance;  -- 100
+                             UPDATE ... SET balance=150;
+                             COMMIT;
+
+SELECT balance;  -- 150
+COMMIT;
+
+Read Committed:
+each SELECT can obtain a newer snapshot.</div>
+
+<h3>10.1 Writes can wait and then re-evaluate</h3>
+<p>
+Read Committed modification commands have behavior that cannot be reduced to “everything comes from the statement's initial snapshot.” If a target row is concurrently updated, an <code>UPDATE</code>, <code>DELETE</code>, <code>SELECT FOR UPDATE</code>, or related command can wait for the first updater. If that updater commits, PostgreSQL re-evaluates the search condition against the updated version before deciding whether to proceed.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.2 Good default, but not universal</h3>
+<p>
+Read Committed is effective for many OLTP operations where each statement can be reasoned about independently or where atomic constraints/row locks enforce conflicts. It is much harder to use correctly for business rules that depend on a stable multi-statement view of changing data.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="repeatable-read">
+<h2>11. Repeatable Read</h2>
+<p>
+A Repeatable Read transaction uses a stable snapshot established at its first non-transaction-control statement. Successive queries see the same committed database state, together with the transaction's own changes. Concurrent transactions can continue committing, but their later commits are not added to this transaction's snapshot.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>BEGIN ISOLATION LEVEL REPEATABLE READ;
+
+SELECT count(*)
+FROM app.orders
+WHERE status = 'open';
+
+-- Other sessions can commit new open orders here.
+
+SELECT count(*)
+FROM app.orders
+WHERE status = 'open';
+-- same snapshot result, absent this transaction's own changes
+
+COMMIT;</code></pre>
+
+<p>
+PostgreSQL implements this level as snapshot isolation. It prevents dirty reads, nonrepeatable reads and phantom reads, but it can still permit serialization anomalies where several transactions each act on a logically consistent snapshot that cannot all be placed into a single serial execution order.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>11.1 Updating concurrently changed rows</h3>
+<p>
+An updating Repeatable Read transaction can receive a serialization failure if a row it attempts to update was changed by a concurrent transaction after the Repeatable Read transaction's snapshot was established. The correct response is to abort and retry the complete transaction against a new snapshot.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="serializable">
+<h2>12. Serializable isolation</h2>
+<p>
+Serializable provides PostgreSQL's strictest isolation. Committed Serializable transactions are guaranteed to have an effect consistent with executing those transactions one at a time in some order. PostgreSQL achieves this using Serializable Snapshot Isolation: transactions use snapshot-style reads and PostgreSQL additionally tracks read/write dependencies that could form dangerous structures. When a safe serial order cannot be guaranteed, one transaction is aborted with <code>serialization_failure</code> rather than allowing an anomalous commit.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>BEGIN ISOLATION LEVEL SERIALIZABLE;
+
+SELECT count(*)
+FROM scheduling.doctor
+WHERE on_call;
+
+-- Make a decision based on the invariant.
+
+UPDATE scheduling.doctor
+SET on_call = false
+WHERE doctor_id = 101;
+
+COMMIT;</code></pre>
+
+<h3>12.1 Predicate locks are not normal blocking locks</h3>
+<p>
+Serializable transactions can acquire predicate locks represented in <code>pg_locks</code> as <code>SIReadLock</code>. These track read dependencies for SSI and generally do not block normal concurrent access. PostgreSQL can promote multiple fine-grained predicate locks to coarser page/relation locks to bound predicate-lock memory use.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>12.2 Serializable still requires retries</h3>
+<p>
+Serializable is not “execute with no concurrency.” It permits high concurrency but may abort a participant to preserve serializability. Applications must treat SQLSTATE <code>40001</code> as a transaction-level retry signal.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>12.3 Read-only deferrable transactions</h3>
+<pre><code>BEGIN
+    ISOLATION LEVEL SERIALIZABLE
+    READ ONLY
+    DEFERRABLE;
+
+-- Long report using a safe snapshot.
+SELECT ...;
+
+COMMIT;</code></pre>
+
+<p>
+A Serializable, read-only, deferrable transaction may wait before its first query until PostgreSQL can obtain a snapshot that is safe from serialization failures, after which it can run without the normal SSI predicate-lock/retry risk described for such reporting workloads.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="mvcc">
+<h2>13. MVCC</h2>
+<p>
+PostgreSQL's concurrency foundation is Multi-Version Concurrency Control. Updating a logical row normally creates a new physical tuple version rather than overwriting the prior committed version in place. Transactions read the tuple version that is visible to their snapshot. Once no transaction can need an old version, vacuum/pruning can reclaim it.<sup><a href="#r4">[4]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<div class="diagram">logical row id=42
+
+V1:
+ xmin=100
+ xmax=125
+ balance=500
+      |
+      +------ update by XID 125
+                 |
+                 v
+V2:
+ xmin=125
+ xmax=0
+ balance=600
+
+older snapshot -> V1 may be visible
+newer snapshot -> V2 visible
+future cleanup -> V1 reclaimed when globally dead</div>
+
+<p>
+The key concurrency benefit is that readers can usually continue reading an older visible version while another transaction writes a newer version. This avoids the read/write lock conflict pattern used by traditional lock-based concurrency schemes.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="snapshots">
+<h2>14. Snapshots</h2>
+<p>
+A snapshot represents the set/horizon of transactions relevant to visibility decisions. PostgreSQL exposes snapshot values using the <code>pg_snapshot</code> type, which contains lower and upper transaction-ID bounds plus an array of transactions that were in progress when the snapshot was taken.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<pre><code>SELECT pg_current_snapshot();
+
+SELECT
+    pg_snapshot_xmin(pg_current_snapshot()) AS xmin,
+    pg_snapshot_xmax(pg_current_snapshot()) AS xmax;</code></pre>
+
+<h3>14.1 Snapshot lifetime depends on isolation</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Isolation</th><th>Typical snapshot scope</th></tr></thead>
+<tbody>
+<tr><td>Read Committed</td><td>New snapshot for each ordinary command.</td></tr>
+<tr><td>Repeatable Read</td><td>Transaction snapshot established at first non-control statement.</td></tr>
+<tr><td>Serializable</td><td>Stable snapshot plus SSI dependency tracking.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>14.2 Exporting a snapshot</h3>
+<pre><code>-- Session A:
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT pg_export_snapshot();
+-- e.g. 00000003-0000001B-1
+
+-- Session B, before doing work:
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SET TRANSACTION SNAPSHOT '00000003-0000001B-1';</code></pre>
+
+<p>
+PostgreSQL supports exporting/importing snapshots so separate sessions can operate against the same database view, subject to restrictions on when a snapshot may be imported and the exporting transaction remaining open.<sup><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="xids">
+<h2>15. Transaction IDs</h2>
+<p>
+Every PostgreSQL transaction has a virtual transaction identifier. A normal transaction ID (XID) is assigned from a cluster-wide sequence when a transaction first needs to write. A read-only transaction can therefore have a virtual XID without having been assigned a normal XID.<sup><a href="#r11">[11]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<pre><code>BEGIN;
+
+SELECT pg_current_xact_id_if_assigned();
+-- NULL in a transaction that has not needed a normal XID yet
+
+CREATE TEMP TABLE xid_demo(id integer);
+INSERT INTO xid_demo VALUES (1);
+
+SELECT pg_current_xact_id_if_assigned();
+
+ROLLBACK;</code></pre>
+
+<p>
+Normal on-disk transaction identifiers have finite wraparound semantics, which is why VACUUM/freezing must eventually make very old tuple versions safe from XID wraparound. Long-running transactions, abandoned prepared transactions, and some replication slots can hold back those horizons.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="visibility">
+<h2>16. Tuple visibility</h2>
+<p>
+Heap tuples include transaction metadata such as the inserting transaction ID (<code>xmin</code>) and deleting/updating transaction state (<code>xmax</code>). Whether a tuple is visible depends on those fields, transaction commit/abort status, the active snapshot, and tuple status bits. An XID value alone is not enough to decide visibility without transaction state and snapshot context.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<pre><code>SELECT
+    ctid,
+    xmin,
+    xmax,
+    *
+FROM app.account
+WHERE account_id = 42;</code></pre>
+
+<div class="diagram">To see tuple T, conceptually PostgreSQL asks:
+
+Was T's creating transaction visible to this snapshot?
+        |
+        +-- no -> tuple not visible
+        |
+        yes
+        |
+Was T deleted/updated by a transaction visible to this snapshot?
+        |
+        +-- yes -> old tuple not visible
+        |
+        no
+        |
+        v
+tuple is visible</div>
+
+<p>
+The actual visibility rules include many optimizations and states, but this model captures the core MVCC reasoning. System columns are useful for diagnostics but should not be used as durable application-level identity or concurrency tokens without careful semantics.<sup><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<section id="versions">
+<h2>17. Tuple versions and concurrent updates</h2>
+<p>
+An <code>UPDATE</code> normally produces a new heap tuple version and marks the old version as updated; a <code>DELETE</code> marks the prior version deleted. PostgreSQL must retain the previous version while some snapshot may still see it. This physical versioning is why long-running snapshots can contribute to dead-tuple retention and bloat.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>17.1 Lost-update style operations</h3>
+<p>
+Use atomic SQL expressions where possible rather than application read-modify-write sequences. For example, a balance increment should typically be expressed as one <code>UPDATE balance = balance + ...</code> statement or protected by an appropriate row lock/isolation strategy rather than reading the value into application memory and later writing an independently computed replacement.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>-- Prefer an atomic database-side change:
+UPDATE counter
+SET value = value + 1
+WHERE counter_id = 7
+RETURNING value;</code></pre>
+</section>
+
+<section id="row-locks">
+<h2>18. Row-level locking</h2>
+<p>
+PostgreSQL provides four explicit row-lock strengths through <code>SELECT ... FOR ...</code>: <code>FOR UPDATE</code>, <code>FOR NO KEY UPDATE</code>, <code>FOR SHARE</code>, and <code>FOR KEY SHARE</code>. Row locks block conflicting row-level writers/lockers but do not block ordinary snapshot reads. They are held until transaction end, though locks acquired after a savepoint are released if PostgreSQL rolls back to that savepoint.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Locking clause</th><th>Typical purpose</th><th>Relative strength</th></tr></thead>
+<tbody>
+<tr><td><code>FOR UPDATE</code></td><td>Strong row lock for planned update/delete or exclusive ownership.</td><td>Strongest row lock.</td></tr>
+<tr><td><code>FOR NO KEY UPDATE</code></td><td>Update row without changing key values referenced by foreign keys.</td><td>Weaker than FOR UPDATE.</td></tr>
+<tr><td><code>FOR SHARE</code></td><td>Shared row lock preventing conflicting writes while permitting other share locks.</td><td>Shared.</td></tr>
+<tr><td><code>FOR KEY SHARE</code></td><td>Weak shared lock protecting key/reference stability.</td><td>Weakest listed row lock.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>18.1 Pessimistic claim pattern</h3>
+<pre><code>BEGIN;
+
+SELECT *
+FROM inventory.product
+WHERE product_id = 501
+FOR UPDATE;
+
+-- Decide/update while the row is locked.
+UPDATE inventory.product
+SET quantity = quantity - 1
+WHERE product_id = 501
+  AND quantity &gt; 0;
+
+COMMIT;</code></pre>
+
+<h3>18.2 Work queue with <code>SKIP LOCKED</code></h3>
+<pre><code>BEGIN;
+
+WITH next_job AS (
+    SELECT job_id
+    FROM queue.job
+    WHERE state = 'ready'
+    ORDER BY priority DESC, job_id
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+)
+UPDATE queue.job AS j
+SET
+    state = 'running',
+    started_at = clock_timestamp()
+FROM next_job
+WHERE j.job_id = next_job.job_id
+RETURNING j.*;
+
+COMMIT;</code></pre>
+
+<p>
+<code>SKIP LOCKED</code> is useful for queue-like consumers because it avoids waiting on rows already claimed by other workers, but it intentionally provides an inconsistent view of locked rows and is not appropriate as a general substitute for normal isolation.<sup><a href="#r27">[27]</a></sup>
+</p>
+</section>
+
+<section id="table-locks">
+<h2>19. Table-level locking</h2>
+<p>
+PostgreSQL automatically obtains table-level locks appropriate to each command, and applications can explicitly request table locks using <code>LOCK TABLE</code>. There are eight table lock modes, ranging from <code>ACCESS SHARE</code> to <code>ACCESS EXCLUSIVE</code>. Conflicts are defined by the lock compatibility matrix, not simply by a numeric ordering.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Mode</th><th>Representative automatic acquisition</th><th>Key observation</th></tr></thead>
+<tbody>
+<tr><td><code>ACCESS SHARE</code></td><td>Plain SELECT</td><td>Conflicts only with ACCESS EXCLUSIVE.</td></tr>
+<tr><td><code>ROW SHARE</code></td><td>SELECT ... FOR UPDATE/SHARE</td><td>Adds stronger coordination for row locking.</td></tr>
+<tr><td><code>ROW EXCLUSIVE</code></td><td>INSERT, UPDATE, DELETE, MERGE</td><td>Common writer table lock.</td></tr>
+<tr><td><code>SHARE UPDATE EXCLUSIVE</code></td><td>VACUUM (without FULL), ANALYZE, some CREATE INDEX/ALTER TABLE operations</td><td>Self-conflicting maintenance/DDL coordination.</td></tr>
+<tr><td><code>SHARE</code></td><td>CREATE INDEX (non-concurrent)</td><td>Allows readers, conflicts with row writers.</td></tr>
+<tr><td><code>SHARE ROW EXCLUSIVE</code></td><td>Some DDL/trigger operations</td><td>Self-exclusive shared/write coordination.</td></tr>
+<tr><td><code>EXCLUSIVE</code></td><td>Explicit/specialized uses</td><td>Allows ACCESS SHARE readers but blocks many others.</td></tr>
+<tr><td><code>ACCESS EXCLUSIVE</code></td><td>DROP TABLE, TRUNCATE, VACUUM FULL, many ALTER TABLE forms</td><td>Conflicts with every table lock mode.</td></tr>
+</tbody>
+</table>
+</div>
+
+<pre><code>BEGIN;
+
+LOCK TABLE accounting.ledger
+IN SHARE MODE;
+
+-- Perform cross-table/current-state validation.
+
+COMMIT;</code></pre>
+
+<p>
+Explicit table locking can enforce application consistency where non-Serializable transactions need a current globally stable view, but it reduces concurrency. Serializable transactions can often avoid such broad blocking by detecting dangerous dependency patterns instead.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="advisory">
+<h2>20. Advisory locks</h2>
+<p>
+Advisory locks are application-defined locks identified by either one 64-bit key or two 32-bit keys. PostgreSQL does not attach an advisory lock key to a particular row/table meaning; the application defines the resource convention. Locks can be shared or exclusive, and either session-scoped or transaction-scoped.<sup><a href="#r7">[7]</a><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>20.1 Transaction-scoped advisory lock</h3>
+<pre><code>BEGIN;
+
+SELECT pg_advisory_xact_lock(9001);
+
+-- Exactly one transaction at a time performs
+-- application-defined work for resource 9001.
+
+UPDATE app.resource
+SET refreshed_at = clock_timestamp()
+WHERE resource_id = 9001;
+
+COMMIT;
+-- lock automatically released</code></pre>
+
+<h3>20.2 Try-lock pattern</h3>
+<pre><code>SELECT pg_try_advisory_lock(42);</code></pre>
+
+<p>
+Try-lock functions return immediately with a Boolean result instead of waiting. Session-level advisory locks persist until explicitly unlocked or the session ends; transaction-level advisory locks automatically release at transaction end and cannot be manually released early.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Advisory means cooperative.</strong> PostgreSQL will not stop another code path from modifying the underlying data unless that code path follows the same advisory-lock convention. Use row/table constraints and locks when the database itself must enforce conflict semantics.
+</div>
+</section>
+
+<section id="lock-monitoring">
+<h2>21. Monitoring locks</h2>
+<p>
+The <code>pg_locks</code> view exposes locks known to PostgreSQL's lock manager, including relation locks, transaction/virtual-transaction locks, advisory locks and Serializable predicate locks. Row-level locks are primarily recorded in tuples and therefore do not appear as one <code>pg_locks</code> row per locked row; waits can appear as transaction-ID locks, and the supplied <code>pgrowlocks</code> extension can inspect row-lock information directly.<sup><a href="#r25">[25]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<pre><code>SELECT
+    l.pid,
+    a.usename,
+    a.state,
+    l.locktype,
+    l.mode,
+    l.granted,
+    l.relation::regclass AS relation,
+    l.transactionid,
+    l.virtualxid,
+    a.wait_event_type,
+    a.wait_event,
+    left(a.query, 120) AS query
+FROM pg_locks AS l
+LEFT JOIN pg_stat_activity AS a
+  ON a.pid = l.pid
+ORDER BY l.granted, l.pid;</code></pre>
+
+<h3>21.1 Find blockers</h3>
+<pre><code>SELECT
+    a.pid,
+    pg_blocking_pids(a.pid) AS blocking_pids,
+    a.wait_event_type,
+    a.wait_event,
+    a.query
+FROM pg_stat_activity AS a
+WHERE cardinality(pg_blocking_pids(a.pid)) &gt; 0;</code></pre>
+
+<p>
+<code>pg_blocking_pids()</code> is preferable to trying to infer every blocker by manually self-joining <code>pg_locks</code>, because PostgreSQL can account for lock-manager queue ordering and parallel-worker relationships.<sup><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="deadlocks">
+<h2>22. Deadlocks</h2>
+<p>
+A deadlock occurs when transactions wait in a cycle such that none can proceed without another releasing a resource. PostgreSQL automatically detects deadlock cycles and aborts one transaction so the others can continue. Deadlocks can involve row locks, table locks, advisory locks or combinations of resources.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<div class="diagram">Transaction A                 Transaction B
+-------------                 -------------
+locks row 1                   locks row 2
+    |                             |
+wants row 2                   wants row 1
+    |                             |
+    +---------- waits <------------+
+               cycle
+
+PostgreSQL detects cycle
+and aborts one participant.</div>
+
+<h3>22.1 Reproduce a row-lock deadlock</h3>
+<pre><code>-- Session A
+BEGIN;
+UPDATE account SET balance = balance + 10 WHERE id = 1;
+-- wait
+
+-- Session B
+BEGIN;
+UPDATE account SET balance = balance + 20 WHERE id = 2;
+UPDATE account SET balance = balance + 20 WHERE id = 1;
+-- waits for A
+
+-- Session A
+UPDATE account SET balance = balance + 10 WHERE id = 2;
+-- cycle: PostgreSQL aborts one transaction</code></pre>
+
+<h3>22.2 Prevention: consistent lock order</h3>
+<pre><code>-- Every transfer locks lower account_id first.
+SELECT *
+FROM account
+WHERE id IN (10, 20)
+ORDER BY id
+FOR UPDATE;</code></pre>
+
+<p>
+The standard defense is to acquire multiple resources in a consistent global order and use the strongest lock mode needed as the first lock on an object when practical. Deadlocks can still occur in complex systems, so applications should also be ready to retry transactions aborted with SQLSTATE <code>40P01</code> when retry is semantically safe.<sup><a href="#r7">[7]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>22.3 Detection timing</h3>
+<p>
+PostgreSQL does not run an expensive deadlock search the instant every lock wait begins. <code>deadlock_timeout</code> controls how long PostgreSQL waits before checking for a deadlock; the PostgreSQL 18 default is one second. The same interval is used by <code>log_lock_waits</code> to decide when to log lock waits.<sup><a href="#r30">[30]</a></sup>
+</p>
+</section>
+
+<section id="serialization">
+<h2>23. Serialization failures</h2>
+<p>
+A serialization failure is not a deadlock. It is PostgreSQL deliberately aborting a transaction because the concurrent execution cannot safely commit under the requested isolation semantics. Both Repeatable Read and Serializable can return SQLSTATE <code>40001</code>; Serializable uses this specifically to prevent serialization anomalies detected by SSI dependency tracking.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>ERROR:  could not serialize access due to concurrent update
+SQLSTATE: 40001</code></pre>
+
+<p>
+Applications should retry the complete transaction, not merely the statement that received the error. The decisions that selected which rows to read, which values to compute, and which SQL statements to issue may all have depended on the old snapshot.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="retry">
+<h2>24. Retry architecture</h2>
+<p>
+Transaction retry logic belongs around the entire unit of work. PostgreSQL does not automatically retry Serializable transactions because the server cannot reproduce arbitrary application-side decisions or external interactions correctly.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code># Pseudocode
+
+for attempt in range(MAX_ATTEMPTS):
+    try:
+        begin_transaction(isolation="serializable")
+
+        # All decision-making and SQL for the unit of work
+        # occur inside this retry attempt.
+        perform_business_transaction()
+
+        commit()
+        break
+
+    except DatabaseError as e:
+        rollback()
+
+        if e.sqlstate not in {"40001", "40P01"}:
+            raise
+
+        sleep(backoff_with_jitter(attempt))
+else:
+    raise TransactionRetryExhausted()</code></pre>
+
+<h3>24.1 Idempotency and external side effects</h3>
+<p>
+If a retried transaction triggers external effects—payment requests, emails, message publishing—the application must design those effects for idempotency or move them behind a transactional outbox/coordination mechanism. A database rollback cannot undo a remote HTTP request that has already completed.
+</p>
+
+<h3>24.2 Retry more carefully for constraint errors</h3>
+<p>
+PostgreSQL notes that some unique-violation (<code>23505</code>) and exclusion-violation (<code>23P01</code>) cases can reflect concurrency patterns similar to serialization conflicts, but these SQLSTATEs can also represent permanent invalid input. Unlike <code>40001</code>, they should not be blindly retried without application knowledge.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="consistency-checks">
+<h2>25. Application-level consistency patterns</h2>
+
+<h3>25.1 Prefer constraints for local invariants</h3>
+<pre><code>CREATE TABLE app.username (
+    user_id bigint PRIMARY KEY,
+    normalized_username text NOT NULL UNIQUE
+);</code></pre>
+
+<p>
+A unique constraint lets PostgreSQL serialize conflicting insertions correctly without an application-side “SELECT then INSERT if absent” race.</p>
+
+<h3>25.2 Use row locking for current-row decisions</h3>
+<pre><code>BEGIN;
+
+SELECT quantity
+FROM inventory.product
+WHERE product_id = 501
+FOR UPDATE;
+
+UPDATE inventory.product
+SET quantity = quantity - 1
+WHERE product_id = 501
+  AND quantity &gt;= 1;
+
+COMMIT;</code></pre>
+
+<h3>25.3 Use Serializable for broad predicate invariants</h3>
+<p>
+When a rule depends on a set of rows or the absence of rows and cannot be represented directly as a constraint, Serializable can be simpler than manually locking every potentially relevant row/range. The application then accepts transaction retries as the concurrency-control mechanism.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>25.4 Broad explicit locking is sometimes appropriate</h3>
+<p>
+If non-Serializable writes can occur and an application must verify a global invariant against a current stable state, PostgreSQL documents explicit row or table locking as a valid strategy. Such locks trade concurrency for certainty and should be scoped narrowly.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="twophase">
+<h2>26. Two-phase commit (2PC)</h2>
+<p>
+PostgreSQL supports two-phase commit for coordination by an external distributed transaction manager. The local transaction performs its work, then executes <code>PREPARE TRANSACTION</code>. PostgreSQL persists enough state for a later <code>COMMIT PREPARED</code> or <code>ROLLBACK PREPARED</code> from any session. The transaction is no longer associated with the session after prepare.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<div class="diagram">global transaction manager
+        |
+        +-------------------------+
+        |                         |
+        v                         v
+ PostgreSQL A                PostgreSQL B
+ BEGIN                       BEGIN
+ changes                     changes
+ PREPARE 'g-123-A'           PREPARE 'g-123-B'
+        |                         |
+        +-----------+-------------+
+                    |
+      all participants prepared?
+              /           \
+            yes            no
+             |              |
+             v              v
+       COMMIT PREPARED  ROLLBACK PREPARED
+       on every system   on every system</div>
+
+<h3>26.1 Example</h3>
+<pre><code>-- Phase 1
+BEGIN;
+
+UPDATE finance.account
+SET balance = balance - 100
+WHERE account_id = 10;
+
+PREPARE TRANSACTION 'global-payment-8f0c';
+
+-- Later, after external coordinator decision:
+COMMIT PREPARED 'global-payment-8f0c';
+
+-- Or:
+-- ROLLBACK PREPARED 'global-payment-8f0c';</code></pre>
+
+<h3>26.2 Inspect prepared transactions</h3>
+<pre><code>SELECT
+    transaction,
+    gid,
+    prepared,
+    owner,
+    database
+FROM pg_prepared_xacts
+ORDER BY prepared;</code></pre>
+
+<h3>26.3 Prepared transactions are operational liabilities if abandoned</h3>
+<p>
+A prepared transaction keeps its locks and can hold back vacuum/XID horizons. PostgreSQL explicitly warns that prepared transactions should normally remain prepared only briefly and recommends keeping the feature disabled unless an external transaction manager reliably resolves them. <code>max_prepared_transactions</code> controls how many can exist; a value of zero disables transaction preparation.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<p>
+Short-lived prepared state can remain in shared memory and WAL; prepared transactions that survive checkpoints are represented in <code>pg_twophase</code> state files so the decision can survive restart/crash recovery.<sup><a href="#r10">[10]</a><a href="#r31">[31]</a></sup>
+</p>
+</section>
+
+<section id="patterns">
+<h2>27. Production concurrency patterns</h2>
+
+<h3>27.1 Atomic inventory decrement without an explicit SELECT lock</h3>
+<pre><code>UPDATE inventory.product
+SET quantity = quantity - 1
+WHERE product_id = $1
+  AND quantity &gt; 0
+RETURNING quantity;</code></pre>
+
+<p>
+This expresses the test and write in one atomic SQL statement. Under Read Committed, concurrent updaters are coordinated through row-level update locking and PostgreSQL rechecks the qualification after relevant waits.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>27.2 Optimistic version column</h3>
+<pre><code>UPDATE app.document
+SET
+    body = $new_body,
+    version = version + 1
+WHERE document_id = $id
+  AND version = $expected_version
+RETURNING version;</code></pre>
+
+<p>
+If zero rows are updated, another transaction changed the row first. This application-level optimistic concurrency pattern is often convenient for APIs, but it is separate from PostgreSQL's internal MVCC transaction IDs and avoids depending on implementation system columns.</p>
+
+<h3>27.3 Worker queue</h3>
+<pre><code>BEGIN;
+
+WITH claimed AS (
+    SELECT job_id
+    FROM job
+    WHERE state = 'ready'
+    ORDER BY priority DESC, job_id
+    FOR UPDATE SKIP LOCKED
+    LIMIT 10
+)
+UPDATE job AS j
+SET state = 'running'
+FROM claimed AS c
+WHERE j.job_id = c.job_id
+RETURNING j.*;
+
+COMMIT;</code></pre>
+
+<h3>27.4 Read-consistent reporting</h3>
+<pre><code>BEGIN
+    ISOLATION LEVEL REPEATABLE READ
+    READ ONLY;
+
+SELECT ...;
+SELECT ...;
+SELECT ...;
+
+COMMIT;</code></pre>
+
+<p>
+This provides a stable database snapshot across a multi-query report. If the report requires protection from every serialization anomaly relative to concurrent business transactions, use Serializable semantics instead.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>27.5 Serializable invariant</h3>
+<pre><code>BEGIN ISOLATION LEVEL SERIALIZABLE;
+
+SELECT count(*) AS active_admins
+FROM app.user_role
+WHERE role = 'admin'
+  AND active;
+
+-- remove one only if the invariant remains valid
+DELETE FROM app.user_role
+WHERE user_id = $user
+  AND role = 'admin';
+
+COMMIT;</code></pre>
+
+<p>
+Concurrent transactions making related decisions can trigger <code>40001</code>; the application retries from the beginning rather than adding broad blocking locks around all reads.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="pitfalls">
+<h2>28. Common pitfalls</h2>
+
+<h3>28.1 Leaving transactions idle</h3>
+<p>
+An idle transaction can retain locks and, at snapshot-holding isolation levels or after certain activity, hold back cleanup horizons. Keep transactions short and configure <code>idle_in_transaction_session_timeout</code> where appropriate for application roles.<sup><a href="#r32">[32]</a></sup>
+</p>
+
+<h3>28.2 Assuming Read Committed means one transaction snapshot</h3>
+<p>
+It does not. Read Committed normally takes one snapshot per command, so consecutive reads can legitimately see different committed results.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>28.3 Using Repeatable Read as though it were Serializable</h3>
+<p>
+PostgreSQL Repeatable Read prevents phantoms and provides a stable snapshot, but concurrent snapshot-isolation transactions can still produce a serialization anomaly. Business-rule enforcement across predicates may require Serializable or explicit locking.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>28.4 Retrying only the failed statement</h3>
+<p>
+For SQLSTATE <code>40001</code>, retry the complete transaction including application decisions, not only the statement that failed.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>28.5 Inconsistent lock ordering</h3>
+<p>
+Locking the same set of objects in different orders across code paths is a classic deadlock generator. Define canonical ordering rules for multi-row/multi-resource operations.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>28.6 Assuming row locks block normal readers</h3>
+<p>
+A row-level lock blocks incompatible writers/lockers, not ordinary MVCC reads. A normal SELECT can still read the row version visible to its snapshot.<sup><a href="#r4">[4]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>28.7 Treating advisory locks as enforced data constraints</h3>
+<p>
+Advisory locks work only when every cooperating code path obeys the same application convention. They do not automatically protect underlying SQL rows from unconstrained operations.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>28.8 Leaving prepared transactions unresolved</h3>
+<p>
+A forgotten 2PC transaction continues holding locks and can interfere with VACUUM and transaction-ID maintenance. Monitor <code>pg_prepared_xacts</code> if 2PC is enabled.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>28.9 Treating sequences as fully transactional counters</h3>
+<p>
+PostgreSQL documents that sequence changes are immediately visible to other transactions and are not rolled back when the transaction that called the sequence aborts. Sequence gaps are therefore normal and should not be used as proof of transaction rollback or business-event continuity.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>28.10 Confusing deadlocks and serialization failures</h3>
+<p>
+Deadlock detection breaks a blocking wait cycle and reports <code>40P01</code>; a serialization failure reports <code>40001</code> because PostgreSQL cannot allow that concurrent execution to commit under the requested isolation semantics. Both may be retryable, but they are different mechanisms.<sup><a href="#r6">[6]</a><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="checklist">
+<h2>29. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Make transaction boundaries intentional.</strong> One transaction should represent one coherent unit of database work.</li>
+<li><strong>Keep transactions short.</strong> Do not hold database transactions open around slow external calls or user think time.</li>
+<li><strong>Use constraints before application “check then write” logic</strong> when an invariant maps cleanly to a database constraint.</li>
+<li><strong>Know the snapshot model.</strong> Read Committed is statement-scoped; Repeatable Read and Serializable use stable transaction snapshots.</li>
+<li><strong>Choose Serializable when a multi-row/predicate invariant must behave as a serial execution</strong> and transaction retry is acceptable.</li>
+<li><strong>Build retry handling for <code>40001</code></strong> whenever Repeatable Read or Serializable writes are used.</li>
+<li><strong>Consider <code>40P01</code> retry handling</strong> for semantically retryable deadlocks.</li>
+<li><strong>Retry the entire transaction.</strong></li>
+<li><strong>Acquire multiple locks in a consistent order.</strong></li>
+<li><strong>Use the weakest lock that correctly protects the invariant</strong> without relying on accidental behavior.</li>
+<li><strong>Use <code>SKIP LOCKED</code> for queue-style workloads, not as a general consistency primitive.</strong></li>
+<li><strong>Monitor blockers with <code>pg_stat_activity</code>, <code>pg_locks</code>, and <code>pg_blocking_pids()</code>.</strong></li>
+<li><strong>Distinguish advisory locks from database-enforced locks.</strong></li>
+<li><strong>Use savepoints for genuine partial-recovery boundaries.</strong></li>
+<li><strong>Remember that sequence increments are not rolled back.</strong></li>
+<li><strong>Use two-phase commit only with a real external transaction manager.</strong></li>
+<li><strong>Monitor prepared transactions and resolve them quickly.</strong></li>
+<li><strong>Keep durability settings aligned with business consequences.</strong> An acknowledged financial transaction should not use a durability mode intended for disposable telemetry.</li>
+<li><strong>Test concurrency, not only single-session correctness.</strong> Important invariants should be stress-tested with concurrent sessions and deliberate failure/retry scenarios.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Concurrency principle:</strong> PostgreSQL maximizes concurrency by separating <em>visibility</em> from <em>conflict</em>. MVCC decides which tuple version a transaction may see; locks serialize operations that must not proceed together; Serializable isolation detects dependency structures that snapshots alone cannot make safe. Correct applications choose the narrowest mechanism that actually protects their invariant.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. Transactions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-transactions.html">https://www.postgresql.org/docs/18/tutorial-transactions.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Transaction Processing [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/transactions.html">https://www.postgresql.org/docs/18/transactions.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. BEGIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-begin.html">https://www.postgresql.org/docs/18/sql-begin.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Concurrency Control: Introduction [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/mvcc-intro.html">https://www.postgresql.org/docs/18/mvcc-intro.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Transaction Isolation [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/transaction-iso.html">https://www.postgresql.org/docs/18/transaction-iso.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Serialization Failure Handling [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/mvcc-serialization-failure-handling.html">https://www.postgresql.org/docs/18/mvcc-serialization-failure-handling.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Explicit Locking [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/explicit-locking.html">https://www.postgresql.org/docs/18/explicit-locking.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Viewing Locks [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-locks.html">https://www.postgresql.org/docs/18/monitoring-locks.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. PREPARE TRANSACTION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-prepare-transaction.html">https://www.postgresql.org/docs/18/sql-prepare-transaction.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Two-Phase Transactions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/two-phase.html">https://www.postgresql.org/docs/18/two-phase.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Transactions and Identifiers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/transaction-id.html">https://www.postgresql.org/docs/18/transaction-id.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. ROLLBACK TO SAVEPOINT [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-rollback-to.html">https://www.postgresql.org/docs/18/sql-rollback-to.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Data Definition: Constraints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Write-Ahead Logging (WAL) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/wal-intro.html">https://www.postgresql.org/docs/18/wal-intro.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. ROLLBACK [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-rollback.html">https://www.postgresql.org/docs/18/sql-rollback.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. RELEASE SAVEPOINT [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-release-savepoint.html">https://www.postgresql.org/docs/18/sql-release-savepoint.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Data Consistency Checks at the Application Level [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/applevel-consistency.html">https://www.postgresql.org/docs/18/applevel-consistency.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. Asynchronous Commit [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/wal-async-commit.html">https://www.postgresql.org/docs/18/wal-async-commit.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Non-Durable Settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/non-durability.html">https://www.postgresql.org/docs/18/non-durability.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. SET TRANSACTION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-set-transaction.html">https://www.postgresql.org/docs/18/sql-set-transaction.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Subtransactions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/subxacts.html">https://www.postgresql.org/docs/18/subxacts.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Database Page Layout: Table Row Layout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-page-layout.html">https://www.postgresql.org/docs/18/storage-page-layout.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Transaction ID and Snapshot Information Functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-info.html">https://www.postgresql.org/docs/18/functions-info.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Snapshot Synchronization Functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Transactions and Locking [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xact-locking.html">https://www.postgresql.org/docs/18/xact-locking.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. System Columns [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-system-columns.html">https://www.postgresql.org/docs/18/ddl-system-columns.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. SELECT — Locking Clause [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-select.html">https://www.postgresql.org/docs/18/sql-select.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. Advisory Lock Functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. pg_locks [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-locks.html">https://www.postgresql.org/docs/18/view-pg-locks.html</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. Lock Management Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-locks.html">https://www.postgresql.org/docs/18/runtime-config-locks.html</a></li>
+
+<li id="r31">PostgreSQL Global Development Group. Database File Layout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-file-layout.html">https://www.postgresql.org/docs/18/storage-file-layout.html</a></li>
+
+<li id="r32">PostgreSQL Global Development Group. Client Connection Defaults: idle_in_transaction_session_timeout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-client.html">https://www.postgresql.org/docs/18/runtime-config-client.html</a></li>
+
+<li id="r33">PostgreSQL Global Development Group. pg_prepared_xacts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-prepared-xacts.html">https://www.postgresql.org/docs/18/view-pg-prepared-xacts.html</a></li>
+
+<li id="r34">PostgreSQL Global Development Group. COMMIT PREPARED [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-commit-prepared.html">https://www.postgresql.org/docs/18/sql-commit-prepared.html</a></li>
+
+<li id="r35">PostgreSQL Global Development Group. ROLLBACK PREPARED [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-rollback-prepared.html">https://www.postgresql.org/docs/18/sql-rollback-prepared.html</a></li>
+
+<li id="r36">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. Correct concurrency behavior depends on PostgreSQL version, transaction boundaries, isolation level, schema constraints, query patterns, lock acquisition order, retry behavior, replication/durability settings, and external side effects. Test important invariants using concurrent sessions and deliberate transaction failures rather than relying only on single-session examples.
+</p>
+</footer>
+
+</body>
+</html>

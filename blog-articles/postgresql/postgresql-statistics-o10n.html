@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL statistics and optimization: table and column statistics, histograms, MCVs, correlation, selectivity and cardinality estimation, extended statistics, ANALYZE, planner costs, and query-plan instability.">
+<title>PostgreSQL Statistics &amp; Optimization</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1030px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:840px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.formula{
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:17px 19px;margin:18px 0;font-family:"SFMono-Regular",Consolas,monospace;
+  overflow-x:auto
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Statistics &amp; Optimization</h1>
+  <p class="dek">An expert guide to PostgreSQL's statistical query-planning model: relation cardinality, column distributions, histograms, most-common values, physical correlation, selectivity and cardinality estimation, extended multivariate statistics, ANALYZE and VACUUM ANALYZE, planner cost constants, prepared-plan behavior, and systematic diagnosis of unstable or badly estimated plans.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL is a cost-based optimizer: it enumerates plausible execution strategies, estimates how many rows each operation will produce, estimates the cost of those operations, and selects a plan with the lowest estimated total cost. Statistics are therefore not incidental metadata. They are the evidence from which PostgreSQL estimates scan selectivity, join cardinality, number of groups, index locality, row width, and ultimately whether an index scan, sequential scan, nested loop, hash join, merge join, sort, hash aggregate, or other strategy appears cheapest.<sup><a href="#r1">[1]</a>-<a href="#r3">[3]</a></sup>
+</p>
+<p>
+The core statistics model has two levels. Relation-level statistics such as <code>pg_class.reltuples</code> and <code>relpages</code> approximate the size of tables and indexes. Per-column statistics in <code>pg_statistic</code>, exposed more safely through <code>pg_stats</code>, describe null fractions, average widths, numbers of distinct values, most-common values (MCVs), equal-population histograms, and correlation between logical value ordering and physical heap ordering. PostgreSQL combines these summaries with operator-specific selectivity functions to estimate how many rows satisfy predicates.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a><a href="#r5">[5]</a></sup>
+</p>
+<p>
+Single-column statistics have a fundamental weakness: they usually treat conditions on separate columns as independent. PostgreSQL's extended statistics objects address selected forms of cross-column dependence through functional dependencies, multivariate distinct counts, multivariate MCV lists, and expression statistics. They can radically improve estimates for correlated predicates and group counts, although PostgreSQL 18 still does not use extended statistics for join selectivity estimation.<sup><a href="#r2">[2]</a><a href="#r6">[6]</a></sup>
+</p>
+<p>
+Query-plan instability often reflects changing evidence rather than arbitrary optimizer behavior. <code>ANALYZE</code> samples large tables, so repeated samples can differ slightly; rapidly changing or skewed data can make statistics stale between analyses; and prepared statements may switch between parameter-sensitive custom plans and parameter-independent generic plans. Diagnosing instability means comparing estimated and actual row counts, understanding the statistics behind the estimates, and separating estimator problems from cost-model or plan-cache problems before resorting to planner method switches.<sup><a href="#r7">[7]</a>-<a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#planner">How statistics drive optimization</a></li>
+<li><a href="#table-stats">Table statistics</a></li>
+<li><a href="#column-stats">Column statistics</a></li>
+<li><a href="#ndistinct">Distinct-value estimates</a></li>
+<li><a href="#mcv">Most-common values</a></li>
+<li><a href="#histogram">Histograms</a></li>
+<li><a href="#correlation">Correlation</a></li>
+<li><a href="#selectivity">Selectivity estimation</a></li>
+<li><a href="#cardinality">Cardinality estimation</a></li>
+<li><a href="#joins">Join-cardinality errors</a></li>
+<li><a href="#extended">Extended statistics</a></li>
+<li><a href="#dependencies">Functional dependencies</a></li>
+<li><a href="#ndistinct-ext">Multivariate n-distinct</a></li>
+<li><a href="#mcv-ext">Multivariate MCV lists</a></li>
+<li><a href="#expressions">Expression statistics</a></li>
+<li><a href="#analyze">ANALYZE</a></li>
+<li><a href="#targets">Statistics targets</a></li>
+<li><a href="#vacuum-analyze">VACUUM ANALYZE</a></li>
+<li><a href="#autoanalyze">Autoanalyze</a></li>
+<li><a href="#partitioned">Partitioned-table statistics</a></li>
+<li><a href="#costs">Planner cost parameters</a></li>
+<li><a href="#explain">EXPLAIN for estimation diagnosis</a></li>
+<li><a href="#instability">Query-plan instability</a></li>
+<li><a href="#prepared">Generic vs custom plans</a></li>
+<li><a href="#monitoring">Workload-level monitoring</a></li>
+<li><a href="#workflow">Optimization workflow</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="planner">
+<h2>1. How statistics drive optimization</h2>
+<p>
+The optimizer's most important intermediate quantity is often cardinality: the estimated number of rows emitted by a plan node. Costs for joins, sorts, hashes, repeated parameterized scans, aggregation, materialization, and parallel operations all depend on the number of input/output rows. A cardinality error near the bottom of a plan can therefore propagate upward and change join order, join algorithm, memory assumptions, and scan method.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<div class="diagram">SQL
+ |
+ v
+parse / rewrite
+ |
+ v
+candidate access paths and join orders
+ |
+ +--> relation cardinality: reltuples / current size
+ |
+ +--> predicate selectivity:
+ |      null_frac
+ |      n_distinct
+ |      MCV frequencies
+ |      histogram
+ |      cross-column statistics
+ |
+ +--> estimated rows at every node
+ |
+ +--> cost model:
+        page I/O
+        tuple/index CPU
+        operators/functions
+        parallel overhead
+        cache assumptions
+ |
+ v
+lowest-estimated-cost plan
+ |
+ v
+executor
+ |
+ v
+actual rows / time / buffers
+ |
+ +--> compare actual vs estimated with EXPLAIN ANALYZE</div>
+
+<p>
+The planner's cost numbers are intentionally abstract rather than millisecond predictions. Their role is comparison among alternative plans. PostgreSQL conventionally anchors the scale with <code>seq_page_cost=1.0</code> and expresses CPU, random-I/O, parallel, and other costs relative to that baseline.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="table-stats">
+<h2>2. Table and index statistics</h2>
+<p>
+The planner needs a base cardinality before applying predicates. PostgreSQL stores approximate row and page counts in <code>pg_class</code>: <code>reltuples</code> estimates live rows and <code>relpages</code> estimates pages. These fields are not updated continuously; <code>VACUUM</code>, <code>ANALYZE</code>, and some DDL commands update them. When the current physical page count differs from the stored page count, the planner scales the row estimate to reflect the table's current size.<sup><a href="#r2">[2]</a><a href="#r12">[12]</a></sup>
+</p>
+
+<pre><code>SELECT
+    c.oid::regclass AS relation,
+    c.relkind,
+    c.reltuples,
+    c.relpages,
+    pg_size_pretty(pg_relation_size(c.oid)) AS relation_size
+FROM pg_class AS c
+WHERE c.oid IN (
+    'app.orders'::regclass,
+    'app.orders_customer_created_idx'::regclass
+);</code></pre>
+
+<h3>2.1 Approximate by design</h3>
+<p>
+<code>reltuples</code> is an estimate, not a transactionally maintained row counter. Maintaining an exact count on every write would itself impose concurrency and write overhead. For planning, a sufficiently accurate estimate is more useful than an exact but expensive count.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>2.2 Row width matters too</h3>
+<p>
+The planner also estimates row width, because wider rows affect sequential-scan I/O, sort/hash memory, tuple-transfer costs, and join execution. Per-column average widths in <code>pg_stats.avg_width</code> contribute to these estimates.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="column-stats">
+<h2>3. Column statistics and <code>pg_stats</code></h2>
+<p>
+<code>ANALYZE</code> stores detailed statistics in the internal <code>pg_statistic</code> catalog. PostgreSQL recommends examining the readable <code>pg_stats</code> view instead: it exposes only statistics for tables the current user may read and presents the internal statistic slots as named columns.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<pre><code>SELECT
+    schemaname,
+    tablename,
+    attname,
+    null_frac,
+    avg_width,
+    n_distinct,
+    most_common_vals,
+    most_common_freqs,
+    histogram_bounds,
+    correlation
+FROM pg_stats
+WHERE schemaname = 'app'
+  AND tablename = 'orders'
+ORDER BY attname;</code></pre>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Statistic</th><th>What it represents</th><th>Planner use</th></tr></thead>
+<tbody>
+<tr><td><code>null_frac</code></td><td>Fraction of rows where the column is SQL NULL</td><td><code>IS NULL</code>/<code>IS NOT NULL</code> and residual population calculations</td></tr>
+<tr><td><code>avg_width</code></td><td>Average stored bytes for non-null values</td><td>Row-width and memory/I/O costing</td></tr>
+<tr><td><code>n_distinct</code></td><td>Estimated number or proportional number of distinct non-null values</td><td>Equality/group cardinality estimation</td></tr>
+<tr><td><code>most_common_vals</code></td><td>Frequently occurring values</td><td>Accurate selectivity for skewed common values</td></tr>
+<tr><td><code>most_common_freqs</code></td><td>Observed frequencies of those MCVs</td><td>Direct selectivity estimates for matching MCVs</td></tr>
+<tr><td><code>histogram_bounds</code></td><td>Approximately equal-population value buckets excluding MCV population</td><td>Range selectivity and non-MCV distribution modeling</td></tr>
+<tr><td><code>correlation</code></td><td>Correlation between logical value ordering and physical row position</td><td>Cost adjustment for index scans/random heap access</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="ndistinct">
+<h2>4. Distinct-value estimates</h2>
+<p>
+<code>n_distinct</code> has two encodings. A positive number estimates a fixed absolute count of distinct values. A negative number represents the negative fraction of table rows expected to be distinct. Thus <code>-1</code> means approximately unique, while <code>-0.1</code> means distinct values are expected to number roughly 10% of the current row count.<sup><a href="#r4">[4]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>4.1 Why proportional values matter</h3>
+<pre><code>-- Suppose reltuples ~= 10,000,000
+-- n_distinct = -0.20
+-- estimated distinct values ~= 2,000,000</code></pre>
+
+<p>
+A proportional encoding lets the estimate grow as the table grows, which is appropriate for identifier-like or high-cardinality attributes. A positive fixed count is more appropriate for stable domains such as a finite set of status codes.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>4.2 Manual override</h3>
+<pre><code>ALTER TABLE app.orders
+ALTER COLUMN external_id
+SET (
+    n_distinct = -1
+);
+
+ANALYZE app.orders;</code></pre>
+
+<p>
+PostgreSQL permits manual <code>n_distinct</code> overrides when sampling cannot estimate cardinality reliably. The ANALYZE documentation recommends this only where an independently known value is more accurate, because a wrong override can systematically poison estimates.<sup><a href="#r7">[7]</a><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="mcv">
+<h2>5. Most-common values (MCVs)</h2>
+<p>
+A histogram alone is a poor description of strongly skewed values. PostgreSQL therefore stores selected high-frequency values separately in <code>most_common_vals</code> with parallel frequencies in <code>most_common_freqs</code>. When an equality predicate's constant is present in the MCV list, the planner can use its recorded frequency directly.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>SELECT
+    most_common_vals,
+    most_common_freqs
+FROM pg_stats
+WHERE schemaname = 'app'
+  AND tablename = 'orders'
+  AND attname = 'status';</code></pre>
+
+<h3>5.1 Equality on an MCV</h3>
+<div class="formula">selectivity(status = 'open')
+≈ frequency stored for 'open' in most_common_freqs
+
+estimated_rows
+≈ relation_cardinality × selectivity</div>
+
+<p>
+This is why skewed columns often benefit from a larger statistics target: the planner can record more important values explicitly instead of forcing them into a coarse residual model.<sup><a href="#r5">[5]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>5.2 Equality on a value outside the MCV list</h3>
+<p>
+For a non-null equality constant that is not an MCV, PostgreSQL estimates the remaining non-MCV probability mass as approximately uniform across the remaining distinct values. In simplified form:<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<div class="formula">selectivity(non_MCV_value)
+≈ (1 - null_frac - Σ MCV_frequencies)
+  / (n_distinct - number_of_MCVs)</div>
+
+<p>
+This assumption is necessarily approximate. If the “tail” is itself very skewed, raising the statistics target may move more high-frequency tail values into the MCV list and improve estimates.
+</p>
+</section>
+
+<section id="histogram">
+<h2>6. Histograms</h2>
+<p>
+For orderable data types, <code>histogram_bounds</code> divides the non-MCV population into intervals containing approximately equal numbers of rows. Unlike equal-width histograms, dense value regions therefore get narrower value ranges and sparse regions get wider ones. Values represented in the MCV list are excluded from the histogram population.<sup><a href="#r4">[4]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<div class="diagram">values -------------------------------------------->
+
+0       10  12 13 14    30            100
+|--------|---|-|--|------|--------------|
+ bucket1  b2 b3 b4         bucket5
+
+Each bucket aims for roughly equal POPULATION,
+not equal numerical width.</div>
+
+<h3>6.1 Range selectivity</h3>
+<p>
+For a predicate such as <code>amount &lt; 100</code>, PostgreSQL locates the constant within the histogram, counts complete buckets below it, estimates a fraction of the containing bucket, and combines that result with any MCV values satisfying the predicate. The final estimate is multiplied by the base relation cardinality to derive estimated rows.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>EXPLAIN
+SELECT *
+FROM app.orders
+WHERE total_amount &lt; 100;</code></pre>
+
+<h3>6.2 Histogram resolution</h3>
+<p>
+The per-column statistics target bounds both MCV-list length and histogram resolution. More buckets reduce approximation error for irregular distributions, at the cost of a larger ANALYZE sample, more analysis time, additional catalog storage, and slightly more planning work.<sup><a href="#r2">[2]</a><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="correlation">
+<h2>7. Correlation: physical locality, not column dependence</h2>
+<p>
+The <code>pg_stats.correlation</code> value ranges from -1 to +1 and measures how closely a column's logical ordering follows the table's physical row ordering. Values near +1 or -1 tell the planner that an index scan following that column tends to visit heap pages in an ordered/local pattern, reducing the effective penalty of random page access compared with a column whose correlation is near zero.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<pre><code>SELECT
+    attname,
+    correlation
+FROM pg_stats
+WHERE schemaname = 'app'
+  AND tablename = 'orders'
+ORDER BY abs(correlation) DESC NULLS LAST;</code></pre>
+
+<div class="callout warn">
+<strong>Do not confuse this with cross-column statistical correlation.</strong> <code>pg_stats.correlation</code> is about physical heap order versus the value ordering of one column. Cross-column dependencies belong to extended statistics.
+</div>
+
+<h3>7.1 Naturally correlated columns</h3>
+<p>
+An append-mostly table whose <code>created_at</code> increases with insertion order often has strong positive physical correlation on that column. An index range scan over recent timestamps may therefore be costed more favorably than an equally selective index on a randomly distributed UUID-like value.<sup><a href="#r4">[4]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>7.2 CLUSTER can alter correlation</h3>
+<pre><code>CLUSTER app.orders
+USING orders_customer_created_idx;
+
+ANALYZE app.orders;</code></pre>
+
+<p>
+<code>CLUSTER</code> physically rewrites a table according to an index order; a subsequent <code>ANALYZE</code> lets the planner observe the resulting correlation. PostgreSQL does not maintain clustered order automatically as future updates/inserts arrive.<sup><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="selectivity">
+<h2>8. Selectivity estimation</h2>
+<p>
+Selectivity is the planner's estimated fraction of rows satisfying a predicate. PostgreSQL associates operators with restriction and join selectivity estimator functions. Those estimators consult available statistics and apply type/operator-specific logic; the built-in equality and scalar range estimators are documented through PostgreSQL's row-estimation examples.<sup><a href="#r5">[5]</a><a href="#r16">[16]</a></sup>
+</p>
+
+<div class="formula">estimated_rows
+= estimated_input_rows × predicate_selectivity</div>
+
+<h3>8.1 AND conditions and independence</h3>
+<p>
+When multiple predicates concern columns for which PostgreSQL has no applicable multivariate statistics, it commonly approximates them as independent and multiplies their selectivities. If two conditions each appear to match 1% independently, their conjunction is estimated near 0.01%. If the columns are actually strongly correlated, that multiplication can be wildly wrong.<sup><a href="#r2">[2]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<div class="formula">S(A AND B) ≈ S(A) × S(B)
+when the estimator assumes independence</div>
+
+<h3>8.2 OR and NOT</h3>
+<p>
+Boolean combinations require corresponding probability logic and safeguards against overlap. The important operational point is not to hand-reproduce every estimator, but to recognize that a poor primitive selectivity estimate can contaminate higher-level Boolean estimates and eventually alter the chosen plan.<sup><a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<section id="cardinality">
+<h2>9. Cardinality estimation</h2>
+<p>
+Cardinality estimation turns relation size and selectivity into predicted row counts at each plan node. Those row counts affect whether repeated nested-loop probes seem cheap, how large a hash table is expected to be, how many groups an aggregate will produce, whether parallelism appears worthwhile, and how much work a sort is expected to perform.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>9.1 Diagnose estimation ratios</h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    SETTINGS,
+    SUMMARY,
+    TIMING OFF
+)
+SELECT ...
+FROM ...;</code></pre>
+
+<p>
+The most useful comparison is often <code>actual rows</code> versus estimated <code>rows</code> at the earliest node where they diverge materially. Later nodes can inherit error from their children, so fixing the first major misestimate is usually more effective than tuning the final join directly.<sup><a href="#r3">[3]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>9.2 A simple error factor</h3>
+<div class="formula">estimation_factor
+= actual_rows / estimated_rows
+
+1.0       = exact
+10        = 10× underestimate
+0.1       = 10× overestimate</div>
+
+<p>
+Use the ratio as a diagnostic aid rather than a universal alarm threshold. A tenfold error from 1 row to 10 rows may be irrelevant, while a twofold error from 50 million to 100 million rows can dominate memory and join strategy.
+</p>
+</section>
+
+<section id="joins">
+<h2>10. Join-cardinality errors</h2>
+<p>
+Join estimates are especially consequential because they control join ordering and method. An underestimated outer input can make a nested loop appear cheap even though it will execute its inner scan far more times than expected. Conversely, an overestimated join can make PostgreSQL choose a hash/merge strategy with unnecessary startup/memory work.<sup><a href="#r1">[1]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<div class="diagram">estimated:
+  customers filter -> 10 rows
+           |
+           v
+      nested loop
+           |
+           +--> 10 index probes into orders
+
+actual:
+  customers filter -> 100,000 rows
+           |
+           v
+      same nested loop
+           |
+           +--> 100,000 probes
+
+Root cause may be the FILTER estimate,
+not the nested-loop implementation.</div>
+
+<h3>10.1 Extended-statistics limitation</h3>
+<p>
+In PostgreSQL 18, extended statistics are not currently used for selectivity estimates made for table joins. They can improve restriction clauses and group cardinalities within a relation, but they do not directly solve every join-correlation problem.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>10.2 Schema design can expose stronger information</h3>
+<p>
+Primary keys, unique constraints, foreign keys, NOT NULL constraints, partition bounds, and usable indexes provide structural information separate from sampled distribution statistics. Where a relationship is truly invariant, expressing it declaratively is generally preferable to hoping the statistical model infers it from sampled data.
+</p>
+</section>
+
+<section id="extended">
+<h2>11. Extended statistics</h2>
+<p>
+PostgreSQL does not automatically compute statistics for every column combination because the combinatorial cost would be prohibitive. Instead, administrators define targeted statistics objects for combinations that matter to real queries. Creating the object records the definition; a subsequent manual or automatic <code>ANALYZE</code> computes its data.<sup><a href="#r2">[2]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>CREATE STATISTICS app.orders_customer_state_stats
+    (dependencies, ndistinct, mcv)
+ON customer_id, state
+FROM app.orders;
+
+ANALYZE app.orders;</code></pre>
+
+<h3>11.1 Inspect extended statistics</h3>
+<pre><code>SELECT
+    statistics_schemaname,
+    statistics_name,
+    attnames,
+    exprs,
+    kinds,
+    n_distinct,
+    dependencies,
+    most_common_vals,
+    most_common_freqs,
+    most_common_base_freqs
+FROM pg_stats_ext
+WHERE schemaname = 'app'
+  AND tablename = 'orders';</code></pre>
+
+<p>
+The <code>pg_stats_ext</code> view exposes extended-statistics information in a readable form, while <code>pg_statistic_ext</code> stores definitions and <code>pg_statistic_ext_data</code> stores collected values. The underlying data catalogs are access-restricted because MCV contents can reveal data distributions.<sup><a href="#r19">[19]</a>-<a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="dependencies">
+<h2>12. Functional-dependency statistics</h2>
+<p>
+Functional dependencies model cases where one column strongly determines another. A canonical example is ZIP code and city: a ZIP code may determine one city nearly perfectly, while a city can contain many ZIP codes. Without dependency knowledge, predicates on both columns can be multiplied as if independent, producing severe underestimation.<sup><a href="#r2">[2]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>CREATE STATISTICS app.customer_geo_dep
+    (dependencies)
+ON postal_code, city, state
+FROM app.customer;
+
+ANALYZE app.customer;</code></pre>
+
+<pre><code>EXPLAIN (ANALYZE, TIMING OFF)
+SELECT *
+FROM app.customer
+WHERE postal_code = '27601'
+  AND city = 'Raleigh';</code></pre>
+
+<p>
+Dependency statistics are applied to supported equality and constant-<code>IN</code> conditions. PostgreSQL 18 does not use them for arbitrary range predicates, LIKE clauses, or equality joins between columns, and dependencies do not encode which combinations are impossible strongly enough to guarantee a zero-row estimate for contradictory constant combinations.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="ndistinct-ext">
+<h2>13. Multivariate n-distinct statistics</h2>
+<p>
+Single-column distinct counts cannot reliably predict the number of distinct combinations in <code>GROUP BY a, b</code>. If <code>a</code> and <code>b</code> are correlated, multiplying or otherwise combining their individual cardinalities can drastically overestimate the number of groups. The <code>ndistinct</code> statistics kind records observed distinct counts for column combinations to improve grouping estimates.<sup><a href="#r2">[2]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>CREATE STATISTICS app.order_group_ndistinct
+    (ndistinct)
+ON tenant_id, customer_id, state
+FROM app.orders;
+
+ANALYZE app.orders;</code></pre>
+
+<pre><code>EXPLAIN (ANALYZE, TIMING OFF)
+SELECT
+    tenant_id,
+    customer_id,
+    state,
+    count(*)
+FROM app.orders
+GROUP BY tenant_id, customer_id, state;</code></pre>
+
+<p>
+Use multivariate distinct statistics for combinations actually used in grouping/distinct estimation and where bad group-count estimates affect plan quality; unnecessary objects add ANALYZE and planning overhead.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="mcv-ext">
+<h2>14. Multivariate MCV lists</h2>
+<p>
+Multivariate MCV lists capture specific combinations of values that occur together more or less frequently than independent single-column frequencies suggest. They are more detailed than functional dependencies because they store actual common combinations, but this also makes them more expensive to collect, store, and consult.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>CREATE STATISTICS app.orders_state_channel_mcv
+    (mcv)
+ON state, sales_channel
+FROM app.orders;
+
+ANALYZE app.orders;</code></pre>
+
+<h3>14.1 Inspect MCV items</h3>
+<pre><code>SELECT
+    m.index,
+    m.values,
+    m.nulls,
+    m.frequency,
+    m.base_frequency
+FROM pg_statistic_ext AS se
+JOIN pg_statistic_ext_data AS sed
+  ON sed.stxoid = se.oid
+CROSS JOIN LATERAL
+    pg_mcv_list_items(sed.stxdmcv) AS m
+WHERE se.stxname = 'orders_state_channel_mcv'
+ORDER BY m.frequency DESC;</code></pre>
+
+<p>
+<code>frequency</code> represents the observed frequency of the combination in the statistics sample, while <code>base_frequency</code> represents what the planner would expect from the individual frequencies under independence. Large differences are exactly the kind of cross-column skew multivariate MCVs are intended to model.<sup><a href="#r17">[17]</a><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="expressions">
+<h2>15. Statistics on expressions</h2>
+<p>
+A query can filter on an expression for which ordinary column statistics say little—for example <code>date_trunc('month', created_at)</code>, <code>lower(email)</code>, or a computed category. PostgreSQL supports statistics objects containing expressions; univariate expression statistics are collected automatically for each complex expression in such an object, without requiring the index-maintenance cost of an expression index.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>CREATE STATISTICS app.orders_created_month_stats
+ON (
+    date_trunc('month', created_at)
+)
+FROM app.orders;
+
+ANALYZE app.orders;</code></pre>
+
+<pre><code>EXPLAIN
+SELECT count(*)
+FROM app.orders
+WHERE date_trunc('month', created_at)
+      = timestamp '2026-09-01 00:00:00';</code></pre>
+
+<h3>15.1 Statistics are not an access path</h3>
+<p>
+Expression statistics improve estimates, not execution access. If the expression itself is selective and frequently filtered, an expression index may still be appropriate; expression statistics can improve planning without providing index lookup capability.<sup><a href="#r6">[6]</a><a href="#r22">[22]</a></sup>
+</p>
+</section>
+
+<section id="analyze">
+<h2>16. <code>ANALYZE</code></h2>
+<p>
+<code>ANALYZE</code> samples table contents, computes planner statistics, and stores them in PostgreSQL's statistics catalogs. For large tables it uses a random sample rather than reading every row, which bounds maintenance cost but makes the resulting estimates approximate and slightly variable from one run to another.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<pre><code>ANALYZE app.orders;
+
+ANALYZE (VERBOSE)
+app.orders;
+
+ANALYZE app.orders (
+    customer_id,
+    state,
+    total_amount
+);</code></pre>
+
+<h3>16.1 Sampling can move a borderline plan</h3>
+<p>
+PostgreSQL explicitly notes that repeated <code>ANALYZE</code> runs can produce slightly different statistics even when the underlying data has not changed. Estimated costs can therefore move, and in rare cases a plan near a cost crossover can switch from one strategy to another. Increasing the statistics target increases the sample and can reduce this sampling-driven instability.<sup><a href="#r7">[7]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>16.2 Locks and concurrency</h3>
+<p>
+<code>ANALYZE</code> requires only a read lock on the target table and normally runs concurrently with ordinary non-DDL activity. PostgreSQL 18 also supports <code>SKIP_LOCKED</code> and <code>BUFFER_USAGE_LIMIT</code> options for operational control.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>16.3 ANALYZE after bulk change</h3>
+<pre><code>COPY app.orders
+FROM '/staging/orders.csv'
+WITH (FORMAT csv, HEADER true);
+
+ANALYZE app.orders;</code></pre>
+
+<p>
+After a large import, restore, or distribution-changing update, a manual ANALYZE can be appropriate instead of waiting for autoanalyze to reach its threshold. PostgreSQL's <code>EXPLAIN</code> documentation recommends ensuring statistics are current before diagnosing apparently poor planner behavior.<sup><a href="#r18">[18]</a><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="targets">
+<h2>17. Statistics targets</h2>
+<p>
+<code>default_statistics_target</code> is 100 by default. A column-specific target can override it with <code>ALTER TABLE ... SET STATISTICS</code>. The target limits MCV entries and histogram bins, and the largest target among analyzed columns influences the sample size. Higher values improve detail at the cost of longer ANALYZE, more statistics storage, and some additional planning work.<sup><a href="#r7">[7]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<pre><code>SHOW default_statistics_target;
+
+ALTER TABLE app.orders
+ALTER COLUMN customer_id
+SET STATISTICS 1000;
+
+ALTER TABLE app.orders
+ALTER COLUMN state
+SET STATISTICS 500;
+
+ANALYZE app.orders;</code></pre>
+
+<h3>17.1 Raise targets selectively</h3>
+<p>
+Good candidates are columns that are heavily used in filters/grouping and have irregular distributions or estimation problems. Raising the global target to thousands because one column is skewed makes every ANALYZE more expensive and is usually inferior to targeted changes.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>17.2 Extended-statistics target</h3>
+<pre><code>ALTER STATISTICS
+app.orders_state_channel_mcv
+SET STATISTICS 1000;
+
+ANALYZE app.orders;</code></pre>
+
+<p>
+PostgreSQL 18 permits an extended statistics target from 0 through 10000; <code>DEFAULT</code> returns to the object's normal defaulting behavior. A higher target can increase MCV detail for the statistics object.<sup><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="vacuum-analyze">
+<h2>18. <code>VACUUM ANALYZE</code></h2>
+<p>
+<code>VACUUM</code> and <code>ANALYZE</code> address different problems. VACUUM reclaims obsolete MVCC storage, advances freeze/visibility state, and performs related maintenance; ANALYZE samples live data and refreshes planner statistics. <code>VACUUM (ANALYZE)</code> runs both operations in one command but does not merge their semantics into one algorithm.<sup><a href="#r23">[23]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<pre><code>VACUUM (
+    ANALYZE,
+    VERBOSE
+) app.orders;</code></pre>
+
+<h3>18.1 When ANALYZE alone is sufficient</h3>
+<p>
+If the issue is stale cardinality/distribution statistics after a bulk load and dead tuples are not a concern, <code>ANALYZE</code> alone is cheaper and more targeted. Conversely, a vacuum operation without ANALYZE can reclaim space while leaving old planner distributions intact.
+</p>
+
+<h3>18.2 CLI wrapper</h3>
+<pre><code>vacuumdb \
+  --analyze \
+  --verbose \
+  appdb</code></pre>
+
+<p>
+<code>vacuumdb</code> is a client wrapper around the server's VACUUM/ANALYZE commands. Its <code>--analyze-in-stages</code> mode can quickly produce coarse statistics first on a freshly restored/upgraded database and then build fuller statistics in later stages.<sup><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<section id="autoanalyze">
+<h2>19. Autoanalyze</h2>
+<p>
+Autovacuum also schedules automatic ANALYZE runs. For ordinary tables, PostgreSQL compares the number of inserted, updated, or deleted tuples since the last analysis with a threshold consisting of a fixed base plus a scale factor multiplied by the estimated table row count.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<div class="formula">analyze_threshold
+= autovacuum_analyze_threshold
+  + autovacuum_analyze_scale_factor × reltuples</div>
+
+<h3>19.1 Per-table tuning</h3>
+<pre><code>ALTER TABLE app.orders
+SET (
+    autovacuum_analyze_threshold = 5000,
+    autovacuum_analyze_scale_factor = 0.01
+);</code></pre>
+
+<p>
+Large rapidly changing tables may need lower scale factors so a meaningful distribution change is observed earlier. Tiny frequently changing tables can usually tolerate defaults because the absolute threshold remains small.<sup><a href="#r23">[23]</a><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>19.2 Distribution change can matter before row-count change</h3>
+<p>
+A table can keep roughly the same row count while a critical distribution changes dramatically—for example, millions of orders move from <code>pending</code> to <code>complete</code>. Autoanalyze counts tuple modifications, so such updates eventually trigger it, but latency between a sudden distribution change and the next analysis can temporarily produce stale selectivity estimates.
+</p>
+</section>
+
+<section id="partitioned">
+<h2>20. Partitioned-table statistics</h2>
+<p>
+Explicit <code>ANALYZE</code> on a partitioned table samples rows across its partitions and can build parent/inherited statistics. Autovacuum processes the leaf partitions but does not process the storage-less partitioned parent itself, so parent-level statistics can become stale when only the partitions change. PostgreSQL recommends running manual ANALYZE on partitioned parents when their data distribution changes significantly.<sup><a href="#r7">[7]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<pre><code>ANALYZE analytics.events;</code></pre>
+
+<h3>20.1 Local versus inherited statistics</h3>
+<p>
+<code>pg_stats.inherited</code> distinguishes statistics for only the relation from statistics covering its inheritance/partition tree. This distinction matters when diagnosing a query on the parent versus a query using <code>ONLY parent</code>.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="costs">
+<h2>21. Planner cost parameters</h2>
+<p>
+Cost parameters model relative work, not absolute elapsed time. PostgreSQL documentation explicitly warns that there is no universally correct formula for choosing them and that tuning them from a few isolated experiments is risky; they should approximate the overall workload and hardware environment.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Parameter</th><th>PostgreSQL 18 default</th><th>Planner interpretation</th></tr></thead>
+<tbody>
+<tr><td><code>seq_page_cost</code></td><td>1.0</td><td>Relative cost of a sequential page fetch</td></tr>
+<tr><td><code>random_page_cost</code></td><td>4.0</td><td>Relative cost of a non-sequential page fetch</td></tr>
+<tr><td><code>cpu_tuple_cost</code></td><td>0.01</td><td>Processing one row</td></tr>
+<tr><td><code>cpu_index_tuple_cost</code></td><td>0.005</td><td>Processing one index entry</td></tr>
+<tr><td><code>cpu_operator_cost</code></td><td>0.0025</td><td>Executing one operator/function</td></tr>
+<tr><td><code>parallel_setup_cost</code></td><td>1000</td><td>Launching parallel workers</td></tr>
+<tr><td><code>parallel_tuple_cost</code></td><td>0.1</td><td>Moving a tuple from a parallel worker</td></tr>
+<tr><td><code>effective_cache_size</code></td><td>4 GB*</td><td>Planner estimate of cache available to one query; does not allocate memory</td></tr>
+</tbody>
+</table>
+</div>
+<p class="small">*The documentation notes that the default scales with block size if PostgreSQL was built with a nonstandard <code>BLCKSZ</code>.<sup><a href="#r11">[11]</a></sup></p>
+
+<h3>21.1 Random versus sequential I/O</h3>
+<pre><code>SHOW seq_page_cost;
+SHOW random_page_cost;</code></pre>
+
+<p>
+Reducing <code>random_page_cost</code> relative to <code>seq_page_cost</code> makes index-driven access look cheaper. PostgreSQL's default of 4.0 already assumes substantial caching; systems whose active database is mostly memory-resident may justify a smaller gap, while rotational or uncached storage can justify a larger one. Measure representative workload behavior before changing global values.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>21.2 <code>effective_cache_size</code> is not cache allocation</h3>
+<pre><code>SHOW effective_cache_size;</code></pre>
+
+<p>
+This setting is only a planner assumption about likely cache availability from PostgreSQL shared buffers plus OS cache, adjusted mentally for competing concurrent queries. Increasing it does not allocate or reserve memory; it changes cost estimates, especially for index access.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>21.3 Tablespace-specific I/O costs</h3>
+<pre><code>ALTER TABLESPACE fast_nvme
+SET (
+    random_page_cost = 1.2,
+    seq_page_cost = 1.0
+);</code></pre>
+
+<p>
+PostgreSQL permits tablespace-specific overrides for page cost parameters, allowing physically distinct storage classes to be modeled differently without changing the entire cluster's cost assumptions.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>21.4 Planner method switches are diagnostic tools</h3>
+<pre><code>SET LOCAL enable_seqscan = off;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT ...;</code></pre>
+
+<p>
+The <code>enable_*scan</code>/<code>enable_*join</code> settings are deliberately described as crude planner influence controls. They are useful to test whether an alternative plan could be faster, but PostgreSQL recommends fixing statistics/cost/index/schema problems rather than permanently disabling plan types as the primary tuning strategy.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="explain">
+<h2>22. Using <code>EXPLAIN</code> to diagnose estimates</h2>
+<p>
+<code>EXPLAIN</code> exposes the planner's estimated costs, row counts, and widths. <code>EXPLAIN ANALYZE</code> actually executes the statement and adds runtime row counts and timings. With <code>BUFFERS</code>, <code>WAL</code>, <code>SETTINGS</code>, and PostgreSQL 18's <code>MEMORY</code> option, it can expose additional resource/planner context.<sup><a href="#r3">[3]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    WAL,
+    SETTINGS,
+    MEMORY,
+    TIMING OFF,
+    SUMMARY
+)
+SELECT
+    o.customer_id,
+    sum(o.total_amount)
+FROM app.orders AS o
+WHERE o.state = 'paid'
+  AND o.created_at &gt;= current_date - interval '30 days'
+GROUP BY o.customer_id;</code></pre>
+
+<h3>22.1 A practical reading order</h3>
+<ol>
+<li>Start at the lowest node where estimated rows and actual rows diverge materially.</li>
+<li>Identify the predicate/join/group estimate responsible.</li>
+<li>Inspect the relevant <code>pg_stats</code>/<code>pg_stats_ext</code> data.</li>
+<li>Check whether statistics are stale or sampled too coarsely.</li>
+<li>Only then evaluate indexes, cost constants, join settings, or query rewrites.</li>
+</ol>
+
+<h3>22.2 <code>EXPLAIN ANALYZE</code> has overhead</h3>
+<p>
+Because it executes the query and instruments plan nodes, <code>EXPLAIN ANALYZE</code> can make execution slower than a normal run. Timing instrumentation can be particularly expensive on some platforms; <code>TIMING OFF</code> retains actual row counts while reducing per-node clock-call overhead.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>22.3 Do not run destructive statements accidentally</h3>
+<pre><code>BEGIN;
+
+EXPLAIN (ANALYZE, BUFFERS)
+DELETE FROM app.orders
+WHERE created_at &lt; date '2020-01-01';
+
+ROLLBACK;</code></pre>
+
+<p>
+Because <code>ANALYZE</code> in EXPLAIN means “execute,” wrap mutating tests in a rollbackable transaction when safe and remember that some external side effects (for example, certain function behavior) may not be reversible merely because the SQL transaction rolls back.
+</p>
+</section>
+
+<section id="instability">
+<h2>23. Query-plan instability</h2>
+<p>
+A plan is “unstable” operationally when small changes in data, statistics, parameter values, configuration, or planner state cause materially different execution plans or runtimes. This is not one PostgreSQL feature; several distinct mechanisms can produce it.<sup><a href="#r7">[7]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Cause</th><th>Symptom</th><th>Primary diagnostic/fix</th></tr></thead>
+<tbody>
+<tr><td>Sampling variation</td><td>Plan flips after ANALYZE although data is nearly unchanged</td><td>Raise target on decisive skewed columns/stat objects</td></tr>
+<tr><td>Stale statistics</td><td>Estimated rows diverge increasingly after bulk changes</td><td>Manual ANALYZE / lower autoanalyze threshold</td></tr>
+<tr><td>Parameter skew</td><td>Same query shape is fast for one value, slow for another</td><td>Inspect MCVs; compare custom/generic plans</td></tr>
+<tr><td>Cross-column dependence</td><td>Combined filters badly underestimated/overestimated</td><td>Extended dependencies/MCV stats</td></tr>
+<tr><td>Wrong group cardinality</td><td>Hash/sort aggregate strategy/memory unexpected</td><td>Multivariate <code>ndistinct</code></td></tr>
+<tr><td>Cost boundary</td><td>Index/seq scan switches around similar estimated costs</td><td>Verify estimates and cost assumptions; avoid reflexive enable_* hacks</td></tr>
+<tr><td>Prepared generic plan</td><td>Latency worsens after repeated executions in same session</td><td>Inspect <code>pg_prepared_statements</code>; test <code>plan_cache_mode</code></td></tr>
+<tr><td>Planner-statistics refresh</td><td>Prepared statement replans after ANALYZE</td><td>Expected invalidation; compare resulting estimates</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>23.1 Sampling instability</h3>
+<p>
+Large-table ANALYZE samples are randomized. PostgreSQL explicitly notes that a fresh sample can slightly change estimated costs and, in rare borderline cases, change the selected plan. If a critical decision depends on a poorly represented tail of a distribution, increasing the relevant target is more direct than globally forcing a scan type.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>23.2 Cost crossover</h3>
+<div class="diagram">estimated cost
+ ^
+ |            sequential scan
+ |           /
+ |          /
+ |---------X------------------> selectivity
+ |        /
+ |       / index scan
+ |
+ +-------------------------------------------->
+
+Near X, a small estimate change can legitimately flip plans.
+The real question is whether both cost curves model reality accurately.</div>
+
+<h3>23.3 Plan change is not automatically regression</h3>
+<p>
+A changing plan can be appropriate when the data distribution, parameter value, cache/storage assumptions, or relation size changes. Stabilizing a plan at all costs can freeze a strategy that is optimal only for today's data.
+</p>
+</section>
+
+<section id="prepared">
+<h2>24. Prepared statements: generic versus custom plans</h2>
+<p>
+Parameterized prepared statements can use custom plans—planned with the actual supplied values—or generic plans that are reusable across parameter values. PostgreSQL's default <code>plan_cache_mode=auto</code> initially uses custom plans, calculates their average estimated cost, then compares a generic plan against that history and can switch to the generic plan when repeated replanning does not appear worthwhile.<sup><a href="#r8">[8]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>24.1 Skew makes parameters matter</h3>
+<pre><code>PREPARE orders_by_customer(bigint) AS
+SELECT *
+FROM app.orders
+WHERE customer_id = $1
+ORDER BY created_at DESC;</code></pre>
+
+<p>
+If customer 1 owns 30% of all orders while most customers own 20 rows, an index plan suitable for a typical customer may be poor for customer 1, and a generic plan cannot use the actual parameter value to choose differently. Accurate MCV statistics help custom plans estimate this skew; they cannot make a generic plan parameter-specific.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>24.2 Inspect custom and generic behavior</h3>
+<pre><code>EXPLAIN EXECUTE orders_by_customer(42);
+
+EXPLAIN (GENERIC_PLAN)
+SELECT *
+FROM app.orders
+WHERE customer_id = $1::bigint
+ORDER BY created_at DESC;</code></pre>
+
+<p>
+PostgreSQL 18's <code>EXPLAIN (GENERIC_PLAN)</code> can display a parameter-independent plan without executing it. For an already prepared statement, a generic plan retains <code>$n</code> placeholders while a custom plan displays the supplied constants.<sup><a href="#r3">[3]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>24.3 Count plan types</h3>
+<pre><code>SELECT
+    name,
+    generic_plans,
+    custom_plans,
+    statement
+FROM pg_prepared_statements;</code></pre>
+
+<p>
+The session-local <code>pg_prepared_statements</code> view reports how many generic and custom plans have been used for each prepared statement.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>24.4 Diagnostic override</h3>
+<pre><code>SET LOCAL plan_cache_mode = force_custom_plan;
+-- compare
+
+SET LOCAL plan_cache_mode = force_generic_plan;
+-- compare</code></pre>
+
+<p>
+Use this to prove that parameter sensitivity is the issue before changing application prepare behavior. PostgreSQL also forces reanalysis/replanning of prepared statements after relevant DDL or planner-statistics updates, so an ANALYZE can legitimately alter a cached statement's subsequent plan.<sup><a href="#r8">[8]</a></sup>
+</p>
+</section>
+
+<section id="monitoring">
+<h2>25. Workload-level plan monitoring</h2>
+
+<h3>25.1 <code>pg_stat_statements</code></h3>
+<p>
+The supplied <code>pg_stat_statements</code> extension aggregates planning and execution metrics for normalized query shapes. With planning tracking enabled it records plan counts and planning-time statistics; execution metrics include min/max/mean/standard deviation, block activity, rows, WAL, and parallel-worker information. Large execution-time variance for one normalized query can be a signal of parameter skew, plan changes, cache effects, lock waits, or changing input cardinality.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<pre><code>SELECT
+    queryid,
+    calls,
+    plans,
+    round(mean_plan_time::numeric, 3) AS mean_plan_ms,
+    round(mean_exec_time::numeric, 3) AS mean_exec_ms,
+    round(stddev_exec_time::numeric, 3) AS exec_stddev_ms,
+    round(min_exec_time::numeric, 3) AS min_exec_ms,
+    round(max_exec_time::numeric, 3) AS max_exec_ms,
+    rows,
+    query
+FROM pg_stat_statements
+WHERE calls &gt; 20
+ORDER BY max_exec_time DESC
+LIMIT 25;</code></pre>
+
+<h3>25.2 Planning tracking overhead</h3>
+<pre><code># postgresql.conf
+shared_preload_libraries = 'pg_stat_statements'
+pg_stat_statements.track_planning = on</code></pre>
+
+<p>
+Planning tracking is optional because planning statistics add overhead, especially in workloads with many structurally identical concurrent queries that contend on the same statistics entry. Enable it intentionally when the diagnostic value justifies the cost.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>25.3 <code>auto_explain</code></h3>
+<p>
+<code>auto_explain</code> can log execution plans for slow statements automatically, which is valuable when the bad plan appears only under production parameter values. <code>log_analyze</code> can include actual row counts, but PostgreSQL warns that enabling per-node timing for all candidate statements can impose substantial overhead; <code>auto_explain.log_timing=off</code> can reduce that cost when row counts are the main goal.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<pre><code># Example only:
+session_preload_libraries = 'auto_explain'
+auto_explain.log_min_duration = '1s'
+auto_explain.log_analyze = on
+auto_explain.log_timing = off
+auto_explain.log_buffers = on
+auto_explain.log_settings = on
+auto_explain.sample_rate = 0.10</code></pre>
+</section>
+
+<section id="workflow">
+<h2>26. A statistics-first optimization workflow</h2>
+
+<div class="diagram">slow / unstable query
+        |
+        v
+capture exact SQL + parameters
+        |
+        v
+EXPLAIN (ANALYZE, BUFFERS, SETTINGS, TIMING OFF)
+        |
+        v
+find earliest major estimate error
+        |
+  +-----+---------------------------------------+
+  |                                             |
+estimate wrong?                              estimates good?
+  |                                             |
+  v                                             v
+inspect pg_stats / pg_stats_ext             investigate cost model,
+  |                                         I/O, work_mem, indexes,
+  +--> stale? -> ANALYZE                     join algorithms, cache,
+  +--> sample too coarse? -> raise target    parallelism, locking
+  +--> correlated columns? -> ext stats
+  +--> expression? -> expression stats
+  +--> partition parent stale? -> ANALYZE parent
+  +--> parameter skew? -> custom/generic test
+        |
+        v
+re-ANALYZE / reproduce
+        |
+        v
+measure actual workload again</div>
+
+<h3>26.1 Step 1: preserve the problematic context</h3>
+<p>
+Record the SQL shape, parameter values, PostgreSQL settings relevant to planning, schema/index definitions, and time/data-distribution context. Reproducing only the SQL text can miss the parameter skew or prepared-plan state that caused the incident.
+</p>
+
+<h3>26.2 Step 2: compare estimates to actuals</h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    SETTINGS,
+    TIMING OFF,
+    SUMMARY
+)
+SELECT ...;</code></pre>
+
+<h3>26.3 Step 3: inspect exact statistics used by the suspect predicate</h3>
+<pre><code>SELECT *
+FROM pg_stats
+WHERE schemaname = 'app'
+  AND tablename = 'orders'
+  AND attname IN (
+      'customer_id',
+      'state',
+      'created_at'
+  );</code></pre>
+
+<h3>26.4 Step 4: fix the smallest statistical model that explains the error</h3>
+<pre><code>-- Example: one skewed column.
+ALTER TABLE app.orders
+ALTER COLUMN customer_id
+SET STATISTICS 1000;
+
+-- Example: cross-column skew.
+CREATE STATISTICS app.orders_customer_state_mcv (mcv)
+ON customer_id, state
+FROM app.orders;
+
+ANALYZE app.orders;</code></pre>
+
+<h3>26.5 Step 5: verify, then revisit cost/index choices</h3>
+<p>
+If cardinalities become accurate but PostgreSQL still chooses a slower plan, the problem has moved from selectivity estimation toward cost assumptions, missing access paths, memory, or execution behavior. That is the right time to examine cost constants or index design.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="pitfalls">
+<h2>27. Common pitfalls</h2>
+
+<h3>27.1 “The planner should know the exact row count”</h3>
+<p>
+PostgreSQL deliberately uses approximate relation and sampled distribution statistics. Exact continuously maintained counts would be expensive and still would not solve predicate-distribution estimation.<sup><a href="#r2">[2]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>27.2 Raising every statistics target to 10,000</h3>
+<p>
+Higher targets increase sample size, ANALYZE time, statistics storage, and planning work. Raise targets selectively where estimation error matters.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>27.3 Misreading <code>correlation</code> as “customer_id correlates with state”</h3>
+<p>
+The <code>pg_stats</code> value is physical ordering correlation for one column. Use extended statistics for relationships between columns.<sup><a href="#r4">[4]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>27.4 Creating extended statistics but forgetting ANALYZE</h3>
+<p>
+<code>CREATE STATISTICS</code> defines what to collect; it does not populate statistical values. ANALYZE performs collection.<sup><a href="#r2">[2]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>27.5 Expecting extended statistics to fix join selectivity</h3>
+<p>
+PostgreSQL 18 does not currently apply them to table-join selectivity estimation.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>27.6 Changing <code>random_page_cost</code> to fix one query</h3>
+<p>
+Planner cost constants affect the whole workload (or tablespace). PostgreSQL explicitly warns against choosing them based on a few experiments. First verify the query's cardinality estimates and access-path design.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>27.7 Disabling sequential scans permanently</h3>
+<p>
+A sequential scan can be the correct plan when a query returns a large fraction of a table. <code>enable_seqscan=off</code> is useful for comparison but does not repair bad estimates or create a truly efficient index path.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>27.8 Blaming PostgreSQL for parameter-sensitive workloads without inspecting generic plans</h3>
+<p>
+A plan optimal for a rare value can be disastrous for a very common value. Prepared statements can intentionally choose a generic plan to save repeated planning work. Compare custom and generic behavior before changing SQL/indexes.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>27.9 Forgetting parent statistics on partitioned tables</h3>
+<p>
+Autovacuum handles leaf partitions but not the partitioned parent itself; manual parent ANALYZE may be needed for parent-level statistics.<sup><a href="#r7">[7]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>27.10 Treating plan changes after ANALYZE as inherently bad</h3>
+<p>
+ANALYZE exists so the optimizer can adapt to data. Sampling can cause small changes, while real distribution changes should change plans. The objective is robust performance, not a permanently identical plan tree.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>27.11 Looking only at total runtime</h3>
+<p>
+A slow plan's root cause often appears as an early row-estimation error. Node-level estimated-versus-actual cardinalities are usually more diagnostic than the final execution time alone.<sup><a href="#r18">[18]</a></sup>
+</p>
+</section>
+
+<section id="checklist">
+<h2>28. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Keep statistics current.</strong> Let autoanalyze work and run manual ANALYZE after major distribution-changing loads.</li>
+<li><strong>Inspect <code>pg_stats</code>, not just EXPLAIN.</strong> Understand the evidence behind the row estimate.</li>
+<li><strong>Monitor <code>reltuples</code>/<code>relpages</code>.</strong> Base cardinality errors contaminate all higher estimates.</li>
+<li><strong>Use MCVs for skew.</strong> Raise per-column targets when important common values are underrepresented.</li>
+<li><strong>Use histograms for ranges.</strong> Increase resolution only where it improves real estimates.</li>
+<li><strong>Interpret correlation correctly.</strong> It models physical ordering locality, not cross-column dependence.</li>
+<li><strong>Create extended statistics deliberately.</strong> Use dependencies, n-distinct, MCV, or expression statistics for demonstrated problems.</li>
+<li><strong>Remember extended-statistics limits.</strong> PostgreSQL 18 does not use them for join selectivity.</li>
+<li><strong>Compare estimated and actual rows.</strong> Find the earliest material divergence in the plan.</li>
+<li><strong>Tune statistics before planner switches.</strong> <code>enable_*</code> settings are diagnostic levers, not first-choice permanent fixes.</li>
+<li><strong>Tune cost constants workload-wide.</strong> Do not optimize <code>random_page_cost</code> around one anecdotal query.</li>
+<li><strong>Set <code>effective_cache_size</code> realistically.</strong> It is a planner estimate, not allocated memory.</li>
+<li><strong>Investigate parameter skew.</strong> Compare custom and generic plans for prepared statements.</li>
+<li><strong>Monitor plan/execution variance.</strong> Use <code>pg_stat_statements</code> and selectively use <code>auto_explain</code>.</li>
+<li><strong>Analyze partitioned parents explicitly.</strong></li>
+<li><strong>Retest after data growth.</strong> A plan that was correct at 10 million rows may not remain correct at 500 million.</li>
+<li><strong>Prefer declarative schema information.</strong> Constraints and proper data modeling complement statistical estimation.</li>
+<li><strong>Optimize from evidence.</strong> Cardinality estimates explain many “mysterious” plan choices.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Optimization principle:</strong> PostgreSQL chooses plans from a model of the data, not from the data itself. When a plan looks irrational, first ask which cardinality estimate made it rational to the optimizer—and then improve the evidence or assumptions behind that estimate.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Statistics Used by the Planner [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. pg_stats [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-stats.html">https://www.postgresql.org/docs/18/view-pg-stats.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Row Estimation Examples [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/row-estimation-examples.html">https://www.postgresql.org/docs/18/row-estimation-examples.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. CREATE STATISTICS [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createstatistics.html">https://www.postgresql.org/docs/18/sql-createstatistics.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. ANALYZE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-analyze.html">https://www.postgresql.org/docs/18/sql-analyze.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. PREPARE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-prepare.html">https://www.postgresql.org/docs/18/sql-prepare.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. pg_prepared_statements [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-prepared-statements.html">https://www.postgresql.org/docs/18/view-pg-prepared-statements.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. How the Planner Uses Statistics [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats-details.html">https://www.postgresql.org/docs/18/planner-stats-details.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Query Planning: Planner Cost Constants and Planner Options [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-query.html">https://www.postgresql.org/docs/18/runtime-config-query.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. pg_class [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-class.html">https://www.postgresql.org/docs/18/catalog-pg-class.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. pg_statistic [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-statistic.html">https://www.postgresql.org/docs/18/catalog-pg-statistic.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. ALTER TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altertable.html">https://www.postgresql.org/docs/18/sql-altertable.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. CLUSTER [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-cluster.html">https://www.postgresql.org/docs/18/sql-cluster.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Operator Optimization Information [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xoper-optimization.html">https://www.postgresql.org/docs/18/xoper-optimization.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Multivariate Statistics Examples [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/multivariate-statistics-examples.html">https://www.postgresql.org/docs/18/multivariate-statistics-examples.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. EXPLAIN command notes and execution instrumentation [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. pg_stats_ext [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-stats-ext.html">https://www.postgresql.org/docs/18/view-pg-stats-ext.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. pg_statistic_ext_data [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-statistic-ext-data.html">https://www.postgresql.org/docs/18/catalog-pg-statistic-ext-data.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Planner Statistics and Security [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats-security.html">https://www.postgresql.org/docs/18/planner-stats-security.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Indexes on Expressions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-expressional.html">https://www.postgresql.org/docs/18/indexes-expressional.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Routine Vacuuming: Updating Planner Statistics and Autoanalyze [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. ALTER STATISTICS [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-alterstatistics.html">https://www.postgresql.org/docs/18/sql-alterstatistics.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. VACUUM [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-vacuum.html">https://www.postgresql.org/docs/18/sql-vacuum.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. vacuumdb [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-vacuumdb.html">https://www.postgresql.org/docs/18/app-vacuumdb.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. CREATE TABLE: autovacuum storage parameters [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtable.html">https://www.postgresql.org/docs/18/sql-createtable.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. pg_prepared_statements system view [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-prepared-statements.html">https://www.postgresql.org/docs/18/view-pg-prepared-statements.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. pg_stat_statements — track statistics of SQL planning and execution [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. auto_explain — log execution plans of slow queries [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/auto-explain.html">https://www.postgresql.org/docs/18/auto-explain.html</a></li>
+
+<li id="r31">PostgreSQL Global Development Group. pg_stats_ext_exprs [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-stats-ext-exprs.html">https://www.postgresql.org/docs/18/view-pg-stats-ext-exprs.html</a></li>
+
+<li id="r32">PostgreSQL Global Development Group. pg_statistic_ext [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html">https://www.postgresql.org/docs/18/catalog-pg-statistic-ext.html</a></li>
+
+<li id="r33">PostgreSQL Global Development Group. Examining Index Usage [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-examine.html">https://www.postgresql.org/docs/18/indexes-examine.html</a></li>
+
+<li id="r34">PostgreSQL Global Development Group. Table Partitioning [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-partitioning.html">https://www.postgresql.org/docs/18/ddl-partitioning.html</a></li>
+
+<li id="r35">PostgreSQL Global Development Group. Monitoring Database Activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r36">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. PostgreSQL 18 Documentation; 2025-2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r37">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. Planner behavior depends on PostgreSQL version, statistics freshness and sampling, data distribution, schema constraints, parameter values, indexes, cache/storage characteristics, prepared-statement behavior, and concurrent workload. Validate changes with representative production-scale data and compare estimated versus actual cardinalities before changing global planner cost parameters.
+</p>
+</footer>
+
+</body>
+</html>

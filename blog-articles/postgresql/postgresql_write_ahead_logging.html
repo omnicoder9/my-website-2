@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL write-ahead logging: WAL concepts, records, segments, buffers, durability, crash recovery, checkpoints, full-page writes, archiving, wal_level, fsync, synchronous_commit, retention, and replication slots.">
+<title>PostgreSQL Write-Ahead Logging (WAL)</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1000px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:840px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Write-Ahead Logging</h1>
+  <p class="dek">An expert guide to PostgreSQL WAL: the write-ahead rule, WAL records and resource managers, segments and LSNs, WAL buffers and the WAL writer, durability and group commit, crash recovery, checkpoints and restartpoints, full-page images, WAL compression and archiving, <code>wal_level</code>, <code>fsync</code>, <code>synchronous_commit</code>, retention, replication slots, and production monitoring.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+Write-ahead logging (WAL) is the durability and recovery substrate of PostgreSQL. Its core rule is simple: PostgreSQL must make the log record describing a database-page change durable before the corresponding modified data page is allowed to reach durable storage. That ordering means a transaction can commit after forcing a comparatively small sequential WAL stream rather than synchronously flushing every table and index page it changed. If the server later crashes with data files only partially updated, PostgreSQL replays WAL from the last checkpoint's redo position to reconstruct a consistent state.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+<p>
+WAL is also the common substrate for physical replication, continuous archiving and point-in-time recovery, logical decoding, and several maintenance/recovery mechanisms. The amount and lifetime of WAL are therefore affected not only by transaction volume but by <code>wal_level</code>, checkpoints, full-page images, base backups, archiving, replication lag, <code>wal_keep_size</code>, and replication slots. A configuration that performs well under ordinary writes can still exhaust <code>pg_wal</code> when an archive destination fails or a slot consumer stops advancing.<sup><a href="#r3">[3]</a>-<a href="#r6">[6]</a></sup>
+</p>
+<p>
+Durability settings must be understood as distinct contracts. <code>fsync=off</code> disables PostgreSQL's normal efforts to ensure ordered durable writes and can produce unrecoverable corruption after an operating-system or hardware crash. By contrast, <code>synchronous_commit=off</code> leaves the WAL machinery crash-safe but permits PostgreSQL to report a transaction committed before its commit record is durably flushed; a crash can therefore lose some recently acknowledged transactions without leaving the database internally inconsistent.<sup><a href="#r3">[3]</a><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#concept">The WAL concept</a></li>
+<li><a href="#lifecycle">WAL lifecycle</a></li>
+<li><a href="#records">WAL records</a></li>
+<li><a href="#lsn">Log sequence numbers</a></li>
+<li><a href="#segments">WAL segments and pg_wal</a></li>
+<li><a href="#buffers">WAL buffers and WAL writer</a></li>
+<li><a href="#commit">Commit durability</a></li>
+<li><a href="#fsync">fsync and storage correctness</a></li>
+<li><a href="#synccommit">synchronous_commit</a></li>
+<li><a href="#async">Asynchronous commit</a></li>
+<li><a href="#checkpoints">Checkpoints</a></li>
+<li><a href="#restartpoints">Restartpoints</a></li>
+<li><a href="#fpi">Full-page writes</a></li>
+<li><a href="#compression">WAL compression</a></li>
+<li><a href="#crash">Crash recovery</a></li>
+<li><a href="#levels">wal_level</a></li>
+<li><a href="#archiving">WAL archiving</a></li>
+<li><a href="#retention">WAL retention</a></li>
+<li><a href="#slots">Replication slots</a></li>
+<li><a href="#replication">WAL and replication</a></li>
+<li><a href="#logical">WAL and logical decoding</a></li>
+<li><a href="#monitoring">Monitoring WAL</a></li>
+<li><a href="#waldump">Inspecting WAL records</a></li>
+<li><a href="#tuning">Performance tuning</a></li>
+<li><a href="#failure">Failure modes</a></li>
+<li><a href="#patterns">Production configuration patterns</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="concept">
+<h2>1. The WAL concept</h2>
+<p>
+PostgreSQL's write-ahead rule requires the WAL describing a data-file change to be flushed to durable storage before that changed data page is flushed. Commit durability then requires the commit record to satisfy the configured WAL synchronization contract before success is returned to the client. The result is a separation between <em>logical durability</em> and immediate data-file persistence: dirty table/index pages may remain in shared buffers after commit because recovery can reconstruct them from WAL.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="diagram">transaction modifies row
+        |
+        v
+buffer page becomes dirty
+        |
+        +-----------------------+
+        |                       |
+        v                       v
+construct WAL record      data page still only
+        |                  in shared buffers
+        v
+WAL buffers
+        |
+        v
+write / flush WAL
+        |
+        +------ durable commit boundary
+        |
+        v
+client may receive COMMIT success
+        |
+        | later
+        v
+checkpointer / background writer / backend
+writes dirty data page
+        |
+        v
+data file durable
+
+Invariant:
+required WAL must reach durable storage BEFORE the data page it protects.</div>
+
+<p>
+This ordering has two major performance consequences. First, commit generally needs to force a sequential log rather than every random data page modified by the transaction. Second, multiple concurrent transactions can share one WAL flush, so the cost of one durability synchronization can commit several transactions together.<sup><a href="#r1">[1]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>1.1 REDO, not a general UNDO log</h3>
+<p>
+Crash recovery is primarily roll-forward recovery: PostgreSQL starts from a checkpoint and replays WAL records needed to redo physical changes. PostgreSQL's MVCC data representation and transaction status mechanisms handle the visibility of transactions that did not commit; recovery does not need a traditional transaction-by-transaction rollback pass over every uncommitted update before opening the database.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="lifecycle">
+<h2>2. End-to-end WAL lifecycle</h2>
+
+<div class="diagram">SQL execution
+   |
+   v
+heap/index/catalog change
+   |
+   v
+resource manager builds WAL record
+   |
+   v
+WAL insert into shared WAL buffers
+   |
+   +--> record assigned LSN
+   |
+   v
+WAL writer/backend writes WAL pages
+   |
+   v
+OS page cache
+   |
+   +--> fsync/fdatasync/O_DSYNC/etc.
+   |
+   v
+durable WAL storage
+   |
+   +-----------------------+----------------------+-------------------+
+   |                       |                      |                   |
+   v                       v                      v                   v
+crash recovery        physical replica       WAL archive       logical decode
+REDO replay           WAL sender/receiver     PITR              change stream
+   |
+   v
+old segments:
+recycle/remove ONLY when no retention requirement still needs them</div>
+
+<p>
+A WAL file can remain in <code>pg_wal</code> for several independent reasons: ordinary checkpoint/recycling policy, <code>wal_keep_size</code>, an archive backlog, a physical or logical replication slot, a backup/recovery requirement, or replication/recovery state. <code>max_wal_size</code> is not therefore a hard ceiling on <code>pg_wal</code> size.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="records">
+<h2>3. WAL records</h2>
+<p>
+PostgreSQL appends WAL records as changes occur. Every record has common WAL metadata plus content interpreted by a <em>resource manager</em> responsible for a subsystem such as heap operations, B-tree indexes, transaction control, checkpoints, or other storage components. The exact record payload depends on the operation being logged.<sup><a href="#r2">[2]</a><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>3.1 Conceptual record shape</h3>
+<div class="diagram">+---------------------------------------------------------+
+| common WAL record header                                |
+|  - total length                                         |
+|  - transaction-related metadata where applicable        |
+|  - previous-record linkage / record metadata            |
+|  - resource-manager id + operation info                 |
+|  - record checksum / integrity metadata                 |
++---------------------------------------------------------+
+| optional block references                               |
+|  relation/fork/block identity                           |
+|  optional full-page image                               |
+|  operation-specific block data                          |
++---------------------------------------------------------+
+| resource-manager-specific main data                     |
++---------------------------------------------------------+</div>
+
+<p>
+The exact binary format is PostgreSQL-internal and can change between releases. Applications should use supported SQL views/functions or utilities such as <code>pg_waldump</code> rather than parsing WAL bytes directly unless they are implementing a PostgreSQL-version-specific extension or replication component.<sup><a href="#r2">[2]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>3.2 Resource managers</h3>
+<pre><code>SELECT
+    rm_id,
+    rm_name,
+    rm_builtin
+FROM pg_get_wal_resource_managers()
+ORDER BY rm_id;</code></pre>
+
+<p>
+PostgreSQL 18 exposes currently loaded WAL resource managers through <code>pg_get_wal_resource_managers()</code>, including whether each manager is built in or supplied by an extension.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>3.3 WAL for extensions</h3>
+<p>
+Extensions implementing custom storage/access methods can participate in crash safety through PostgreSQL's generic WAL facility or by registering a custom WAL resource manager. Generic WAL is simpler and describes page modifications generically; custom resource managers provide more control and can integrate with logical decoding, but are substantially more complex.<sup><a href="#r9">[9]</a><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="lsn">
+<h2>4. Log sequence numbers (LSNs)</h2>
+<p>
+Every WAL insertion position is identified by a log sequence number. An LSN is a byte position in the WAL stream represented by PostgreSQL's <code>pg_lsn</code> type. LSNs increase monotonically as WAL is generated and are widely used to measure replication, recovery, and archival progress.<sup><a href="#r2">[2]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>4.1 Current write-ahead positions</h3>
+<pre><code>SELECT
+    pg_current_wal_insert_lsn() AS insert_lsn,
+    pg_current_wal_lsn()        AS write_lsn,
+    pg_current_wal_flush_lsn()  AS flush_lsn;</code></pre>
+
+<p>
+The positions represent different stages: insertion into WAL buffers, writing WAL, and flushing WAL durably. On a busy server they can differ temporarily.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>4.2 Measure WAL volume</h3>
+<pre><code>SELECT pg_size_pretty(
+    pg_wal_lsn_diff(
+        '4A/90000000'::pg_lsn,
+        '4A/10000000'::pg_lsn
+    )
+) AS wal_distance;</code></pre>
+
+<h3>4.3 Map LSN to segment</h3>
+<pre><code>SELECT
+    pg_walfile_name(pg_current_wal_lsn()),
+    pg_walfile_name_offset(pg_current_wal_lsn());</code></pre>
+
+<p>
+These functions are useful when correlating SQL-visible positions with archive files, replication lag, or <code>pg_waldump</code> analysis.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="segments">
+<h2>5. WAL segments and <code>pg_wal</code></h2>
+<p>
+PostgreSQL stores WAL under <code>PGDATA/pg_wal</code> as fixed-size segment files. The normal segment size is 16 MiB, although it can be chosen at cluster initialization with <code>initdb --wal-segsize</code>. Segments are internally divided into WAL pages, normally 8 KiB.<sup><a href="#r2">[2]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>5.1 Segment names</h3>
+<pre><code>000000010000000A000000FE
+^^^^^^^^
+timeline
+
+        ^^^^^^^^
+        high-order log component
+
+                ^^^^^^^^
+                segment component</code></pre>
+
+<p>
+The hexadecimal file name encodes the timeline and WAL position. Administrators should treat the name as an opaque WAL identity and use PostgreSQL functions/utilities for position conversion rather than implementing archive logic that assumes an undocumented binary layout.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>5.2 Recycle versus remove</h3>
+<p>
+At checkpoints, PostgreSQL can recycle no-longer-required WAL segments by renaming them for future positions instead of repeatedly creating new files. <code>wal_recycle=on</code> is the default; copy-on-write filesystems are one scenario where creating new files can sometimes be preferable.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>5.3 Segment preallocation</h3>
+<p>
+With <code>wal_init_zero=on</code> (the default), PostgreSQL initializes new WAL files with zeroes, which can preallocate space on some filesystems. Copy-on-write filesystems may not benefit and can be configured differently.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Never manually delete files from <code>pg_wal</code> to free space.</strong> PostgreSQL's recovery, replication, and archive state determines which WAL is safe to recycle/remove. Manual deletion can make the cluster unrecoverable or break replicas and slots.
+</div>
+</section>
+
+<section id="buffers">
+<h2>6. WAL buffers and the WAL writer</h2>
+<p>
+Before WAL reaches files, records are staged in shared WAL buffers. <code>wal_buffers</code> controls the shared memory available for WAL not yet written. PostgreSQL's default <code>-1</code> auto-sizes the buffer to approximately 1/32 of <code>shared_buffers</code>, with a lower bound of 64 KiB and an upper bound of one WAL segment (normally 16 MiB). The default is intended to be reasonable for most installations.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<pre><code>SHOW wal_buffers;
+SHOW wal_writer_delay;
+SHOW wal_writer_flush_after;</code></pre>
+
+<h3>6.1 What fills WAL buffers?</h3>
+<p>
+Backends insert WAL records into the shared WAL buffers while modifying protected data. If buffers fill, backends must help write WAL, increasing foreground latency. A few megabytes can help on highly concurrent write workloads, but extremely large WAL buffers usually do not help because commit and the WAL writer still cause frequent writes/flushes.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>6.2 WAL writer</h3>
+<p>
+The WAL writer periodically writes WAL buffers and may flush them according to <code>wal_writer_delay</code> and <code>wal_writer_flush_after</code>. In PostgreSQL 18, the default delay is 200 ms and the default volume threshold is 1 MiB. Asynchronously committing transactions can wake the WAL writer sooner.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>6.3 Detect buffer pressure</h3>
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full,
+    stats_reset
+FROM pg_stat_wal;</code></pre>
+
+<p>
+A rapidly increasing <code>wal_buffers_full</code> value means WAL generation has repeatedly exhausted the available WAL buffers. PostgreSQL 18 also exposes per-statement <code>wal_buffers_full</code>, WAL records, full-page images, and WAL bytes in <code>pg_stat_statements</code> when that extension is enabled.<sup><a href="#r15">[15]</a><a href="#r16">[16]</a></sup>
+</p>
+</section>
+
+<section id="commit">
+<h2>7. Commit durability</h2>
+<p>
+Under ordinary durable settings, PostgreSQL makes the transaction's commit WAL durable before returning success. This does not require the transaction's table/index pages to be on disk yet. If a crash occurs afterward, recovery can replay the durable WAL and reproduce those data-page changes.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="diagram">Transaction T
+  UPDATE heap page
+  UPDATE index page
+  write commit record
+        |
+        v
+WAL flushed through T's commit LSN
+        |
+        +--> COMMIT success returned
+        |
+        | data pages may still be dirty
+        v
+later checkpoint/background writes
+
+Crash after COMMIT:
+WAL has T -> REDO can reconstruct missing page writes.
+
+Crash before commit WAL durable:
+T may be absent after recovery.</div>
+
+<h3>7.1 Group commit</h3>
+<p>
+Concurrent committers can share WAL synchronization. If several transactions need WAL flushed to nearby positions, one process's durable flush can satisfy others waiting behind it. This is one reason PostgreSQL can sustain transactional throughput even though durable commits involve storage synchronization.<sup><a href="#r1">[1]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>7.2 Commit delay knobs</h3>
+<pre><code>SHOW commit_delay;
+SHOW commit_siblings;</code></pre>
+
+<p>
+<code>commit_delay</code> can intentionally delay a synchronous WAL flush when enough concurrent transactions are active, attempting to gather more commits behind one flush. This is workload- and storage-dependent and should be benchmarked rather than enabled by rule of thumb.<sup><a href="#r8">[8]</a></sup>
+</p>
+</section>
+
+<section id="fsync">
+<h2>8. <code>fsync</code> and storage correctness</h2>
+<p>
+With <code>fsync=on</code>, PostgreSQL issues operating-system synchronization requests so writes are forced to durable storage in the required order. The exact mechanism is controlled by <code>wal_sync_method</code> and can use facilities such as <code>fdatasync()</code>, <code>fsync()</code>, <code>O_DSYNC</code>, or platform-specific alternatives.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<pre><code>SHOW fsync;
+SHOW wal_sync_method;</code></pre>
+
+<h3>8.1 Why <code>fsync=off</code> is dangerous</h3>
+<p>
+Turning <code>fsync</code> off disables PostgreSQL's normal attempts to force and order durable writes. An abrupt operating-system or hardware failure can then leave data files and WAL in an ordering/state that cannot be repaired by ordinary crash recovery, resulting in unrecoverable corruption. PostgreSQL states that high-quality hardware by itself is not a sufficient reason to disable <code>fsync</code>.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>8.2 Legitimate non-durable scenarios</h3>
+<p>
+PostgreSQL documents limited cases where <code>fsync=off</code> can make sense: disposable databases, initial loading of a cluster that can be recreated from another source, or frequently recreated read-only clones not used for failover. These are explicitly non-durable designs.<sup><a href="#r3">[3]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>8.3 Returning from <code>fsync=off</code></h3>
+<p>
+Simply changing the setting back to <code>on</code> does not retroactively guarantee that previously dirty kernel buffers have reached persistent storage. PostgreSQL documents methods such as shutting down and synchronizing storage, <code>sync</code>, reboot/unmount, or <code>initdb --sync-only</code> to establish a durable baseline.<sup><a href="#r3">[3]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>8.4 Storage must tell the truth</h3>
+<p>
+WAL durability depends on the storage stack honoring flush requests. A controller or drive that reports a flush complete while retaining volatile write-cache data can violate PostgreSQL's assumptions. Battery-backed/persistent caches or correctly configured write barriers/flush semantics are part of database durability, not an implementation detail.<sup><a href="#r2">[2]</a><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="synccommit">
+<h2>9. <code>synchronous_commit</code></h2>
+<p>
+<code>synchronous_commit</code> determines how far WAL processing must progress before PostgreSQL reports transaction success. The valid values are <code>off</code>, <code>local</code>, <code>remote_write</code>, <code>on</code>, and <code>remote_apply</code>. Without configured synchronous standbys, the meaningful local distinction is primarily <code>on</code> versus <code>off</code>; the remote modes gain their distinct behavior when synchronous replication is configured.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Value</th><th>Local durability before success</th><th>Remote synchronous behavior</th></tr></thead>
+<tbody>
+<tr><td><code>off</code></td><td>Does not wait for local WAL flush</td><td>Does not wait for synchronous standby acknowledgement</td></tr>
+<tr><td><code>local</code></td><td>Waits for local WAL flush</td><td>Does not wait for remote synchronous standby</td></tr>
+<tr><td><code>remote_write</code></td><td>Waits for local WAL flush</td><td>Waits for remote OS-level write acknowledgement</td></tr>
+<tr><td><code>on</code></td><td>Waits for local WAL flush</td><td>Waits for remote durable flush when synchronous replication applies</td></tr>
+<tr><td><code>remote_apply</code></td><td>Waits for local WAL flush</td><td>Waits until synchronous standby replays the commit</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>9.1 Per-transaction durability</h3>
+<pre><code>BEGIN;
+
+SET LOCAL synchronous_commit = off;
+
+INSERT INTO analytics.page_view(...);
+
+COMMIT;</code></pre>
+
+<pre><code>BEGIN;
+
+SET LOCAL synchronous_commit = remote_apply;
+
+INSERT INTO finance.payment(...);
+
+COMMIT;</code></pre>
+
+<p>
+The setting can be applied selectively by transaction/session/user/database. This allows noncritical telemetry to use asynchronous commit while financially significant transactions preserve stronger acknowledgement semantics.<sup><a href="#r3">[3]</a></sup>
+</p>
+</section>
+
+<section id="async">
+<h2>10. Asynchronous commit</h2>
+<p>
+With <code>synchronous_commit=off</code>, PostgreSQL can acknowledge a transaction once it is logically complete without waiting for that transaction's WAL to reach persistent storage. A crash can therefore lose recent acknowledged transactions. PostgreSQL nevertheless guarantees that recovery will leave the database in a consistent state—as if those lost transactions had aborted cleanly—because <code>fsync</code> and write-ordering protections remain active.<sup><a href="#r7">[7]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<p>
+PostgreSQL documents the maximum local durability delay for asynchronous commit as three times <code>wal_writer_delay</code>. This is an upper-bound behavior under the WAL writer mechanism, not a promise that every asynchronous transaction waits that long.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="callout ok">
+<strong>Safe performance trade-off:</strong> if an application can lose a small number of recent noncritical transactions after a host crash, <code>synchronous_commit=off</code> is far safer than <code>fsync=off</code>. The former risks recent transaction loss; the latter risks structural corruption.
+</div>
+</section>
+
+<section id="checkpoints">
+<h2>11. Checkpoints</h2>
+<p>
+A checkpoint establishes a WAL position such that database files have been brought forward sufficiently for recovery to begin from that checkpoint's REDO location rather than from the beginning of time. Checkpoints write dirty buffers, synchronize files, emit checkpoint WAL information, and update control information used to find the recovery starting point.<sup><a href="#r20">[20]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>11.1 Why checkpoints exist</h3>
+<p>
+Without checkpoints, crash recovery could require replaying an ever-growing history. A newer checkpoint shortens the amount of WAL that must be scanned/replayed. The trade-off is checkpoint I/O and full-page-image generation after the checkpoint.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>11.2 Main checkpoint settings</h3>
+<pre><code># Illustrative values, not universal recommendations:
+checkpoint_timeout = '15min'
+checkpoint_completion_target = 0.9
+max_wal_size = '8GB'
+min_wal_size = '2GB'</code></pre>
+
+<p>
+<code>checkpoint_timeout</code> sets the maximum time between automatic checkpoints; PostgreSQL 18 defaults to 5 minutes. <code>max_wal_size</code> can trigger checkpoints based on WAL volume and is a soft rather than absolute limit. <code>checkpoint_completion_target</code> (default 0.9) spreads checkpoint write activity across most of the available checkpoint interval to reduce I/O spikes.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>11.3 Forced checkpoints</h3>
+<pre><code>CHECKPOINT;</code></pre>
+
+<p>
+The SQL <code>CHECKPOINT</code> command forces an immediate checkpoint and is not intended for routine normal operation. Frequent forced checkpoints increase I/O and full-page-write generation.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>11.4 Checkpoint frequency and WAL volume</h3>
+<p>
+More frequent checkpoints tend to increase full-page images because each checkpoint resets the “first modification since checkpoint” condition. Increasing checkpoint intervals can therefore reduce full-page-write overhead, but it allows more WAL to accumulate and can lengthen crash recovery.<sup><a href="#r3">[3]</a></sup>
+</p>
+</section>
+
+<section id="restartpoints">
+<h2>12. Restartpoints during recovery</h2>
+<p>
+A server in archive recovery or standby recovery cannot create ordinary checkpoints in the same way as a primary. Instead, it creates <em>restartpoints</em> at suitable checkpoint records encountered in the replay stream. Restartpoints establish points from which recovery could restart if the standby itself crashes.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<pre><code>-- On a server in recovery this requests a restartpoint.
+CHECKPOINT;</code></pre>
+
+<p>
+PostgreSQL's <code>CHECKPOINT</code> command documentation explicitly notes that during recovery it forces a restartpoint rather than an ordinary checkpoint.<sup><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="fpi">
+<h2>13. Full-page writes</h2>
+<p>
+A database page is normally written in a storage-block-sized operation, but an operating-system or power failure can interrupt that write and leave a <em>torn page</em>: part old contents, part new contents. The ordinary logical delta in a WAL record might not contain enough information to repair arbitrary torn bytes. PostgreSQL's default <code>full_page_writes=on</code> protects against this by logging the entire page image the first time a page is modified after each checkpoint.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="diagram">checkpoint
+    |
+    v
+page P first modified
+    |
+    +--> WAL includes full-page image (FPI) + change information
+    |
+page P modified again
+    |
+    +--> usually only change WAL, no second FPI needed
+    |
+next checkpoint
+    |
+    v
+page P next first modification
+    |
+    +--> FPI again</div>
+
+<h3>13.1 Why only the first change?</h3>
+<p>
+Crash recovery starts from a checkpoint. Once the first post-checkpoint change replays a full valid page image, subsequent WAL deltas for that page have a known consistent base. Logging the page image on every modification would therefore be unnecessary overhead.<sup><a href="#r3">[3]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>13.2 Do not disable casually</h3>
+<pre><code>SHOW full_page_writes;</code></pre>
+
+<p>
+PostgreSQL warns that disabling <code>full_page_writes</code> can produce unrecoverable or silent data corruption after a system failure. It should be treated with the same caution as other non-durable settings.<sup><a href="#r3">[3]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>13.3 Hint bits and <code>wal_log_hints</code></h3>
+<pre><code>SHOW wal_log_hints;</code></pre>
+
+<p>
+When <code>wal_log_hints=on</code>, PostgreSQL logs full-page images on the first post-checkpoint change even for otherwise noncritical hint-bit modifications. Data checksums cause hint-bit updates to receive the necessary WAL protection regardless of this setting. <code>wal_log_hints</code> is also relevant to tooling such as <code>pg_rewind</code> on clusters without data checksums.<sup><a href="#r3">[3]</a><a href="#r22">[22]</a></sup>
+</p>
+</section>
+
+<section id="compression">
+<h2>14. WAL compression</h2>
+<p>
+Full-page images can dominate WAL volume in workloads that dirty many distinct pages soon after checkpoints. <code>wal_compression</code> compresses full-page images before they are written to WAL and decompresses them during replay. PostgreSQL 18 supports <code>pglz</code>, and builds compiled with the corresponding libraries can also support <code>lz4</code> and <code>zstd</code>.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<pre><code># Example:
+wal_compression = zstd</code></pre>
+
+<p>
+Compression can reduce WAL bandwidth, archive storage, and replication traffic at the cost of CPU during generation and replay. The correct choice depends on CPU headroom, storage/network bottlenecks, compression availability in the PostgreSQL build, and the proportion of WAL made up of full-page images.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>14.1 Measure before deciding</h3>
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes
+FROM pg_stat_wal;</code></pre>
+
+<p>
+A high <code>wal_fpi</code> count relative to total WAL activity is one signal that full-page images are significant enough for compression/checkpoint tuning to matter.<sup><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="crash">
+<h2>15. Crash recovery</h2>
+<p>
+After an unclean shutdown, PostgreSQL reads cluster control information to locate the latest usable checkpoint, reads the checkpoint record, and replays WAL forward from the checkpoint's REDO location. Because WAL is durable before protected data pages, replay can reconstruct changes that committed but had not yet reached the data files.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<div class="diagram">pg_control
+   |
+   v
+latest checkpoint location
+   |
+   v
+read checkpoint record
+   |
+   v
+REDO start LSN
+   |
+   v
+scan WAL forward
+   |
+   +--> restore full-page images where needed
+   +--> redo heap/index/catalog operations
+   +--> apply transaction state records
+   |
+   v
+consistent end of WAL
+   |
+   v
+database opens for normal operation</div>
+
+<h3>15.1 Recovery time is partly a WAL-volume problem</h3>
+<p>
+Larger intervals between checkpoints can reduce steady-state checkpoint/FPI overhead but can increase the volume of WAL recovery may need to scan and replay after a crash. <code>max_wal_size</code> and <code>checkpoint_timeout</code> therefore participate in both performance and recovery-time design.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>15.2 WAL does not replace data checksums</h3>
+<p>
+WAL protects the write ordering and reconstructs logged changes. Data checksums detect some forms of on-disk page corruption. The mechanisms address different reliability problems and are complementary.<sup><a href="#r23">[23]</a></sup>
+</p>
+</section>
+
+<section id="levels">
+<h2>16. <code>wal_level</code></h2>
+<p>
+<code>wal_level</code> controls how much information PostgreSQL writes to WAL. PostgreSQL 18 supports <code>minimal</code>, <code>replica</code> (the default), and <code>logical</code>. Each higher level contains the information required by lower levels plus additional information for its use case. It can only be changed at server start.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Level</th><th>Purpose</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><code>minimal</code></td><td>Enough for crash recovery, with reduced logging for certain create/rewrite operations</td><td>Specialized non-replication/non-archiving configurations</td></tr>
+<tr><td><code>replica</code></td><td>Adds information needed for WAL archiving and physical replication, including standby reads</td><td>Default production setting for backups/HA</td></tr>
+<tr><td><code>logical</code></td><td>Adds information required for logical decoding</td><td>Logical replication, CDC, output plugins</td></tr>
+</tbody>
+</table>
+</div>
+
+<pre><code>SHOW wal_level;</code></pre>
+
+<h3>16.1 Higher WAL levels can increase volume</h3>
+<p>
+Additional logical/replication information is not free. If logical decoding is not required, <code>replica</code> is normally sufficient for physical replication and continuous archiving. When logical replication or a CDC tool requires logical decoding, use <code>logical</code> and size WAL/network/storage accordingly.<sup><a href="#r3">[3]</a><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="archiving">
+<h2>17. WAL archiving</h2>
+<p>
+Continuous archiving copies completed WAL segments to durable external storage. Combined with a physical base backup, archived WAL enables point-in-time recovery: restore the backup, fetch archived WAL, and replay it forward to a target. PostgreSQL can archive through a shell <code>archive_command</code> or an <code>archive_library</code> module.<sup><a href="#r5">[5]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<h3>17.1 Command-based archiving</h3>
+<pre><code>wal_level = replica
+archive_mode = on
+
+archive_command =
+  'test ! -f /srv/wal-archive/%f &amp;&amp; cp %p /srv/wal-archive/%f'</code></pre>
+
+<p>
+<code>%p</code> is replaced by the path to the WAL file to archive and <code>%f</code> by the file name. The command must return success only when the WAL has been stored safely. PostgreSQL retries failed archival and will not recycle/remove the segment merely because the command was attempted.<sup><a href="#r5">[5]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>17.2 Archive modules</h3>
+<pre><code>archive_mode = on
+archive_library = 'basic_archive'
+basic_archive.archive_directory = '/srv/wal-archive'</code></pre>
+
+<p>
+PostgreSQL's archive-module API avoids launching a shell command per segment and allows modules to implement more robust archiving behavior. The supplied <code>basic_archive</code> module is an example implementation, not a complete off-site disaster-recovery product.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>17.3 Archive lag on low-write systems</h3>
+<pre><code>archive_timeout = '5min'</code></pre>
+
+<p>
+A WAL segment is normally archived after it completes. <code>archive_timeout</code> can force a segment switch so low-volume systems do not leave recent WAL unarchived for too long. Very small values waste archive space because switched segments still occupy full segment-sized files.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>17.4 Force a segment switch</h3>
+<pre><code>SELECT pg_switch_wal();</code></pre>
+
+<p>
+This can be useful before a backup/recovery test or when an operator wants the current partly filled segment to become archivable promptly.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="retention">
+<h2>18. WAL retention</h2>
+<p>
+The amount of WAL retained in <code>pg_wal</code> is determined by the maximum requirement among several independent mechanisms. A segment cannot safely disappear simply because the normal checkpoint size budget has been reached if an archive, standby, or slot still requires it.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<div class="diagram">Reasons a WAL segment may remain in pg_wal:
+
+normal checkpoint/recycle budget --------+
+min_wal_size ----------------------------+
+wal_keep_size ---------------------------+
+archive not yet successful --------------+--> effective retention
+physical slot restart_lsn ---------------+
+logical slot restart_lsn ----------------+
+backup/recovery requirements ------------+
+standby/recovery state ------------------+</div>
+
+<h3>18.1 <code>max_wal_size</code> is a soft limit</h3>
+<pre><code>SHOW max_wal_size;
+SHOW min_wal_size;</code></pre>
+
+<p>
+<code>max_wal_size</code> influences automatic checkpoint behavior but is explicitly a soft limit. Heavy load, a failing archive command/library, high <code>wal_keep_size</code>, and replication-slot requirements can cause <code>pg_wal</code> to grow beyond it.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>18.2 <code>wal_keep_size</code></h3>
+<pre><code># Example:
+wal_keep_size = '2GB'</code></pre>
+
+<p>
+<code>wal_keep_size</code> retains at least a specified amount of older WAL in <code>pg_wal</code> for streaming standbys, giving lagging replicas some protection even without slots. Unlike a replication slot, it does not track a specific consumer's exact progress.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>18.3 Capacity formula</h3>
+<pre><code>approximate WAL storage runway
+    = free pg_wal bytes
+      / peak WAL generation bytes per second</code></pre>
+
+<p>
+Use peak—not average—generation. Index builds, bulk loads, maintenance, checkpoints/full-page images, and write bursts can drastically change WAL generation.
+</p>
+</section>
+
+<section id="slots">
+<h2>19. Replication slots</h2>
+<p>
+A replication slot is a durable promise that PostgreSQL will retain WAL (and, for logical slots, catalog visibility state) required by a specific replication consumer. Physical slots protect WAL for physical standbys; logical slots protect WAL and decoding state for logical replication/CDC. Slots survive disconnects, so they protect consumers from short outages but can also retain large amounts of WAL during long outages.<sup><a href="#r4">[4]</a><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>19.1 Create a physical slot</h3>
+<pre><code>SELECT *
+FROM pg_create_physical_replication_slot(
+    'standby_a'
+);</code></pre>
+
+<h3>19.2 Create a logical slot</h3>
+<pre><code>SELECT *
+FROM pg_create_logical_replication_slot(
+    'cdc_orders',
+    'pgoutput'
+);</code></pre>
+
+<h3>19.3 Inspect slot retention</h3>
+<pre><code>SELECT
+    slot_name,
+    slot_type,
+    active,
+    active_pid,
+    restart_lsn,
+    confirmed_flush_lsn,
+    wal_status,
+    pg_size_pretty(safe_wal_size) AS safe_wal_remaining,
+    inactive_since,
+    invalidation_reason
+FROM pg_replication_slots
+ORDER BY slot_name;</code></pre>
+
+<p>
+<code>restart_lsn</code> is the oldest WAL position the slot may still require. For logical slots, <code>confirmed_flush_lsn</code> records how far the consumer has confirmed receipt. PostgreSQL 18 exposes <code>wal_status</code> and <code>safe_wal_size</code> to show whether a slot's required WAL remains safely retained under configured limits.<sup><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>19.4 Bound slot retention</h3>
+<pre><code># Examples only:
+max_slot_wal_keep_size = '50GB'
+idle_replication_slot_timeout = '24h'</code></pre>
+
+<p>
+With the default <code>max_slot_wal_keep_size=-1</code>, a slot can retain unlimited WAL. A finite limit can prevent unbounded growth but may invalidate a slot if the consumer falls too far behind. PostgreSQL 18's <code>idle_replication_slot_timeout</code> can invalidate slots inactive longer than a configured interval. Both settings trade consumer continuity for storage safety and must be aligned with legitimate outage windows.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<div class="callout danger">
+<strong>Inactive slot + active workload = growing disk obligation.</strong> Every production slot should have an owner, purpose, lag alert, retirement process, and explicit retention policy.
+</div>
+</section>
+
+<section id="replication">
+<h2>20. WAL and physical replication</h2>
+<p>
+Streaming replication sends WAL from the primary's WAL sender to a standby WAL receiver. The standby writes/flushed WAL and recovery replays it. Replication positions are therefore WAL LSNs, and replication lag can be split into send, receive/write, flush, and replay stages.<sup><a href="#r28">[28]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<pre><code>SELECT
+    application_name,
+    state,
+    sync_state,
+    sent_lsn,
+    write_lsn,
+    flush_lsn,
+    replay_lsn,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            pg_current_wal_lsn(),
+            replay_lsn
+        )
+    ) AS replay_byte_lag
+FROM pg_stat_replication;</code></pre>
+
+<p>
+The same WAL stream can simultaneously support crash recovery, physical replication, and archiving. That is why changing WAL generation or retention settings often affects backup and HA behavior together.
+</p>
+</section>
+
+<section id="logical">
+<h2>21. WAL and logical decoding</h2>
+<p>
+Logical decoding reads WAL and reconstructs logical row/change information through an output plugin. This requires <code>wal_level=logical</code> and logical replication slots. The standard logical replication implementation uses the built-in <code>pgoutput</code> plugin, while <code>test_decoding</code> is supplied for testing and illustration.<sup><a href="#r24">[24]</a><a href="#r30">[30]</a></sup>
+</p>
+
+<pre><code>wal_level = logical
+max_replication_slots = 10
+max_wal_senders = 10</code></pre>
+
+<h3>21.1 Logical retention can also block vacuum</h3>
+<p>
+Logical slots can expose both <code>restart_lsn</code> and <code>catalog_xmin</code>. The former retains WAL; the latter can prevent vacuum from removing older catalog tuples required for decoding. Slot monitoring is therefore both a WAL-storage and database-bloat concern.<sup><a href="#r27">[27]</a></sup>
+</p>
+</section>
+
+<section id="monitoring">
+<h2>22. Monitoring WAL in PostgreSQL 18</h2>
+
+<h3>22.1 Cluster-wide generation</h3>
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full,
+    stats_reset
+FROM pg_stat_wal;</code></pre>
+
+<p>
+In PostgreSQL 18, WAL I/O timing has been moved out of <code>pg_stat_wal</code> into <code>pg_stat_io</code>; PostgreSQL 18 also adds WAL I/O rows and per-backend WAL/I/O observability improvements.<sup><a href="#r15">[15]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>22.2 WAL I/O</h3>
+<pre><code>SELECT *
+FROM pg_stat_io
+WHERE object = 'wal'
+ORDER BY backend_type, context;</code></pre>
+
+<p>
+Exact row combinations depend on server activity and PostgreSQL's statistics model. Enable <code>track_wal_io_timing</code> when WAL I/O timing itself must be measured, recognizing that timing instrumentation can add overhead on some systems.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>22.3 Checkpointer health</h3>
+<pre><code>SELECT
+    num_timed,
+    num_requested,
+    num_done,
+    write_time,
+    sync_time,
+    buffers_written,
+    slru_written,
+    stats_reset
+FROM pg_stat_checkpointer;</code></pre>
+
+<p>
+PostgreSQL 18 adds <code>num_done</code> and <code>slru_written</code> to checkpointer statistics. A high rate of requested/WAL-driven checkpoints relative to expected timed checkpoints can indicate that <code>max_wal_size</code> is too small for the workload.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>22.4 Archive health</h3>
+<pre><code>SELECT
+    archived_count,
+    last_archived_wal,
+    last_archived_time,
+    failed_count,
+    last_failed_wal,
+    last_failed_time,
+    stats_reset
+FROM pg_stat_archiver;</code></pre>
+
+<h3>22.5 Per-statement WAL</h3>
+<pre><code>SELECT
+    query,
+    calls,
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full
+FROM pg_stat_statements
+ORDER BY wal_bytes DESC
+LIMIT 20;</code></pre>
+
+<p>
+This is especially useful for finding statements whose runtime seems acceptable but whose WAL amplification is expensive for replication, archiving, storage, and recovery.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>22.6 Estimate WAL rate</h3>
+<pre><code>-- Capture at t1:
+SELECT clock_timestamp(), pg_current_wal_lsn();
+
+-- Capture again at t2 and calculate:
+SELECT
+    pg_wal_lsn_diff($lsn2::pg_lsn, $lsn1::pg_lsn)
+    / EXTRACT(EPOCH FROM ($time2 - $time1))
+    AS bytes_per_second;</code></pre>
+</section>
+
+<section id="waldump">
+<h2>23. Inspecting WAL with <code>pg_waldump</code></h2>
+<p>
+<code>pg_waldump</code> renders PostgreSQL WAL records in human-readable form. It is a diagnostic/internal utility and is most useful for database engineers investigating WAL composition, resource-manager activity, recovery behavior, or extension logging. It should generally be run against files while the server is stopped or against copied WAL rather than used as an ordinary application interface.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>23.1 Display records</h3>
+<pre><code>pg_waldump \
+  --path="$PGDATA/pg_wal" \
+  --limit=100</code></pre>
+
+<h3>23.2 Filter by resource manager</h3>
+<pre><code>pg_waldump \
+  --path="$PGDATA/pg_wal" \
+  --rmgr=Btree \
+  --limit=50</code></pre>
+
+<h3>23.3 Summary mode</h3>
+<pre><code>pg_waldump \
+  --path="$PGDATA/pg_wal" \
+  --stats=record</code></pre>
+
+<p>
+The output can reveal which resource managers and record types dominate a captured WAL range. Combine this with workload-level statistics rather than inferring application causality from WAL alone.
+</p>
+</section>
+
+<section id="tuning">
+<h2>24. WAL performance tuning</h2>
+
+<h3>24.1 Start with the bottleneck</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Symptom</th><th>Likely area</th><th>Investigate</th></tr></thead>
+<tbody>
+<tr><td>Commit latency tracks storage latency</td><td>WAL durable flush</td><td><code>pg_stat_io</code>, storage cache/flush behavior, <code>wal_sync_method</code>, group commit</td></tr>
+<tr><td><code>wal_buffers_full</code> rises rapidly</td><td>WAL buffer pressure</td><td>WAL rate, <code>wal_buffers</code>, concurrent writers</td></tr>
+<tr><td>Very high <code>wal_fpi</code></td><td>Full-page-image volume</td><td>Checkpoint frequency, <code>max_wal_size</code>, <code>wal_compression</code></td></tr>
+<tr><td>Frequent requested checkpoints</td><td>Checkpoint/WAL sizing</td><td><code>pg_stat_checkpointer</code>, <code>max_wal_size</code></td></tr>
+<tr><td><code>pg_wal</code> grows despite checkpoints</td><td>Retention obligation</td><td>archive failure, slots, <code>wal_keep_size</code>, replica lag</td></tr>
+<tr><td>Replication/archive bandwidth saturated</td><td>WAL volume</td><td>WAL-generating SQL, FPI ratio, compression, bulk operations</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>24.2 Increase checkpoint interval carefully</h3>
+<pre><code># Example baseline to benchmark, not a generic prescription:
+checkpoint_timeout = '15min'
+checkpoint_completion_target = 0.9
+max_wal_size = '8GB'
+min_wal_size = '2GB'</code></pre>
+
+<p>
+Larger checkpoint intervals can reduce checkpoint churn and FPIs, but require more <code>pg_wal</code> space and can extend crash-recovery work. The right values are workload- and RTO-dependent.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>24.3 Use asynchronous commit selectively</h3>
+<pre><code>ALTER ROLE telemetry_ingest
+SET synchronous_commit = off;</code></pre>
+
+<p>
+This can reduce latency for expendable event streams while leaving default durable commit semantics for critical application roles. Do not disable <code>fsync</code> to solve a commit-latency problem that can be addressed at the transaction durability layer.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>24.4 Compress FPIs if CPU is available</h3>
+<pre><code>wal_compression = lz4</code></pre>
+
+<p>
+Benchmark CPU cost against reduced WAL bytes, archive bandwidth, and replica traffic. Compression helps primarily the full-page-image component of WAL rather than every record equally.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>24.5 Measure SQL WAL amplification</h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    WAL
+)
+UPDATE app.account
+SET last_seen_at = clock_timestamp()
+WHERE account_id BETWEEN 1 AND 100000;</code></pre>
+
+<p>
+Modern PostgreSQL <code>EXPLAIN</code> can report WAL records, full-page images, and bytes generated by the executed plan, helping compare alternative write strategies.<sup><a href="#r32">[32]</a></sup>
+</p>
+</section>
+
+<section id="failure">
+<h2>25. WAL failure modes</h2>
+
+<h3>25.1 Archive destination failure</h3>
+<div class="diagram">WAL generation continues
+      |
+archive command fails
+      |
+completed WAL cannot be recycled
+      |
+pg_wal grows
+      |
+filesystem fills
+      |
+database may be unable to continue safely</div>
+
+<p>
+Monitor <code>pg_stat_archiver</code>, archive-side freshness, and filesystem free space. The failure of a remote backup service can become a primary-database storage incident if the backlog is allowed to grow indefinitely.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>25.2 Abandoned replication slot</h3>
+<p>
+A disconnected consumer with a slot can create the same disk-growth pattern. With unlimited slot retention, the cluster continues retaining old WAL until the consumer advances or the slot is removed. A finite <code>max_slot_wal_keep_size</code> protects disk at the cost of potentially invalidating the consumer.<sup><a href="#r4">[4]</a><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>25.3 Misconfigured durability</h3>
+<p>
+Disabling <code>fsync</code> or <code>full_page_writes</code> can transform an ordinary abrupt failure into unrecoverable corruption. Disabling only <code>synchronous_commit</code> has a different, narrower failure mode: loss of some recent acknowledged transactions.<sup><a href="#r3">[3]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>25.4 Storage lying about flush completion</h3>
+<p>
+Even correct PostgreSQL settings cannot compensate for storage that violates flush semantics. Test and configure storage controllers, hypervisors, cloud/block devices, filesystems, and write caches according to their durability guarantees.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>25.5 WAL retention policy too small for replica outage</h3>
+<p>
+Without enough <code>wal_keep_size</code>, archive coverage, or a healthy physical slot, a standby that falls too far behind can lose access to required WAL and need a new base backup. Retention policy must reflect realistic repair/outage durations rather than normal steady-state lag.
+</p>
+
+<h3>25.6 Manually invoking <code>pg_resetwal</code></h3>
+<p>
+<code>pg_resetwal</code> is an emergency last-resort utility for control/WAL corruption scenarios and can leave the database inconsistent. It is not a disk-space cleanup tool and should never be substituted for repairing archive or slot retention problems.<sup><a href="#r33">[33]</a></sup>
+</p>
+</section>
+
+<section id="patterns">
+<h2>26. Production configuration patterns</h2>
+
+<h3>26.1 Durable standalone database with PITR</h3>
+<pre><code>wal_level = replica
+fsync = on
+full_page_writes = on
+synchronous_commit = on
+
+checkpoint_completion_target = 0.9
+max_wal_size = '8GB'
+
+archive_mode = on
+archive_command = '/usr/local/bin/archive-wal %p %f'</code></pre>
+
+<p>
+The archival helper should atomically upload/store WAL, refuse unsafe collisions, return success only after durability criteria are satisfied, and export observable failure state.
+</p>
+
+<h3>26.2 Primary with physical standbys</h3>
+<pre><code>wal_level = replica
+fsync = on
+full_page_writes = on
+
+max_wal_senders = 10
+max_replication_slots = 10
+wal_keep_size = '2GB'
+
+# Protect local disk from an indefinitely abandoned slot.
+max_slot_wal_keep_size = '100GB'</code></pre>
+
+<h3>26.3 Primary with CDC/logical replication</h3>
+<pre><code>wal_level = logical
+
+max_wal_senders = 20
+max_replication_slots = 20
+
+# Operational safety policy example:
+max_slot_wal_keep_size = '100GB'
+idle_replication_slot_timeout = '48h'</code></pre>
+
+<p>
+The slot limits above are examples, not recommendations. They must be sized from peak WAL rate, maximum expected connector outage, resynchronization cost, and disk capacity.
+</p>
+
+<h3>26.4 Mixed durability by workload</h3>
+<pre><code>-- Default:
+ALTER DATABASE appdb
+SET synchronous_commit = on;
+
+-- Noncritical fire-and-forget telemetry:
+ALTER ROLE telemetry_writer
+SET synchronous_commit = off;</code></pre>
+
+<h3>26.5 Observability query</h3>
+<pre><code>WITH wal AS (
+    SELECT
+        wal_records,
+        wal_fpi,
+        wal_bytes,
+        wal_buffers_full
+    FROM pg_stat_wal
+),
+slots AS (
+    SELECT
+        count(*) FILTER (WHERE NOT active) AS inactive_slots,
+        max(
+            pg_wal_lsn_diff(
+                pg_current_wal_lsn(),
+                restart_lsn
+            )
+        ) FILTER (WHERE restart_lsn IS NOT NULL)
+            AS max_slot_retained_bytes
+    FROM pg_replication_slots
+)
+SELECT
+    wal.wal_records,
+    wal.wal_fpi,
+    pg_size_pretty(wal.wal_bytes) AS total_wal,
+    wal.wal_buffers_full,
+    slots.inactive_slots,
+    pg_size_pretty(slots.max_slot_retained_bytes)
+        AS max_slot_retention
+FROM wal
+CROSS JOIN slots;</code></pre>
+</section>
+
+<section id="checklist">
+<h2>27. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Keep <code>fsync=on</code></strong> for durable production data unless the entire database is intentionally disposable.</li>
+<li><strong>Keep <code>full_page_writes=on</code></strong> for crash safety against torn page writes.</li>
+<li><strong>Use <code>synchronous_commit=off</code> selectively</strong> when losing recent noncritical transactions is acceptable.</li>
+<li><strong>Choose <code>wal_level</code> from actual requirements.</strong> Use <code>replica</code> for archiving/physical replication and <code>logical</code> when logical decoding is required.</li>
+<li><strong>Size <code>pg_wal</code> capacity for failure modes.</strong> Include peak WAL rate, archive outages, standby lag, and slot retention.</li>
+<li><strong>Do not treat <code>max_wal_size</code> as a disk-usage cap.</strong></li>
+<li><strong>Monitor replication slots.</strong> Alert on inactivity, retained bytes, <code>wal_status</code>, and <code>safe_wal_size</code>.</li>
+<li><strong>Monitor archiving.</strong> Archive failure is eventually a local storage failure.</li>
+<li><strong>Monitor checkpoint behavior.</strong> Frequent requested/WAL-driven checkpoints often indicate under-sized WAL/checkpoint configuration.</li>
+<li><strong>Measure full-page-image volume.</strong> Use <code>pg_stat_wal</code>, <code>pg_stat_statements</code>, and <code>EXPLAIN (WAL)</code>.</li>
+<li><strong>Consider WAL compression</strong> when FPIs dominate and CPU is available.</li>
+<li><strong>Measure WAL I/O in PostgreSQL 18 through <code>pg_stat_io</code>.</strong></li>
+<li><strong>Test storage flush semantics.</strong> PostgreSQL durability assumes the storage stack honors synchronization requests.</li>
+<li><strong>Archive WAL off-host</strong> when PITR/disaster recovery is required.</li>
+<li><strong>Test crash and PITR recovery.</strong> Settings are not a durability guarantee until the recovery path is exercised.</li>
+<li><strong>Never manually delete <code>pg_wal</code> files.</strong></li>
+<li><strong>Treat <code>pg_resetwal</code> as last-resort recovery tooling.</strong></li>
+<li><strong>Correlate WAL tuning with HA and backups.</strong> The same WAL stream drives crash recovery, replication, and continuous archiving.</li>
+</ol>
+
+<div class="callout ok">
+<strong>WAL design principle:</strong> optimize the log only after preserving its ordering contract. PostgreSQL performance depends on making WAL cheap to generate and flush; PostgreSQL correctness depends on never allowing protected data to outrun the WAL needed to recover it.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Write-Ahead Logging (WAL) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-intro.html">https://www.postgresql.org/docs/18/wal-intro.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. WAL Internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-internals.html">https://www.postgresql.org/docs/18/wal-internals.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Write Ahead Log Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-wal.html">https://www.postgresql.org/docs/18/runtime-config-wal.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Replication Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-replication.html">https://www.postgresql.org/docs/18/runtime-config-replication.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Continuous Archiving and Point-in-Time Recovery [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/continuous-archiving.html">https://www.postgresql.org/docs/18/continuous-archiving.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Backup and Restore [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup.html">https://www.postgresql.org/docs/18/backup.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Asynchronous Commit [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-async-commit.html">https://www.postgresql.org/docs/18/wal-async-commit.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. WAL Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-configuration.html">https://www.postgresql.org/docs/18/wal-configuration.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Write Ahead Logging for Extensions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-for-extensions.html">https://www.postgresql.org/docs/18/wal-for-extensions.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. pg_waldump [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgwaldump.html">https://www.postgresql.org/docs/18/pgwaldump.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. System Administration Functions: backup, recovery, and WAL control functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Custom WAL Resource Managers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/custom-rmgr.html">https://www.postgresql.org/docs/18/custom-rmgr.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. pg_lsn Type [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-pg-lsn.html">https://www.postgresql.org/docs/18/datatype-pg-lsn.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. initdb [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-initdb.html">https://www.postgresql.org/docs/18/app-initdb.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Monitoring Database Activity: pg_stat_wal [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-stats.html">https://www.postgresql.org/docs/18/monitoring-stats.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. pg_stat_statements [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Non-Durable Settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/non-durability.html">https://www.postgresql.org/docs/18/non-durability.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. initdb: --sync-only [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-initdb.html">https://www.postgresql.org/docs/18/app-initdb.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Reliability [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-reliability.html">https://www.postgresql.org/docs/18/wal-reliability.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. CHECKPOINT [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-checkpoint.html">https://www.postgresql.org/docs/18/sql-checkpoint.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. WAL Configuration: checkpoints and restartpoints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-configuration.html">https://www.postgresql.org/docs/18/wal-configuration.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. pg_rewind [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgrewind.html">https://www.postgresql.org/docs/18/app-pgrewind.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Data Checksums [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/checksums.html">https://www.postgresql.org/docs/18/checksums.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Logical Replication Configuration Settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-config.html">https://www.postgresql.org/docs/18/logical-replication-config.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Archive Modules [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/archive-modules.html">https://www.postgresql.org/docs/18/archive-modules.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. basic_archive — an example WAL archive module [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/basic-archive.html">https://www.postgresql.org/docs/18/basic-archive.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. pg_replication_slots [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-replication-slots.html">https://www.postgresql.org/docs/18/view-pg-replication-slots.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. Log-Shipping Standby Servers and Streaming Replication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/warm-standby.html">https://www.postgresql.org/docs/18/warm-standby.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. Streaming Replication Protocol [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/protocol-replication.html">https://www.postgresql.org/docs/18/protocol-replication.html</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. Logical Decoding [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logicaldecoding.html">https://www.postgresql.org/docs/18/logicaldecoding.html</a></li>
+
+<li id="r31">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. 2025-2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r32">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+
+<li id="r33">PostgreSQL Global Development Group. pg_resetwal [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgresetwal.html">https://www.postgresql.org/docs/18/app-pgresetwal.html</a></li>
+
+<li id="r34">PostgreSQL Global Development Group. Monitoring Database Activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r35">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. WAL behavior depends on PostgreSQL version, workload, storage durability semantics, checkpoint frequency, replication topology, archive reliability, slot policy, filesystem capacity, and recovery objectives. Benchmark and recovery-test any WAL tuning change under representative write rates and failure scenarios before production deployment.
+</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL triggers: BEFORE, AFTER, INSTEAD OF, row-level, statement-level, transition tables, event triggers, auditing, automatic data maintenance, and constraint triggers.">
+<title>PostgreSQL Triggers: Timing, Granularity, Auditing, Maintenance, and Constraints</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:980px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Triggers</h1>
+  <p class="dek">A technical guide to BEFORE, AFTER, and INSTEAD OF triggers; row-level and statement-level execution; transition tables; event triggers; auditing; automatic data maintenance; deferred constraint triggers; trigger ordering; recursion; replication behavior; and production design.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+A PostgreSQL trigger is a database object that automatically invokes a trigger function when a specified database event occurs. Ordinary triggers attach to a table, partitioned table, view, or foreign table and respond to data-modification events such as <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, and, for statement-level triggers, <code>TRUNCATE</code>. Event triggers operate at database scope and respond to supported DDL and database events rather than to row changes.<sup><a href="#r1">[1]</a>-<a href="#r3">[3]</a></sup>
+</p>
+<p>
+Triggers are useful when logic must execute regardless of which application issued a statement: maintaining timestamps or derived state, implementing updatable views, recording transactional audit history, enforcing specialized cross-row invariants, and governing schema changes. Their power also makes them easy to misuse. Trigger logic is implicit from the perspective of the calling SQL statement, executes inside database transactions, can multiply work per affected row, can recursively cause more triggers, and can introduce ordering and concurrency dependencies. Good trigger engineering therefore requires explicit knowledge of timing, granularity, data visibility, transaction semantics, and failure behavior.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">Trigger execution model</a></li>
+<li><a href="#create">CREATE TRIGGER</a></li>
+<li><a href="#functions">PL/pgSQL trigger functions</a></li>
+<li><a href="#before">BEFORE triggers</a></li>
+<li><a href="#after">AFTER triggers</a></li>
+<li><a href="#instead">INSTEAD OF triggers</a></li>
+<li><a href="#row">Row-level triggers</a></li>
+<li><a href="#statement">Statement-level triggers</a></li>
+<li><a href="#transition">Transition tables</a></li>
+<li><a href="#when">WHEN conditions and UPDATE OF</a></li>
+<li><a href="#ordering">Ordering and interactions</a></li>
+<li><a href="#visibility">Data visibility</a></li>
+<li><a href="#audit">Audit logging</a></li>
+<li><a href="#maintenance">Automatic data maintenance</a></li>
+<li><a href="#constraints">Constraint triggers</a></li>
+<li><a href="#events">Event triggers</a></li>
+<li><a href="#partitioning">Partitioned tables</a></li>
+<li><a href="#replication">Replication behavior</a></li>
+<li><a href="#performance">Performance engineering</a></li>
+<li><a href="#operations">Operations and inspection</a></li>
+<li><a href="#design">Design guidelines</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. Trigger execution model</h2>
+<p>
+PostgreSQL classifies ordinary triggers along two independent dimensions: <em>timing</em> and <em>granularity</em>. Timing determines whether the function runs before, after, or instead of an operation. Granularity determines whether it runs once per affected row or once per SQL statement. Not every combination is legal: <code>INSTEAD OF</code> triggers exist only on views and are always row-level, while <code>TRUNCATE</code> triggers are statement-level only.<sup><a href="#r1">[1]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>Timing</th><th>Row-level</th><th>Statement-level</th><th>Main use</th></tr>
+</thead>
+<tbody>
+<tr><td><code>BEFORE</code></td><td>Tables and foreign tables</td><td>Tables, views, foreign tables</td><td>Validate, normalize, alter or suppress a row before storage; pre-statement setup.</td></tr>
+<tr><td><code>AFTER</code></td><td>Tables and foreign tables</td><td>Tables, views, foreign tables</td><td>Observe final changes, audit, maintain dependent data, run set-wise postprocessing.</td></tr>
+<tr><td><code>INSTEAD OF</code></td><td>Views only</td><td>Not supported</td><td>Implement writes against a view by redirecting them to base tables.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="diagram">SQL statement
+     |
+     +--> BEFORE STATEMENT trigger(s)
+     |
+     +--> for each affected row:
+     |      BEFORE ROW trigger(s)
+     |          |
+     |          +-- may modify NEW
+     |          +-- may return NULL and skip this row
+     |          v
+     |      physical row operation / constraints
+     |
+     +--> AFTER ROW trigger events
+     |      (executed after row changes; ordinary AFTER events complete
+     |       before AFTER STATEMENT)
+     |
+     +--> AFTER STATEMENT trigger(s)
+     |
+     +--> deferred constraint-trigger events, if any,
+            may wait until transaction end</div>
+
+<p>
+For triggers of the same kind on the same event and relation, PostgreSQL fires them in alphabetical order by trigger name. For <code>BEFORE</code> and <code>INSTEAD OF</code> row triggers, the row returned by one trigger becomes the input to the next. A <code>BEFORE</code> or <code>INSTEAD OF</code> trigger can return <code>NULL</code> to suppress the operation for that row.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="create">
+<h2>2. <code>CREATE TRIGGER</code></h2>
+<p>
+PostgreSQL 18 supports <code>CREATE TRIGGER</code> and <code>CREATE OR REPLACE TRIGGER</code>. A trigger specifies its name, timing, event or events, target relation, granularity, optional condition, optional transition relations, and the trigger function to execute.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>CREATE [ OR REPLACE ] [ CONSTRAINT ] TRIGGER trigger_name
+{ BEFORE | AFTER | INSTEAD OF }
+{ INSERT | UPDATE [ OF column [, ...] ] | DELETE | TRUNCATE [ OR ... ] }
+ON relation
+[ DEFERRABLE | NOT DEFERRABLE ]
+[ INITIALLY IMMEDIATE | INITIALLY DEFERRED ]
+[ REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows ]
+[ FOR EACH { ROW | STATEMENT } ]
+[ WHEN ( condition ) ]
+EXECUTE FUNCTION trigger_function(arguments);</code></pre>
+
+<p>
+If <code>FOR EACH</code> is omitted, statement-level execution is the default. The user creating the trigger requires <code>TRIGGER</code> privilege on the target relation and <code>EXECUTE</code> privilege on the trigger function. A trigger function is declared with no ordinary function arguments and returns the pseudo-type <code>trigger</code>; literal arguments from <code>CREATE TRIGGER</code> are exposed through language-specific trigger metadata such as PL/pgSQL's <code>TG_ARGV</code>.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>2.1 Multi-event trigger</h3>
+<pre><code>CREATE TRIGGER orders_audit_row
+AFTER INSERT OR UPDATE OR DELETE
+ON app.orders
+FOR EACH ROW
+EXECUTE FUNCTION app.audit_order_row();</code></pre>
+
+<p>
+PostgreSQL permits multiple DML events in one trigger using <code>OR</code>. The trigger function can inspect <code>TG_OP</code> to distinguish <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code>.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="functions">
+<h2>3. PL/pgSQL trigger functions</h2>
+<p>
+PL/pgSQL automatically creates special trigger variables. <code>NEW</code> contains the proposed row for row-level <code>INSERT</code> and <code>UPDATE</code>; <code>OLD</code> contains the previous row for row-level <code>UPDATE</code> and <code>DELETE</code>. Other variables include <code>TG_OP</code>, <code>TG_WHEN</code>, <code>TG_LEVEL</code>, <code>TG_TABLE_SCHEMA</code>, <code>TG_TABLE_NAME</code>, <code>TG_NAME</code>, <code>TG_NARGS</code>, and <code>TG_ARGV</code>.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>CREATE OR REPLACE FUNCTION app.example_trigger()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE DEBUG
+        'trigger=% op=% when=% level=% table=%.%',
+        TG_NAME,
+        TG_OP,
+        TG_WHEN,
+        TG_LEVEL,
+        TG_TABLE_SCHEMA,
+        TG_TABLE_NAME;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;</code></pre>
+
+<h3>3.1 Return-value semantics</h3>
+<p>
+The return value is critical for row-level <code>BEFORE</code> and <code>INSTEAD OF</code> triggers. A <code>BEFORE INSERT</code> or <code>BEFORE UPDATE</code> trigger normally returns <code>NEW</code>, potentially after modifying it. A <code>BEFORE DELETE</code> trigger normally returns <code>OLD</code>. Returning <code>NULL</code> suppresses that row's operation. The return value of an ordinary row-level <code>AFTER</code> trigger and of statement-level triggers is ignored, so those functions conventionally return <code>NULL</code>.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="before">
+<h2>4. <code>BEFORE</code> triggers</h2>
+<p>
+A row-level <code>BEFORE</code> trigger executes before PostgreSQL performs the row operation. It can change <code>NEW</code> for an <code>INSERT</code> or <code>UPDATE</code>, reject the statement by raising an exception, or return <code>NULL</code> to suppress that row without necessarily aborting the entire statement. Because the row has not yet been written, a <code>BEFORE</code> trigger is generally the natural choice for normalization or automatic values that belong to the row being stored.<sup><a href="#r2">[2]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>4.1 Automatic <code>updated_at</code></h3>
+<pre><code>CREATE TABLE app.customer (
+    customer_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email text NOT NULL,
+    display_name text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT statement_timestamp()
+);
+
+CREATE OR REPLACE FUNCTION app.set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at := statement_timestamp();
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER customer_10_set_updated_at
+BEFORE UPDATE
+ON app.customer
+FOR EACH ROW
+WHEN (OLD.* IS DISTINCT FROM NEW.*)
+EXECUTE FUNCTION app.set_updated_at();</code></pre>
+
+<p>
+The <code>WHEN</code> predicate avoids invoking the function for an update where the complete old/new row images are not distinct at the point PostgreSQL evaluates the condition. The trigger changes <code>NEW</code> in memory before storage rather than issuing a second <code>UPDATE</code> against the same row.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>4.2 Normalizing data</h3>
+<pre><code>CREATE OR REPLACE FUNCTION app.normalize_customer()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.email := lower(trim(NEW.email));
+    NEW.display_name := trim(NEW.display_name);
+
+    IF NEW.display_name = '' THEN
+        RAISE EXCEPTION 'display_name must not be empty'
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER customer_05_normalize
+BEFORE INSERT OR UPDATE
+ON app.customer
+FOR EACH ROW
+EXECUTE FUNCTION app.normalize_customer();</code></pre>
+
+<div class="callout">
+<strong>Prefer declarative constraints where they fit.</strong> <code>NOT NULL</code>, <code>CHECK</code>, <code>UNIQUE</code>, foreign keys, generated columns, domains, and defaults are more visible to schema tools and the optimizer than custom trigger code. Use triggers for behavior that cannot be expressed cleanly with declarative features.<sup><a href="#r7">[7]</a></sup>
+</div>
+</section>
+
+<section id="after">
+<h2>5. <code>AFTER</code> triggers</h2>
+<p>
+An <code>AFTER</code> trigger executes after PostgreSQL has completed the row operation and checked relevant constraints. By the time a row-level <code>AFTER</code> trigger executes, the effects of the outer command are visible to SQL run from the trigger. Because the stored row can no longer be replaced by the trigger's return value, <code>AFTER</code> triggers are a natural fit for auditing, dependent-table maintenance, notifications inside the database, and validation that needs to observe final row state.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>5.1 Audit row after change</h3>
+<pre><code>CREATE TABLE audit.order_change (
+    audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    changed_by name NOT NULL,
+    operation text NOT NULL,
+    order_id bigint,
+    old_row jsonb,
+    new_row jsonb
+);
+
+CREATE OR REPLACE FUNCTION audit.log_order_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO audit.order_change(
+            changed_by, operation, order_id, new_row
+        )
+        VALUES (
+            session_user, TG_OP, NEW.order_id, to_jsonb(NEW)
+        );
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO audit.order_change(
+            changed_by, operation, order_id, old_row, new_row
+        )
+        VALUES (
+            session_user, TG_OP, NEW.order_id,
+            to_jsonb(OLD), to_jsonb(NEW)
+        );
+
+    ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO audit.order_change(
+            changed_by, operation, order_id, old_row
+        )
+        VALUES (
+            session_user, TG_OP, OLD.order_id, to_jsonb(OLD)
+        );
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER orders_90_audit
+AFTER INSERT OR UPDATE OR DELETE
+ON app.orders
+FOR EACH ROW
+EXECUTE FUNCTION audit.log_order_change();</code></pre>
+
+<p>
+The audit insert participates in the same transaction as the original data change. If the transaction later rolls back, the audit row rolls back too. This makes the pattern useful for committed data history but insufficient as a tamper-resistant record of failed or rolled-back attempts; server/audit logging is a separate concern.<sup><a href="#r6">[6]</a><a href="#r8">[8]</a></sup>
+</p>
+</section>
+
+<section id="instead">
+<h2>6. <code>INSTEAD OF</code> triggers</h2>
+<p>
+<code>INSTEAD OF</code> triggers are row-level triggers defined on views. Rather than allowing PostgreSQL to perform the original <code>INSERT</code>, <code>UPDATE</code>, or <code>DELETE</code> against the view, the trigger function performs the intended changes against underlying tables. Its return value tells PostgreSQL whether the row operation was handled and affects <code>RETURNING</code> behavior.<sup><a href="#r1">[1]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>6.1 Updatable API-style view</h3>
+<pre><code>CREATE TABLE app.person (
+    person_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    first_name text NOT NULL,
+    last_name text NOT NULL
+);
+
+CREATE TABLE app.person_contact (
+    person_id bigint PRIMARY KEY
+        REFERENCES app.person(person_id) ON DELETE CASCADE,
+    email text NOT NULL UNIQUE
+);
+
+CREATE VIEW api.person AS
+SELECT
+    p.person_id,
+    p.first_name,
+    p.last_name,
+    c.email
+FROM app.person AS p
+JOIN app.person_contact AS c USING (person_id);</code></pre>
+
+<pre><code>CREATE OR REPLACE FUNCTION api.write_person_view()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO app.person(first_name, last_name)
+        VALUES (NEW.first_name, NEW.last_name)
+        RETURNING person_id INTO NEW.person_id;
+
+        INSERT INTO app.person_contact(person_id, email)
+        VALUES (NEW.person_id, NEW.email);
+
+        RETURN NEW;
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        UPDATE app.person
+        SET first_name = NEW.first_name,
+            last_name = NEW.last_name
+        WHERE person_id = OLD.person_id;
+
+        UPDATE app.person_contact
+        SET email = NEW.email
+        WHERE person_id = OLD.person_id;
+
+        NEW.person_id := OLD.person_id;
+        RETURN NEW;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        DELETE FROM app.person
+        WHERE person_id = OLD.person_id;
+
+        RETURN OLD;
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER person_view_write
+INSTEAD OF INSERT OR UPDATE OR DELETE
+ON api.person
+FOR EACH ROW
+EXECUTE FUNCTION api.write_person_view();</code></pre>
+
+<p>
+This pattern can expose a stable relational interface while hiding underlying normalization. It should not be used merely to make ordinary automatically updatable views more complicated; PostgreSQL can automatically rewrite many simple views without an <code>INSTEAD OF</code> trigger.<sup><a href="#r1">[1]</a><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="row">
+<h2>7. Row-level triggers</h2>
+<p>
+A <code>FOR EACH ROW</code> trigger runs once per row affected by the statement. A statement that updates one million rows can therefore invoke a row trigger one million times. This gives the function direct <code>OLD</code>/<code>NEW</code> access but makes per-row SQL, network operations, expensive JSON processing, or repeated scans potentially costly.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>7.1 Row filtering without exceptions</h3>
+<pre><code>CREATE OR REPLACE FUNCTION app.skip_empty_event()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.payload = '{}'::jsonb THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER event_10_skip_empty
+BEFORE INSERT
+ON app.event
+FOR EACH ROW
+EXECUTE FUNCTION app.skip_empty_event();</code></pre>
+
+<p>
+Returning <code>NULL</code> from a row-level <code>BEFORE</code> trigger suppresses the current row and prevents subsequent triggers for that row from firing. This behavior is materially different from raising an exception, which normally aborts the statement and transaction unless handled in a surrounding PL/pgSQL exception context.<sup><a href="#r2">[2]</a><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="statement">
+<h2>8. Statement-level triggers</h2>
+<p>
+A <code>FOR EACH STATEMENT</code> trigger fires once for the statement, even if the statement affects zero rows. Statement-level triggers reduce invocation overhead and are useful for logging statement occurrence, refreshing a coarse-grained status, or performing set-based work through transition tables. <code>TRUNCATE</code> triggers are always statement-level.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>8.1 Track bulk operation occurrence</h3>
+<pre><code>CREATE TABLE audit.table_operation (
+    event_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    actor name NOT NULL,
+    table_schema name NOT NULL,
+    table_name name NOT NULL,
+    operation text NOT NULL
+);
+
+CREATE OR REPLACE FUNCTION audit.log_table_operation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO audit.table_operation(
+        actor, table_schema, table_name, operation
+    )
+    VALUES (
+        session_user, TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_OP
+    );
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER orders_95_statement_audit
+AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
+ON app.orders
+FOR EACH STATEMENT
+EXECUTE FUNCTION audit.log_table_operation();</code></pre>
+
+<p>
+This records that the statement occurred but not which rows changed. For set-level access to row images, use transition relations on supported <code>AFTER</code> triggers.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="transition">
+<h2>9. Transition tables</h2>
+<p>
+The <code>REFERENCING</code> clause can expose the set of rows changed by one SQL statement as read-only transition relations. <code>OLD TABLE</code> holds before-images for <code>UPDATE</code>/<code>DELETE</code>, and <code>NEW TABLE</code> holds after-images for <code>INSERT</code>/<code>UPDATE</code>. In PostgreSQL 18, transition tables are available only for <code>AFTER</code> triggers on plain tables; they are not available to constraint triggers, and an <code>UPDATE</code> trigger using transition tables cannot specify an <code>UPDATE OF column</code> list.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>9.1 Set-wise audit for updates</h3>
+<pre><code>CREATE TABLE audit.order_price_change (
+    audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    changed_by name NOT NULL,
+    order_id bigint NOT NULL,
+    old_total numeric(12,2) NOT NULL,
+    new_total numeric(12,2) NOT NULL
+);
+
+CREATE OR REPLACE FUNCTION audit.log_order_price_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO audit.order_price_change(
+        changed_by,
+        order_id,
+        old_total,
+        new_total
+    )
+    SELECT
+        session_user,
+        n.order_id,
+        o.total,
+        n.total
+    FROM old_orders AS o
+    JOIN new_orders AS n USING (order_id)
+    WHERE o.total IS DISTINCT FROM n.total;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER orders_90_price_audit
+AFTER UPDATE
+ON app.orders
+REFERENCING
+    OLD TABLE AS old_orders
+    NEW TABLE AS new_orders
+FOR EACH STATEMENT
+EXECUTE FUNCTION audit.log_order_price_changes();</code></pre>
+
+<p>
+This approach can be much more efficient than issuing one audit <code>INSERT</code> from every affected row because the trigger function runs once and processes the changed set relationally. It also gives the function a statement-wide perspective that an isolated row trigger does not naturally have.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>9.2 Set-wise summary maintenance</h3>
+<pre><code>CREATE TABLE app.daily_sales (
+    sales_date date PRIMARY KEY,
+    gross numeric(18,2) NOT NULL
+);
+
+CREATE OR REPLACE FUNCTION app.apply_inserted_sales()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO app.daily_sales(sales_date, gross)
+    SELECT
+        sold_at::date,
+        sum(total)
+    FROM inserted_sales
+    GROUP BY sold_at::date
+    ON CONFLICT (sales_date)
+    DO UPDATE SET gross =
+        app.daily_sales.gross + EXCLUDED.gross;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER sale_90_summary_insert
+AFTER INSERT
+ON app.sale
+REFERENCING NEW TABLE AS inserted_sales
+FOR EACH STATEMENT
+EXECUTE FUNCTION app.apply_inserted_sales();</code></pre>
+
+<div class="callout warn">
+<strong>Summary maintenance must handle every mutation path.</strong> If inserts increase a summary, updates that move rows across groups and deletes that remove rows also need correct inverse/delta logic. Missing one path silently corrupts derived data.
+</div>
+</section>
+
+<section id="when">
+<h2>10. <code>WHEN</code> conditions and <code>UPDATE OF</code></h2>
+<p>
+A trigger can include a Boolean <code>WHEN</code> condition. For row triggers the condition can reference <code>OLD</code> and/or <code>NEW</code> as appropriate. For an <code>AFTER</code> trigger, PostgreSQL evaluates the condition immediately after the row change and queues the trigger event only when the condition is true, which can materially reduce overhead when only a small fraction of rows require trigger execution.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>CREATE TRIGGER invoice_90_notify_paid
+AFTER UPDATE
+ON app.invoice
+FOR EACH ROW
+WHEN (
+    OLD.status IS DISTINCT FROM NEW.status
+    AND NEW.status = 'paid'
+)
+EXECUTE FUNCTION app.invoice_became_paid();</code></pre>
+
+<h3>10.1 <code>UPDATE OF</code> is syntactic targeting</h3>
+<pre><code>CREATE TRIGGER product_20_recalculate
+BEFORE UPDATE OF quantity, unit_price
+ON app.line_item
+FOR EACH ROW
+EXECUTE FUNCTION app.recalculate_line_total();</code></pre>
+
+<p>
+An <code>UPDATE OF</code> trigger fires when a listed column appears as a target of the <code>UPDATE</code>, not only when its value changes. For example, <code>SET quantity = quantity</code> still qualifies. Conversely, a listed value can be changed indirectly by an earlier <code>BEFORE</code> trigger even if the original statement did not target that column. Use <code>WHEN (OLD.column IS DISTINCT FROM NEW.column)</code> when actual value change is the intended condition.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="ordering">
+<h2>11. Trigger ordering and interactions</h2>
+<p>
+When multiple triggers of the same kind apply to the same event on a relation, PostgreSQL fires them alphabetically by trigger name rather than by creation time. Naming can therefore encode ordering intentionally, but hidden order dependencies are a maintainability risk.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>customer_10_normalize
+customer_20_validate_business_rule
+customer_90_audit</code></pre>
+
+<p>
+For row-level <code>BEFORE</code> triggers, each trigger sees the row returned by earlier <code>BEFORE</code> triggers. If one returns <code>NULL</code>, the row operation and remaining row triggers are skipped. An <code>INSERT ... ON CONFLICT DO UPDATE</code> statement can execute both insert and update trigger paths when rows encounter conflicts, so functions shared between those events must be safe under that control flow.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>11.1 Avoid accidental recursion</h3>
+<pre><code>-- Risky design:
+-- An UPDATE trigger on app.account issues UPDATE app.account ...
+-- which invokes the trigger again.</code></pre>
+
+<p>
+A trigger that writes to its own table can recursively fire itself. PostgreSQL does not prohibit such recursion. Prefer modifying <code>NEW</code> in a <code>BEFORE</code> trigger when the goal is to change the current row. When recursive cross-row updates are genuinely required, design a termination condition and consider the concurrency implications explicitly.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="visibility">
+<h2>12. Visibility of data changes</h2>
+<p>
+Trigger timing changes which effects are visible to SQL executed inside the trigger. Statement-level <code>BEFORE</code> triggers see none of the modifications of the triggering statement; statement-level <code>AFTER</code> triggers see all of them. A row-level <code>BEFORE</code> trigger does not see its own not-yet-performed row modification, although it can see modifications already made to previously processed rows of the same statement. The order in which a multi-row command processes rows is not generally predictable, so depending on those partial effects is unsafe. A row-level <code>AFTER</code> trigger sees the command's completed changes.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Do not enforce cross-row invariants by assuming row-processing order in a BEFORE ROW trigger.</strong> For set-wide logic, use declarative constraints, statement-level transition tables, explicit locking, or an appropriate deferred constraint trigger.
+</div>
+</section>
+
+<section id="audit">
+<h2>13. Audit logging with triggers</h2>
+
+<h3>13.1 What trigger-based auditing is good at</h3>
+<p>
+A data-change trigger can capture old/new row images, the database user, operation type, transaction-visible application context, and timestamps independently of which application code path performed the write. PostgreSQL's PL/pgSQL documentation includes row-level auditing as a canonical trigger use case.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>13.2 Generic JSONB audit design</h3>
+<pre><code>CREATE SCHEMA audit;
+
+CREATE TABLE audit.row_history (
+    audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    txid bigint NOT NULL DEFAULT pg_current_xact_id()::text::bigint,
+    session_user_name name NOT NULL DEFAULT session_user,
+    current_user_name name NOT NULL DEFAULT current_user,
+    application_name text DEFAULT current_setting('application_name', true),
+    schema_name name NOT NULL,
+    table_name name NOT NULL,
+    operation text NOT NULL,
+    old_row jsonb,
+    new_row jsonb
+);</code></pre>
+
+<pre><code>CREATE OR REPLACE FUNCTION audit.capture_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, audit
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO audit.row_history(
+            schema_name, table_name, operation, new_row
+        )
+        VALUES (
+            TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_OP, to_jsonb(NEW)
+        );
+        RETURN NULL;
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO audit.row_history(
+            schema_name, table_name, operation, old_row, new_row
+        )
+        VALUES (
+            TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_OP,
+            to_jsonb(OLD), to_jsonb(NEW)
+        );
+        RETURN NULL;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO audit.row_history(
+            schema_name, table_name, operation, old_row
+        )
+        VALUES (
+            TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_OP, to_jsonb(OLD)
+        );
+        RETURN NULL;
+    END IF;
+
+    RAISE EXCEPTION 'unsupported trigger operation: %', TG_OP;
+END;
+$$;</code></pre>
+
+<pre><code>REVOKE ALL ON FUNCTION audit.capture_row() FROM PUBLIC;
+
+CREATE TRIGGER customer_90_audit
+AFTER INSERT OR UPDATE OR DELETE
+ON app.customer
+FOR EACH ROW
+EXECUTE FUNCTION audit.capture_row();</code></pre>
+
+<p>
+A <code>SECURITY DEFINER</code> audit function can let application roles write audit records without granting direct write access to the audit table, but it becomes a privileged code boundary and must use a safe, controlled <code>search_path</code> and minimal owner privileges. PostgreSQL's security guidance for security-definer functions applies to trigger functions as it does to ordinary callable functions.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>13.3 Limitations</h3>
+<p>
+Trigger-based audit rows are transactional. They record committed database state changes well, but a transaction rollback removes both the original data changes and its trigger-written audit rows. Privileged users can also alter or disable triggers. When an audit requirement includes failed statements, administrator activity, DDL, or tamper-resistant evidence, combine data triggers with protected server/audit logs and external log retention rather than treating the audit table as the sole security record.<sup><a href="#r4">[4]</a><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="maintenance">
+<h2>14. Automatic data maintenance</h2>
+<p>
+Triggers can maintain derived state when an invariant needs to hold immediately inside the same database transaction. PostgreSQL's own PL/pgSQL documentation includes automatic row stamping and summary-table maintenance as canonical examples.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>14.1 Maintain a denormalized count</h3>
+<pre><code>CREATE TABLE app.project (
+    project_id bigint PRIMARY KEY,
+    open_task_count bigint NOT NULL DEFAULT 0
+);
+
+CREATE TABLE app.task (
+    task_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_id bigint NOT NULL REFERENCES app.project(project_id),
+    status text NOT NULL
+        CHECK (status IN ('open', 'closed'))
+);</code></pre>
+
+<pre><code>CREATE OR REPLACE FUNCTION app.maintain_open_task_count()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status = 'open' THEN
+            UPDATE app.project
+            SET open_task_count = open_task_count + 1
+            WHERE project_id = NEW.project_id;
+        END IF;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        IF OLD.status = 'open' THEN
+            UPDATE app.project
+            SET open_task_count = open_task_count - 1
+            WHERE project_id = OLD.project_id;
+        END IF;
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- Handle project moves and status changes.
+        IF OLD.project_id = NEW.project_id THEN
+            IF OLD.status = 'closed' AND NEW.status = 'open' THEN
+                UPDATE app.project
+                SET open_task_count = open_task_count + 1
+                WHERE project_id = NEW.project_id;
+            ELSIF OLD.status = 'open' AND NEW.status = 'closed' THEN
+                UPDATE app.project
+                SET open_task_count = open_task_count - 1
+                WHERE project_id = NEW.project_id;
+            END IF;
+        ELSE
+            IF OLD.status = 'open' THEN
+                UPDATE app.project
+                SET open_task_count = open_task_count - 1
+                WHERE project_id = OLD.project_id;
+            END IF;
+
+            IF NEW.status = 'open' THEN
+                UPDATE app.project
+                SET open_task_count = open_task_count + 1
+                WHERE project_id = NEW.project_id;
+            END IF;
+        END IF;
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER task_80_maintain_project
+AFTER INSERT OR UPDATE OR DELETE
+ON app.task
+FOR EACH ROW
+EXECUTE FUNCTION app.maintain_open_task_count();</code></pre>
+
+<p>
+This provides transactionally consistent derived data, but it also introduces write amplification and lock contention on popular parent rows. For high-write workloads, set-wise transition-table maintenance, query-time aggregation, materialized views, asynchronous processing, or another architecture may be preferable depending on freshness requirements.
+</p>
+
+<h3>14.2 Built-in trigger functions</h3>
+<p>
+PostgreSQL also supplies a small number of reusable built-in trigger functions, including <code>suppress_redundant_updates_trigger()</code> and <code>tsvector_update_trigger()</code>. The latter exists for automatic text-search vector maintenance, although generated columns are another design option for derived values where the expression rules permit them.<sup><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="constraints">
+<h2>15. Constraint triggers</h2>
+<p>
+A constraint trigger is a special <code>AFTER ROW</code> trigger on a plain table whose firing can be immediate or deferred. If it is <code>DEFERRABLE</code>, <code>SET CONSTRAINTS</code> can switch its timing between immediate and deferred; an initially deferred constraint trigger can wait until transaction end. PostgreSQL expects constraint triggers to raise an exception when the invariant they implement is violated.<sup><a href="#r5">[5]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>15.1 Deferred cross-row invariant</h3>
+<p>
+Suppose allocations may be inserted or updated in any order inside one transaction, but the committed total for a project must never exceed its budget. A deferred constraint trigger can check the final transactional state. The example locks the parent project row to serialize concurrent budget checks for the same project.</p>
+
+<pre><code>CREATE TABLE finance.project_budget (
+    project_id bigint PRIMARY KEY,
+    budget numeric(14,2) NOT NULL CHECK (budget &gt;= 0)
+);
+
+CREATE TABLE finance.allocation (
+    allocation_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_id bigint NOT NULL
+        REFERENCES finance.project_budget(project_id),
+    amount numeric(14,2) NOT NULL CHECK (amount &gt;= 0)
+);</code></pre>
+
+<pre><code>CREATE OR REPLACE FUNCTION finance.check_project_budget()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_project_id bigint;
+    v_budget numeric(14,2);
+    v_allocated numeric(14,2);
+BEGIN
+    v_project_id := COALESCE(NEW.project_id, OLD.project_id);
+
+    -- Serialize checks/changes for this project.
+    SELECT budget
+    INTO v_budget
+    FROM finance.project_budget
+    WHERE project_id = v_project_id
+    FOR UPDATE;
+
+    SELECT COALESCE(sum(amount), 0)
+    INTO v_allocated
+    FROM finance.allocation
+    WHERE project_id = v_project_id;
+
+    IF v_allocated &gt; v_budget THEN
+        RAISE EXCEPTION
+            'project % allocation % exceeds budget %',
+            v_project_id, v_allocated, v_budget
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER allocation_budget_check
+AFTER INSERT OR UPDATE OR DELETE
+ON finance.allocation
+DEFERRABLE
+INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION finance.check_project_budget();</code></pre>
+
+<pre><code>BEGIN;
+
+INSERT INTO finance.allocation(project_id, amount)
+VALUES (7, 3000), (7, 2000);
+
+-- Force deferred checks now instead of waiting for COMMIT:
+SET CONSTRAINTS allocation_budget_check IMMEDIATE;
+
+COMMIT;</code></pre>
+
+<p>
+Constraint triggers are useful when an invariant genuinely needs deferred evaluation and cannot be represented by PostgreSQL's declarative constraint types. They are not a substitute for ordinary <code>CHECK</code>, <code>UNIQUE</code>, exclusion, primary-key, or foreign-key constraints where those features can express the rule. Also, because a constraint trigger is row-level, a bulk statement can queue many deferred events; functions should be designed with that cost in mind.<sup><a href="#r5">[5]</a><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="events">
+<h2>16. Event triggers</h2>
+<p>
+Event triggers are database-wide hooks for supported database/DDL events. Unlike ordinary triggers, they are not attached to one table and do not process DML row changes. PostgreSQL 18 event-trigger events include <code>ddl_command_start</code>, <code>ddl_command_end</code>, <code>sql_drop</code>, <code>table_rewrite</code>, and <code>login</code>. Event trigger functions return the pseudo-type <code>event_trigger</code>.<sup><a href="#r3">[3]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>16.1 DDL audit table</h3>
+<pre><code>CREATE TABLE audit.ddl_history (
+    audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    actor name NOT NULL,
+    command_tag text NOT NULL,
+    object_type text,
+    schema_name text,
+    object_identity text
+);</code></pre>
+
+<pre><code>CREATE OR REPLACE FUNCTION audit.capture_ddl()
+RETURNS event_trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    cmd record;
+BEGIN
+    FOR cmd IN
+        SELECT *
+        FROM pg_event_trigger_ddl_commands()
+    LOOP
+        INSERT INTO audit.ddl_history(
+            actor,
+            command_tag,
+            object_type,
+            schema_name,
+            object_identity
+        )
+        VALUES (
+            session_user,
+            cmd.command_tag,
+            cmd.object_type,
+            cmd.schema_name,
+            cmd.object_identity
+        );
+    END LOOP;
+END;
+$$;
+
+CREATE EVENT TRIGGER audit_ddl_end
+ON ddl_command_end
+EXECUTE FUNCTION audit.capture_ddl();</code></pre>
+
+<p>
+<code>pg_event_trigger_ddl_commands()</code> is available inside <code>ddl_command_end</code> event-trigger functions and returns information about base DDL commands performed by the user action. If a <code>ddl_command_end</code> event trigger raises an error, the DDL statement is rolled back with the transaction.<sup><a href="#r14">[14]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>16.2 Capture dropped objects</h3>
+<pre><code>CREATE TABLE audit.drop_history (
+    audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    actor name NOT NULL,
+    object_type text,
+    schema_name text,
+    object_identity text,
+    original boolean,
+    normal boolean
+);
+
+CREATE OR REPLACE FUNCTION audit.capture_drops()
+RETURNS event_trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO audit.drop_history(
+        actor,
+        object_type,
+        schema_name,
+        object_identity,
+        original,
+        normal
+    )
+    SELECT
+        session_user,
+        object_type,
+        schema_name,
+        object_identity,
+        original,
+        normal
+    FROM pg_event_trigger_dropped_objects();
+END;
+$$;
+
+CREATE EVENT TRIGGER audit_sql_drop
+ON sql_drop
+EXECUTE FUNCTION audit.capture_drops();</code></pre>
+
+<h3>16.3 Governing DDL</h3>
+<pre><code>CREATE OR REPLACE FUNCTION admin.block_drop_table()
+RETURNS event_trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION
+        'DROP TABLE is disabled in this database; use the deployment pipeline';
+END;
+$$;
+
+CREATE EVENT TRIGGER guard_drop_table
+ON ddl_command_start
+WHEN TAG IN ('DROP TABLE')
+EXECUTE FUNCTION admin.block_drop_table();</code></pre>
+
+<p>
+Event-trigger <code>WHEN TAG IN (...)</code> filters let an administrator apply a trigger only to selected command tags. Multiple event triggers for the same event fire in alphabetical name order. Because a broken event trigger can interfere with essential DDL—and <code>login</code> event triggers can affect connections—event triggers require particularly careful testing and operational recovery planning.<sup><a href="#r14">[14]</a><a href="#r16">[16]</a></sup>
+</p>
+</section>
+
+<section id="partitioning">
+<h2>17. Triggers and partitioned tables</h2>
+<p>
+Creating a row-level trigger on a partitioned table causes PostgreSQL to create corresponding clone triggers on existing partitions, and matching clones are created for partitions attached or created later. When a partition is detached, its clone triggers are removed. Statement-level triggers behave differently: when a statement targets a partitioned parent, statement triggers attached to the explicitly named parent fire, while statement triggers on individual partitions do not automatically fire just because their rows were modified through the parent.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>17.1 Inspect cloned triggers</h3>
+<pre><code>SELECT
+    c.oid::regclass AS relation,
+    t.tgname,
+    t.tgparentid,
+    t.tgenabled
+FROM pg_trigger AS t
+JOIN pg_class AS c
+  ON c.oid = t.tgrelid
+WHERE NOT t.tgisinternal
+ORDER BY relation::text, t.tgname;</code></pre>
+
+<p>
+The <code>pg_trigger.tgparentid</code> column identifies a trigger cloned from a parent trigger. This is useful when diagnosing trigger behavior across partition hierarchies.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="replication">
+<h2>18. Triggers and replication behavior</h2>
+<p>
+PostgreSQL's <code>session_replication_role</code> setting controls whether replication-related triggers and rules fire for a session. The default is <code>origin</code>. Logical replication apply processes can use <code>replica</code>, under which triggers in their default configuration do not fire. Individual triggers can be configured through <code>ALTER TABLE ... ENABLE TRIGGER</code> variants to fire in origin, replica, or always modes.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<pre><code>ALTER TABLE app.orders ENABLE REPLICA TRIGGER orders_replica_hook;
+ALTER TABLE app.orders ENABLE ALWAYS  TRIGGER orders_always_hook;
+ALTER TABLE app.orders ENABLE         TRIGGER orders_normal_hook;
+ALTER TABLE app.orders DISABLE        TRIGGER orders_disabled_hook;</code></pre>
+
+<div class="callout warn">
+<strong>Replication semantics must be designed, not assumed.</strong> A trigger that maintains local derived tables or audit state may need different behavior on a logical subscriber than it has on the publisher. Test the actual replication mode and trigger-enable state.
+</div>
+</section>
+
+<section id="performance">
+<h2>19. Trigger performance engineering</h2>
+
+<h3>19.1 Invocation count is multiplicative</h3>
+<p>
+A row trigger runs once per affected row, so its cost multiplies with statement cardinality. If a function performs another indexed lookup, JSON conversion, or write for each row, a bulk statement can turn one SQL operation into millions of additional operations. Statement-level transition tables can often convert that procedural loop into a set-based query.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>19.2 Use <code>WHEN</code> to avoid needless AFTER events</h3>
+<pre><code>CREATE TRIGGER account_90_balance_audit
+AFTER UPDATE
+ON app.account
+FOR EACH ROW
+WHEN (OLD.balance IS DISTINCT FROM NEW.balance)
+EXECUTE FUNCTION audit.capture_balance_change();</code></pre>
+
+<p>
+For an <code>AFTER</code> trigger, PostgreSQL evaluates the <code>WHEN</code> condition before queuing the trigger event. A selective predicate can therefore avoid later event processing for rows that do not matter.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>19.3 Prefer set-oriented SQL inside triggers</h3>
+<p>
+Transition tables make it possible to aggregate, join, and write all affected rows in one invocation. This usually gives PostgreSQL's planner more opportunity to optimize the work than repeatedly running the same statement from a row trigger.
+</p>
+
+<h3>19.4 Watch lock amplification</h3>
+<p>
+Triggers can touch tables not named in the caller's statement, so they can expand the lock footprint and create deadlock paths that are not obvious from application SQL. Use consistent lock/update ordering across trigger code and application code, keep transactions short, and monitor blocking through <code>pg_stat_activity</code> and <code>pg_locks</code>.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>19.5 Avoid synchronous external side effects</h3>
+<p>
+A database trigger executes inside the SQL transaction. Calling external HTTP services or other unreliable remote systems from trigger code couples transaction latency and correctness to network behavior, while PostgreSQL cannot atomically commit the remote side effect with the database transaction. A safer pattern is often to write an outbox/event row transactionally and have a separate worker deliver the external side effect after commit.
+</p>
+
+<pre><code>CREATE TABLE app.outbox (
+    event_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    event_type text NOT NULL,
+    aggregate_id bigint NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    published_at timestamptz
+);
+
+-- Trigger performs only a local transactional INSERT.
+INSERT INTO app.outbox(event_type, aggregate_id, payload)
+VALUES ('invoice.paid', NEW.invoice_id, to_jsonb(NEW));</code></pre>
+</section>
+
+<section id="operations">
+<h2>20. Inspecting and operating triggers</h2>
+
+<h3>20.1 Information schema</h3>
+<pre><code>SELECT
+    trigger_schema,
+    trigger_name,
+    event_manipulation,
+    event_object_schema,
+    event_object_table,
+    action_timing,
+    action_orientation,
+    action_condition
+FROM information_schema.triggers
+ORDER BY event_object_schema,
+         event_object_table,
+         action_order;</code></pre>
+
+<p>
+The SQL-standard <code>information_schema.triggers</code> view exposes ordinary triggers visible to the current user, including event, timing, orientation, condition, and transition-table metadata. PostgreSQL's reported action order reflects its alphabetical trigger-name firing order.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>20.2 Catalog-level inspection</h3>
+<pre><code>SELECT
+    c.oid::regclass AS relation,
+    t.tgname,
+    t.tgenabled,
+    t.tgisinternal,
+    p.oid::regprocedure AS trigger_function,
+    pg_get_triggerdef(t.oid, true) AS definition
+FROM pg_trigger AS t
+JOIN pg_class AS c ON c.oid = t.tgrelid
+JOIN pg_proc  AS p ON p.oid = t.tgfoid
+WHERE NOT t.tgisinternal
+ORDER BY relation::text, t.tgname;</code></pre>
+
+<h3>20.3 Event-trigger inventory</h3>
+<pre><code>SELECT
+    e.evtname,
+    e.evtevent,
+    e.evtenabled,
+    e.evttags,
+    p.oid::regprocedure AS function_name
+FROM pg_event_trigger AS e
+JOIN pg_proc AS p ON p.oid = e.evtfoid
+ORDER BY e.evtevent, e.evtname;</code></pre>
+
+<p>
+Ordinary triggers are stored in <code>pg_trigger</code>; event triggers are stored in <code>pg_event_trigger</code>. Internal triggers also exist—for example, PostgreSQL uses trigger mechanisms internally for some constraints—so operational queries often filter <code>tgisinternal</code> when inventorying application-defined triggers.<sup><a href="#r17">[17]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>20.4 Temporarily disabling triggers</h3>
+<pre><code>ALTER TABLE app.orders DISABLE TRIGGER orders_90_audit;
+
+-- ... controlled maintenance ...
+
+ALTER TABLE app.orders ENABLE TRIGGER orders_90_audit;</code></pre>
+
+<p>
+Disabling triggers changes correctness behavior and should be tightly controlled. <code>DISABLE TRIGGER ALL</code> can include internally generated constraint triggers and normally requires elevated privileges for system constraint triggers. Bulk-load procedures should prefer designs that preserve constraints and maintenance logic unless bypass is explicitly safe.<sup><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="design">
+<h2>21. Design guidelines</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Requirement</th><th>Usually prefer</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Validate one row</td><td>Declarative constraint; otherwise BEFORE ROW</td><td>Constraints are explicit; BEFORE can reject/normalize before storage.</td></tr>
+<tr><td>Compute a value from same row</td><td>Generated column/default when possible; otherwise BEFORE ROW</td><td>Avoids second write.</td></tr>
+<tr><td>Audit every committed row change</td><td>AFTER ROW or AFTER STATEMENT + transition tables</td><td>Observes final row state.</td></tr>
+<tr><td>Bulk/set-wise dependent maintenance</td><td>AFTER STATEMENT + transition tables</td><td>One invocation and set-oriented SQL.</td></tr>
+<tr><td>Make a complex view writable</td><td>INSTEAD OF ROW trigger</td><td>Maps view DML to underlying tables.</td></tr>
+<tr><td>Check invariant at transaction end</td><td>Declarative deferrable constraint if possible; otherwise constraint trigger</td><td>Supports deferred validation.</td></tr>
+<tr><td>Observe/govern DDL</td><td>Event trigger</td><td>Database-wide DDL event scope.</td></tr>
+<tr><td>Call remote service</td><td>Transactional outbox + external worker</td><td>Avoids coupling DB commit to remote side effects.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>21.1 Production checklist</h3>
+<ol class="checklist">
+<li><strong>Prefer declarative schema features</strong> when they express the rule directly.</li>
+<li><strong>Name triggers intentionally</strong> because equal-kind triggers fire alphabetically.</li>
+<li><strong>Use BEFORE triggers to modify NEW</strong> rather than issuing a second update to the same row.</li>
+<li><strong>Use AFTER triggers for observation</strong> of final row changes.</li>
+<li><strong>Use statement-level transition tables</strong> when logic is naturally set-oriented.</li>
+<li><strong>Make every mutation path explicit</strong>: INSERT, UPDATE, DELETE, TRUNCATE, conflict updates, cascades, and partition routing where relevant.</li>
+<li><strong>Test bulk statements</strong>, not only single-row operations.</li>
+<li><strong>Test concurrency</strong> for cross-row/cross-table invariants and derived counters.</li>
+<li><strong>Test rollback behavior</strong> so transactional audit/maintenance semantics are understood.</li>
+<li><strong>Review replication behavior</strong> and <code>session_replication_role</code> implications.</li>
+<li><strong>Avoid hidden remote side effects</strong> from inside database transactions.</li>
+<li><strong>Inventory triggers during schema review</strong> so behavior does not become invisible institutional knowledge.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Trigger design principle:</strong> keep the trigger small, deterministic, transactionally appropriate, and close to the invariant it protects. The more hidden work a trigger performs, the more important it becomes to document, benchmark, and test it as part of the schema itself.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Triggers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/triggers.html">https://www.postgresql.org/docs/18/triggers.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Overview of trigger behavior [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/trigger-definition.html">https://www.postgresql.org/docs/18/trigger-definition.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Event triggers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/event-triggers.html">https://www.postgresql.org/docs/18/event-triggers.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Visibility of data changes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/trigger-datachanges.html">https://www.postgresql.org/docs/18/trigger-datachanges.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. CREATE TRIGGER [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtrigger.html">https://www.postgresql.org/docs/18/sql-createtrigger.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. PL/pgSQL trigger functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-trigger.html">https://www.postgresql.org/docs/18/plpgsql-trigger.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Constraints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Transactions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-transactions.html">https://www.postgresql.org/docs/18/tutorial-transactions.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. CREATE VIEW [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createview.html">https://www.postgresql.org/docs/18/sql-createview.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. CREATE FUNCTION: writing SECURITY DEFINER functions safely [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createfunction.html">https://www.postgresql.org/docs/18/sql-createfunction.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Error reporting and logging [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-logging.html">https://www.postgresql.org/docs/18/runtime-config-logging.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Built-in trigger functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-trigger.html">https://www.postgresql.org/docs/18/functions-trigger.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. SET CONSTRAINTS [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-set-constraints.html">https://www.postgresql.org/docs/18/sql-set-constraints.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Overview of event trigger behavior [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/event-trigger-definition.html">https://www.postgresql.org/docs/18/event-trigger-definition.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Event trigger functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-event-triggers.html">https://www.postgresql.org/docs/18/functions-event-triggers.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. CREATE EVENT TRIGGER [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createeventtrigger.html">https://www.postgresql.org/docs/18/sql-createeventtrigger.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. pg_trigger system catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-trigger.html">https://www.postgresql.org/docs/18/catalog-pg-trigger.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. Client connection defaults: session_replication_role [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-client.html">https://www.postgresql.org/docs/18/runtime-config-client.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. ALTER TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altertable.html">https://www.postgresql.org/docs/18/sql-altertable.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Explicit locking [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/explicit-locking.html">https://www.postgresql.org/docs/18/explicit-locking.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Monitoring database activity and locks [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Information schema: triggers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/infoschema-triggers.html">https://www.postgresql.org/docs/18/infoschema-triggers.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. pg_event_trigger system catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-event-trigger.html">https://www.postgresql.org/docs/18/catalog-pg-event-trigger.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Writing trigger functions in C [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/trigger-interface.html">https://www.postgresql.org/docs/18/trigger-interface.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. A complete trigger example [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/trigger-example.html">https://www.postgresql.org/docs/18/trigger-example.html</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. Trigger semantics interact with schema constraints, isolation, locking, replication, partitions, procedural-language behavior, and PostgreSQL version details. Test trigger logic with multi-row statements, concurrent transactions, rollback, partition routing, logical replication, and production-scale data before deployment.
+</p>
+</footer>
+
+</body>
+</html>

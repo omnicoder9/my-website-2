@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A technical article on PostgreSQL internals: query processing, planner and executor runtime, WAL, locks, transactions, memory contexts, background workers, parallel execution, logical decoding, access methods, FDWs, extension development, and PostgreSQL C APIs.">
+<title>PostgreSQL Internals: Query Engine, Runtime, and Extension APIs</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315caa;--accent2:#173d74;--code:#101827;--codeink:#e8eef9;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#eef9f1;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  line-height:1.68;font-size:16px
+}
+header{
+  background:linear-gradient(135deg,#14213d,#315caa);color:#fff;
+  padding:58px 22px 48px
+}
+.wrap,main{max-width:1120px;margin:0 auto}
+h1{font-size:clamp(2.1rem,4.5vw,3.5rem);line-height:1.1;margin:0 0 14px;letter-spacing:-.04em}
+.dek{max-width:920px;color:#dce7ff;font-size:1.12rem;margin:0}
+.meta{color:#c5d5f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 28px rgba(25,39,68,.08);padding:44px clamp(20px,5vw,64px);
+  margin-top:28px;margin-bottom:30px
+}
+h2{
+  font-size:1.8rem;line-height:1.25;letter-spacing:-.02em;
+  margin:2.55em 0 .65em;padding-bottom:.42em;border-bottom:1px solid var(--line)
+}
+h3{font-size:1.3rem;line-height:1.3;margin-top:1.9em}
+h4{font-size:1.08rem;margin-top:1.55em}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);border:1px solid #243047;
+  border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:26px 0 36px
+}
+.toc h2{border:0;margin:0 0 10px;padding:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:36px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.callout{border-left:4px solid var(--accent);background:var(--note);padding:14px 18px;border-radius:8px;margin:18px 0}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;background:#f7f8fb;border:1px solid var(--line);
+  border-radius:10px;padding:18px;line-height:1.45;color:#243047
+}
+.small{font-size:.92rem;color:var(--muted)}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.kbd{font-family:monospace;background:#eef1f5;border:1px solid #d4dae5;padding:1px 5px;border-radius:4px}
+footer{max-width:1120px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:760px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+  body{background:#fff} header{background:#fff;color:#000;padding:18px 0}
+  header .dek,header .meta{color:#444} main{border:0;box-shadow:none;margin:0;padding:0}
+  a{color:#000;text-decoration:none} pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Internals: Query Engine, Runtime, and Extension APIs</h1>
+  <p class="dek">A source-oriented tour of PostgreSQL's query engine, runtime subsystems, logical decoding, and extension interfaces, with storage and buffer internals summarized where they affect execution.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 documentation baseline • Source-tree details are version-sensitive • Updated 15 September 2026</p>
+</div>
+</header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL is simultaneously a relational database engine and a framework of cooperating subsystems. A SQL statement enters through the backend process, is parsed and rewritten, is transformed into paths and then a plan, and is interpreted by an executor whose nodes obtain tuples through table and index access-method APIs. Beneath that layer, PostgreSQL coordinates relation storage, a shared buffer cache, write-ahead logging (WAL), transaction status, snapshots, locking, and background processes. The same architecture is deliberately extensible: functions, types, operators, foreign data wrappers (FDWs), table and index access methods, background workers, logical-decoding output plugins, and other server modules can be added without modifying core SQL syntax or rebuilding the server in many cases.<sup><a href="#r1">[1]</a>-<a href="#r3">[3]</a></sup>
+</p>
+<p>
+This article uses PostgreSQL 18.6 documentation as the stable behavioral baseline and refers to PostgreSQL's generated source documentation for implementation examples. Internal C functions and structures outside documented extension interfaces are not guaranteed to remain source- or binary-compatible across major releases; PostgreSQL explicitly distinguishes well-established plugin APIs from the much larger body of internal server symbols.<sup><a href="#r21">[21]</a></sup>
+</p>
+<div class="callout">
+<strong>Companion article:</strong> for a bottom-up treatment of process architecture, shared memory, relation files, heap pages, tuple layout, TOAST, FSM/VM, catalogs, and object-to-file mapping, see <a href="postgresql-internals-process-architecture-storage-layout.html">PostgreSQL Internals: Process Architecture and Storage Layout</a>.
+</div>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+  <li><a href="#source">Source code organization</a></li>
+  <li><a href="#querypath">The path of a query</a></li>
+  <li><a href="#storage">Storage manager</a></li>
+  <li><a href="#buffers">Buffer manager in the execution path</a></li>
+  <li><a href="#wal">WAL subsystem</a></li>
+  <li><a href="#locks">Lock manager</a></li>
+  <li><a href="#transactions">Transaction manager</a></li>
+  <li><a href="#mvcc">MVCC in the runtime</a></li>
+  <li><a href="#planner">Query planner internals</a></li>
+  <li><a href="#executor">Executor internals</a></li>
+  <li><a href="#memory">Memory contexts</a></li>
+  <li><a href="#workers">Background workers</a></li>
+  <li><a href="#parallel">Parallel execution</a></li>
+  <li><a href="#logical">Logical decoding</a></li>
+  <li><a href="#types">Custom data types</a></li>
+  <li><a href="#operators">Custom operators</a></li>
+  <li><a href="#access">Custom access methods</a></li>
+  <li><a href="#fdw">Foreign data wrappers</a></li>
+  <li><a href="#extensions">Extension development</a></li>
+  <li><a href="#capi">PostgreSQL C APIs</a></li>
+  <li><a href="#lab">Runtime inspection lab</a></li>
+  <li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="source">
+<h2>1. PostgreSQL source code</h2>
+<p>
+The PostgreSQL source is maintained in Git, and the official documentation links to the public repository and describes how to obtain it. The source tree separates major concerns into directories such as <code>src/backend/access</code>, <code>executor</code>, <code>optimizer</code>, <code>parser</code>, <code>replication</code>, <code>storage</code>, and <code>utils</code>, while public and internal headers live primarily under <code>src/include</code>.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Area</th><th>Typical source location</th><th>Representative responsibility</th></tr></thead>
+<tbody>
+<tr><td>Access/transam</td><td><code>src/backend/access/transam/</code></td><td>Transactions, WAL, commit status, snapshots, recovery support.</td></tr>
+<tr><td>Heap/index access</td><td><code>src/backend/access/heap/</code>, <code>nbtree/</code>, <code>gin/</code>, <code>gist/</code>, etc.</td><td>Heap tuples and built-in index access methods.</td></tr>
+<tr><td>Storage</td><td><code>src/backend/storage/</code></td><td>Buffering, locks, shared memory, file/storage manager layers, IPC.</td></tr>
+<tr><td>Optimizer</td><td><code>src/backend/optimizer/</code></td><td>Path generation, costing, join planning, plan construction.</td></tr>
+<tr><td>Executor</td><td><code>src/backend/executor/</code></td><td>Plan-node initialization, tuple production, DML execution, instrumentation.</td></tr>
+<tr><td>Replication</td><td><code>src/backend/replication/</code></td><td>Physical/logical replication, slots, logical decoding, WAL sender behavior.</td></tr>
+<tr><td>Memory/utilities</td><td><code>src/backend/utils/</code></td><td>Memory contexts, caches, GUCs, type utilities, error/reporting infrastructure.</td></tr>
+<tr><td>Server interface</td><td><code>src/backend/tcop/</code></td><td>Top-level traffic-cop/query-processing control path.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+A practical way to read PostgreSQL source is to follow one behavior vertically rather than trying to understand the tree directory by directory. For example, follow a page read from <code>ReadBuffer()</code> in the buffer manager down to the storage-manager layer, then follow a tuple visibility decision from heap access code into snapshot and transaction-state facilities. The official internals chapter deliberately presents query processing as a sequence of stages rather than a catalog of files, which mirrors this approach.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<div class="callout">
+<strong>Version boundary.</strong> Code examples in this article illustrate PostgreSQL 18-era interfaces and the current generated source documentation. Re-check headers and documentation when targeting another major release; internal APIs are not an ABI promise across major versions.<sup><a href="#r21">[21]</a></sup>
+</div>
+</section>
+
+<section id="querypath">
+<h2>2. The path of a query</h2>
+<p>
+At a high level, PostgreSQL receives SQL in a backend process, parses it into a parse tree, performs parse analysis and rewriting, invokes the planner/optimizer to generate an executable plan, and finally runs that plan through the executor. The executor returns result tuples to the client or applies data-modifying operations as specified by the plan.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<div class="diagram">client SQL
+   |
+   v
+backend / traffic-cop
+   |
+   +--> raw parser
+   |
+   +--> parse analysis / transformation
+   |
+   +--> rewrite system
+   |
+   +--> planner / optimizer
+   |       |
+   |       +--> RelOptInfo / Paths / costs
+   |       +--> chosen Path
+   |       +--> Plan tree
+   |
+   +--> ExecutorStart()
+   +--> ExecutorRun()
+   +--> ExecutorFinish()
+   +--> ExecutorEnd()
+           |
+           +--> table/index AMs
+           +--> buffers
+           +--> WAL / locks / transactions / snapshots
+           +--> result or modified rows</div>
+
+<p>
+The top-level executor interface in <code>src/backend/executor/execMain.c</code> is explicitly organized around <code>ExecutorStart</code>, <code>ExecutorRun</code>, <code>ExecutorFinish</code>, and <code>ExecutorEnd</code>. The planner's external interface is implemented in <code>src/backend/optimizer/plan/planner.c</code>. These functions are useful landmarks when tracing a statement in a debugger.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="storage">
+<h2>3. Storage manager</h2>
+<p>
+PostgreSQL's built-in heap and index access methods store relations as files divided into blocks/pages. Ordinary tables and indexes have a main fork; relations can also have free-space-map and visibility-map forks, and unlogged relations have an initialization fork. Large relation files are segmented when they exceed the configured segment size. TOAST tables provide out-of-line storage for values that do not fit efficiently in ordinary heap tuples.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<p>
+The storage manager, commonly abbreviated <em>smgr</em>, is the layer through which relation file operations are dispatched. In the PostgreSQL source, <code>src/backend/storage/smgr/smgr.c</code> describes itself as the public interface to the storage-manager switch; an <code>SMgrRelation</code> represents the physical on-disk relation files opened for reads and writes. Buffer flushing, recovery, checkpoints, and DDL-related physical file operations can use this layer even when they are not going through the ordinary relation cache path.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>3.1 Relation forks and page-oriented I/O</h3>
+<p>
+The smgr layer does not understand SQL rows in the way the executor does. Its job is closer to relation-fork and block I/O: create or unlink storage, read/write/extend blocks, determine relation size, synchronize storage, and mediate the concrete storage implementation. Higher layers decide what page contents mean.<sup><a href="#r4">[4]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>-- Inspect physical relation identity and fork sizes from SQL.
+SELECT
+    c.oid::regclass AS relation,
+    pg_relation_filenode(c.oid) AS filenode,
+    pg_size_pretty(pg_relation_size(c.oid, 'main')) AS main,
+    pg_size_pretty(pg_relation_size(c.oid, 'fsm'))  AS fsm,
+    pg_size_pretty(pg_relation_size(c.oid, 'vm'))   AS vm
+FROM pg_class AS c
+WHERE c.oid = 'public.orders'::regclass;</code></pre>
+
+<p>
+Functions such as <code>pg_relation_size</code> expose the sizes of relation forks at SQL level, while the physical-storage chapter documents the file layout and the meaning of the main, FSM, VM, and initialization forks.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="buffers">
+<h2>4. Buffer manager in the execution path</h2>
+<p>
+The shared buffer manager matters to this article because executor nodes, table access methods, index access methods, WAL, and checkpoint activity all meet at page access. In source terms, the runtime path repeatedly asks for relation blocks, pins the selected buffer while using it, acquires content locks when page contents must be examined or changed, marks modified pages dirty, and relies on WAL-before-data ordering before dirty pages reach durable storage.<sup><a href="#r6">[6]</a><a href="#r7">[7]</a></sup>
+</p>
+<p>
+This query/runtime article treats buffers as execution plumbing: what the executor and extension code need to know when they cause page reads, writes, or instrumentation. For the deeper physical view--buffer identity, replacement behavior, buffer-access strategy rings, <code>pg_buffercache</code> queries, and the mapping from cached blocks back to relation files--see <a href="postgresql-internals-process-architecture-storage-layout.html#shared-buffers">PostgreSQL Internals: Process Architecture and Storage Layout</a>.<sup><a href="#r23">[23]</a></sup>
+</p>
+</section>
+
+<section id="wal">
+<h2>5. WAL subsystem</h2>
+<p>
+Write-ahead logging is PostgreSQL's crash-recovery foundation. The core rule is that the WAL describing a change must reach durable storage before the corresponding modified data page is allowed to reach durable storage. This allows recovery to redo committed changes whose data pages had not yet been written when a crash occurred, and means a commit can usually force sequential WAL rather than every changed heap and index page.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<p>
+WAL positions are represented by Log Sequence Numbers (LSNs), monotonically increasing byte positions in the WAL stream. WAL is stored under <code>pg_wal</code> in segment files. In the source tree, <code>xlog.c</code> coordinates startup/checkpointing and WAL-buffer management; record construction is largely in <code>xloginsert.c</code>, recovery in <code>xlogrecovery.c</code>, record reading in <code>xlogreader.c</code>, and redo helpers in <code>xlogutils.c</code>.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>5.1 A simplified write path</h3>
+<div class="diagram">backend modifies page
+   |
+   | construct WAL record
+   v
+WAL insertion buffers ----> WAL segment files
+   |                              |
+   |                              +--> durable flush required by commit policy
+   |
+   +--> page receives page LSN
+          |
+          v
+   dirty shared buffer
+          |
+          +--> later checkpoint / bgwriter / eviction write
+                  (must not violate WAL-before-data rule)</div>
+
+<p>
+The page LSN connects page state to WAL progress: before a dirty page is written, the WAL required to redo that page state must already be durable. The buffer manager and WAL manager therefore interact directly; PostgreSQL's buffer-manager source includes WAL-related headers and uses page LSNs during writeback decisions.<sup><a href="#r6">[6]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>5.2 Observing WAL</h3>
+<pre><code>-- Current insertion position.
+SELECT pg_current_wal_lsn();
+
+-- Byte distance between two LSNs.
+SELECT pg_size_pretty(
+    pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0'::pg_lsn)
+);
+
+-- From the shell, inspect WAL records (requires appropriate access).
+pg_waldump --start=0/16B6C50 --limit=20 /path/to/pg_wal</code></pre>
+
+<p>
+PostgreSQL documents <code>pg_lsn</code> values as byte positions in WAL and ships <code>pg_waldump</code> for low-level WAL inspection.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>5.3 WAL for extensions</h3>
+<p>
+Extensions that implement crash-sensitive storage structures can use PostgreSQL's generic WAL facility or a custom WAL resource manager. Generic WAL is simpler but is not decoded by logical decoding; custom resource managers are more flexible and can participate in logical decoding but require a larger amount of implementation and operational care.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="locks">
+<h2>6. Lock manager</h2>
+<p>
+PostgreSQL has multiple synchronization mechanisms with different scopes. The heavyweight lock manager handles database-object locks and lock modes visible conceptually through SQL locking behavior; lightweight locks (LWLocks) protect shared-memory data structures and short critical sections; spinlocks are used for still shorter low-level mutual exclusion. These mechanisms complement MVCC rather than replacing it.<sup><a href="#r8">[8]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<p>
+The primary heavyweight lock implementation is in <code>src/backend/storage/lmgr/lock.c</code>. Its source describes the shared lock table as a shared-memory hash table; when a process requests an incompatible lock, the backend is placed to sleep by process-management code until the lock can be granted. The main interface includes operations such as <code>LockAcquire()</code> and <code>LockRelease()</code>.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>6.1 MVCC and locks solve different problems</h3>
+<p>
+MVCC allows ordinary readers and writers to operate without treating every read/write overlap as a blocking conflict. PostgreSQL still needs explicit table locks, tuple-level locking, relation-extension locks, internal metadata locks, and predicate locking for serializable isolation. The concurrency-control documentation defines table- and row-level lock modes and documents deadlock detection and advisory locks.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<pre><code>-- See heavyweight locks currently known to PostgreSQL.
+SELECT
+    pid,
+    locktype,
+    relation::regclass,
+    mode,
+    granted,
+    waitstart
+FROM pg_locks
+ORDER BY granted, pid;
+
+-- Find sessions waiting on another backend.
+SELECT
+    pid,
+    pg_blocking_pids(pid) AS blockers,
+    wait_event_type,
+    wait_event,
+    query
+FROM pg_stat_activity
+WHERE cardinality(pg_blocking_pids(pid)) &gt; 0;</code></pre>
+</section>
+
+<section id="transactions">
+<h2>7. Transaction manager</h2>
+<p>
+PostgreSQL's transaction-processing internals cover transaction identifiers, locking relationships, subtransactions, and two-phase transactions. The source file <code>src/backend/access/transam/xact.c</code> contains top-level transaction-system routines and coordinates with commit status, subtransactions, WAL, two-phase commit, snapshots, replication, invalidation, and resource cleanup.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>7.1 Transaction IDs and command IDs</h3>
+<p>
+PostgreSQL uses 32-bit transaction identifiers (<code>xid</code>) in on-disk tuple metadata and manages wraparound through vacuum/freezing mechanisms. User-facing snapshot inspection uses the non-wrapping <code>xid8</code> type where appropriate. A transaction can execute multiple commands, so command identifiers participate in distinguishing visibility among changes made within the same transaction.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>7.2 Transaction state is more than BEGIN/COMMIT</h3>
+<p>
+Internally, a backend tracks top-level transaction state, subtransaction nesting, resource ownership, transaction characteristics, command counters, snapshots, pending invalidations, and callbacks. Successful commit must coordinate durability and visibility; abort must release or unwind resources safely. This is why transaction code touches a broad set of subsystems in <code>xact.c</code> rather than being isolated in a narrow module.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<pre><code>-- View the current transaction identifier only when one is assigned.
+SELECT pg_current_xact_id_if_assigned();
+
+BEGIN;
+SELECT pg_current_xact_id();  -- forces/returns an xid8
+SAVEPOINT s1;
+UPDATE accounts SET balance = balance - 10 WHERE id = 1;
+ROLLBACK TO s1;
+COMMIT;</code></pre>
+</section>
+
+<section id="mvcc">
+<h2>8. MVCC in the runtime</h2>
+<p>
+PostgreSQL's multiversion concurrency control (MVCC) gives each statement or transaction a visibility snapshot and lets ordinary reads avoid blocking ordinary writes under the documented isolation model. For the planner and executor, the important contract is not the byte layout of a tuple header; it is that every scan node returns only tuple versions visible to the snapshot and lock mode under which that node runs.<sup><a href="#r8">[8]</a><a href="#r10">[10]</a></sup>
+</p>
+<p>
+Snapshots also shape extension code. Server-side functions, SPI users, custom scan providers, access methods, FDWs, and logical-decoding plugins must respect the snapshot, command-counter, transaction, and memory-lifetime rules of the backend they run inside. Code that bypasses those rules can produce rows that SQL semantics would not permit, leak memory across statements, or observe state at the wrong transactional moment.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a><a href="#r21">[21]</a></sup>
+</p>
+<p>
+For heap tuple header fields, <code>xmin</code>/<code>xmax</code>, HOT chains, visibility-map effects, free-space reuse, and raw-page inspection, use the companion storage article's <a href="postgresql-internals-process-architecture-storage-layout.html#heap">heap storage</a> and <a href="postgresql-internals-process-architecture-storage-layout.html#inspection">low-level inspection</a> sections.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="planner">
+<h2>9. Query planner internals</h2>
+<p>
+The planner/optimizer transforms a rewritten query tree into a physical plan. PostgreSQL considers alternative scan methods, join orders, join algorithms, aggregation strategies, parallel alternatives, sort strategies, and other paths, attaches cost estimates, and selects a cheapest path according to the cost model. The internals documentation calls out the planner as the stage that generates possible plans before the executor begins.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<p>
+The planner's external interface lives in <code>src/backend/optimizer/plan/planner.c</code>. Much of the optimizer works with <em>Paths</em>: candidate execution strategies carrying properties such as estimated rows, startup cost, total cost, parameterization, pathkeys (ordering), and parallel-safety information. Only after path selection are plan nodes constructed for the executor.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>9.1 Statistics drive cardinality estimates</h3>
+<p>
+PostgreSQL uses statistics from <code>ANALYZE</code> and related system catalogs to estimate selectivity and row counts. Cardinality mistakes propagate into downstream cost decisions: a severe underestimate can cause the planner to choose nested loops or undersized hashes; an overestimate can make useful indexes appear too expensive. PostgreSQL documents both single-column and multivariate statistics as inputs to planner estimation.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<pre><code>EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+SELECT c.id, count(*)
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+WHERE c.region = 'east'
+GROUP BY c.id
+ORDER BY count(*) DESC
+LIMIT 20;</code></pre>
+
+<p>
+For internals work, compare estimated <code>rows=</code> with actual row counts at each node and then inspect the statistics assumptions that produced the discrepancy. <code>EXPLAIN (ANALYZE, BUFFERS)</code> is often the fastest bridge from a high-level performance symptom to planner and buffer behavior.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>9.2 Join search and GEQO</h3>
+<p>
+Join-order optimization becomes combinatorial as the number of joined relations increases. PostgreSQL contains both its ordinary dynamic-programming-style join search and a genetic query optimizer (GEQO) intended for sufficiently large join problems. GEQO is documented as an alternative search strategy for complex join ordering rather than a different executor.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="executor">
+<h2>10. Executor internals</h2>
+<p>
+The executor interprets the selected plan tree. Each plan-node type has executor support that initializes node-specific state, requests tuples from child nodes, applies expressions or join logic, and produces tuples upward. At the top level, <code>ExecutorStart</code>, <code>ExecutorRun</code>, <code>ExecutorFinish</code>, and <code>ExecutorEnd</code> form the external executor lifecycle.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<div class="diagram">Limit
+  |
+Sort
+  |
+Hash Join
+  |            \
+Seq Scan       Hash
+(customers)      |
+              Seq Scan
+               (orders)</div>
+
+<p>
+Execution is demand-driven for many plan nodes: a parent asks a child for the next tuple or batch of work, and the child recursively pulls from its own children. Materialization, hashing, sorting, aggregation, parallel exchange, and modification nodes introduce node-specific state and buffering. Executor state, expression contexts, tuple slots, snapshots, and instrumentation are allocated and released around the query lifecycle.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>10.1 TupleTableSlot</h3>
+<p>
+Executor nodes generally exchange tuples through <code>TupleTableSlot</code>-style abstractions rather than by assuming one fixed physical tuple representation. This indirection allows executor code to handle heap tuples, minimal tuples, virtual tuples, foreign tuples, and other representations through slot operations, which is important for extensibility and avoiding unnecessary materialization.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>10.2 Hooks</h3>
+<p>
+The executor exposes hook variables around its top-level lifecycle, including start/run/finish/end hooks, allowing extensions to observe or wrap execution. Hooks are powerful but live in the server plugin API space, so extension authors must follow PostgreSQL's API/ABI stability guidance rather than assuming every internal executor symbol is stable forever.<sup><a href="#r13">[13]</a><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="memory">
+<h2>11. Memory contexts</h2>
+<p>
+PostgreSQL avoids pervasive manual lifetime tracking by allocating most backend memory inside hierarchical <em>memory contexts</em>. Allocations made with <code>palloc()</code> belong to the current context. Resetting or deleting a context releases all allocations owned by it, making context lifetime the primary unit of memory management in server code.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<p>
+The implementation in <code>src/backend/utils/mmgr/mcxt.c</code> provides operations common to context types and dispatches allocator-specific work through a <code>MemoryContextMethods</code> table. PostgreSQL has multiple context implementations optimized for different allocation patterns, while the context tree supplies ownership and lifetime semantics above them.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>11.1 Typical C pattern</h3>
+<pre><code>MemoryContext old;
+MemoryContext workctx;
+
+workctx = AllocSetContextCreate(CurrentMemoryContext,
+                                "my extension work",
+                                ALLOCSET_DEFAULT_SIZES);
+
+old = MemoryContextSwitchTo(workctx);
+
+/* These allocations belong to workctx. */
+char *buf = palloc(4096);
+/* ... do work ... */
+
+MemoryContextSwitchTo(old);
+
+/* Frees everything allocated in workctx at once. */
+MemoryContextDelete(workctx);</code></pre>
+
+<p>
+When using SPI, <code>SPI_connect()</code> creates a new memory context and makes it current; <code>SPI_finish()</code> destroys that SPI context and restores the previous one. Therefore, return values that must outlive <code>SPI_finish()</code> need to be allocated in an appropriate upper context, for example with <code>SPI_palloc()</code> where documented.<sup><a href="#r14">[14]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<pre><code>-- Inspect this backend's memory-context tree.
+SELECT
+    name,
+    type,
+    level,
+    total_bytes,
+    free_bytes,
+    used_bytes
+FROM pg_backend_memory_contexts
+ORDER BY path;</code></pre>
+
+<p>
+PostgreSQL exposes <code>pg_backend_memory_contexts</code> for inspecting the current backend's context hierarchy and allocation totals; access is restricted because this is server-internal diagnostic information.<sup><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="workers">
+<h2>12. Background workers</h2>
+<p>
+PostgreSQL lets extensions register code to run in server-managed background processes. Background workers are started, stopped, and monitored by the server, share PostgreSQL's shared-memory environment, and can optionally establish database connections. Static background workers are commonly registered from <code>_PG_init()</code> when the module is loaded through <code>shared_preload_libraries</code>; dynamic workers can be requested later from a backend or another worker.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<p>
+The implementation is centered in <code>src/backend/postmaster/bgworker.c</code>, which maintains registered-worker metadata and shared-memory worker slots. PostgreSQL's own features also use background-worker infrastructure, including logical replication and parallel query components.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>12.1 Minimal registration skeleton</h3>
+<pre><code>#include "postgres.h"
+#include "fmgr.h"
+#include "postmaster/bgworker.h"
+
+PG_MODULE_MAGIC;
+
+void _PG_init(void);
+void my_worker_main(Datum main_arg);
+
+void
+_PG_init(void)
+{
+    BackgroundWorker worker = {0};
+
+    snprintf(worker.bgw_name, BGW_MAXLEN, "my_worker");
+    snprintf(worker.bgw_type, BGW_MAXLEN, "my_worker");
+
+    worker.bgw_flags =
+        BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
+
+    worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
+    worker.bgw_restart_time = 10;
+
+    snprintf(worker.bgw_library_name, MAXPGPATH, "my_extension");
+    snprintf(worker.bgw_function_name, BGW_MAXLEN, "my_worker_main");
+
+    RegisterBackgroundWorker(&worker);
+}</code></pre>
+
+<p>
+Background workers execute C code inside PostgreSQL's process and memory environment, so a bug can corrupt server state or crash a process. The official documentation explicitly warns administrators to load only carefully audited worker modules.<sup><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="parallel">
+<h2>13. Parallel execution</h2>
+<p>
+When the optimizer selects a parallel plan, the plan contains a <code>Gather</code> or <code>Gather Merge</code> node above a parallel portion. The leader requests worker processes, and each successfully launched worker executes the parallel plan fragment. The leader can also participate in the parallel work while simultaneously consuming worker output.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<p>
+<code>Gather</code> does not preserve ordering from workers; <code>Gather Merge</code> merges already ordered streams while preserving the required sort order. Parallel execution is constrained by configuration such as <code>max_worker_processes</code>, <code>max_parallel_workers</code>, and <code>max_parallel_workers_per_gather</code>, so a plan may receive fewer workers than the planner requested.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<pre><code>EXPLAIN (ANALYZE, VERBOSE)
+SELECT count(*)
+FROM large_fact
+WHERE event_date &gt;= current_date - interval '30 days';
+
+-- Typical shape:
+-- Finalize Aggregate
+--   -&gt; Gather
+--        Workers Planned: N
+--        -&gt; Partial Aggregate
+--             -&gt; Parallel Seq Scan ...</code></pre>
+
+<h3>13.1 Parallel safety</h3>
+<p>
+A parallel plan cannot freely call arbitrary code. Functions and plan operations are classified with respect to parallel safety, and custom server code must not assume process-local state is automatically shared among workers. Parallel infrastructure uses dynamic shared memory and explicit shared data structures where cooperation is necessary.<sup><a href="#r16">[16]</a><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="logical">
+<h2>14. Logical decoding</h2>
+<p>
+Logical decoding converts physical WAL changes into a logical stream that external consumers can understand without reconstructing raw page modifications. PostgreSQL associates logical streams with replication slots and uses output plugins to transform decoded changes into a chosen representation.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<p>
+The source file <code>src/backend/replication/logical/logical.c</code> coordinates logical-decoding contexts and interaction among WAL reading, snapshot building, reorder buffers, decoding, and output. It is designed so consumers can create and consume change streams without directly orchestrating every internal decoding component.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>14.1 Replication slots</h3>
+<p>
+A logical replication slot identifies a persistent change stream for one database and preserves the resources needed for a consumer to continue from its confirmed position. This durability has an operational consequence: a stalled or abandoned slot can retain WAL, so slot lag must be monitored.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>-- For experimentation only; requires logical WAL configuration.
+SELECT *
+FROM pg_create_logical_replication_slot('demo_slot', 'test_decoding');
+
+CREATE TABLE ld_demo(id int primary key, v text);
+INSERT INTO ld_demo VALUES (1, 'hello');
+UPDATE ld_demo SET v = 'world' WHERE id = 1;
+
+SELECT *
+FROM pg_logical_slot_get_changes('demo_slot', NULL, NULL);
+
+SELECT pg_drop_replication_slot('demo_slot');</code></pre>
+
+<h3>14.2 Output plugin skeleton</h3>
+<pre><code>#include "postgres.h"
+#include "fmgr.h"
+#include "replication/output_plugin.h"
+
+PG_MODULE_MAGIC;
+
+static void startup(LogicalDecodingContext *ctx,
+                    OutputPluginOptions *opt,
+                    bool is_init);
+static void begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn);
+static void change(LogicalDecodingContext *ctx,
+                   ReorderBufferTXN *txn,
+                   Relation rel,
+                   ReorderBufferChange *chg);
+static void commit_txn(LogicalDecodingContext *ctx,
+                       ReorderBufferTXN *txn,
+                       XLogRecPtr commit_lsn);
+
+void
+_PG_output_plugin_init(OutputPluginCallbacks *cb)
+{
+    cb-&gt;startup_cb = startup;
+    cb-&gt;begin_cb   = begin_txn;
+    cb-&gt;change_cb  = change;
+    cb-&gt;commit_cb  = commit_txn;
+}</code></pre>
+
+<p>
+An output plugin must export <code>_PG_output_plugin_init</code> and fill callback pointers. PostgreSQL ships <code>contrib/test_decoding</code> as an example implementation.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="types">
+<h2>15. Custom data types</h2>
+<p>
+PostgreSQL's extensibility is catalog-driven: system catalogs describe types, functions, operators, access methods, and related metadata. A user-defined base type can therefore become a first-class SQL type when the required support functions and catalog entries are created. For a base type, input and output functions are mandatory; binary send/receive, typmod, analysis, subscripting, and other support functions are optional depending on the type.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>15.1 Example: fixed-size 2D point type</h3>
+<pre><code>/* point2d.c */
+#include "postgres.h"
+#include "fmgr.h"
+#include "utils/builtins.h"
+
+PG_MODULE_MAGIC;
+
+typedef struct Point2D
+{
+    double x;
+    double y;
+} Point2D;
+
+PG_FUNCTION_INFO_V1(point2d_in);
+PG_FUNCTION_INFO_V1(point2d_out);
+
+Datum
+point2d_in(PG_FUNCTION_ARGS)
+{
+    char *str = PG_GETARG_CSTRING(0);
+    Point2D *p = (Point2D *) palloc(sizeof(Point2D));
+
+    if (sscanf(str, "(%lf,%lf)", &p-&gt;x, &p-&gt;y) != 2)
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+                 errmsg("invalid point2d value: \"%s\"", str)));
+
+    PG_RETURN_POINTER(p);
+}
+
+Datum
+point2d_out(PG_FUNCTION_ARGS)
+{
+    Point2D *p = (Point2D *) PG_GETARG_POINTER(0);
+    PG_RETURN_CSTRING(psprintf("(%g,%g)", p-&gt;x, p-&gt;y));
+}</code></pre>
+
+<pre><code>-- SQL installation script
+CREATE TYPE point2d;
+
+CREATE FUNCTION point2d_in(cstring)
+RETURNS point2d
+AS 'MODULE_PATHNAME', 'point2d_in'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION point2d_out(point2d)
+RETURNS cstring
+AS 'MODULE_PATHNAME', 'point2d_out'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE TYPE point2d (
+    INTERNALLENGTH = 16,
+    INPUT = point2d_in,
+    OUTPUT = point2d_out,
+    ALIGNMENT = double
+);</code></pre>
+
+<p>
+The shell-type pattern is required because the I/O functions refer to the type before its final definition exists. PostgreSQL documents this bootstrap sequence for user-defined base types. Real production types must also address alignment, binary representation, pass-by-value/reference rules, TOAST behavior where relevant, error handling, binary I/O if desired, and portability of any on-disk representation.<sup><a href="#r18">[18]</a></sup>
+</p>
+</section>
+
+<section id="operators">
+<h2>16. Custom operators</h2>
+<p>
+A PostgreSQL operator delegates execution to an underlying function, but operator catalog metadata also informs the optimizer. Operator definitions can declare commutators, negators, selectivity functions, and whether the operator participates in hash or merge semantics. Operators are overloadable by operand types.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<pre><code>CREATE FUNCTION point2d_distance(point2d, point2d)
+RETURNS double precision
+AS 'MODULE_PATHNAME', 'point2d_distance'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- A made-up distance operator.
+CREATE OPERATOR &lt;-&gt; (
+    LEFTARG = point2d,
+    RIGHTARG = point2d,
+    FUNCTION = point2d_distance,
+    COMMUTATOR = &lt;-&gt;
+);</code></pre>
+
+<p>
+The operator itself does not automatically make an index usable. Indexability requires an appropriate operator class/family and access-method strategy/support functions. PostgreSQL separates operator semantics from index access-method integration so that the same SQL type can support different indexing strategies.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="access">
+<h2>17. Custom access methods</h2>
+
+<h3>17.1 Table access methods</h3>
+<p>
+The table access method API defines the boundary between core PostgreSQL and a table's physical storage behavior. Each table AM is represented in <code>pg_am</code> and is created through <code>CREATE ACCESS METHOD</code>. Its handler returns a <code>TableAmRoutine</code> containing callbacks for scans, tuple operations, index interaction, vacuuming, relation sizing, and other table behaviors.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<pre><code>PG_FUNCTION_INFO_V1(my_tableam_handler);
+
+Datum
+my_tableam_handler(PG_FUNCTION_ARGS)
+{
+    static const TableAmRoutine routine = {
+        .type = T_TableAmRoutine,
+
+        /* Required callbacks would be filled here:
+         * slot_callbacks,
+         * scan_begin / scan_getnextslot / scan_end,
+         * tuple_insert / tuple_delete / tuple_update,
+         * relation_size,
+         * relation_vacuum,
+         * index_fetch_*,
+         * ...
+         */
+    };
+
+    PG_RETURN_POINTER(&routine);
+}</code></pre>
+
+<pre><code>CREATE FUNCTION my_tableam_handler(internal)
+RETURNS table_am_handler
+AS 'MODULE_PATHNAME'
+LANGUAGE C;
+
+CREATE ACCESS METHOD my_tableam
+TYPE TABLE
+HANDLER my_tableam_handler;</code></pre>
+
+<p>
+A real table AM is a large implementation, not a handful of callbacks. It must integrate correctly with MVCC, WAL/crash recovery as applicable, indexes, vacuum, relation lifecycle, scans, locking, statistics, and executor expectations. The table-AM chapter should therefore be treated as the contract, while built-in heap code is an implementation reference rather than a minimal template.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>17.2 Index access methods</h3>
+<p>
+Index access methods implement independent index relation types. The core server calls an <code>IndexAmRoutine</code> containing callbacks for build, insertion, scans, uniqueness checks where supported, vacuum, costing, parallel behaviors, and other capabilities. PostgreSQL's built-in B-tree, GiST, SP-GiST, GIN, BRIN, and hash indexes are separate access methods behind this interface.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<pre><code>PG_FUNCTION_INFO_V1(my_indexam_handler);
+
+Datum
+my_indexam_handler(PG_FUNCTION_ARGS)
+{
+    IndexAmRoutine *am = makeNode(IndexAmRoutine);
+
+    am-&gt;amstrategies = 1;
+    am-&gt;amsupport = 1;
+
+    /* Supply ambuild, ambuildempty, aminsert,
+       ambeginscan, amrescan, amgettuple/amgetbitmap,
+       amendscan, amcostestimate, vacuum callbacks, etc. */
+
+    PG_RETURN_POINTER(am);
+}</code></pre>
+
+<p>
+Index methods are also tied to operator classes and operator families, which map SQL operators and support functions to access-method strategy numbers. That mapping is how the planner knows that a predicate can be implemented by a particular custom index.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="fdw">
+<h2>18. Foreign data wrappers</h2>
+<p>
+An FDW makes an external data source look like a PostgreSQL foreign table. The FDW supplies a handler returning an <code>FdwRoutine</code> of planner, executor, update, explain, analyze, import, parallel, and optional asynchronous callbacks. The core planner asks the FDW to estimate and generate foreign paths; the executor later invokes callbacks to start, iterate, rescan, and end the foreign scan.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>18.1 Minimal structural skeleton</h3>
+<pre><code>#include "postgres.h"
+#include "fmgr.h"
+#include "foreign/fdwapi.h"
+
+PG_MODULE_MAGIC;
+PG_FUNCTION_INFO_V1(my_fdw_handler);
+
+Datum
+my_fdw_handler(PG_FUNCTION_ARGS)
+{
+    FdwRoutine *r = makeNode(FdwRoutine);
+
+    r-&gt;GetForeignRelSize  = myGetForeignRelSize;
+    r-&gt;GetForeignPaths    = myGetForeignPaths;
+    r-&gt;GetForeignPlan     = myGetForeignPlan;
+    r-&gt;BeginForeignScan   = myBeginForeignScan;
+    r-&gt;IterateForeignScan = myIterateForeignScan;
+    r-&gt;ReScanForeignScan  = myReScanForeignScan;
+    r-&gt;EndForeignScan     = myEndForeignScan;
+
+    PG_RETURN_POINTER(r);
+}</code></pre>
+
+<p>
+The planner callbacks are where an FDW reports row estimates, costs, parameterization, pushdown opportunities, path ordering, and other information. A sophisticated FDW can push filters, joins, aggregation, ordering, or limits to the remote system when semantics permit, reducing data transfer and local execution work.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<pre><code>CREATE FUNCTION my_fdw_handler()
+RETURNS fdw_handler
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT;
+
+CREATE FOREIGN DATA WRAPPER my_fdw
+HANDLER my_fdw_handler;
+
+CREATE SERVER remote_system
+FOREIGN DATA WRAPPER my_fdw
+OPTIONS (endpoint 'https://example.internal');
+
+CREATE FOREIGN TABLE remote_orders(
+    id bigint,
+    total numeric
+)
+SERVER remote_system
+OPTIONS (resource 'orders');</code></pre>
+</section>
+
+<section id="extensions">
+<h2>19. Extension development</h2>
+<p>
+An extension packages related SQL objects and optional shared-library code into a unit that can be installed with <code>CREATE EXTENSION</code>. PostgreSQL uses an extension control file, one or more versioned SQL scripts, and optional dynamically loadable libraries. PGXS provides makefile infrastructure for building many server extensions against an installed PostgreSQL development environment.<sup><a href="#r18">[18]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>19.1 Small complete extension layout</h3>
+<pre><code>my_math/
+├── Makefile
+├── my_math.control
+├── my_math--1.0.sql
+└── my_math.c</code></pre>
+
+<h4><code>my_math.c</code></h4>
+<pre><code>#include "postgres.h"
+#include "fmgr.h"
+
+PG_MODULE_MAGIC;
+
+PG_FUNCTION_INFO_V1(int8_square);
+
+Datum
+int8_square(PG_FUNCTION_ARGS)
+{
+    int64 x = PG_GETARG_INT64(0);
+
+    if (x != 0 &amp;&amp; (x &gt; PG_INT64_MAX / x || x &lt; PG_INT64_MIN / x))
+        ereport(ERROR,
+                (errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+                 errmsg("bigint square overflow")));
+
+    PG_RETURN_INT64(x * x);
+}</code></pre>
+
+<h4><code>my_math--1.0.sql</code></h4>
+<pre><code>CREATE FUNCTION int8_square(bigint)
+RETURNS bigint
+AS 'MODULE_PATHNAME', 'int8_square'
+LANGUAGE C
+IMMUTABLE
+STRICT
+PARALLEL SAFE;</code></pre>
+
+<h4><code>my_math.control</code></h4>
+<pre><code>comment = 'Small C extension example'
+default_version = '1.0'
+module_pathname = '$libdir/my_math'
+relocatable = true</code></pre>
+
+<h4><code>Makefile</code></h4>
+<pre><code>EXTENSION = my_math
+MODULES = my_math
+DATA = my_math--1.0.sql
+
+PG_CONFIG = pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
+include $(PGXS)</code></pre>
+
+<h4>Build and install</h4>
+<pre><code>make
+sudo make install
+
+psql -d postgres -c "CREATE EXTENSION my_math"
+psql -d postgres -c "SELECT int8_square(12)"</code></pre>
+
+<p>
+PGXS standardizes common extension build/install rules but is not intended as a universal build system. PostgreSQL also supports regression-test integration through PGXS variables and versioned update scripts so extension upgrades can be expressed as catalog changes instead of destructive reinstallations.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>19.2 Safety model</h3>
+<p>
+A C extension executes in the PostgreSQL server's address space and privileges. Memory corruption, invalid pointers, incorrect varlena handling, unsafe signal behavior, or broken lock/WAL protocols can crash a backend or the server and can corrupt data. That power is precisely why base-type creation, background workers, access methods, and similar facilities are treated as privileged extension points.<sup><a href="#r18">[18]</a><a href="#r15">[15]</a><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="capi">
+<h2>20. PostgreSQL C APIs</h2>
+
+<h3>20.1 Function manager (fmgr)</h3>
+<p>
+Dynamically loaded SQL-callable C functions use PostgreSQL's version-1 function-manager convention. A function has the C signature <code>Datum name(PG_FUNCTION_ARGS)</code>, is announced with <code>PG_FUNCTION_INFO_V1(name)</code>, reads arguments through <code>PG_GETARG_*</code> macros, and returns through <code>PG_RETURN_*</code> macros. <code>Datum</code> is the generic server value carrier used by this interface.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<pre><code>PG_FUNCTION_INFO_V1(add_one);
+
+Datum
+add_one(PG_FUNCTION_ARGS)
+{
+    int32 arg = PG_GETARG_INT32(0);
+    PG_RETURN_INT32(arg + 1);
+}</code></pre>
+
+<h3>20.2 <code>PG_MODULE_MAGIC</code></h3>
+<p>
+Loadable PostgreSQL modules normally declare <code>PG_MODULE_MAGIC</code>. The magic block allows the server to reject modules compiled for an incompatible PostgreSQL server interface rather than loading arbitrary incompatible code.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>20.3 SPI: call SQL from server C code</h3>
+<p>
+The Server Programming Interface (SPI) lets C functions and server modules invoke PostgreSQL's parser, planner, and executor. Typical code connects to SPI, executes or prepares SQL, inspects returned tuple tables, and then disconnects. SPI also establishes memory-lifetime rules for allocations made while connected.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<pre><code>#include "executor/spi.h"
+
+if (SPI_connect() != SPI_OK_CONNECT)
+    elog(ERROR, "SPI_connect failed");
+
+int rc = SPI_execute(
+    "SELECT id, total FROM orders WHERE total &gt; 1000",
+    true,   /* read_only */
+    0       /* no row limit */
+);
+
+if (rc != SPI_OK_SELECT)
+    elog(ERROR, "SPI_execute failed: %d", rc);
+
+/* SPI_processed rows are available through SPI_tuptable. */
+
+SPI_finish();</code></pre>
+
+<h3>20.4 Error reporting</h3>
+<p>
+Server C code uses PostgreSQL's error-reporting infrastructure rather than ordinary application-level error handling. <code>ereport()</code>/<code>elog()</code> can abort the current transaction through PostgreSQL's non-local error machinery, so C extensions must use PostgreSQL cleanup patterns and resource owners rather than assuming a normal C return path after an error.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>20.5 Hooks and callbacks</h3>
+<p>
+PostgreSQL exposes hooks at selected planner, executor, utility, authentication, shared-memory, and other integration points. Hooks are commonly implemented as global function-pointer variables; extensions save the previous hook, install their own, and optionally chain. Because the server contains many symbols that were not designed as stable plugin contracts, PostgreSQL 18's API/ABI guidance recommends favoring established interfaces and planning for major-version recompilation and adaptation when using deeper internals.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>20.6 Shared memory and LWLocks</h3>
+<p>
+Extensions loaded early enough can request shared-memory space and named lightweight locks, then attach to that shared state in server processes. Correct shared-memory code must define initialization ownership, concurrency protocols, process lifetime, error behavior, and versioning carefully; ordinary process-local globals are not a substitute for explicitly shared state.<sup><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="lab">
+<h2>21. Runtime inspection lab</h2>
+<p>
+PostgreSQL exposes query/runtime internals through <code>EXPLAIN</code>, system views, memory-context views, WAL tooling, and supplied inspection modules. In this article, the useful first pass is to correlate a plan tree with executor timing, buffer counters, locks, memory contexts, and WAL position; raw heap-page decoding belongs in the companion storage article.<sup><a href="#r11">[11]</a><a href="#r14">[14]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>21.1 Trace a plan through runtime subsystems</h3>
+<pre><code>EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+SELECT c.id, count(*) AS orders
+FROM customers AS c
+JOIN orders AS o ON o.customer_id = c.id
+WHERE c.region = 'east'
+GROUP BY c.id
+ORDER BY orders DESC
+LIMIT 20;
+
+SELECT pid, locktype, relation::regclass, mode, granted
+FROM pg_locks
+WHERE pid = pg_backend_pid()
+ORDER BY locktype, mode;</code></pre>
+
+<p>
+Read the plan twice: first as a planner artifact, where estimated row counts and costs explain why this shape was chosen, and then as an executor trace, where actual rows, timing, and buffer counters show what happened when each node ran. Lock and memory views give the same experiment a backend-runtime dimension.<sup><a href="#r8">[8]</a><a href="#r11">[11]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>21.2 Keep page inspection in the storage lane</h3>
+<p>
+Use <code>pageinspect</code>, <code>pg_buffercache</code>, <code>pg_walinspect</code>, <code>pg_freespacemap</code>, and <code>pg_visibility</code> when the question is about physical pages, buffer residency, WAL records, or heap-storage side structures. The companion article demonstrates that workflow directly so this article can stay focused on planner, executor, extension, and runtime APIs.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>21.3 Build PostgreSQL for source-level debugging</h3>
+<pre><code>git clone https://git.postgresql.org/git/postgresql.git
+cd postgresql
+git checkout REL_18_STABLE
+
+./configure --enable-debug --enable-cassert
+make -j"$(nproc)"
+make check</code></pre>
+
+<p>
+The official source repository documentation explains obtaining PostgreSQL with Git. Debug and assertion-enabled builds are appropriate for development and source tracing rather than production benchmarking because assertions and debug options alter runtime behavior and overhead.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="callout ok">
+<strong>Suggested reading path:</strong> start with the official “Overview of PostgreSQL Internals,” then read <code>execMain.c</code> and <code>planner.c</code>, then use the companion storage article when you need to trace heap pages through <code>bufmgr.c</code>, <code>smgr.c</code>, WAL, and tuple visibility. After that, move into access-method or logical-decoding extension APIs.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. PostgreSQL 18.6 documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Overview of PostgreSQL internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/overview.html">https://www.postgresql.org/docs/18/overview.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. The source code repository [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sourcerepo.html">https://www.postgresql.org/docs/18/sourcerepo.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Database physical storage [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage.html">https://www.postgresql.org/docs/18/storage.html</a>; <a href="https://www.postgresql.org/docs/18/storage-file-layout.html">https://www.postgresql.org/docs/18/storage-file-layout.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. PostgreSQL source code: <code>src/backend/storage/smgr/smgr.c</code> [Internet]. Doxygen source documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://doxygen.postgresql.org/smgr_8c_source.html">https://doxygen.postgresql.org/smgr_8c_source.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. PostgreSQL source code: buffer manager [Internet]. Doxygen source documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://doxygen.postgresql.org/bufmgr_8c_source.html">https://doxygen.postgresql.org/bufmgr_8c_source.html</a>; <a href="https://doxygen.postgresql.org/buf__internals_8h_source.html">https://doxygen.postgresql.org/buf__internals_8h_source.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Write-ahead logging; WAL internals; PostgreSQL source code <code>xlog.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-intro.html">https://www.postgresql.org/docs/18/wal-intro.html</a>; <a href="https://www.postgresql.org/docs/18/wal-internals.html">https://www.postgresql.org/docs/18/wal-internals.html</a>; <a href="https://doxygen.postgresql.org/xlog_8c_source.html">https://doxygen.postgresql.org/xlog_8c_source.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Concurrency control; PostgreSQL source code <code>lock.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/mvcc.html">https://www.postgresql.org/docs/18/mvcc.html</a>; <a href="https://doxygen.postgresql.org/lock_8c_source.html">https://doxygen.postgresql.org/lock_8c_source.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Transaction processing; PostgreSQL source code <code>xact.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/transactions.html">https://www.postgresql.org/docs/18/transactions.html</a>; <a href="https://doxygen.postgresql.org/xact_8c_source.html">https://doxygen.postgresql.org/xact_8c_source.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Transaction/snapshot information and heap tuple header source [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-info.html">https://www.postgresql.org/docs/18/functions-info.html</a>; <a href="https://doxygen.postgresql.org/htup__details_8h_source.html">https://doxygen.postgresql.org/htup__details_8h_source.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. How the planner uses statistics [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats-details.html">https://www.postgresql.org/docs/18/planner-stats-details.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. PostgreSQL source code: <code>src/backend/optimizer/plan/planner.c</code> [Internet]. Doxygen source documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://doxygen.postgresql.org/planner_8c_source.html">https://doxygen.postgresql.org/planner_8c_source.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Executor internals and PostgreSQL source code <code>execMain.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/overview.html">https://www.postgresql.org/docs/18/overview.html</a>; <a href="https://doxygen.postgresql.org/execMain_8c_source.html">https://doxygen.postgresql.org/execMain_8c_source.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. SPI memory management; <code>pg_backend_memory_contexts</code>; PostgreSQL source code <code>mcxt.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/spi-memory.html">https://www.postgresql.org/docs/18/spi-memory.html</a>; <a href="https://www.postgresql.org/docs/18/view-pg-backend-memory-contexts.html">https://www.postgresql.org/docs/18/view-pg-backend-memory-contexts.html</a>; <a href="https://doxygen.postgresql.org/mcxt_8c_source.html">https://doxygen.postgresql.org/mcxt_8c_source.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Background worker processes; PostgreSQL source code <code>bgworker.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/bgworker.html">https://www.postgresql.org/docs/18/bgworker.html</a>; <a href="https://doxygen.postgresql.org/bgworker_8c_source.html">https://doxygen.postgresql.org/bgworker_8c_source.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. How parallel query works [Internet]. PostgreSQL Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/how-parallel-query-works.html">https://www.postgresql.org/docs/18/how-parallel-query-works.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Logical decoding; logical decoding output plugins; write-ahead logging for extensions; PostgreSQL source code <code>logical.c</code> [Internet]. PostgreSQL 18 Documentation and Doxygen; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logicaldecoding.html">https://www.postgresql.org/docs/18/logicaldecoding.html</a>; <a href="https://www.postgresql.org/docs/18/logicaldecoding-output-plugin.html">https://www.postgresql.org/docs/18/logicaldecoding-output-plugin.html</a>; <a href="https://www.postgresql.org/docs/18/wal-for-extensions.html">https://www.postgresql.org/docs/18/wal-for-extensions.html</a>; <a href="https://doxygen.postgresql.org/logical_8c_source.html">https://doxygen.postgresql.org/logical_8c_source.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. Extending SQL; CREATE TYPE; user-defined operators [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/extend.html">https://www.postgresql.org/docs/18/extend.html</a>; <a href="https://www.postgresql.org/docs/18/sql-createtype.html">https://www.postgresql.org/docs/18/sql-createtype.html</a>; <a href="https://www.postgresql.org/docs/18/sql-createoperator.html">https://www.postgresql.org/docs/18/sql-createoperator.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Table access method interface definition; index access method interface definition [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/tableam.html">https://www.postgresql.org/docs/18/tableam.html</a>; <a href="https://www.postgresql.org/docs/18/indexam.html">https://www.postgresql.org/docs/18/indexam.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Writing a foreign data wrapper [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/fdwhandler.html">https://www.postgresql.org/docs/18/fdwhandler.html</a>; <a href="https://www.postgresql.org/docs/18/fdw-functions.html">https://www.postgresql.org/docs/18/fdw-functions.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. C-language functions; Server Programming Interface; server API and ABI stability guidance [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc-c.html">https://www.postgresql.org/docs/18/xfunc-c.html</a>; <a href="https://www.postgresql.org/docs/18/spi.html">https://www.postgresql.org/docs/18/spi.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Extension building infrastructure (PGXS) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/extend-pgxs.html">https://www.postgresql.org/docs/18/extend-pgxs.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Additional supplied modules and extensions: <code>pageinspect</code>, <code>pg_buffercache</code>, <code>pg_walinspect</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/contrib.html">https://www.postgresql.org/docs/18/contrib.html</a>; <a href="https://www.postgresql.org/docs/18/pageinspect.html">https://www.postgresql.org/docs/18/pageinspect.html</a></li>
+</ol>
+</section>
+</main>
+
+<footer>
+<p>
+This article is a technical learning resource. PostgreSQL server internals and C extension APIs can change between major releases; validate source-level code against the exact server version you compile and deploy.
+</p>
+</footer>
+</body>
+</html>

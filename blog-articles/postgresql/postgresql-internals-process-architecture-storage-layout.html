@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL internals: process architecture, shared memory, buffers, memory contexts, physical relation files, heap pages, tuple layout, TOAST, visibility/free-space maps, system catalogs, OIDs, and storage layout.">
+<title>PostgreSQL Internals: Process Architecture and Storage Layout</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}
+.dek{max-width:1030px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}h4{margin-top:1.6em;font-size:1.08rem}p{margin:.92em 0}a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}pre code{color:inherit}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:850px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{body{background:#fff}header{background:#fff;color:#000;padding:18px 0}header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}a{color:#000;text-decoration:none}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Internals: Process Architecture and Storage Layout</h1>
+<p class="dek">A bottom-up technical guide to PostgreSQL's process and memory architecture, buffer manager, WAL buffers, backend memory, physical relation files, heap pages and tuples, TOAST, visibility and free-space maps, system catalogs, object identifiers, and the mapping from SQL objects to on-disk storage.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>PostgreSQL is a multiprocess client/server database. A supervisor process accepts connections and starts one backend process per client session. Those backend processes do not share ordinary private address space, but they coordinate through operating-system shared memory, semaphores and other IPC mechanisms. Shared state includes the shared buffer pool, WAL buffers, lock-related structures and many internal caches/control structures; query-local executor state and most temporary working memory remain private to each backend process.<sup><a href="#r1">[1]</a>-<a href="#r3">[3]</a></sup></p>
+<p>Persistent table storage is relation oriented. Built-in heap tables and indexes are stored in relation files identified by filenode numbers and split into fixed-size pages, normally 8 KiB. Heap pages contain a page header, stable line pointers, free space, tuple data and optionally access-method-specific special space. Heap tuples carry MVCC transaction metadata such as inserting/deleting transaction IDs and a physical tuple identifier (<code>ctid</code>). Large variable-length values use TOAST, which transparently compresses and/or moves values out of the main heap row when necessary.<sup><a href="#r4">[4]</a>-<a href="#r7">[7]</a></sup></p>
+<p>Several side structures make heap storage practical. The free-space map records which pages have reusable capacity so inserts do not scan the whole relation looking for room. The visibility map records pages known to be all-visible or all-frozen, enabling index-only scans and reducing vacuum work. System catalogs—ordinary PostgreSQL tables with specially known schemas—describe relations, columns, functions, types, operators, access methods and most other database objects. OIDs serve as internal catalog identifiers, while relation filenodes identify the current physical storage files; the two must not be assumed to be identical.<sup><a href="#r8">[8]</a>-<a href="#r12">[12]</a></sup></p>
+<div class="callout">
+<strong>Companion article:</strong> for planner, executor, logical decoding, background workers, foreign data wrappers, access methods, extension packaging, and PostgreSQL C APIs, see <a href="postgresql-internals-query-engine-runtime-extension-apis.html">PostgreSQL Internals: Query Engine, Runtime, and Extension APIs</a>.
+</div>
+</section>
+
+<nav class="toc" aria-label="Table of contents"><h2>Contents</h2><ol>
+<li><a href="#architecture">Client/server architecture</a></li><li><a href="#connections">Connection lifecycle</a></li><li><a href="#processes">PostgreSQL processes</a></li><li><a href="#backend">Backend processes</a></li>
+<li><a href="#background">Background/auxiliary processes</a></li><li><a href="#shared-memory">Shared memory</a></li><li><a href="#shared-buffers">Shared buffers</a></li><li><a href="#wal-buffers">WAL buffers</a></li>
+<li><a href="#private-memory">Backend/private memory</a></li><li><a href="#work-mem">work_mem</a></li><li><a href="#maintenance-memory">maintenance_work_mem</a></li><li><a href="#memory-contexts">Memory contexts</a></li>
+<li><a href="#storage-overview">Physical storage overview</a></li><li><a href="#file-layout">PGDATA file layout</a></li><li><a href="#relation-files">Relation files/forks</a></li><li><a href="#pages">Pages and blocks</a></li>
+<li><a href="#tuples">Heap tuples</a></li><li><a href="#heap">Heap storage</a></li><li><a href="#toast">TOAST</a></li><li><a href="#fsm">Free-space map</a></li>
+<li><a href="#vm">Visibility map</a></li><li><a href="#catalogs">System catalogs</a></li><li><a href="#oids">Object identifiers</a></li><li><a href="#object-to-file">Object-to-file mapping</a></li>
+<li><a href="#inspection">Low-level inspection</a></li><li><a href="#postgres18">PostgreSQL 18 internals notes</a></li><li><a href="#operational">Operational implications</a></li><li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="architecture"><h2>1. Client/server architecture</h2>
+<p>PostgreSQL implements a process-per-connection client/server model. A client process communicates with exactly one backend process for a session. A supervisor process traditionally called the <em>postmaster</em> (the primary <code>postgres</code> server process) listens for connection requests and starts backend processes as connections arrive.<sup><a href="#r1">[1]</a></sup></p>
+<div class="diagram">application / psql / JDBC / libpq
+              |
+       PostgreSQL protocol
+              |
+              v
+      +-----------------+
+      | postmaster /    |
+      | primary postgres|
+      +--------+--------+
+               |
+         accepts/spawns
+       +-------+--------+---------+
+       |                |         |
+       v                v         v
+ backend A          backend B  backend C
+ session A          session B  session C
+       \                |         /
+        \               |        /
+         +--------------+-------+
+                        |
+                        v
+               shared-memory state
+         shared buffers / WAL buffers /
+         locks / internal shared control</div>
+<p>The wire protocol carries SQL text and protocol messages between the client and backend. Query parsing, planning, execution, transaction management and most SQL semantics occur inside the server backend rather than in the client library.<sup><a href="#r1">[1]</a></sup></p>
+</section>
+
+<section id="connections"><h2>2. Connection lifecycle</h2>
+<p>When the server detects a new connection request, it creates a backend process dedicated to that client. Backend processes coordinate with the rest of the instance using shared memory and semaphores. Once established, the client sends requests to that backend and receives results over the same session connection.<sup><a href="#r1">[1]</a></sup></p>
+<pre><code>SELECT
+    pid,
+    backend_type,
+    usename,
+    datname,
+    client_addr,
+    state,
+    query
+FROM pg_stat_activity
+ORDER BY backend_type, pid;</code></pre>
+<p>On Unix-like systems, process titles visible through <code>ps</code> identify both server background processes and per-client backends. Client backends typically expose user, database, client host and activity in the process title.<sup><a href="#r13">[13]</a></sup></p>
+<pre><code>$ ps -ef | grep '[p]ostgres'
+
+postgres ... postgres: checkpointer
+postgres ... postgres: background writer
+postgres ... postgres: walwriter
+postgres ... postgres: autovacuum launcher
+postgres ... postgres: appuser appdb 10.0.1.15 idle</code></pre>
+</section>
+
+<section id="processes"><h2>3. Process architecture</h2>
+<p>A PostgreSQL instance contains several categories of processes: the primary supervisor, client backends, auxiliary processes, autovacuum workers, WAL sender processes, parallel workers, logical-replication workers and optional extension-defined background workers. The exact set varies with configuration and workload.<sup><a href="#r14">[14]</a><a href="#r15">[15]</a></sup></p>
+<div class="table-wrap"><table><thead><tr><th>Category</th><th>Examples</th><th>Role</th></tr></thead><tbody>
+<tr><td>Supervisor</td><td>postmaster / primary <code>postgres</code></td><td>Starts instance, listens for connections, manages child process lifecycle.</td></tr>
+<tr><td>Backend</td><td>client backend</td><td>Handles one client session and executes its work.</td></tr>
+<tr><td>Auxiliary</td><td>checkpointer, background writer, WAL writer, startup process, WAL archiver, WAL receiver, WAL summarizer</td><td>Instance-wide maintenance/recovery/I/O duties.</td></tr>
+<tr><td>Autovacuum</td><td>launcher + workers</td><td>Schedules and performs VACUUM/ANALYZE maintenance.</td></tr>
+<tr><td>Replication</td><td>WAL sender, logical replication worker</td><td>Physical/logical change transport and apply.</td></tr>
+<tr><td>Parallel/background worker</td><td>parallel query worker, extension workers</td><td>Runs PostgreSQL or extension background tasks.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="backend"><h2>4. Backend processes</h2>
+<p>A backend process is the server-side process acting for one client session. It owns session-local state such as temporary-table buffers, prepared statements/cursors, many caches, private memory contexts and executor state. It attaches to the instance’s shared memory so it can access the shared buffer pool, locks and global coordination structures.<sup><a href="#r1">[1]</a><a href="#r16">[16]</a></sup></p>
+<h3>4.1 Inspect your backend</h3>
+<pre><code>SELECT
+    pg_backend_pid() AS pid,
+    current_database(),
+    current_user;</code></pre>
+<h3>4.2 Session memory contexts</h3>
+<pre><code>SELECT
+    name,
+    type,
+    level,
+    total_bytes,
+    used_bytes,
+    free_bytes
+FROM pg_backend_memory_contexts
+ORDER BY total_bytes DESC
+LIMIT 25;</code></pre>
+<p>PostgreSQL 18’s <code>pg_backend_memory_contexts</code> exposes the context hierarchy for the current backend, including context type and path information.<sup><a href="#r17">[17]</a></sup></p>
+</section>
+
+<section id="background"><h2>5. Background and auxiliary processes</h2>
+<h3>5.1 Background writer</h3>
+<p>The background writer periodically writes dirty shared-buffer pages so backends are less likely to face bursts of dirty-buffer writes when they need replacement buffers. It is deliberately rate controlled so it smooths I/O rather than simply flushing everything aggressively.<sup><a href="#r2">[2]</a></sup></p>
+<h3>5.2 Checkpointer</h3>
+<p>The checkpointer executes checkpoints, synchronizing modified database pages according to PostgreSQL’s WAL/checkpoint protocol and establishing recovery starting points.<sup><a href="#r14">[14]</a></sup></p>
+<h3>5.3 WAL writer</h3>
+<p>The WAL writer periodically writes WAL buffers, reducing the amount of WAL-writing work individual foreground backends must perform.<sup><a href="#r18">[18]</a></sup></p>
+<h3>5.4 Autovacuum</h3>
+<p>The autovacuum subsystem has a persistent launcher and worker processes. The launcher schedules work across databases, while workers run VACUUM and/or ANALYZE on tables that cross activity or anti-wraparound thresholds.<sup><a href="#r15">[15]</a></sup></p>
+<h3>5.5 Startup, archiver and replication processes</h3>
+<p>During recovery, the startup process replays WAL. A configured WAL archiver copies completed WAL to an archive. WAL receiver and sender processes participate in physical streaming replication. Logical replication and parallel query use PostgreSQL’s worker infrastructure.<sup><a href="#r14">[14]</a></sup></p>
+</section>
+
+<section id="shared-memory"><h2>6. Shared memory</h2>
+<p>Because PostgreSQL backends are separate operating-system processes, common state is placed in shared memory. PostgreSQL requires IPC facilities such as shared memory and semaphores. On modern Unix-like systems the main shared memory region is typically backed by anonymous <code>mmap</code>, while additional dynamic shared memory can be allocated for features such as parallel query.<sup><a href="#r2">[2]</a><a href="#r19">[19]</a></sup></p>
+<pre><code>SHOW shared_memory_type;
+SHOW dynamic_shared_memory_type;
+SHOW min_dynamic_shared_memory;</code></pre>
+<h3>6.1 Inspect shared-memory allocations</h3>
+<pre><code>SELECT
+    name,
+    pg_size_pretty(size) AS size,
+    pg_size_pretty(allocated_size) AS allocated
+FROM pg_shmem_allocations
+ORDER BY size DESC NULLS LAST;</code></pre>
+<p>The <code>pg_shmem_allocations</code> view reports allocations within the server’s main shared memory segment, including PostgreSQL and extension allocations. It does not include dynamic shared memory allocations.<sup><a href="#r20">[20]</a></sup></p>
+<div class="diagram">server startup
+   |
+   +--> main shared-memory area
+   |      shared buffers
+   |      WAL buffers
+   |      lock/control structures
+   |      fixed shared caches
+   |
+   +--> dynamic shared memory (on demand)
+          parallel query coordination/data
+          extension/background-worker needs
+          other transient shared structures</div>
+</section>
+
+<section id="shared-buffers"><h2>7. Shared buffers</h2>
+<p><code>shared_buffers</code> is PostgreSQL’s shared database-page cache. A buffer slot normally holds one database block, typically 8 KiB. Every backend can access the shared cache, while PostgreSQL also benefits from the operating system’s filesystem cache underneath it.<sup><a href="#r2">[2]</a></sup></p>
+<pre><code>SHOW shared_buffers;
+SHOW block_size;</code></pre>
+<p>PostgreSQL 18 documents 128 MiB as the typical default. For a dedicated server with at least 1 GiB of RAM, the documentation suggests 25% of system memory as a reasonable starting point while noting that PostgreSQL also relies on the OS cache and allocations above roughly 40% are unlikely to be generally superior.<sup><a href="#r2">[2]</a></sup></p>
+<div class="diagram">relation block requested
+      |
+      +-- already in shared_buffers? -- yes --> pin + use
+      |
+      no
+      |
+      v
+choose reusable buffer
+      |
+      +-- dirty? --> write as required
+      |
+      v
+read block from filesystem
+      |
+      v
+buffer becomes valid/pinned
+      |
+      v
+backend reads/modifies page
+      |
+      +-- write operation --> mark dirty
+      |
+      v
+later background/checkpoint/backend write</div>
+<h3>7.1 Inspect the buffer cache</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_buffercache;
+
+SELECT *
+FROM pg_buffercache_summary();
+
+SELECT
+    usage_count,
+    buffers,
+    dirty,
+    pinned
+FROM pg_buffercache_usage_counts()
+ORDER BY usage_count;</code></pre>
+<p>The supplied <code>pg_buffercache</code> extension can inspect buffer identities, dirty/pinned state and clock-sweep usage counts. PostgreSQL 18 also adds NUMA-aware buffer inspection when built with NUMA support.<sup><a href="#r21">[21]</a><a href="#r22">[22]</a></sup></p>
+</section>
+
+<section id="wal-buffers"><h2>8. WAL buffers</h2>
+<p>WAL buffers are shared memory used to stage WAL records that have not yet been written to WAL segment files. The default <code>wal_buffers=-1</code> selects approximately 1/32 of <code>shared_buffers</code>, bounded below by 64 KiB and above by one WAL segment, normally 16 MiB.<sup><a href="#r18">[18]</a></sup></p>
+<pre><code>SHOW wal_buffers;
+
+SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full
+FROM pg_stat_wal;</code></pre>
+<p>WAL buffers are not a second copy of shared table pages. They contain serialized WAL records used for crash recovery, replication and archiving. The write-ahead rule requires relevant WAL to become durable before protected dirty data pages may be flushed to durable storage.<sup><a href="#r23">[23]</a></sup></p>
+</section>
+
+<section id="private-memory"><h2>9. Backend/private memory</h2>
+<p>Not all PostgreSQL memory is shared. Each backend process has its own private address space for parser/planner state, executor state, per-query memory contexts, tuple slots, expression evaluation, caches, network buffers and temporary working data. This private memory is where settings such as <code>work_mem</code> and much of <code>maintenance_work_mem</code> become operationally important.</p>
+<p>A common sizing mistake is to add <code>shared_buffers + work_mem</code> and treat the result as maximum PostgreSQL memory. <code>work_mem</code> is a per-operation base limit, not one fixed allocation per server or even per connection, so one complex plan can use several independent work areas and several backends can do so concurrently.<sup><a href="#r2">[2]</a></sup></p>
+</section>
+
+<section id="work-mem"><h2>10. <code>work_mem</code></h2>
+<p><code>work_mem</code> sets the base maximum memory available to an individual query operation such as a sort or hash table before PostgreSQL uses temporary files. PostgreSQL 18 defaults it to 4 MiB. Sorts used by <code>ORDER BY</code>, <code>DISTINCT</code> and merge joins can consume work memory, while hash joins, hash aggregates, Memoize nodes and some <code>IN</code> processing use hash memory derived from <code>work_mem</code> and <code>hash_mem_multiplier</code>.<sup><a href="#r2">[2]</a></sup></p>
+<pre><code>SHOW work_mem;
+SHOW hash_mem_multiplier;
+
+SET LOCAL work_mem = '128MB';
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT customer_id, sum(total_amount)
+FROM app.orders
+GROUP BY customer_id;</code></pre>
+<div class="diagram">one backend
+  |
+  +-- Sort A ---------- up to work_mem
+  +-- Sort B ---------- up to work_mem
+  +-- Hash Join ------- up to work_mem × hash_mem_multiplier
+  +-- HashAggregate --- up to work_mem × hash_mem_multiplier
+
+several concurrent backends/parallel workers
+  => aggregate RAM can greatly exceed one work_mem value</div>
+<p>When an operation exceeds its in-memory allowance, PostgreSQL can spill to temporary files under <code>base/pgsql_tmp</code> or the selected temporary tablespace. EXPLAIN can report temporary block I/O and sort/hash spill behavior.<sup><a href="#r4">[4]</a><a href="#r24">[24]</a></sup></p>
+</section>
+
+<section id="maintenance-memory"><h2>11. <code>maintenance_work_mem</code></h2>
+<p><code>maintenance_work_mem</code> is the memory limit used by maintenance commands such as <code>VACUUM</code>, <code>CREATE INDEX</code> and <code>ALTER TABLE ADD FOREIGN KEY</code>. PostgreSQL 18 defaults it to 64 MiB and documents that it can normally be set higher than <code>work_mem</code> because fewer maintenance operations are usually concurrent.<sup><a href="#r2">[2]</a></sup></p>
+<pre><code>SHOW maintenance_work_mem;
+SHOW autovacuum_work_mem;
+SHOW vacuum_buffer_usage_limit;</code></pre>
+<p>Autovacuum workers can each consume <code>autovacuum_work_mem</code> (or fall back to <code>maintenance_work_mem</code> when it is <code>-1</code>), so aggregate maintenance memory still needs capacity planning. PostgreSQL also treats parallel utility memory differently from parallel query: supported parallel maintenance commands apply <code>maintenance_work_mem</code> to the utility operation as a whole rather than independently multiplying it for each worker.<sup><a href="#r2">[2]</a></sup></p>
+</section>
+
+<section id="memory-contexts"><h2>12. Memory contexts</h2>
+<p>Internally, PostgreSQL manages private allocations through hierarchical memory contexts. Instead of tracking and individually freeing every allocation, code allocates objects into a context associated with a particular lifetime—query, transaction, cache, executor node, error handling and so on—and can reset or delete the context as a unit. This design simplifies cleanup on success and error paths.<sup><a href="#r16">[16]</a></sup></p>
+<div class="diagram">TopMemoryContext
+├── CacheMemoryContext
+│   ├── catalog/cache allocations
+│   └── long-lived session caches
+├── TopTransactionContext
+│   └── transaction-lifetime allocations
+├── MessageContext
+│   └── current protocol/query message
+└── Executor / query contexts
+    ├── plan-node state
+    ├── expression state
+    └── tuple / temporary allocations</div>
+<h3>12.1 Inspect current backend memory</h3>
+<pre><code>SELECT
+    repeat('  ', level - 1) || name AS context,
+    type,
+    pg_size_pretty(total_bytes) AS total,
+    pg_size_pretty(used_bytes)  AS used,
+    pg_size_pretty(free_bytes)  AS free
+FROM pg_backend_memory_contexts
+ORDER BY path;</code></pre>
+<h3>12.2 Request another backend's context dump</h3>
+<pre><code>SELECT pg_log_backend_memory_contexts(12345);</code></pre>
+<p><code>pg_log_backend_memory_contexts()</code> asks another backend or auxiliary process to log its memory-context hierarchy. PostgreSQL cautions against frequent use because it can generate many log messages.<sup><a href="#r25">[25]</a></sup></p>
+</section>
+
+<section id="storage-overview"><h2>13. Physical storage overview</h2>
+<p>PostgreSQL’s built-in heap table access method stores tables as relations composed of fixed-size blocks/pages. Index access methods use relation files too, usually with the same basic page framework but index-specific page content. The physical-storage chapter explicitly notes that PostgreSQL is extensible: custom table or index access methods are not required to use every detail of the built-in heap/index storage format.<sup><a href="#r5">[5]</a></sup></p>
+<div class="diagram">SQL object
+   |
+   v
+system catalog metadata
+(pg_class / pg_attribute / ...)
+   |
+   v
+relation identity
+OID + relfilenode + tablespace + database
+   |
+   v
+relation forks/files
+main / fsm / vm / init
+   |
+   v
+file segments
+relfilenode
+relfilenode.1
+relfilenode.2
+...
+   |
+   v
+fixed-size pages (usually 8 KiB)
+   |
+   v
+line pointers + heap/index tuples</div>
+</section>
+
+<section id="file-layout"><h2>14. PostgreSQL data-directory layout</h2>
+<p>The PostgreSQL data directory contains configuration/state files plus subdirectories for databases, WAL and specialized transactional metadata. The built-in <code>pg_default</code> tablespace is stored under <code>PGDATA/base</code>; cluster-wide relations such as <code>pg_database</code> live under <code>PGDATA/global</code>; WAL segment files live under <code>PGDATA/pg_wal</code>.<sup><a href="#r4">[4]</a></sup></p>
+<div class="table-wrap"><table><thead><tr><th>Path</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>base/</code></td><td>Per-database directories for the default tablespace; directories are named by database OID.</td></tr>
+<tr><td><code>global/</code></td><td>Cluster-wide system relations.</td></tr>
+<tr><td><code>pg_wal/</code></td><td>Write-ahead log segments and associated WAL state.</td></tr>
+<tr><td><code>pg_tblspc/</code></td><td>Symbolic links/junctions to user-defined tablespaces.</td></tr>
+<tr><td><code>pg_replslot/</code></td><td>Replication-slot state.</td></tr>
+<tr><td><code>pg_multixact/</code></td><td>MultiXact status/member information.</td></tr>
+<tr><td><code>pg_subtrans/</code></td><td>Subtransaction status.</td></tr>
+<tr><td><code>pg_logical/</code></td><td>Logical-decoding status data.</td></tr>
+<tr><td><code>pg_dynshmem/</code></td><td>Files used by one dynamic-shared-memory implementation.</td></tr>
+<tr><td><code>pg_stat/</code></td><td>Persistent statistics subsystem files.</td></tr>
+</tbody></table></div>
+<pre><code>SHOW data_directory;
+
+SELECT
+    oid,
+    datname
+FROM pg_database
+ORDER BY oid;</code></pre>
+<p>A database directory under <code>base</code> is named by the database’s OID, not by its SQL name. User-defined tablespaces add another layer: a link under <code>pg_tblspc</code> points to the external tablespace location, which then contains a version-specific directory and per-database OID subdirectories.<sup><a href="#r4">[4]</a></sup></p>
+</section>
+
+<section id="relation-files"><h2>15. Relation files, filenodes and forks</h2>
+<p>Each ordinary table and index is stored in its own relation files. The main file is named after the relation’s current filenode. Additional relation forks store supporting structures: <code>_fsm</code> for the free-space map, <code>_vm</code> for heap visibility maps, and <code>_init</code> for the initialization fork of unlogged relations.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>SELECT
+    c.oid,
+    c.oid::regclass AS relation,
+    c.relfilenode,
+    pg_relation_filenode(c.oid) AS actual_filenode,
+    pg_relation_filepath(c.oid) AS filepath
+FROM pg_class AS c
+WHERE c.oid = 'app.orders'::regclass;</code></pre>
+<p>For some system catalogs <code>pg_class.relfilenode</code> is zero and PostgreSQL resolves the actual lower-level filenode through internal mapping; <code>pg_relation_filenode()</code> handles this correctly.<sup><a href="#r4">[4]</a></sup></p>
+
+<h3>15.1 File segmentation</h3>
+<p>By default, a relation file larger than 1 GiB is split into segments. The first segment uses the bare filenode name, then <code>.1</code>, <code>.2</code> and so on. The 1 GiB segment size is a build-time default and can differ in a custom PostgreSQL build.<sup><a href="#r4">[4]</a></sup></p>
+<div class="diagram">base/16384/
+  24576       first main-fork segment
+  24576.1     second segment
+  24576.2     third segment
+  24576_fsm   free-space map fork
+  24576_vm    visibility map fork</div>
+
+<h3>15.2 Temporary relations/files</h3>
+<p>Temporary relations have backend-qualified filenames. Temporary files produced by operations such as sorts that exceed memory appear in <code>pgsql_tmp</code> directories and contain the owning backend PID in their filename.<sup><a href="#r4">[4]</a></sup></p>
+</section>
+
+<section id="pages"><h2>16. Pages and blocks</h2>
+<p>PostgreSQL tables and indexes are arrays of fixed-size pages, normally 8 KiB. “Block” and “page” are commonly used for this unit in PostgreSQL. A heap page contains five logical regions: a 24-byte page header, an array of 4-byte item identifiers (line pointers), free space, the actual tuple items, and special space used by some index access methods. Ordinary heap pages do not use special space.<sup><a href="#r6">[6]</a></sup></p>
+<div class="diagram">lower addresses
++------------------------------------+
+| PageHeaderData (24 bytes)          |
++------------------------------------+
+| ItemIdData / line pointers         |  grows downward
+| [lp1][lp2][lp3]...                 |
++------------------------------------+
+|                                    |
+|             FREE SPACE             |
+|                                    |
++------------------------------------+
+| tuple/item data                    |  grows upward
+|        [tuple3][tuple2][tuple1]    |
++------------------------------------+
+| special space (indexes may use it) |
++------------------------------------+
+higher addresses</div>
+<p>The page header includes <code>pd_lsn</code> (the WAL position of the latest page change), an optional checksum field, flag bits, offsets describing free/special space, a page-size/version field and <code>pd_prune_xid</code>, which helps identify pages where pruning might be useful.<sup><a href="#r6">[6]</a></sup></p>
+
+<h3>16.1 Stable line pointers</h3>
+<p>A tuple can move within a page when free space is compacted without changing its line-pointer index. PostgreSQL’s physical tuple identifier (<code>ctid</code>) is a pair of block number and line-pointer index, so the line-pointer stability permits intra-page compaction without breaking every reference to that tuple location.<sup><a href="#r6">[6]</a><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="tuples"><h2>17. Heap tuple layout</h2>
+<p>Heap rows use a fixed header—23 bytes on most machines—followed by an optional null bitmap, alignment padding and user attribute data. The header stores transaction visibility metadata and tuple-state flags. Large variable-length attributes can be represented by compact TOAST pointers rather than inline values.<sup><a href="#r6">[6]</a></sup></p>
+<div class="table-wrap"><table><thead><tr><th>Heap tuple header field</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>t_xmin</code></td><td>XID of transaction that inserted the row version.</td></tr>
+<tr><td><code>t_xmax</code></td><td>Deleting/updating XID or related row-locking state.</td></tr>
+<tr><td><code>t_cid</code></td><td>Command identifier information.</td></tr>
+<tr><td><code>t_ctid</code></td><td>Physical TID of this tuple or a newer row version.</td></tr>
+<tr><td><code>t_infomask</code>, <code>t_infomask2</code></td><td>Attribute count and tuple/MVCC state flags.</td></tr>
+<tr><td><code>t_hoff</code></td><td>Offset where user attributes begin.</td></tr>
+</tbody></table></div>
+<pre><code>SELECT
+    ctid,
+    xmin,
+    xmax,
+    *
+FROM app.orders
+LIMIT 10;</code></pre>
+<p>The SQL-visible system columns expose some of the same underlying concepts, but <code>ctid</code> is not a durable application key: UPDATEs and table rewrites can change physical tuple locations.<sup><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="heap"><h2>18. Heap storage and MVCC versions</h2>
+<p>The default table access method is called <em>heap</em>. Rows do not have to be stored in logical key order; any heap page with sufficient free space can accept a tuple. An UPDATE normally creates a new tuple version rather than overwriting the old version in place, allowing older snapshots to continue seeing prior versions until they become globally obsolete.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup></p>
+<div class="diagram">logical row id=7
+
+page 100:
+ line 4 -> V1
+           xmin=400
+           xmax=425
+           value='old'
+           ctid=(100,7)
+
+ line 7 -> V2
+           xmin=425
+           xmax=0
+           value='new'
+           ctid=(100,7)
+
+older snapshot may see V1
+newer snapshot sees V2
+VACUUM/pruning eventually reclaims V1</div>
+<p>Heap-only tuple (HOT) updates can avoid creating new index entries when indexed columns are unchanged and the new row version fits on the same heap page, reducing update amplification and allowing more efficient pruning.<sup><a href="#r26">[26]</a></sup></p>
+</section>
+
+<section id="toast"><h2>19. TOAST</h2>
+<p>PostgreSQL pages have fixed size and heap tuples are not allowed to span pages. Large variable-length attributes therefore need another representation. TOAST—the Oversized-Attribute Storage Technique—compresses and/or moves large values out of line into a separate TOAST table, leaving a small pointer datum in the main row.<sup><a href="#r7">[7]</a></sup></p>
+<p>TOAST processing normally begins when a row exceeds roughly 2 KiB (<code>TOAST_TUPLE_THRESHOLD</code>). PostgreSQL tries compression and/or out-of-line storage until the row is reduced toward the target size or no further useful reduction is possible. The on-disk TOAST pointer is a compact fixed-size representation containing enough metadata to locate and reconstruct the external value.<sup><a href="#r7">[7]</a></sup></p>
+<div class="diagram">main heap row
++-------------------------------+
+| id | title | body TOAST ptr   |
++-------------------------------+
+                  |
+                  v
+         associated TOAST table
+      +--------------------------+
+      | chunk 0 of large value   |
+      | chunk 1                  |
+      | chunk 2                  |
+      | ...                      |
+      +--------------------------+</div>
+
+<h3>19.1 Inspect a table's TOAST relation</h3>
+<pre><code>SELECT
+    c.oid::regclass AS table_name,
+    c.reltoastrelid,
+    c.reltoastrelid::regclass AS toast_table
+FROM pg_class AS c
+WHERE c.oid = 'app.documents'::regclass;</code></pre>
+
+<h3>19.2 Column storage strategies</h3>
+<p>TOAST-capable data types use per-column storage strategies such as <code>PLAIN</code>, <code>MAIN</code>, <code>EXTERNAL</code>, and <code>EXTENDED</code>, controlling whether compression and/or out-of-line storage are allowed or preferred. Variable-length types participate because their varlena representation can encode inline, compressed and external forms.<sup><a href="#r7">[7]</a></sup></p>
+<pre><code>SELECT
+    attname,
+    attstorage,
+    attcompression
+FROM pg_attribute
+WHERE attrelid = 'app.documents'::regclass
+  AND attnum &gt; 0
+  AND NOT attisdropped
+ORDER BY attnum;</code></pre>
+
+<h3>19.3 TOAST and update behavior</h3>
+<p>If an UPDATE does not change an already out-of-line attribute, PostgreSQL normally preserves the existing external value rather than detoasting and rewriting it. This is one reason very wide rows can still be practical when updates usually touch only small columns.<sup><a href="#r7">[7]</a></sup></p>
+</section>
+
+<section id="fsm"><h2>20. Free-space map (FSM)</h2>
+<p>Heap and most index relations have a free-space map stored in a separate <code>_fsm</code> fork. The FSM tracks approximately how much reusable space is available on each relation page, allowing PostgreSQL to find a page likely to fit a new tuple without linearly scanning the entire relation.<sup><a href="#r8">[8]</a></sup></p>
+<div class="diagram">heap pages:
+ block 0:  800 B free
+ block 1: 3200 B free
+ block 2: 1200 B free
+ block 3: 5000 B free
+
+FSM tree summarizes maxima
+          [5000]
+         /      \
+     [3200]    [5000]
+      /  \      /   \
+    800 3200  1200 5000
+
+need ~4 KiB?
+search descends toward block 3</div>
+<p>The FSM is itself organized as a tree of FSM pages. Bottom-level entries encode free space for relation pages, and upper levels store maxima for lower subtrees so searches can descend efficiently.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>20.1 Inspect free space</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_freespacemap;
+
+SELECT
+    blkno,
+    avail
+FROM pg_freespace('app.orders')
+ORDER BY avail DESC
+LIMIT 20;</code></pre>
+<p>The supplied <code>pg_freespacemap</code> extension exposes the free-space values PostgreSQL currently records. The values are approximate management metadata, not an exact byte-level fragmentation analysis.<sup><a href="#r27">[27]</a></sup></p>
+</section>
+
+<section id="vm"><h2>21. Visibility map (VM)</h2>
+<p>Every heap relation has a visibility-map fork named with the <code>_vm</code> suffix. It stores two bits per heap page. The all-visible bit means all tuples on the page are known visible to all active/future transactions and need no vacuum cleanup at that point; the all-frozen bit means all tuples are frozen for transaction-ID purposes.<sup><a href="#r9">[9]</a></sup></p>
+<div class="diagram">heap page N
+      |
+      +-- all-visible bit
+      |     enables index-only scan
+      |     to skip heap visibility visit
+      |
+      +-- all-frozen bit
+            lets aggressive anti-wraparound
+            VACUUM skip the page</div>
+<p>The map is conservative: a set bit must be true, while a cleared bit does not prove that the condition is false. VACUUM sets visibility bits and data-modifying operations clear them as needed.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>21.1 Inspect visibility coverage</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_visibility;
+
+SELECT *
+FROM pg_visibility_map_summary(
+    'app.orders'::regclass
+);</code></pre>
+<p>Visibility coverage matters directly to query execution because ordinary secondary indexes do not contain heap MVCC visibility state. An index-only scan can avoid a heap fetch when the VM says the page is all-visible.<sup><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="catalogs"><h2>22. System catalogs</h2>
+<p>PostgreSQL stores schema metadata and internal bookkeeping in system catalogs. These catalogs are themselves regular PostgreSQL tables from a storage perspective, but backend code knows their schemas and depends on their semantics. PostgreSQL therefore strongly discourages manual structural manipulation of catalog tables; ordinary SQL DDL should be used instead.<sup><a href="#r10">[10]</a><a href="#r11">[11]</a><a href="#r28">[28]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Catalog</th><th>Representative purpose</th></tr></thead><tbody>
+<tr><td><code>pg_class</code></td><td>Relations: tables, indexes, sequences, materialized views and related metadata.</td></tr>
+<tr><td><code>pg_attribute</code></td><td>Columns/attributes of relations and composite types.</td></tr>
+<tr><td><code>pg_type</code></td><td>Data types and type implementation metadata.<sup><a href="#r33">[33]</a></sup></td></tr>
+<tr><td><code>pg_proc</code></td><td>Functions and procedures.</td></tr>
+<tr><td><code>pg_namespace</code></td><td>Schemas/namespaces.</td></tr>
+<tr><td><code>pg_index</code></td><td>Index-specific metadata linking indexes to indexed relations.</td></tr>
+<tr><td><code>pg_constraint</code></td><td>Check, unique, primary-key, foreign-key and exclusion constraints.</td></tr>
+<tr><td><code>pg_database</code></td><td>Databases in the cluster; shared across databases.<sup><a href="#r32">[32]</a></sup></td></tr>
+<tr><td><code>pg_statistic</code></td><td>Planner statistics collected by ANALYZE.</td></tr>
+<tr><td><code>pg_rewrite</code></td><td>Rewrite rules, including view rules.</td></tr>
+</tbody></table></div>
+
+<h3>22.1 Catalog-driven extensibility</h3>
+<p>PostgreSQL is unusually catalog driven: its catalogs describe not just tables and columns but types, operators, functions, access methods, casts and other extensible behavior. Extensions add catalog rows plus executable code, which is a central part of PostgreSQL’s extensibility model.<sup><a href="#r29">[29]</a></sup></p>
+
+<h3>22.2 Example: reconstruct table metadata</h3>
+<pre><code>SELECT
+    c.oid,
+    n.nspname AS schema_name,
+    c.relname,
+    c.relkind,
+    c.relpersistence,
+    c.reltuples,
+    c.relpages,
+    c.reltoastrelid
+FROM pg_class AS c
+JOIN pg_namespace AS n
+  ON n.oid = c.relnamespace
+WHERE c.oid = 'app.orders'::regclass;</code></pre>
+
+<pre><code>SELECT
+    a.attnum,
+    a.attname,
+    a.atttypid::regtype AS data_type,
+    a.attnotnull,
+    a.attstorage,
+    a.attcompression
+FROM pg_attribute AS a
+WHERE a.attrelid = 'app.orders'::regclass
+  AND a.attnum &gt; 0
+  AND NOT a.attisdropped
+ORDER BY a.attnum;</code></pre>
+</section>
+
+<section id="oids"><h2>23. Object identifiers (OIDs)</h2>
+<p>PostgreSQL uses OIDs as internal primary keys in many system catalogs. The <code>oid</code> type is an unsigned four-byte identifier, so PostgreSQL does not promise global uniqueness across every possible object over arbitrarily large lifetimes. OIDs identify catalog objects within the scopes where the system uses them.<sup><a href="#r12">[12]</a></sup></p>
+
+<h3>23.1 reg* alias types</h3>
+<p>Alias types such as <code>regclass</code>, <code>regtype</code>, <code>regprocedure</code>, <code>regnamespace</code>, and <code>regrole</code> provide convenient name-aware input/output for OID references. They make catalog queries safer and more readable than hand-writing name-to-OID subqueries.<sup><a href="#r12">[12]</a></sup></p>
+<pre><code>SELECT
+    'app.orders'::regclass::oid AS relation_oid,
+    'numeric'::regtype::oid     AS numeric_type_oid;
+
+SELECT *
+FROM pg_attribute
+WHERE attrelid = 'app.orders'::regclass;</code></pre>
+
+<h3>23.2 Early binding</h3>
+<p>A stored constant of a reg-type such as <code>regclass</code> is really an OID reference and creates dependency-aware early binding: if the object is renamed, the reference continues to identify that object. A text name resolved later has different semantics.<sup><a href="#r12">[12]</a></sup></p>
+
+<h3>23.3 OID is not filenode</h3>
+<div class="callout warn"><strong>Do not derive filenames from table OIDs.</strong> Relation OID and filenode frequently start equal, but operations such as <code>TRUNCATE</code>, <code>REINDEX</code>, <code>CLUSTER</code>, and some <code>ALTER TABLE</code> operations can replace physical storage and change the filenode while preserving the logical object OID.<sup><a href="#r4">[4]</a></sup></div>
+</section>
+
+<section id="object-to-file"><h2>24. Mapping an SQL object to physical files</h2>
+<p>The safe way to map a relation to storage is to combine catalogs with PostgreSQL’s file-mapping functions rather than assuming a name or OID corresponds directly to a file.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>SELECT
+    c.oid,
+    c.oid::regclass AS relation,
+    c.reltablespace,
+    pg_relation_filenode(c.oid) AS filenode,
+    pg_relation_filepath(c.oid) AS main_fork_path,
+    pg_relation_size(c.oid, 'main') AS main_bytes,
+    pg_relation_size(c.oid, 'fsm')  AS fsm_bytes,
+    pg_relation_size(c.oid, 'vm')   AS vm_bytes
+FROM pg_class AS c
+WHERE c.oid = 'app.orders'::regclass;</code></pre>
+
+<h3>24.1 Conceptual mapping</h3>
+<div class="diagram">app.orders
+   |
+   v
+pg_namespace + pg_class
+   |
+   +-- relation OID = logical catalog identity
+   +-- tablespace
+   +-- relfilenode / pg_relation_filenode()
+   |
+   v
+database OID directory
+   |
+   v
+main relation path
+base/&lt;db_oid&gt;/&lt;filenode&gt;
+   |
+   +-- &lt;filenode&gt;        main
+   +-- &lt;filenode&gt;_fsm    FSM
+   +-- &lt;filenode&gt;_vm     VM
+   +-- .1, .2 ...         large-file segments</div>
+
+<h3>24.2 Find the current database directory</h3>
+<pre><code>SELECT oid, datname
+FROM pg_database
+WHERE datname = current_database();</code></pre>
+</section>
+
+<section id="inspection"><h2>25. Low-level inspection tools</h2>
+<p>PostgreSQL ships several extensions specifically for inspecting storage internals. They are excellent for learning and diagnosis but some require superuser-level access because they expose raw page content or internal state.</p>
+
+<h3>25.1 <code>pageinspect</code></h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pageinspect;
+
+SELECT *
+FROM page_header(
+    get_raw_page('app.orders', 0)
+);
+
+SELECT
+    lp,
+    t_xmin,
+    t_xmax,
+    t_ctid,
+    t_infomask,
+    t_infomask2,
+    t_hoff
+FROM heap_page_items(
+    get_raw_page('app.orders', 0)
+);</code></pre>
+<p><code>pageinspect</code> can read a time-consistent copy of a raw page and decode heap line pointers and tuple headers. It returns tuples regardless of whether they are visible to the current MVCC snapshot because it is inspecting the physical page image directly.<sup><a href="#r30">[30]</a></sup></p>
+
+<h3>25.2 <code>pg_buffercache</code></h3>
+<pre><code>SELECT
+    c.oid::regclass AS relation,
+    count(*) AS cached_buffers
+FROM pg_buffercache AS b
+JOIN pg_class AS c
+  ON pg_relation_filenode(c.oid) = b.relfilenode
+WHERE b.reldatabase IN (
+    0,
+    (SELECT oid
+     FROM pg_database
+     WHERE datname = current_database())
+)
+GROUP BY c.oid
+ORDER BY cached_buffers DESC
+LIMIT 20;</code></pre>
+
+<h3>25.3 FSM and VM extensions</h3>
+<pre><code>SELECT *
+FROM pg_freespace('app.orders')
+ORDER BY blkno
+LIMIT 20;
+
+SELECT *
+FROM pg_visibility_map_summary(
+    'app.orders'::regclass
+);</code></pre>
+</section>
+
+<section id="postgres18"><h2>26. PostgreSQL 18 internals notes</h2>
+<p>PostgreSQL 18 adds several internals/observability improvements relevant to this topic. It can be compiled with NUMA awareness and exposes <code>pg_shmem_allocations_numa</code> plus <code>pg_buffercache_numa</code> for shared-memory placement inspection. It also added buffer-cache eviction helpers intended for testing, expanded memory-context reporting, and added a TOAST relation to <code>pg_index</code> so very large expression-index metadata can be supported.<sup><a href="#r22">[22]</a><a href="#r31">[31]</a></sup></p>
+<p>These are diagnostic capabilities, not reasons to make routine manual cache-management decisions. PostgreSQL and the operating system manage caching dynamically; explicit cache eviction functions are documented for developer/testing scenarios.<sup><a href="#r21">[21]</a></sup></p>
+</section>
+
+<section id="operational"><h2>27. Operational implications of the internals</h2>
+
+<h3>27.1 Connections consume processes and private memory</h3>
+<p>Because PostgreSQL normally uses one backend process per client session, thousands of idle or lightly active application connections still create process and memory overhead. Connection pooling is therefore a capacity tool, not merely a latency optimization.</p>
+
+<h3>27.2 Shared buffers are only one layer of caching</h3>
+<p>PostgreSQL reads/writes relation pages through its shared buffer cache, while the operating system can also cache filesystem pages. Sizing <code>shared_buffers</code> to nearly all RAM can therefore deprive the OS and backend private memory of useful capacity.<sup><a href="#r2">[2]</a></sup></p>
+
+<h3>27.3 Per-operation memory multiplies</h3>
+<p><code>work_mem</code> is not reserved globally. Concurrent sorts, hash joins, hash aggregates and parallel workers can each consume separate work areas. A setting that is safe for a ten-connection analytics server can be unsafe for hundreds of concurrent OLTP sessions.<sup><a href="#r2">[2]</a></sup></p>
+
+<h3>27.4 MVCC creates physical versions</h3>
+<p>Logical UPDATEs and DELETEs translate into physical tuple-version lifecycle. Heap pages, line pointers, HOT chains, visibility maps, free-space maps and vacuum are all consequences of supporting concurrent MVCC snapshots without overwriting history immediately.</p>
+
+<h3>27.5 TOAST can hide large physical I/O</h3>
+<p>A table whose visible heap rows look compact can have substantial associated TOAST storage. Use <code>pg_total_relation_size()</code> or inspect <code>reltoastrelid</code> when investigating storage size rather than looking only at the main fork.</p>
+
+<h3>27.6 Logical object stability differs from physical file stability</h3>
+<p>Applications should reference SQL objects through names/OIDs/dependencies, never their filenodes or filesystem paths. PostgreSQL is free to replace a relation’s physical storage during maintenance/DDL while keeping the logical object intact.<sup><a href="#r4">[4]</a></sup></p>
+</section>
+
+<section id="checklist"><h2>28. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Understand the process model.</strong> One client session normally maps to one backend process.</li>
+<li><strong>Use connection pooling where connection counts would create excessive backend/process memory overhead.</strong></li>
+<li><strong>Distinguish shared and private memory.</strong> Shared buffers and WAL buffers are instance-wide; most query work areas are per backend/operation.</li>
+<li><strong>Size <code>work_mem</code> for concurrency, not one query.</strong></li>
+<li><strong>Remember <code>hash_mem_multiplier</code>.</strong> Hash operations can exceed the base work_mem value.</li>
+<li><strong>Size maintenance/autovacuum memory separately.</strong></li>
+<li><strong>Inspect memory contexts for unexplained backend growth.</strong></li>
+<li><strong>Use <code>pg_buffercache</code> diagnostically rather than trying to micromanage the cache.</strong></li>
+<li><strong>Remember PostgreSQL’s normal block size is 8 KiB.</strong> Pages are the core unit of heap/index buffer I/O.</li>
+<li><strong>Understand tuple headers and MVCC versions.</strong> UPDATE is normally version creation, not in-place logical overwrite.</li>
+<li><strong>Account for TOAST storage.</strong> Large text/JSON/bytea values may live outside the main heap.</li>
+<li><strong>Use the FSM/VM concepts when reasoning about inserts, VACUUM and index-only scans.</strong></li>
+<li><strong>Query catalogs instead of parsing filesystem names.</strong></li>
+<li><strong>Never assume object OID equals filenode.</strong></li>
+<li><strong>Use <code>pg_relation_filepath()</code> and <code>pg_relation_filenode()</code> for current physical mapping.</strong></li>
+<li><strong>Use <code>pageinspect</code>, <code>pg_freespacemap</code>, and <code>pg_visibility</code> only when low-level diagnosis is actually needed.</strong></li>
+<li><strong>Treat catalog writes as internal surgery.</strong> Prefer supported SQL DDL/API operations.</li>
+<li><strong>Retest internals assumptions after major upgrades.</strong> Internal catalogs, observability fields and implementation details evolve.</li>
+</ol>
+<div class="callout ok"><strong>Internals principle:</strong> PostgreSQL separates logical identity, process-local execution state, instance-wide shared state and physical storage. Good operational reasoning follows those boundaries: know which process owns a resource, which structures are shared, which identifiers are logical versus physical, and which storage metadata is authoritative.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. How Connections Are Established [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/connect-estab.html">https://www.postgresql.org/docs/18/connect-estab.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. Resource Consumption [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. Managing Kernel Resources: Shared Memory and Semaphores [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/kernel-resources.html">https://www.postgresql.org/docs/18/kernel-resources.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. Database File Layout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-file-layout.html">https://www.postgresql.org/docs/18/storage-file-layout.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. Database Physical Storage [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage.html">https://www.postgresql.org/docs/18/storage.html</a></li>
+<li id="r6">PostgreSQL Global Development Group. Database Page Layout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-page-layout.html">https://www.postgresql.org/docs/18/storage-page-layout.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. TOAST [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-toast.html">https://www.postgresql.org/docs/18/storage-toast.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. Free Space Map [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-fsm.html">https://www.postgresql.org/docs/18/storage-fsm.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. Visibility Map [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-vm.html">https://www.postgresql.org/docs/18/storage-vm.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. System Catalogs [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalogs.html">https://www.postgresql.org/docs/18/catalogs.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. System Catalog Declarations and Initial Contents [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/bki.html">https://www.postgresql.org/docs/18/bki.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. Object Identifier Types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-oid.html">https://www.postgresql.org/docs/18/datatype-oid.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. Standard Unix Tools for Monitoring Server Processes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-ps.html">https://www.postgresql.org/docs/18/monitoring-ps.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. PostgreSQL Glossary: Auxiliary Processes, Backends and Background Workers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/glossary.html">https://www.postgresql.org/docs/18/glossary.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. Routine Vacuuming: The Autovacuum Daemon [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. SPI Memory Management and Memory Contexts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/spi-memory.html">https://www.postgresql.org/docs/18/spi-memory.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. pg_backend_memory_contexts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-backend-memory-contexts.html">https://www.postgresql.org/docs/18/view-pg-backend-memory-contexts.html</a></li>
+<li id="r18">PostgreSQL Global Development Group. Write Ahead Log Configuration: wal_buffers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-wal.html">https://www.postgresql.org/docs/18/runtime-config-wal.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. Managing Kernel Resources [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/kernel-resources.html">https://www.postgresql.org/docs/18/kernel-resources.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. pg_shmem_allocations [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-shmem-allocations.html">https://www.postgresql.org/docs/18/view-pg-shmem-allocations.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. pg_buffercache — inspect PostgreSQL buffer cache state [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/pgbuffercache.html">https://www.postgresql.org/docs/18/pgbuffercache.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. Write-Ahead Logging and WAL Internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/wal-internals.html">https://www.postgresql.org/docs/18/wal-internals.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. EXPLAIN: Buffer and Temporary Block Reporting [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. System Administration Functions: pg_log_backend_memory_contexts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. Heap-Only Tuples (HOT) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-hot.html">https://www.postgresql.org/docs/18/storage-hot.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. pg_freespacemap — examine the free space map [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/pgfreespacemap.html">https://www.postgresql.org/docs/18/pgfreespacemap.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. System Catalogs Overview [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalogs-overview.html">https://www.postgresql.org/docs/18/catalogs-overview.html</a></li>
+<li id="r29">PostgreSQL Global Development Group. How Extensibility Works [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/extend-how.html">https://www.postgresql.org/docs/18/extend-how.html</a></li>
+<li id="r30">PostgreSQL Global Development Group. pageinspect — low-level inspection of database pages [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/pageinspect.html">https://www.postgresql.org/docs/18/pageinspect.html</a></li>
+<li id="r31">PostgreSQL Global Development Group. pg_shmem_allocations_numa [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-shmem-allocations-numa.html">https://www.postgresql.org/docs/18/view-pg-shmem-allocations-numa.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. pg_database [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-database.html">https://www.postgresql.org/docs/18/catalog-pg-database.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. pg_type [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-type.html">https://www.postgresql.org/docs/18/catalog-pg-type.html</a></li>
+</ol></section>
+
+</main>
+<footer><p>This article is a technical reference. PostgreSQL internals can vary by major release, operating system, compile-time options, table/index access method, extensions and configuration. Use documented SQL/catalog interfaces where possible, and treat raw page or filesystem inspection as diagnostic work rather than an application integration surface.</p></footer>
+</body>
+</html>

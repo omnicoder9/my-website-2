@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL monitoring and observability: statistics views, pg_stat_statements, locks, long-running queries, replication lag, WAL, connections, cache hit ratio, disk usage, logs, Prometheus, Grafana, and OpenTelemetry.">
+<title>PostgreSQL Monitoring and Observability</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:970px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.small{font-size:.92rem;color:var(--muted)}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Monitoring and Observability</h1>
+  <p class="dek">A production-oriented guide to PostgreSQL statistics views, query observability, locks, replication lag, WAL, connections, cache behavior, disk usage, logs, Prometheus, Grafana, and OpenTelemetry.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL observability is the process of turning database state, cumulative counters, logs, query execution data, replication state, and application traces into evidence about availability, latency, saturation, correctness, and capacity. PostgreSQL 18 exposes a rich cumulative statistics system through views such as <code>pg_stat_activity</code>, <code>pg_stat_database</code>, <code>pg_stat_user_tables</code>, <code>pg_stat_user_indexes</code>, <code>pg_stat_replication</code>, <code>pg_stat_wal</code>, and <code>pg_stat_io</code>. The supplied <code>pg_stat_statements</code> extension adds normalized query-level statistics across the server.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+<p>
+Database observability should not be reduced to a single dashboard. Metrics are best for trend and alert detection; logs preserve event detail; traces connect database calls to application request paths; and direct SQL inspection remains essential during incidents. Prometheus, Grafana, and OpenTelemetry can integrate these signals, but they do not replace understanding the semantics of the PostgreSQL statistics themselves.<sup><a href="#r3">[3]</a>-<a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">Observability model</a></li>
+<li><a href="#stats">PostgreSQL statistics system</a></li>
+<li><a href="#activity">pg_stat_activity</a></li>
+<li><a href="#database">pg_stat_database</a></li>
+<li><a href="#tables">pg_stat_user_tables</a></li>
+<li><a href="#indexes">pg_stat_user_indexes</a></li>
+<li><a href="#statements">pg_stat_statements</a></li>
+<li><a href="#locks">Locks and blocking</a></li>
+<li><a href="#longqueries">Long-running queries</a></li>
+<li><a href="#replication">Replication lag</a></li>
+<li><a href="#wal">WAL statistics</a></li>
+<li><a href="#connections">Connection counts</a></li>
+<li><a href="#cache">Cache hit ratio</a></li>
+<li><a href="#disk">Disk usage</a></li>
+<li><a href="#logs">Logs</a></li>
+<li><a href="#prometheus">Prometheus</a></li>
+<li><a href="#grafana">Grafana</a></li>
+<li><a href="#otel">OpenTelemetry</a></li>
+<li><a href="#alerts">Alert design</a></li>
+<li><a href="#dashboards">Dashboard design</a></li>
+<li><a href="#runbook">Incident workflow</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. An observability model for PostgreSQL</h2>
+<p>
+A useful PostgreSQL observability stack has four signal classes. <strong>Current-state views</strong> answer questions such as “what is running or waiting now?” <strong>Cumulative statistics</strong> show counters since a reset point. <strong>Logs</strong> preserve server events and selected statement information. <strong>Application telemetry</strong> connects database operations to request traces and service-level latency. No single class is sufficient by itself.<sup><a href="#r1">[1]</a><a href="#r8">[8]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<div class="diagram">Application request
+      |
+      | trace/span
+      v
+PostgreSQL client call
+      |
+      v
+PostgreSQL backend process
+  |       |        |        |
+  |       |        |        +--> logs
+  |       |        +-----------> pg_stat_statements
+  |       +--------------------> pg_stat_activity / pg_locks
+  +----------------------------> cumulative pg_stat_* views
+                                  |
+                                  v
+                            exporter / scraper
+                                  |
+                                  v
+                             Prometheus
+                                  |
+                         +--------+--------+
+                         |                 |
+                       Grafana          alerts
+
+Infrastructure metrics (CPU, RAM, disk, network) should be correlated
+with the database and application signals rather than viewed separately.</div>
+
+<h3>1.1 Golden questions</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Question</th><th>Primary PostgreSQL evidence</th><th>Supporting signal</th></tr></thead>
+<tbody>
+<tr><td>Is the service available?</td><td>Connection/readiness test, connection failures</td><td>Exporter target health, application errors</td></tr>
+<tr><td>Why is latency high?</td><td><code>pg_stat_activity</code>, wait events, <code>pg_stat_statements</code>, locks</td><td>traces, CPU/I/O metrics</td></tr>
+<tr><td>Is the server saturated?</td><td>connection count, temp I/O, WAL, checkpoints, I/O views</td><td>host CPU, memory, storage latency</td></tr>
+<tr><td>Is maintenance healthy?</td><td>dead tuples, vacuum/analyze timestamps, progress views</td><td>disk growth, logs</td></tr>
+<tr><td>Is HA healthy?</td><td><code>pg_stat_replication</code>, slots, WAL receiver, archiver</td><td>network latency, replica endpoint checks</td></tr>
+<tr><td>Which SQL is expensive?</td><td><code>pg_stat_statements</code>, <code>EXPLAIN</code></td><td>application traces and route tags</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="stats">
+<h2>2. PostgreSQL statistics views</h2>
+<p>
+PostgreSQL's cumulative statistics system tracks server activity and exposes it through <code>pg_stat_*</code> and <code>pg_statio_*</code> views. PostgreSQL also documents ordinary operating-system tools such as <code>ps</code>, <code>top</code>, <code>iostat</code>, and <code>vmstat</code> as useful complements, because the server's own views do not replace OS-level CPU, memory, storage, and scheduler telemetry.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>2.1 Current versus cumulative values</h3>
+<p>
+Not every column has the same time semantics. For example, <code>pg_stat_database.numbackends</code> reflects current connections, while most other columns in that view are accumulated values since the last reset. Monitoring code should retain the reset timestamp or derive rates over time rather than treating cumulative counters as instantaneous load.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>2.2 Statistics visibility inside transactions</h3>
+<p>
+PostgreSQL can cache statistics reads inside a transaction according to <code>stats_fetch_consistency</code>. PostgreSQL 18 documents <code>none</code>, <code>cache</code>, and <code>snapshot</code>; the default is <code>cache</code>, while <code>none</code> is especially suitable for monitoring systems that want a fresh read on each access. <code>pg_stat_clear_snapshot()</code> clears cached statistics state in the current transaction.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<pre><code>SHOW stats_fetch_consistency;
+
+-- In an interactive troubleshooting transaction, force the next
+-- statistics read to refresh.
+SELECT pg_stat_clear_snapshot();</code></pre>
+
+<h3>2.3 Monitoring privileges</h3>
+<p>
+A monitoring identity does not need to be a superuser. PostgreSQL provides predefined roles including <code>pg_monitor</code> and <code>pg_read_all_stats</code>; <code>pg_monitor</code> includes <code>pg_read_all_settings</code>, <code>pg_read_all_stats</code>, and <code>pg_stat_scan_tables</code>. These roles expose privileged operational information and should still be granted deliberately.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<pre><code>CREATE ROLE monitoring LOGIN PASSWORD 'managed-outside-source-code';
+GRANT CONNECT ON DATABASE postgres TO monitoring;
+GRANT pg_monitor TO monitoring;</code></pre>
+</section>
+
+<section id="activity">
+<h2>3. <code>pg_stat_activity</code></h2>
+<p>
+<code>pg_stat_activity</code> has one row per server process associated with a database session and exposes session identity, state, current query, timestamps, wait events, transaction state, client information, and other runtime metadata. It is the primary first-response view for “what is PostgreSQL doing now?”<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>3.1 Active sessions</h3>
+<pre><code>SELECT
+    pid,
+    datname,
+    usename,
+    application_name,
+    client_addr,
+    state,
+    wait_event_type,
+    wait_event,
+    now() - xact_start  AS transaction_age,
+    now() - query_start AS query_age,
+    left(query, 220) AS query
+FROM pg_stat_activity
+WHERE pid &lt;&gt; pg_backend_pid()
+ORDER BY
+    xact_start NULLS LAST,
+    query_start NULLS LAST;</code></pre>
+
+<h3>3.2 Interpret state and wait separately</h3>
+<p>
+The <code>state</code> column describes session state, while <code>wait_event_type</code> and <code>wait_event</code> explain whether the process is waiting on a lock, I/O, client interaction, WAL, IPC, timeout, or another class of event. An “active” query can still be waiting rather than consuming CPU. This distinction is crucial during latency incidents.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>3.3 Idle in transaction</h3>
+<pre><code>SELECT
+    pid,
+    usename,
+    application_name,
+    client_addr,
+    now() - xact_start AS xact_age,
+    now() - state_change AS idle_age,
+    left(query, 200) AS last_query
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+ORDER BY xact_start;</code></pre>
+
+<p>
+“Idle in transaction” sessions are especially important because a session is not executing a query but still owns an open transaction. Depending on what it previously did, that transaction may retain locks or an old snapshot and interfere with vacuum cleanup or schema changes. Monitoring should track transaction age, not only statement age.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="database">
+<h2>4. <code>pg_stat_database</code></h2>
+<p>
+<code>pg_stat_database</code> aggregates database-wide statistics such as transactions, block reads/hits, tuples processed, temporary-file usage, conflicts, deadlocks, checksum failures, and session counts. It is a high-value source for throughput and health trends because its counters can be converted into rates by a time-series system.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>SELECT
+    datname,
+    numbackends,
+    xact_commit,
+    xact_rollback,
+    blks_read,
+    blks_hit,
+    temp_files,
+    pg_size_pretty(temp_bytes) AS temp_bytes,
+    deadlocks,
+    checksum_failures,
+    stats_reset
+FROM pg_stat_database
+WHERE datname IS NOT NULL
+ORDER BY datname;</code></pre>
+
+<h3>4.1 Derived rates</h3>
+<p>
+The absolute value of <code>xact_commit</code> rarely matters by itself; the rate of change matters. A Prometheus-like system computes transactions per second from counter deltas. The same applies to block reads, temporary bytes, deadlocks, and many other cumulative counters.
+</p>
+
+<pre><code>transactions_per_second
+  = rate(xact_commit + xact_rollback)
+
+rollback_fraction
+  = rate(xact_rollback)
+    / rate(xact_commit + xact_rollback)</code></pre>
+</section>
+
+<section id="tables">
+<h2>5. <code>pg_stat_user_tables</code></h2>
+<p>
+<code>pg_stat_user_tables</code> is the user-table subset of the table statistics views. It exposes estimated live/dead tuple counts, sequential/index scan activity, tuple modifications, vacuum/analyze timestamps and counts, and related maintenance statistics. PostgreSQL 18 also reports time spent in manual and automatic vacuum/analyze activity.<sup><a href="#r1">[1]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>5.1 Dead tuples and maintenance</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    n_mod_since_analyze,
+    last_vacuum,
+    last_autovacuum,
+    last_analyze,
+    last_autoanalyze,
+    vacuum_count,
+    autovacuum_count,
+    analyze_count,
+    autoanalyze_count
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 40;</code></pre>
+
+<h3>5.2 Tables relying heavily on sequential scans</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    seq_scan,
+    seq_tup_read,
+    idx_scan,
+    n_live_tup
+FROM pg_stat_user_tables
+WHERE seq_scan &gt; 0
+ORDER BY seq_tup_read DESC
+LIMIT 40;</code></pre>
+
+<p>
+A high sequential-scan count is not automatically a problem: small tables and scans that return a large fraction of rows can be efficient. The statistics identify candidates for investigation; <code>EXPLAIN (ANALYZE, BUFFERS)</code> determines whether a specific plan is appropriate.<sup><a href="#r1">[1]</a><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="indexes">
+<h2>6. <code>pg_stat_user_indexes</code></h2>
+<p>
+<code>pg_stat_user_indexes</code> exposes user-index scan counts and tuple activity. It helps answer whether an index is being used, but usage count alone is not enough to decide that an index is useless: indexes may exist for rare critical queries, uniqueness enforcement, foreign-key-related access paths, or maintenance windows outside the observation period.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>SELECT
+    schemaname,
+    relname,
+    indexrelname,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+ORDER BY idx_scan ASC, indexrelname;</code></pre>
+
+<h3>6.1 Candidate unused indexes with size</h3>
+<pre><code>SELECT
+    s.schemaname,
+    s.relname,
+    s.indexrelname,
+    s.idx_scan,
+    pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size
+FROM pg_stat_user_indexes AS s
+JOIN pg_index AS i
+  ON i.indexrelid = s.indexrelid
+WHERE s.idx_scan = 0
+  AND NOT i.indisprimary
+  AND NOT i.indisunique
+ORDER BY pg_relation_size(s.indexrelid) DESC;</code></pre>
+
+<div class="callout warn">
+<strong>Do not automate index deletion from <code>idx_scan = 0</code>.</strong> Statistics can be reset, observation windows may miss periodic workloads, and an index can have correctness or operational value not visible from scan count alone.
+</div>
+</section>
+
+<section id="statements">
+<h2>7. <code>pg_stat_statements</code></h2>
+<p>
+The <code>pg_stat_statements</code> extension tracks planning and execution statistics for SQL statements across the server. It requires shared memory, so the module must be listed in <code>shared_preload_libraries</code> and the server restarted when first enabled. Query identifiers must also be available; PostgreSQL automatically enables this behavior when <code>compute_query_id</code> is <code>auto</code> or <code>on</code> and the module is active.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<pre><code># postgresql.conf
+shared_preload_libraries = 'pg_stat_statements'
+compute_query_id = auto</code></pre>
+
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_stat_statements;</code></pre>
+
+<h3>7.1 Top SQL by total execution time</h3>
+<pre><code>SELECT
+    queryid,
+    calls,
+    total_exec_time,
+    mean_exec_time,
+    rows,
+    shared_blks_hit,
+    shared_blks_read,
+    temp_blks_read,
+    temp_blks_written,
+    wal_bytes,
+    left(query, 240) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 30;</code></pre>
+
+<h3>7.2 Top SQL by mean latency</h3>
+<pre><code>SELECT
+    queryid,
+    calls,
+    mean_exec_time,
+    stddev_exec_time,
+    rows,
+    left(query, 240) AS query
+FROM pg_stat_statements
+WHERE calls &gt;= 20
+ORDER BY mean_exec_time DESC
+LIMIT 30;</code></pre>
+
+<h3>7.3 PostgreSQL 18 additions</h3>
+<p>
+PostgreSQL 18 added <code>pg_stat_statements</code> columns for planned/launched parallel workers and for WAL-buffer-full events, making it easier to relate specific query fingerprints to parallel execution behavior and WAL pressure.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>7.4 Query fingerprints versus individual requests</h3>
+<p>
+<code>pg_stat_statements</code> aggregates normalized query forms; it is excellent for finding expensive query classes but does not tell you which user request experienced a particular latency spike. Application tracing fills that gap by associating an individual database call with its parent request and service context.<sup><a href="#r2">[2]</a><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="locks">
+<h2>8. Locks and blocking</h2>
+<p>
+<code>pg_locks</code> exposes outstanding locks from PostgreSQL's lock manager. PostgreSQL documents it as a tool for identifying ungranted locks, lock concentration on relations, and the contribution of lock contention to database performance.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>8.1 Waiting locks</h3>
+<pre><code>SELECT
+    pid,
+    locktype,
+    relation::regclass AS relation,
+    mode,
+    granted,
+    waitstart
+FROM pg_locks
+WHERE NOT granted
+ORDER BY waitstart NULLS LAST;</code></pre>
+
+<h3>8.2 Blocking sessions</h3>
+<pre><code>SELECT
+    a.pid AS waiting_pid,
+    a.usename AS waiting_user,
+    a.application_name,
+    pg_blocking_pids(a.pid) AS blocking_pids,
+    a.wait_event_type,
+    a.wait_event,
+    now() - a.query_start AS waiting_for,
+    left(a.query, 220) AS waiting_query
+FROM pg_stat_activity AS a
+WHERE cardinality(pg_blocking_pids(a.pid)) &gt; 0
+ORDER BY a.query_start;</code></pre>
+
+<h3>8.3 Blocker detail</h3>
+<pre><code>WITH waits AS (
+    SELECT
+        pid AS waiting_pid,
+        unnest(pg_blocking_pids(pid)) AS blocking_pid
+    FROM pg_stat_activity
+)
+SELECT
+    w.waiting_pid,
+    w.blocking_pid,
+    ba.usename AS blocker_user,
+    ba.application_name AS blocker_app,
+    now() - ba.xact_start AS blocker_xact_age,
+    left(ba.query, 220) AS blocker_query
+FROM waits AS w
+JOIN pg_stat_activity AS ba
+  ON ba.pid = w.blocking_pid
+ORDER BY blocker_xact_age DESC NULLS LAST;</code></pre>
+</section>
+
+<section id="longqueries">
+<h2>9. Long-running queries and transactions</h2>
+<p>
+A long statement and a long transaction are different operational problems. <code>query_start</code> identifies when the current query began, while <code>xact_start</code> identifies the transaction's start. A transaction can remain open between statements and continue to influence locking, visibility horizons, or maintenance even when no SQL is actively executing.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>SELECT
+    pid,
+    datname,
+    usename,
+    application_name,
+    state,
+    now() - query_start AS query_age,
+    now() - xact_start AS transaction_age,
+    wait_event_type,
+    wait_event,
+    left(query, 240) AS query
+FROM pg_stat_activity
+WHERE pid &lt;&gt; pg_backend_pid()
+  AND (
+      (state = 'active'
+       AND query_start &lt; now() - interval '30 seconds')
+      OR
+      (xact_start IS NOT NULL
+       AND xact_start &lt; now() - interval '5 minutes')
+  )
+ORDER BY xact_start NULLS LAST, query_start NULLS LAST;</code></pre>
+
+<h3>9.1 Cancellation and termination</h3>
+<pre><code>-- Prefer cancel when the immediate problem is one statement.
+SELECT pg_cancel_backend(12345);
+
+-- Terminate the entire session only when necessary.
+SELECT pg_terminate_backend(12345);</code></pre>
+
+<p>
+PostgreSQL exposes server signaling functions for canceling a backend's current query or terminating the session. A monitoring account that must take such actions can be granted <code>pg_signal_backend</code>, though that role is operationally powerful and does not permit signaling superuser-owned backends.<sup><a href="#r10">[10]</a><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="replication">
+<h2>10. Replication lag</h2>
+<p>
+On a primary server, <code>pg_stat_replication</code> shows one row per directly connected WAL sender. It exposes sent, written, flushed, and replayed WAL locations and time-based lag estimates. Replication is asynchronous by default unless synchronous replication is configured, so some lag is inherent in ordinary streaming replication.<sup><a href="#r1">[1]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>10.1 Primary-side replication status</h3>
+<pre><code>SELECT
+    application_name,
+    client_addr,
+    state,
+    sync_state,
+    sent_lsn,
+    write_lsn,
+    flush_lsn,
+    replay_lsn,
+    write_lag,
+    flush_lag,
+    replay_lag
+FROM pg_stat_replication
+ORDER BY application_name;</code></pre>
+
+<h3>10.2 Byte lag</h3>
+<pre><code>SELECT
+    application_name,
+    pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS replay_lag_bytes,
+    pg_size_pretty(
+        pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn)
+    ) AS replay_lag_pretty
+FROM pg_stat_replication
+WHERE replay_lsn IS NOT NULL
+ORDER BY replay_lag_bytes DESC;</code></pre>
+
+<h3>10.3 Standby-side replay delay</h3>
+<pre><code>SELECT
+    pg_is_in_recovery() AS in_recovery,
+    pg_last_wal_receive_lsn() AS receive_lsn,
+    pg_last_wal_replay_lsn() AS replay_lsn,
+    now() - pg_last_xact_replay_timestamp() AS replay_delay;</code></pre>
+
+<div class="callout warn">
+<strong>Timestamp lag can mislead on an idle primary.</strong> If the primary has not committed a transaction recently, the age of the last replayed commit can grow even when the standby is fully caught up. Combine timestamp-based delay with WAL-position/byte lag and replication state.
+</div>
+
+<h3>10.4 Replication-slot retention</h3>
+<pre><code>SELECT
+    slot_name,
+    slot_type,
+    active,
+    restart_lsn,
+    confirmed_flush_lsn,
+    wal_status,
+    safe_wal_size
+FROM pg_replication_slots
+ORDER BY active, slot_name;</code></pre>
+
+<p>
+Replication slots can intentionally retain WAL required by consumers. PostgreSQL allows <code>max_slot_wal_keep_size</code> to limit the amount retained by slots at checkpoint time; inactive or lagging slots should be monitored because they can create severe <code>pg_wal</code> growth.<sup><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="wal">
+<h2>11. WAL statistics</h2>
+<p>
+<code>pg_stat_wal</code> reports cluster-wide WAL activity, including WAL record count, full-page images, bytes generated, WAL buffer full events, writes, syncs, and timing when WAL I/O timing is tracked. These statistics help separate query-level latency from WAL-generation and durability pressure.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full,
+    wal_write,
+    wal_sync,
+    wal_write_time,
+    wal_sync_time,
+    stats_reset
+FROM pg_stat_wal;</code></pre>
+
+<h3>11.1 WAL generation rate</h3>
+<p>
+For dashboards, plot the rate of change of <code>wal_bytes</code> rather than the cumulative total. A sharp increase may correspond to bulk loads, index builds, mass updates, full-page-image generation after checkpoints, or simply legitimate traffic growth. Correlate WAL rate with deployment events and <code>pg_stat_statements.wal_bytes</code> to find SQL fingerprints responsible for the write volume.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>11.2 Archiver health</h3>
+<pre><code>SELECT
+    archived_count,
+    last_archived_wal,
+    last_archived_time,
+    failed_count,
+    last_failed_wal,
+    last_failed_time,
+    stats_reset
+FROM pg_stat_archiver;</code></pre>
+</section>
+
+<section id="connections">
+<h2>12. Connection counts</h2>
+<p>
+Each ordinary PostgreSQL client session is represented by a backend process, and connection capacity is finite. Monitoring should distinguish total sessions from active, idle, idle-in-transaction, waiting, and reserved administrative capacity rather than alerting on one undifferentiated count.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>SELECT
+    count(*) AS total_sessions,
+    count(*) FILTER (WHERE backend_type = 'client backend') AS client_sessions,
+    count(*) FILTER (WHERE state = 'active') AS active,
+    count(*) FILTER (WHERE state = 'idle') AS idle,
+    count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_transaction,
+    count(*) FILTER (WHERE wait_event_type IS NOT NULL) AS waiting
+FROM pg_stat_activity;</code></pre>
+
+<h3>12.1 Compare with limits</h3>
+<pre><code>SELECT
+    current_setting('max_connections')::int AS max_connections,
+    current_setting('superuser_reserved_connections')::int
+        AS superuser_reserved_connections,
+    count(*) FILTER (WHERE backend_type = 'client backend') AS used
+FROM pg_stat_activity;</code></pre>
+
+<p>
+Connection saturation should be interpreted with pool metrics from the application tier. A database with 80% of its connection limit used might be healthy if the pool is stable and queries are short, or it might already be in trouble if pool checkout latency is rising and most sessions are blocked.
+</p>
+</section>
+
+<section id="cache">
+<h2>13. Cache hit ratio</h2>
+<p>
+A common PostgreSQL cache-hit ratio is calculated from <code>pg_stat_database.blks_hit</code> and <code>blks_read</code>. PostgreSQL explicitly states that <code>blks_hit</code> counts hits in the PostgreSQL shared-buffer cache only; it does not include the operating system's filesystem cache. Therefore a low or changing value is an investigation signal, not a direct measurement of physical disk misses.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>SELECT
+    datname,
+    blks_hit,
+    blks_read,
+    round(
+      100.0 * blks_hit
+      / NULLIF(blks_hit + blks_read, 0),
+      2
+    ) AS shared_buffer_hit_pct
+FROM pg_stat_database
+WHERE datname IS NOT NULL
+ORDER BY shared_buffer_hit_pct;</code></pre>
+
+<h3>13.1 Table-level I/O views</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    heap_blks_read,
+    heap_blks_hit,
+    idx_blks_read,
+    idx_blks_hit,
+    toast_blks_read,
+    toast_blks_hit
+FROM pg_statio_user_tables
+ORDER BY heap_blks_read DESC
+LIMIT 30;</code></pre>
+
+<p>
+A better workflow than alerting on an arbitrary 99% threshold is to correlate cache ratios with read latency, <code>pg_stat_io</code>, storage metrics, and application performance. Large analytical scans may legitimately reduce a database-wide ratio without representing an outage.
+</p>
+</section>
+
+<section id="disk">
+<h2>14. Disk usage</h2>
+<p>
+PostgreSQL provides size functions including <code>pg_database_size</code>, <code>pg_table_size</code>, <code>pg_indexes_size</code>, <code>pg_relation_size</code>, <code>pg_total_relation_size</code>, and <code>pg_tablespace_size</code>. These report database-object storage but do not replace filesystem-level monitoring of the data directory, <code>pg_wal</code>, logs, temporary files, archives, and free disk space.<sup><a href="#r16">[16]</a><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>14.1 Database sizes</h3>
+<pre><code>SELECT
+    datname,
+    pg_size_pretty(pg_database_size(datname)) AS database_size
+FROM pg_database
+WHERE datallowconn
+ORDER BY pg_database_size(datname) DESC;</code></pre>
+
+<h3>14.2 Largest user relations</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    pg_size_pretty(pg_table_size(relid)) AS table_size,
+    pg_size_pretty(pg_indexes_size(relid)) AS indexes_size,
+    pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM pg_statio_user_tables
+ORDER BY pg_total_relation_size(relid) DESC
+LIMIT 40;</code></pre>
+
+<h3>14.3 Tablespace usage</h3>
+<pre><code>SELECT
+    spcname,
+    pg_size_pretty(pg_tablespace_size(oid)) AS size
+FROM pg_tablespace
+ORDER BY pg_tablespace_size(oid) DESC;</code></pre>
+
+<p>
+A production alert should normally be based on filesystem free bytes and growth rate, not solely on SQL object totals, because WAL retention or logs can fill a disk even if ordinary table sizes are stable.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="logs">
+<h2>15. PostgreSQL logs</h2>
+<p>
+PostgreSQL logging can record startup/shutdown events, errors, checkpoints, connections, lock waits, temporary files, autovacuum behavior, slow statements, and other operational events depending on configuration. <code>log_min_duration_statement</code> logs completed statements whose duration exceeds a configured threshold; <code>log_min_duration_sample</code> allows sampling to reduce volume at high traffic levels.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>15.1 Example logging configuration</h3>
+<pre><code># postgresql.conf
+
+logging_collector = on
+log_destination = 'stderr'
+
+# Correlate log lines by time, PID, user, database, application, and client.
+log_line_prefix = '%m [%p] user=%u db=%d app=%a client=%h '
+
+# Slow statements.
+log_min_duration_statement = '500ms'
+
+# Operational events.
+log_checkpoints = on
+log_lock_waits = on
+log_temp_files = '100MB'
+
+# Connection lifecycle if required for the environment.
+log_connections = on
+log_disconnections = on</code></pre>
+
+<p>
+PostgreSQL recommends including a process ID or session identifier in <code>log_line_prefix</code> when correlating statement and duration messages. PostgreSQL 18 expanded connection logging granularity and added a <code>%L</code> prefix escape for client IP information.<sup><a href="#r8">[8]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>15.2 Logging tradeoffs</h3>
+<p>
+Logging every statement on a high-throughput system can create substantial volume and can expose sensitive SQL text. Prefer targeted duration thresholds, sampling, and structured application traces. Query parameters and secrets should not be intentionally collected unless there is a justified and secured operational need.
+</p>
+</section>
+
+<section id="prometheus">
+<h2>16. Prometheus</h2>
+<p>
+Prometheus scrapes HTTP metrics endpoints on a configured interval and stores time series identified by labels. A common PostgreSQL pattern uses <code>prometheus-community/postgres_exporter</code> to query PostgreSQL statistics and expose them at an HTTP <code>/metrics</code> endpoint. The current exporter project lists PostgreSQL 13 through 18 in its CI-tested versions and includes collectors for database, locks, replication, replication slots, activity, archiver, table statistics, WAL, and optional <code>pg_stat_statements</code> metrics.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>16.1 Exporter monitoring role</h3>
+<pre><code>CREATE ROLE postgres_exporter LOGIN PASSWORD 'managed-secret';
+GRANT CONNECT ON DATABASE postgres TO postgres_exporter;
+GRANT pg_monitor TO postgres_exporter;</code></pre>
+
+<p>
+The exporter documentation recommends <code>pg_monitor</code> or <code>pg_read_all_stats</code> for non-superuser monitoring on supported modern PostgreSQL releases.<sup><a href="#r3">[3]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>16.2 Exporter example</h3>
+<pre><code>docker run --rm \
+  --network host \
+  -e DATA_SOURCE_URI="localhost:5432/postgres?sslmode=require" \
+  -e DATA_SOURCE_USER="postgres_exporter" \
+  -e DATA_SOURCE_PASS_FILE="/run/secrets/postgres_exporter_password" \
+  -v /run/secrets:/run/secrets:ro \
+  quay.io/prometheuscommunity/postgres-exporter</code></pre>
+
+<p>
+The exporter listens on port 9187 by default and exposes metrics at <code>/metrics</code>. Its documentation recommends file-based password input as an alternative to putting the password directly in an environment variable.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>16.3 Prometheus scrape configuration</h3>
+<pre><code>global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/postgres.yml
+
+scrape_configs:
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - db01-exporter.internal:9187
+          - db02-exporter.internal:9187</code></pre>
+
+<p>
+Prometheus configuration uses <code>scrape_configs</code> for targets and <code>rule_files</code> for recording and alerting rules; valid configuration can be reloaded at runtime.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>16.4 PromQL examples</h3>
+<pre><code># Transactions per second by database.
+sum by (datname) (
+  rate(pg_stat_database_xact_commit[5m])
+  +
+  rate(pg_stat_database_xact_rollback[5m])
+)
+
+# Rollbacks per second.
+sum by (datname) (
+  rate(pg_stat_database_xact_rollback[5m])
+)
+
+# Current PostgreSQL sessions.
+sum by (datname) (
+  pg_stat_database_numbackends
+)
+
+# Shared-buffer hit ratio over a moving interval.
+sum by (datname) (rate(pg_stat_database_blks_hit[5m]))
+/
+clamp_min(
+  sum by (datname) (
+    rate(pg_stat_database_blks_hit[5m])
+    +
+    rate(pg_stat_database_blks_read[5m])
+  ),
+  1
+)</code></pre>
+
+<p>
+Prometheus <code>rate()</code> calculates a per-second average rate for counters and accounts for counter resets; its documentation recommends applying <code>rate()</code> before aggregating so resets can be detected correctly.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>16.5 Recording rules</h3>
+<pre><code>groups:
+  - name: postgres-recording
+    interval: 30s
+    rules:
+      - record: postgres:transactions_per_second:5m
+        expr: |
+          sum by (instance, datname) (
+            rate(pg_stat_database_xact_commit[5m])
+            +
+            rate(pg_stat_database_xact_rollback[5m])
+          )
+
+      - record: postgres:shared_buffer_hit_ratio:5m
+        expr: |
+          sum by (instance, datname) (
+            rate(pg_stat_database_blks_hit[5m])
+          )
+          /
+          clamp_min(
+            sum by (instance, datname) (
+              rate(pg_stat_database_blks_hit[5m])
+              +
+              rate(pg_stat_database_blks_read[5m])
+            ),
+            1
+          )</code></pre>
+
+<p>
+Recording rules precompute expressions at regular intervals and store the result as new time series. Prometheus provides <code>promtool check rules</code> for syntax validation.<sup><a href="#r18">[18]</a></sup>
+</p>
+</section>
+
+<section id="grafana">
+<h2>17. Grafana</h2>
+<p>
+Grafana can query Prometheus as a data source and render PostgreSQL telemetry as dashboards, panels, tables, and alerts. Grafana variables can make one dashboard reusable across environments, clusters, instances, databases, and applications by replacing hard-coded labels with selectable values.<sup><a href="#r5">[5]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>17.1 Recommended dashboard rows</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Dashboard row</th><th>Panels</th></tr></thead>
+<tbody>
+<tr><td>Service overview</td><td>availability, application DB error rate, p95/p99 request latency, transaction rate</td></tr>
+<tr><td>Connections</td><td>connections, active/idle/idle-in-transaction, pool saturation, connection failures</td></tr>
+<tr><td>Queries</td><td>top query fingerprints, latency, calls/sec, temp spill, WAL bytes</td></tr>
+<tr><td>Storage/cache</td><td>shared-buffer hit ratio, disk reads/writes, I/O latency, DB size, filesystem free space</td></tr>
+<tr><td>Maintenance</td><td>dead tuples, autovacuum/analyze recency, long transactions, vacuum progress</td></tr>
+<tr><td>WAL/HA</td><td>WAL bytes/sec, archiver errors, replication lag, slot retention</td></tr>
+<tr><td>Locks</td><td>blocked sessions, longest blocker, deadlocks</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>17.2 Template variable example</h3>
+<pre><code># Grafana query variable:
+label_values(pg_stat_database_numbackends, instance)
+
+# Dashboard query:
+sum by (datname) (
+  pg_stat_database_numbackends{instance=~"$instance"}
+)</code></pre>
+
+<p>
+Grafana's Prometheus variable support can populate values from Prometheus labels and supports regex matching for multi-value selections.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>17.3 Grafana alerting</h3>
+<p>
+Grafana can create Grafana-managed alerts that query Prometheus, while Prometheus-native alert rules can also be displayed in Grafana. The Grafana documentation recommends pending periods to avoid alerting on brief spikes and recording rules for expensive repeated expressions.<sup><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="otel">
+<h2>18. OpenTelemetry</h2>
+<p>
+OpenTelemetry complements PostgreSQL server monitoring by instrumenting application database calls. Its database semantic conventions define client spans for database operations; for PostgreSQL, <code>db.system.name</code> is set to <code>postgresql</code>, and database calls normally use span kind <code>CLIENT</code>. This lets a trace show how much of an HTTP request's latency was spent waiting on PostgreSQL and which service issued the call.<sup><a href="#r6">[6]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<div class="diagram">HTTP request span
+  |
+  +--> validation
+  |
+  +--> PostgreSQL CLIENT span
+  |       db.system.name = postgresql
+  |       db.namespace   = appdb.public   (when available)
+  |       db.operation   = SELECT/INSERT/... (when available)
+  |
+  +--> downstream HTTP span
+  |
+  +--> response</div>
+
+<h3>18.1 OTLP export</h3>
+<pre><code># Common OpenTelemetry environment configuration.
+export OTEL_SERVICE_NAME="orders-api"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector:4318"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"</code></pre>
+
+<p>
+OpenTelemetry defines OTLP environment variables for shared and signal-specific endpoints. With the common HTTP endpoint, exporters derive paths such as <code>/v1/traces</code>, <code>/v1/metrics</code>, and <code>/v1/logs</code> according to the OTLP exporter specification.<sup><a href="#r22">[22]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>18.2 Collector pipeline</h3>
+<pre><code>receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
+exporters:
+  otlp:
+    endpoint: observability-backend.internal:4317
+    tls:
+      insecure: false
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]
+
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]</code></pre>
+
+<p>
+The OpenTelemetry Collector is designed to receive telemetry, process it, and forward it to one or more backends through signal pipelines. The exact production configuration depends on the chosen backend and security model.<sup><a href="#r24">[24]</a></sup>
+</p>
+
+<h3>18.3 Java zero-code JDBC instrumentation</h3>
+<pre><code>export JAVA_TOOL_OPTIONS="-javaagent:/opt/otel/opentelemetry-javaagent.jar"
+export OTEL_SERVICE_NAME="orders-api"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector:4318"
+
+java -jar orders-api.jar</code></pre>
+
+<p>
+The OpenTelemetry Java agent instruments many common libraries without application source changes. Its supported-library documentation includes JDBC database client spans and metrics. Database-statement sanitization is enabled by default in the Java agent so literal values are replaced rather than exported verbatim in captured SQL text.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>18.4 What traces add that <code>pg_stat_statements</code> cannot</h3>
+<p>
+A query fingerprint might have an acceptable average in <code>pg_stat_statements</code> yet be slow only for a specific API endpoint, tenant, or request fan-out path. Traces provide per-request causality and service context. Conversely, traces are sampled and application-scoped, while <code>pg_stat_statements</code> supplies server-wide aggregate query evidence. The signals are strongest when correlated rather than substituted for one another.
+</p>
+</section>
+
+<section id="alerts">
+<h2>19. Alert design</h2>
+<p>
+An alert should identify an actionable symptom or risk, use a persistence window where brief spikes are harmless, and link to a runbook. Prometheus supports alert rules with an optional <code>for</code> duration so a condition must remain active before firing; Alertmanager adds notification routing, grouping, silencing, and inhibition.<sup><a href="#r27">[27]</a><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>19.1 Example Prometheus rules</h3>
+<pre><code>groups:
+  - name: postgres-alerts
+    rules:
+
+      - alert: PostgreSQLExporterScrapeFailing
+        expr: pg_exporter_last_scrape_error == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL exporter scrape is failing on {{ $labels.instance }}"
+
+      - alert: PostgreSQLTooManyConnections
+        expr: |
+          sum by (instance) (pg_stat_database_numbackends)
+          &gt; 0.85 * pg_settings_max_connections
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections exceed 85% of max"
+
+      - alert: PostgreSQLDeadlocksIncreasing
+        expr: |
+          sum by (instance) (
+            increase(pg_stat_database_deadlocks[10m])
+          ) &gt; 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL deadlocks detected"
+
+      - alert: PostgreSQLSharedBufferHitRatioDrop
+        expr: |
+          postgres:shared_buffer_hit_ratio:5m &lt; 0.90
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Shared-buffer hit ratio dropped; investigate I/O and workload"</code></pre>
+
+<div class="callout warn">
+<strong>Thresholds above are examples, not universal targets.</strong> Production thresholds should come from workload baselines and service objectives. A cache-hit ratio or connection percentage is only useful when it correlates with a real capacity or latency risk.
+</div>
+
+<h3>19.2 Alert on absence too</h3>
+<p>
+Monitoring should detect missing telemetry as well as bad values. Prometheus alert expressions can use target-level <code>up</code> or <code>absent()</code>-style checks so the loss of an exporter does not silently look like a healthy zero rate.<sup><a href="#r20">[20]</a><a href="#r27">[27]</a></sup>
+</p>
+</section>
+
+<section id="dashboards">
+<h2>20. Dashboard design principles</h2>
+
+<h3>20.1 Put service symptoms first</h3>
+<p>
+The first row should answer whether users are affected: application database error rate, request latency, transaction throughput, and database availability. CPU, buffer hits, and WAL are diagnostic signals and belong below the symptom row.
+</p>
+
+<h3>20.2 Show rates for counters</h3>
+<p>
+Cumulative counters such as commits, block reads, WAL bytes, deadlocks, and temp bytes should usually be graphed as rates or interval increases. Raw cumulative values are still useful for reset detection and accounting but are poor visualizations of current load.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>20.3 Keep reset context visible</h3>
+<p>
+If PostgreSQL statistics are reset, counter rates can temporarily change and long-term totals lose continuity. Include <code>stats_reset</code>-derived context or exporter/process uptime panels so operators know whether a sudden drop to zero is a workload change or a counter reset.
+</p>
+
+<h3>20.4 Avoid high-cardinality labels</h3>
+<p>
+Do not export full SQL text, arbitrary user IDs, request IDs, or other unbounded values as Prometheus labels. Keep high-cardinality query/request detail in logs and traces; use bounded labels such as instance, database, environment, service, or query ID for metrics.
+</p>
+</section>
+
+<section id="runbook">
+<h2>21. Incident investigation workflow</h2>
+
+<h3>21.1 Scenario: database latency spike</h3>
+<ol class="checklist">
+<li><strong>Confirm user impact:</strong> application p95/p99 and error rate.</li>
+<li><strong>Check sessions:</strong> active count, pool checkout pressure, idle-in-transaction count.</li>
+<li><strong>Check waits:</strong> <code>pg_stat_activity.wait_event_type</code> and blocking chains.</li>
+<li><strong>Check expensive SQL:</strong> <code>pg_stat_statements</code> recent rates and top total/mean time.</li>
+<li><strong>Check I/O:</strong> <code>pg_stat_io</code>, cache behavior, filesystem/storage latency.</li>
+<li><strong>Check WAL/checkpoints:</strong> WAL generation, sync time, checkpoint activity.</li>
+<li><strong>Check replication:</strong> if reads are routed to replicas, inspect lag and recovery conflicts.</li>
+<li><strong>Check traces:</strong> identify which endpoints and request paths correlate with slow DB spans.</li>
+<li><strong>Check logs:</strong> lock waits, slow statements, temp files, errors, autovacuum/checkpoint events.</li>
+</ol>
+
+<h3>21.2 Compact incident SQL</h3>
+<pre><code>-- 1. What is active?
+SELECT pid, application_name, wait_event_type, wait_event,
+       now()-query_start AS age, left(query,160)
+FROM pg_stat_activity
+WHERE state='active'
+ORDER BY query_start;
+
+-- 2. Who is blocked?
+SELECT pid, pg_blocking_pids(pid), left(query,160)
+FROM pg_stat_activity
+WHERE cardinality(pg_blocking_pids(pid)) &gt; 0;
+
+-- 3. Long transactions?
+SELECT pid, application_name, state, now()-xact_start AS xact_age,
+       left(query,160)
+FROM pg_stat_activity
+WHERE xact_start IS NOT NULL
+ORDER BY xact_start;
+
+-- 4. Top cumulative SQL?
+SELECT calls, total_exec_time, mean_exec_time,
+       shared_blks_read, temp_blks_written, wal_bytes,
+       left(query,160)
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 20;
+
+-- 5. Replication?
+SELECT application_name, state, sync_state,
+       write_lag, flush_lag, replay_lag
+FROM pg_stat_replication;</code></pre>
+
+<div class="callout ok">
+<strong>Observability principle:</strong> use metrics to find the time window, SQL views to inspect current database state, logs to recover event detail, and traces to explain which application operations generated the database work.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Monitoring database activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. pg_stat_statements — track statistics of SQL planning and execution [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r3">Prometheus Community. postgres_exporter: PostgreSQL metric exporter for Prometheus [Internet]. GitHub; 2026 [cited 2026 Sep 15]. Available from: <a href="https://github.com/prometheus-community/postgres_exporter">https://github.com/prometheus-community/postgres_exporter</a></li>
+
+<li id="r4">Prometheus Authors. Prometheus configuration [Internet]. Prometheus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://prometheus.io/docs/prometheus/latest/configuration/configuration/">https://prometheus.io/docs/prometheus/latest/configuration/configuration/</a></li>
+
+<li id="r5">Grafana Labs. Grafana documentation [Internet]. Grafana; 2026 [cited 2026 Sep 15]. Available from: <a href="https://grafana.com/docs/grafana/latest/">https://grafana.com/docs/grafana/latest/</a></li>
+
+<li id="r6">OpenTelemetry Authors. Semantic conventions for PostgreSQL client operations [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/specs/semconv/db/postgresql/">https://opentelemetry.io/docs/specs/semconv/db/postgresql/</a></li>
+
+<li id="r7">OpenTelemetry Authors. Semantic conventions for database client spans [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/specs/semconv/db/database-spans/">https://opentelemetry.io/docs/specs/semconv/db/database-spans/</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Error reporting and logging [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-logging.html">https://www.postgresql.org/docs/18/runtime-config-logging.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Cumulative statistics system and statistics-fetch consistency [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-stats.html">https://www.postgresql.org/docs/18/monitoring-stats.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Predefined roles [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/predefined-roles.html">https://www.postgresql.org/docs/18/predefined-roles.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. PostgreSQL 18 release notes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Viewing locks [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-locks.html">https://www.postgresql.org/docs/18/monitoring-locks.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. System administration functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Replication configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-replication.html">https://www.postgresql.org/docs/18/runtime-config-replication.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Database object size functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r17">Prometheus Authors. Query functions: rate, increase, irate [Internet]. Prometheus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://prometheus.io/docs/prometheus/latest/querying/functions/">https://prometheus.io/docs/prometheus/latest/querying/functions/</a></li>
+
+<li id="r18">Prometheus Authors. Defining recording rules [Internet]. Prometheus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/">https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/</a></li>
+
+<li id="r19">Grafana Labs. Prometheus template variables [Internet]. Grafana Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/">https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables/</a></li>
+
+<li id="r20">Grafana Labs. Prometheus alerting [Internet]. Grafana Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://grafana.com/docs/grafana/latest/datasources/prometheus/alerting/">https://grafana.com/docs/grafana/latest/datasources/prometheus/alerting/</a></li>
+
+<li id="r21">OpenTelemetry Authors. Semantic conventions for SQL database client operations [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/specs/semconv/db/sql/">https://opentelemetry.io/docs/specs/semconv/db/sql/</a></li>
+
+<li id="r22">OpenTelemetry Authors. OTLP exporter configuration [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/">https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/</a></li>
+
+<li id="r23">OpenTelemetry Authors. OpenTelemetry Protocol Exporter specification [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/specs/otel/protocol/exporter/">https://opentelemetry.io/docs/specs/otel/protocol/exporter/</a></li>
+
+<li id="r24">OpenTelemetry Authors. Collector quick start [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/collector/quick-start/">https://opentelemetry.io/docs/collector/quick-start/</a></li>
+
+<li id="r25">OpenTelemetry Authors. Java agent [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/zero-code/java/agent/">https://opentelemetry.io/docs/zero-code/java/agent/</a></li>
+
+<li id="r26">OpenTelemetry Authors. Java agent instrumentation configuration and JDBC support [Internet]. OpenTelemetry; 2026 [cited 2026 Sep 15]. Available from: <a href="https://opentelemetry.io/docs/zero-code/java/agent/instrumentation/">https://opentelemetry.io/docs/zero-code/java/agent/instrumentation/</a>; <a href="https://opentelemetry.io/docs/zero-code/java/agent/supported-libraries/">https://opentelemetry.io/docs/zero-code/java/agent/supported-libraries/</a></li>
+
+<li id="r27">Prometheus Authors. Alerting rules [Internet]. Prometheus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/">https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/</a></li>
+
+<li id="r28">Prometheus Authors. Alertmanager configuration [Internet]. Prometheus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://prometheus.io/docs/alerting/latest/configuration/">https://prometheus.io/docs/alerting/latest/configuration/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical monitoring reference. Exact metric names, exporter collectors, OpenTelemetry instrumentation behavior, and observability-platform capabilities can change by version. Validate dashboards and alert rules against the PostgreSQL, exporter, Prometheus, Grafana, and OpenTelemetry versions deployed in production.
+</p>
+</footer>
+
+</body>
+</html>

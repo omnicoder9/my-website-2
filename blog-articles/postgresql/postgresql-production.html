@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on running PostgreSQL in production: provisioning, configuration management, schema migrations, deployment, backups, HA, disaster recovery, monitoring, capacity planning, connection management, security, upgrades, compatibility, and operational runbooks.">
+<title>PostgreSQL in Production: Engineering, Operations, and Reliability</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5c687a;--line:#dce3ed;
+  --accent:#315da8;--accent2:#173e75;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e6;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1140px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.6vw,3.55rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:940px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,66px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.82rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.3rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:770px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.small{font-size:.92rem;color:var(--muted)}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+footer{max-width:1140px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL in Production</h1>
+  <p class="dek">A production engineering guide to provisioning, configuration, schema change, deployment, backup and recovery, high availability, monitoring, capacity, connection management, security, upgrades, compatibility, and operational runbooks.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 documentation baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+Running PostgreSQL in production is a reliability discipline rather than a single configuration exercise. A production system must provision durable infrastructure, manage server configuration as controlled state, deploy application and schema changes without unsafe lock amplification, maintain independently testable backups, define high-availability and disaster-recovery objectives, observe database behavior, plan resource growth, manage connection pressure, enforce least privilege, and upgrade before a major version leaves support. PostgreSQL supplies the mechanisms for these tasks—including physical and logical replication, continuous WAL archiving and point-in-time recovery, statistics views, TLS, role-based access control, configuration views, <code>pg_upgrade</code>, checksums, and administration utilities—but the operator must combine those mechanisms into a tested operating model.<sup><a href="#r1">[1]</a>-<a href="#r5">[5]</a></sup>
+</p>
+<p>
+This article uses PostgreSQL 18.6 as the current stable documentation baseline. As of September 2026, PostgreSQL 18, 17, 16, 15, and 14 are supported; the PostgreSQL project normally supports each major release for five years and recommends running the current minor release for the chosen major version.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#production-model">Production operating model</a></li>
+<li><a href="#provisioning">Database provisioning</a></li>
+<li><a href="#configuration">Configuration management</a></li>
+<li><a href="#migrations">Schema migrations</a></li>
+<li><a href="#deployment">Deployment strategies</a></li>
+<li><a href="#backup">Backup strategy</a></li>
+<li><a href="#ha">HA architecture</a></li>
+<li><a href="#dr">Disaster recovery</a></li>
+<li><a href="#monitoring">Monitoring</a></li>
+<li><a href="#capacity">Capacity planning</a></li>
+<li><a href="#connections">Connection management</a></li>
+<li><a href="#security">Security hardening</a></li>
+<li><a href="#upgrade">Upgrade planning</a></li>
+<li><a href="#compatibility">Version compatibility</a></li>
+<li><a href="#runbooks">Operational runbooks</a></li>
+<li><a href="#checklist">Production readiness checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="production-model">
+<h2>1. Production operating model</h2>
+<p>
+The database should be operated against explicit service objectives. At minimum, define a recovery point objective (RPO), recovery time objective (RTO), availability target, expected peak throughput, maximum acceptable query latency for important workloads, retention obligations, and maintenance windows. PostgreSQL's backup, replication, failover, and monitoring facilities provide the building blocks, but the values of those objectives determine which building blocks are required.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<div class="diagram">                 ┌──────────────────────────┐
+                 │  Applications / jobs     │
+                 └────────────┬─────────────┘
+                              │
+                     TLS + authentication
+                              │
+                 ┌────────────▼─────────────┐
+                 │ pool / routing endpoint │
+                 └───────┬─────────┬───────┘
+                         │         │
+                     writes      stale-tolerant reads
+                         │         │
+                 ┌───────▼───┐ ┌──▼──────────┐
+                 │ primary   │ │ hot standby │
+                 └───────┬───┘ └──┬──────────┘
+                         │ WAL       │ replay
+                         └───────────┘
+                              │
+                         WAL archive
+                              │
+                 ┌────────────▼─────────────┐
+                 │ backups / PITR / offsite │
+                 └──────────────────────────┘
+
+Observability spans every layer: app latency, pool state, PostgreSQL
+statistics, OS/storage metrics, replication lag, archiver state, and backups.</div>
+
+<p>
+High availability and disaster recovery should not be conflated. A local hot standby can reduce downtime after a server failure, while a geographically separate backup or replica addresses a different failure domain. Similarly, a replica is not a substitute for a backup: replication can faithfully reproduce accidental deletes or destructive DDL, whereas point-in-time recovery can return to an earlier state if the required base backup and WAL remain available.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="provisioning">
+<h2>2. Database provisioning</h2>
+
+<h3>2.1 Provision from requirements, not defaults</h3>
+<p>
+Provisioning should start from workload characteristics: dataset size and growth, working-set size, write rate, WAL generation rate, read/write mix, expected connection concurrency, maintenance workload, RPO/RTO, and the storage system's latency and durability properties. PostgreSQL exposes separate memory and connection parameters, and its resource-consumption documentation notes that many memory settings apply per operation or per worker rather than once per server; consequently, a configuration that looks safe in isolation can overcommit memory under concurrency.<sup><a href="#r11">[11]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>2.2 Initialize deliberately</h3>
+<p>
+<code>initdb</code> creates a PostgreSQL database cluster and fixes choices such as the initial locale provider and cluster-level checksum state. In PostgreSQL 18, data checksums are enabled by default and can be disabled explicitly with <code>--no-data-checksums</code>. When enabled, checksums are stored on data pages and verified when pages are read; temporary files and some internal structures are outside that protection.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<pre><code># Example: explicit cluster initialization.
+# Run as the operating-system account dedicated to PostgreSQL.
+
+initdb \
+  -D /var/lib/postgresql/18/main \
+  --encoding=UTF8 \
+  --locale-provider=icu \
+  --locale=en-US
+
+# Confirm the checksum state after startup.
+psql -Atqc "SHOW data_checksums"</code></pre>
+
+<p>
+The production rule is to make cluster initialization reproducible. Locale, encoding, checksum state, filesystem layout, service user, directory permissions, and binary version should be recorded in infrastructure code or a build procedure rather than inferred from whatever defaults happen to exist on a host.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>2.3 Storage layout</h3>
+<p>
+PostgreSQL relies on its write-ahead log for crash recovery and requires a storage stack that correctly implements the durability behavior expected by <code>fsync</code> and related synchronization methods. Settings such as disabling <code>fsync</code> or <code>full_page_writes</code> are explicitly documented as non-durable optimizations and should not be used for ordinary production systems that require committed data to survive host or power failure.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>2.4 Provisioning verification</h3>
+<pre><code>-- Cluster identity and version.
+SELECT version();
+SHOW server_version;
+SHOW server_version_num;
+
+-- Fundamental durability/physical settings.
+SHOW data_checksums;
+SHOW wal_level;
+SHOW fsync;
+SHOW full_page_writes;
+SHOW synchronous_commit;
+
+-- Core sizing.
+SHOW max_connections;
+SHOW shared_buffers;
+SHOW work_mem;
+SHOW maintenance_work_mem;
+SHOW max_wal_size;
+
+-- Where configuration came from.
+SELECT name, setting, unit, context, source, sourcefile, sourceline, pending_restart
+FROM pg_settings
+WHERE name IN (
+  'max_connections','shared_buffers','work_mem','maintenance_work_mem',
+  'max_wal_size','wal_level','archive_mode','ssl'
+)
+ORDER BY name;</code></pre>
+
+<p>
+<code>pg_settings</code> reports each setting's context, source, and whether a file change is awaiting restart; this is useful for proving that the provisioned server is actually running the intended configuration rather than merely having the intended text in a file.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="configuration">
+<h2>3. Configuration management</h2>
+
+<h3>3.1 Treat PostgreSQL configuration as controlled state</h3>
+<p>
+PostgreSQL reads configuration from <code>postgresql.conf</code> and optionally included files. <code>ALTER SYSTEM</code> writes settings to <code>postgresql.auto.conf</code>, which overrides values from <code>postgresql.conf</code>. A configuration change may be session-settable, reloadable with SIGHUP, or require a server restart depending on the parameter's context.<sup><a href="#r7">[7]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<p>
+Production teams should choose one authoritative configuration path. If an external configuration manager owns the files, uncontrolled <code>ALTER SYSTEM</code> use can create drift because <code>postgresql.auto.conf</code> may override managed values. PostgreSQL 18 includes <code>allow_alter_system</code> specifically to help environments where an external tool is intended to control configuration, though the documentation states that disabling <code>ALTER SYSTEM</code> is not itself a security boundary.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>3.2 Example managed configuration fragment</h3>
+<pre><code># 00-production.conf
+# Example only: values must be sized for the actual workload.
+
+listen_addresses = '10.20.0.15'
+port = 5432
+
+max_connections = 200
+
+shared_buffers = '8GB'
+work_mem = '16MB'
+maintenance_work_mem = '1GB'
+
+wal_level = replica
+max_wal_size = '16GB'
+min_wal_size = '2GB'
+
+archive_mode = on
+archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'
+
+log_checkpoints = on
+log_lock_waits = on
+log_min_duration_statement = '500ms'
+
+ssl = on
+ssl_min_protocol_version = 'TLSv1.2'
+
+shared_preload_libraries = 'pg_stat_statements'</code></pre>
+
+<p>
+The fragment demonstrates categories, not universal values. PostgreSQL's memory documentation warns that <code>work_mem</code> can be consumed by multiple query operations and multiple concurrent sessions, while parallel query can multiply resource use across workers. Therefore static “percentage of RAM” recipes are insufficient for sizing a busy production system.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>3.3 Validate before reload</h3>
+<pre><code>-- Check file parsing and identify ignored/error lines.
+SELECT
+    sourcefile,
+    sourceline,
+    name,
+    setting,
+    applied,
+    error
+FROM pg_file_settings
+WHERE error IS NOT NULL
+   OR applied IS FALSE
+ORDER BY sourcefile, sourceline;
+
+-- Reload valid SIGHUP settings.
+SELECT pg_reload_conf();
+
+-- Identify settings changed in files that still require restart.
+SELECT name, setting, pending_restart
+FROM pg_settings
+WHERE pending_restart;</code></pre>
+
+<p>
+<code>pg_file_settings</code> reports configuration-file entries and parsing/application errors, while <code>pg_reload_conf()</code> requests a server configuration reload. <code>pg_settings.pending_restart</code> identifies file changes that cannot take effect until restart.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>3.4 Change classes</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Change type</th><th>Operational treatment</th><th>Verification</th></tr></thead>
+<tbody>
+<tr><td>Session-level</td><td>Roll out at application/role/database level; no server restart.</td><td><code>SHOW</code>, <code>pg_settings</code>, new-session tests.</td></tr>
+<tr><td>SIGHUP</td><td>Validate files, reload, verify active values.</td><td><code>pg_reload_conf()</code>, logs, <code>pg_settings</code>.</td></tr>
+<tr><td>Restart required</td><td>Schedule maintenance/failover, validate startup path and rollback.</td><td><code>pending_restart</code>, startup logs, readiness checks.</td></tr>
+<tr><td>Cluster-init property</td><td>May require offline tool or new cluster, depending on property.</td><td><code>pg_controldata</code>, documented inspection commands.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="migrations">
+<h2>4. Schema migrations</h2>
+
+<h3>4.1 The production problem is locking, not SQL syntax</h3>
+<p>
+Many <code>ALTER TABLE</code> forms acquire an <code>ACCESS EXCLUSIVE</code> lock unless the command's documentation specifies a weaker level. An operation that completes instantly in a development database can wait behind an old transaction in production, and the queued exclusive lock can then block subsequent queries. Production migrations must therefore be designed around both the work the command performs and the lock it must acquire.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>4.2 Use bounded lock acquisition</h3>
+<pre><code>BEGIN;
+
+-- Do not let a deployment wait indefinitely behind a blocker.
+SET LOCAL lock_timeout = '3s';
+
+-- Bound the statement itself.
+SET LOCAL statement_timeout = '5min';
+
+ALTER TABLE orders
+    ADD COLUMN fulfillment_state text;
+
+COMMIT;</code></pre>
+
+<p>
+<code>lock_timeout</code> aborts a statement that waits too long to acquire a lock, while <code>statement_timeout</code> bounds total statement execution. PostgreSQL recommends against indiscriminately setting these globally in <code>postgresql.conf</code> because different workloads require different limits; deployment sessions are a natural place to set migration-specific values.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>4.3 Expand/contract migration pattern</h3>
+<p>
+For application-visible changes, prefer an expand/contract sequence: first add backward-compatible schema, then deploy application code that can operate with old and new representations, backfill or dual-write as required, switch reads, and only later remove the old representation. This approach is an application deployment strategy built on PostgreSQL's transactional DDL and ALTER facilities; it reduces the need for a schema change and code change to become globally visible at exactly the same instant.<sup><a href="#r12">[12]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h4>Phase 1: expand</h4>
+<pre><code>BEGIN;
+SET LOCAL lock_timeout = '2s';
+
+ALTER TABLE users
+    ADD COLUMN display_name_v2 text;
+
+COMMIT;</code></pre>
+
+<h4>Phase 2: backfill in bounded batches</h4>
+<pre><code>-- Repeat in batches from application/maintenance code.
+WITH batch AS (
+  SELECT id
+  FROM users
+  WHERE display_name_v2 IS NULL
+  ORDER BY id
+  LIMIT 5000
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE users AS u
+SET display_name_v2 = u.display_name
+FROM batch
+WHERE u.id = batch.id;</code></pre>
+
+<h4>Phase 3: enforce without a long initial validation scan</h4>
+<pre><code>ALTER TABLE users
+  ADD CONSTRAINT users_display_name_v2_nn
+  NOT NULL display_name_v2 NOT VALID;
+
+ALTER TABLE users
+  VALIDATE CONSTRAINT users_display_name_v2_nn;</code></pre>
+
+<p>
+PostgreSQL 18 permits foreign-key, check, and not-null constraints to be added as <code>NOT VALID</code>. The initial command skips validating old rows while still enforcing the constraint for subsequent writes; <code>VALIDATE CONSTRAINT</code> later scans existing data using a weaker <code>SHARE UPDATE EXCLUSIVE</code> lock than the usual exclusive schema-change path.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>4.4 Create indexes concurrently</h3>
+<pre><code>CREATE INDEX CONCURRENTLY idx_orders_customer_created
+ON orders(customer_id, created_at DESC);</code></pre>
+
+<p>
+A regular <code>CREATE INDEX</code> blocks writes while the index is built. <code>CREATE INDEX CONCURRENTLY</code> permits inserts, updates, and deletes to continue, at the cost of extra scans, waits, and total work. It cannot run inside a transaction block, and a failed concurrent build can leave an invalid index that should be inspected and removed or rebuilt.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>4.5 Unique constraints with reduced write blocking</h3>
+<pre><code>CREATE UNIQUE INDEX CONCURRENTLY users_email_uq_new
+ON users(lower(email));
+
+-- If the index is suitable for a constraint, attach it with ALTER TABLE.
+-- Expression indexes cannot become ordinary UNIQUE constraints;
+-- for simple columns, the documented USING INDEX route applies.</code></pre>
+
+<p>
+PostgreSQL documents a production-oriented technique for ordinary unique/primary-key constraints: build an eligible unique B-tree index concurrently, then attach it to the constraint with <code>ALTER TABLE ... ADD CONSTRAINT ... USING INDEX</code>. This avoids the long write-blocking phase of building that index under the constraint operation itself.<sup><a href="#r12">[12]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>4.6 Migration preflight</h3>
+<pre><code>-- Long-running transactions can hold old snapshots or locks.
+SELECT
+  pid,
+  usename,
+  application_name,
+  state,
+  now() - xact_start AS transaction_age,
+  wait_event_type,
+  wait_event,
+  left(query, 200) AS query
+FROM pg_stat_activity
+WHERE xact_start IS NOT NULL
+ORDER BY xact_start;
+
+-- Observe a concurrent index build.
+SELECT *
+FROM pg_stat_progress_create_index;</code></pre>
+
+<p>
+PostgreSQL exposes live backend and progress views for schema operations. Concurrent index builds can spend time waiting for writers, validating the index, or waiting for old snapshots; those phases are surfaced through <code>pg_stat_progress_create_index</code>.<sup><a href="#r24">[24]</a><a href="#r16">[16]</a></sup>
+</p>
+</section>
+
+<section id="deployment">
+<h2>5. Deployment strategies</h2>
+
+<h3>5.1 Separate application compatibility from migration completion</h3>
+<p>
+A robust application deployment is compatible with the database both before and after the migration step. This is especially important when deployments are rolling, because old and new application instances may overlap. Expand/contract schema changes, tolerant readers, versioned application behavior, and delayed destructive cleanup reduce coupling between database DDL and process replacement.<sup><a href="#r12">[12]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>5.2 Recommended release sequence</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Stage</th><th>Goal</th><th>Rollback posture</th></tr></thead>
+<tbody>
+<tr><td>Preflight</td><td>Confirm backup health, replication health, free storage, blockers, version, migration plan.</td><td>No production change yet.</td></tr>
+<tr><td>Expand schema</td><td>Add backward-compatible objects with bounded locks.</td><td>Usually leave additive objects in place if app rollback occurs.</td></tr>
+<tr><td>Deploy code</td><td>Roll out code compatible with both representations.</td><td>Roll back application without requiring destructive DDL.</td></tr>
+<tr><td>Backfill</td><td>Move historical data in throttled batches.</td><td>Pause/resume safely; measure replica/WAL/storage impact.</td></tr>
+<tr><td>Validate</td><td>Validate constraints and semantic equivalence.</td><td>Fix invalid rows without removing compatibility path.</td></tr>
+<tr><td>Contract</td><td>Remove old fields/paths only after rollback window ends.</td><td>Destructive step requires a new forward fix or restore.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>5.3 Deployment preflight example</h3>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+: "${DATABASE_URL:?must be set}"
+
+# Is PostgreSQL accepting connections?
+pg_isready -d "$DATABASE_URL"
+
+# Verify exact server version.
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc \
+  "SELECT current_setting('server_version');"
+
+# Refuse to deploy if a transaction has been open too long.
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "
+SELECT CASE WHEN EXISTS (
+  SELECT 1
+  FROM pg_stat_activity
+  WHERE xact_start IS NOT NULL
+    AND now() - xact_start &gt; interval '15 minutes'
+    AND pid &lt;&gt; pg_backend_pid()
+) THEN 1 ELSE 0 END;
+"
+
+# Optional: application-specific migration/version table check.
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc \
+  "SELECT max(version) FROM app_schema_migrations;"</code></pre>
+
+<p>
+<code>pg_isready</code> reports whether a PostgreSQL server is accepting, rejecting, or not responding to connection attempts through distinct exit codes, making it suitable for scripted readiness checks. A successful transport readiness test should still be complemented by application-level checks that exercise the actual database, role, schema, and critical query paths.<sup><a href="#r25">[25]</a></sup>
+</p>
+
+<h3>5.4 Do not use database restore as the first-line deployment rollback</h3>
+<p>
+A database restore is a recovery operation with an RPO/RTO cost, not an ordinary code rollback mechanism. For reversible application releases, design migrations so application rollback can occur without restoring the database. Reserve PITR or backup restoration for situations where data itself must be returned to an earlier state.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="backup">
+<h2>6. Backup strategy</h2>
+
+<h3>6.1 PostgreSQL has three fundamental backup approaches</h3>
+<p>
+The PostgreSQL documentation groups backups into SQL dumps, filesystem-level backups, and continuous archiving. Production systems commonly combine logical dumps for selective portability with physical base backups plus WAL archiving for fast whole-cluster restoration and point-in-time recovery.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>6.2 Define backup policy in RPO/RTO terms</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Mechanism</th><th>Primary use</th><th>Key limitation</th></tr></thead>
+<tbody>
+<tr><td><code>pg_dump</code>/<code>pg_dumpall</code></td><td>Logical portability, selective databases/objects, migrations, archival.</td><td>Restore time can be high for very large datasets; not a continuous PITR stream.</td></tr>
+<tr><td><code>pg_basebackup</code></td><td>Whole-cluster physical base backup; seed standbys/PITR.</td><td>Not selective at database/table level.</td></tr>
+<tr><td>WAL archive</td><td>Replay changes after a base backup; PITR.</td><td>Requires complete, durable archive coverage and retention discipline.</td></tr>
+<tr><td>Replica</td><td>HA/read scaling; can be a backup source.</td><td>Replicates logical mistakes; not historical recovery by itself.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>6.3 Continuous archiving</h3>
+<pre><code># postgresql.conf
+wal_level = replica
+archive_mode = on
+archive_command = '/usr/local/sbin/archive-wal "%p" "%f"'</code></pre>
+
+<pre><code>#!/usr/bin/env bash
+# /usr/local/sbin/archive-wal
+# Simplified local example. Production systems normally copy to
+# independently durable/off-site storage and verify persistence.
+
+set -euo pipefail
+
+src="$1"
+name="$2"
+dest="/srv/postgres-wal-archive/$name"
+
+if [[ -e "$dest" ]]; then
+  cmp --silent "$src" "$dest"
+  exit $?
+fi
+
+tmp="${dest}.tmp.$$"
+cp "$src" "$tmp"
+sync "$tmp"
+mv "$tmp" "$dest"</code></pre>
+
+<p>
+PostgreSQL retries archiving until the configured <code>archive_command</code> or archive module reports success. The documentation recommends that archival logic not overwrite a pre-existing WAL file with different contents, because archive-name collisions can otherwise destroy recoverability. Archived WAL contains effectively all database changes and must be protected accordingly.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>6.4 Base backups</h3>
+<pre><code># Full physical backup, streamed from a running server.
+pg_basebackup \
+  --host=db-primary.internal \
+  --username=backup \
+  --pgdata=/backup/base/2026-09-15 \
+  --format=plain \
+  --wal-method=stream \
+  --checkpoint=fast \
+  --progress \
+  --verbose</code></pre>
+
+<p>
+<code>pg_basebackup</code> takes a physical backup of the entire cluster over the replication protocol and can be used as the base for PITR or a standby. It can also back up from a properly configured standby. PostgreSQL 17 and later support incremental base backups; an incremental backup must be combined with its predecessor chain using <code>pg_combinebackup</code> before it can be used directly for restore.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h4>Incremental backup example</h4>
+<pre><code># Assuming full/backup_manifest is retained:
+pg_basebackup \
+  -h db-primary.internal \
+  -U backup \
+  -D /backup/inc/2026-09-16 \
+  --incremental=/backup/full/backup_manifest \
+  --progress
+
+# Restore preparation requires combining the chain:
+pg_combinebackup \
+  /backup/full \
+  /backup/inc/2026-09-16 \
+  -o /restore/combined</code></pre>
+
+<h3>6.5 Backup verification</h3>
+<p>
+A backup policy is incomplete without automated restore tests. The test should restore into isolated infrastructure, replay WAL to a chosen recovery point, start PostgreSQL, run structural and application-level validation, and measure the elapsed time. Backup age, WAL-archive age, restore success, and restore duration should be monitored as production signals.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<pre><code>-- Monitor the archiver.
+SELECT
+  archived_count,
+  last_archived_wal,
+  last_archived_time,
+  failed_count,
+  last_failed_wal,
+  last_failed_time
+FROM pg_stat_archiver;
+
+-- Monitor a running base backup.
+SELECT *
+FROM pg_stat_progress_basebackup;</code></pre>
+</section>
+
+<section id="ha">
+<h2>7. High-availability architecture</h2>
+
+<h3>7.1 Physical streaming replication</h3>
+<p>
+PostgreSQL physical streaming replication sends WAL from a primary to a standby, which replays the changes. Streaming replication is asynchronous by default: a transaction can commit on the primary before its changes are durable on a standby. If the primary fails during that lag window, transactions acknowledged to clients can be absent after failover.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>7.2 Synchronous replication</h3>
+<p>
+Synchronous replication can make a commit wait for confirmation from one or more synchronous standbys according to the configured policy. This reduces the acknowledged-data-loss window but adds commit latency and availability dependencies: if the required synchronous standby cannot respond, commits that require it can wait. The topology must therefore be selected from RPO, latency, and failure-domain requirements rather than from a generic rule that “synchronous is safer.”<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>7.3 Example physical standby configuration</h3>
+<h4>Primary</h4>
+<pre><code># postgresql.conf
+wal_level = replica
+max_wal_senders = 10
+max_replication_slots = 10
+
+# Example only; synchronous replication is a business/SLO choice.
+# synchronous_standby_names = 'FIRST 1 (db_standby_1)'</code></pre>
+
+<pre><code>-- Create a dedicated replication login.
+CREATE ROLE replicator
+WITH LOGIN REPLICATION
+PASSWORD 'use-a-secret-manager-generated-value';
+
+-- Optional physical slot to protect WAL needed by this standby.
+SELECT pg_create_physical_replication_slot('db_standby_1');</code></pre>
+
+<h4>HBA entry</h4>
+<pre><code># pg_hba.conf
+hostssl replication replicator 10.20.2.15/32 scram-sha-256</code></pre>
+
+<h4>Build the standby</h4>
+<pre><code>pg_basebackup \
+  -h db-primary.internal \
+  -U replicator \
+  -D /var/lib/postgresql/18/main \
+  -R \
+  --slot=db_standby_1 \
+  --wal-method=stream \
+  --progress</code></pre>
+
+<p>
+With <code>-R</code>, <code>pg_basebackup</code> writes <code>standby.signal</code> and appends connection settings to <code>postgresql.auto.conf</code> so the copied data directory can start as a standby. Replication slots can prevent required WAL from being removed before a consumer receives it, but an inactive or lagging slot can therefore retain large volumes of WAL and must be monitored.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>7.4 Failover requires an external decision mechanism</h3>
+<p>
+PostgreSQL can promote a standby with <code>pg_ctl promote</code> or <code>pg_promote()</code>, but the PostgreSQL project documentation explicitly states that the server does not provide the system software that detects primary failure and notifies the standby to fail over. Production automatic failover therefore requires an external control system or managed service that performs health assessment, leader election/fencing, endpoint routing, and promotion.<sup><a href="#r20">[20]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<div class="callout danger">
+<strong>Split-brain prevention is mandatory.</strong> After a standby is promoted, the old primary must not be allowed to rejoin as a writable primary. PostgreSQL's failover documentation explicitly calls out the need for a fencing/STONITH mechanism to prevent both systems from believing they are primary, a condition that can lead to data loss.<sup><a href="#r20">[20]</a></sup>
+</div>
+
+<h3>7.5 HA monitoring</h3>
+<pre><code>-- Primary: connected standbys and their WAL positions.
+SELECT
+    application_name,
+    client_addr,
+    state,
+    sync_state,
+    sent_lsn,
+    write_lsn,
+    flush_lsn,
+    replay_lsn,
+    write_lag,
+    flush_lag,
+    replay_lag
+FROM pg_stat_replication;
+
+-- Primary: retained WAL risk from slots.
+SELECT
+    slot_name,
+    slot_type,
+    active,
+    restart_lsn,
+    confirmed_flush_lsn,
+    wal_status,
+    safe_wal_size
+FROM pg_replication_slots;
+
+-- Standby:
+SELECT
+    pg_is_in_recovery() AS is_standby,
+    pg_last_wal_receive_lsn(),
+    pg_last_wal_replay_lsn(),
+    pg_last_xact_replay_timestamp();</code></pre>
+
+<p>
+PostgreSQL's cumulative statistics system includes views for physical replication, replication slots, WAL receivers, archiving, WAL generation, database activity, locks, I/O, and recovery conflicts. Those server views should be correlated with external checks on process health, storage, network reachability, endpoint routing, and application success.<sup><a href="#r16">[16]</a><a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<section id="dr">
+<h2>8. Disaster recovery</h2>
+
+<h3>8.1 Design DR for independent failure domains</h3>
+<p>
+A disaster-recovery copy should survive the failures that the production primary and its local HA standby are intended to tolerate. That normally means independent storage and, for site-level disaster recovery, a separate failure domain or region. PostgreSQL provides streaming/log-shipping and continuous WAL archiving mechanisms, but geographic placement, object-storage durability, credentials, DNS, network routing, and orchestration are infrastructure responsibilities.<sup><a href="#r17">[17]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>8.2 PITR recovery configuration</h3>
+<p>
+Modern PostgreSQL configures archive recovery using ordinary server parameters plus a <code>recovery.signal</code> file; the old <code>recovery.conf</code> mechanism was removed in PostgreSQL 12. Recovery can target time, transaction, LSN, or a named restore point depending on the recovery requirement.<sup><a href="#r17">[17]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<pre><code># postgresql.conf / postgresql.auto.conf on the recovery host
+restore_command = '/usr/local/sbin/restore-wal "%f" "%p"'
+recovery_target_time = '2026-09-15 18:42:10-04'
+recovery_target_action = 'promote'</code></pre>
+
+<pre><code># Signal archive recovery.
+touch "$PGDATA/recovery.signal"
+
+# Start PostgreSQL through the normal service manager.
+systemctl start postgresql-18</code></pre>
+
+<h3>8.3 Named restore points before dangerous operations</h3>
+<pre><code>SELECT pg_create_restore_point('before_billing_migration_20260915');</code></pre>
+
+<p>
+<code>pg_create_restore_point()</code> inserts a named WAL marker that can be selected later through <code>recovery_target_name</code>. A restore point is useful only if the backup/WAL archive needed to reach it is retained and recoverable.<sup><a href="#r10">[10]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>8.4 Recovery rehearsal</h3>
+<p>
+A DR test should exercise the entire dependency chain: retrieve backup media, retrieve archived WAL, restore permissions and configuration, recover to a declared target, bring the database online in isolation, validate consistency, restore application secrets and network routes, run application smoke tests, and measure RTO. A test that only verifies that backup files exist does not validate recovery.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="monitoring">
+<h2>9. Monitoring</h2>
+
+<h3>9.1 Monitor symptoms and causes</h3>
+<p>
+PostgreSQL provides a broad statistics system covering sessions, replication, WAL, archiving, I/O, tables, indexes, checkpointer behavior, background writer activity, locks, subscriptions, and progress of maintenance operations. Production monitoring should combine these internal signals with OS/storage metrics and application service-level indicators such as request latency and error rate.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>9.2 Session and wait monitoring</h3>
+<pre><code>SELECT
+    pid,
+    usename,
+    application_name,
+    client_addr,
+    state,
+    wait_event_type,
+    wait_event,
+    now() - xact_start  AS xact_age,
+    now() - query_start AS query_age,
+    left(query, 220) AS query
+FROM pg_stat_activity
+WHERE pid &lt;&gt; pg_backend_pid()
+ORDER BY xact_start NULLS LAST, query_start NULLS LAST;</code></pre>
+
+<h3>9.3 Blocking chains</h3>
+<pre><code>SELECT
+    a.pid AS waiting_pid,
+    a.usename AS waiting_user,
+    pg_blocking_pids(a.pid) AS blocking_pids,
+    a.wait_event_type,
+    a.wait_event,
+    now() - a.query_start AS wait_age,
+    left(a.query, 180) AS waiting_query
+FROM pg_stat_activity AS a
+WHERE cardinality(pg_blocking_pids(a.pid)) &gt; 0
+ORDER BY a.query_start;</code></pre>
+
+<h3>9.4 Database-level health</h3>
+<pre><code>SELECT
+    datname,
+    numbackends,
+    xact_commit,
+    xact_rollback,
+    blks_read,
+    blks_hit,
+    temp_files,
+    pg_size_pretty(temp_bytes) AS temp_bytes,
+    deadlocks,
+    checksum_failures
+FROM pg_stat_database
+WHERE datname IS NOT NULL
+ORDER BY datname;</code></pre>
+
+<h3>9.5 Table/vacuum health</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    n_mod_since_analyze,
+    last_autovacuum,
+    last_autoanalyze,
+    autovacuum_count,
+    autoanalyze_count
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 30;</code></pre>
+
+<p>
+Vacuuming is not optional maintenance in an MVCC system. PostgreSQL documents vacuum as necessary to reuse space from updated/deleted tuples, update planner statistics, update the visibility map, and prevent transaction-ID and multixact wraparound problems. The autovacuum subsystem is enabled by default and is strongly recommended for ordinary production systems.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>9.6 Query workload: <code>pg_stat_statements</code></h3>
+<pre><code># postgresql.conf
+shared_preload_libraries = 'pg_stat_statements'
+compute_query_id = auto</code></pre>
+
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+SELECT
+    calls,
+    total_exec_time,
+    mean_exec_time,
+    rows,
+    shared_blks_hit,
+    shared_blks_read,
+    temp_blks_written,
+    wal_bytes,
+    left(query, 200) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 25;</code></pre>
+
+<p>
+The supplied <code>pg_stat_statements</code> module tracks normalized planning/execution statistics across statements. It requires shared memory and is therefore loaded through <code>shared_preload_libraries</code>; access to other users' query text is restricted to appropriately privileged roles.<sup><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>9.7 Alert categories</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Area</th><th>Example signal</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>Availability</td><td>Readiness failure, connection errors, restart loop</td><td>Immediate service loss.</td></tr>
+<tr><td>Latency</td><td>Application p95/p99, slow-query time, wait events</td><td>User-visible degradation and saturation.</td></tr>
+<tr><td>Connections</td><td>Active + waiting sessions near capacity</td><td>New clients may be rejected; memory/process pressure rises.</td></tr>
+<tr><td>Storage</td><td>Free bytes, growth rate, temp spill, WAL growth</td><td>Disk exhaustion can cause outage.</td></tr>
+<tr><td>Replication</td><td>Replay/flush lag, inactive slot, retained WAL</td><td>RPO degradation and disk retention.</td></tr>
+<tr><td>Backup</td><td>Archiver failures, stale base backup, failed restore test</td><td>Recovery objectives no longer credible.</td></tr>
+<tr><td>Vacuum</td><td>Dead tuple growth, old relfrozenxid, long transactions</td><td>Bloat, planner degradation, wraparound risk.</td></tr>
+<tr><td>Locks</td><td>Long lock waits/blocking chains</td><td>Cascading application latency/outage.</td></tr>
+<tr><td>Integrity</td><td>Checksum failures, <code>pg_amcheck</code> errors</td><td>Potential storage/index corruption.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="capacity">
+<h2>10. Capacity planning</h2>
+
+<h3>10.1 Capacity is multi-dimensional</h3>
+<p>
+PostgreSQL capacity should be tracked across storage bytes and growth, WAL volume, IOPS/throughput/latency, CPU, memory, query concurrency, connections, replica lag, temporary-file generation, maintenance time, and checkpoint behavior. Capacity problems often appear first in an adjacent resource: for example, memory pressure can become storage I/O, a slow replica can become WAL-disk growth, or long transactions can become vacuum backlog.<sup><a href="#r11">[11]</a><a href="#r16">[16]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>10.2 Storage inventory</h3>
+<pre><code>-- Database sizes.
+SELECT
+    datname,
+    pg_size_pretty(pg_database_size(datname)) AS size
+FROM pg_database
+ORDER BY pg_database_size(datname) DESC;
+
+-- Largest relations including indexes and TOAST.
+SELECT
+    schemaname,
+    relname,
+    pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+    pg_size_pretty(pg_relation_size(relid)) AS heap_size,
+    pg_size_pretty(pg_indexes_size(relid)) AS index_size
+FROM pg_catalog.pg_statio_user_tables
+ORDER BY pg_total_relation_size(relid) DESC
+LIMIT 40;</code></pre>
+
+<h3>10.3 Connection capacity</h3>
+<pre><code>SELECT
+    count(*) AS total,
+    count(*) FILTER (WHERE state = 'active') AS active,
+    count(*) FILTER (WHERE state = 'idle') AS idle,
+    count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_xact
+FROM pg_stat_activity;
+
+SHOW max_connections;</code></pre>
+
+<p>
+<code>max_connections</code> sets the upper bound on concurrent server connections and influences the sizing of server resources, including shared memory. Raising it is therefore not a free way to handle application connection storms; connection pooling and workload concurrency control are usually safer tools for reducing backend count.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>10.4 Memory envelope</h3>
+<p>
+<code>shared_buffers</code> is cluster-wide, whereas <code>work_mem</code> can be used separately by multiple sort/hash operations within a single query and by many simultaneous sessions. Parallel workers can further multiply operation-level memory. Capacity planning should therefore model a realistic concurrency envelope instead of multiplying <code>work_mem</code> by only the connection count or treating the value as a per-query hard ceiling.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>10.5 Growth forecast</h3>
+<pre><code>-- A simple schema for recording daily database size snapshots.
+CREATE TABLE IF NOT EXISTS ops.database_size_history (
+    captured_at timestamptz NOT NULL DEFAULT now(),
+    database_name name NOT NULL,
+    bytes bigint NOT NULL,
+    PRIMARY KEY (captured_at, database_name)
+);
+
+INSERT INTO ops.database_size_history(database_name, bytes)
+SELECT current_database(), pg_database_size(current_database());
+
+-- Approximate recent average daily growth.
+WITH d AS (
+  SELECT
+    date_trunc('day', captured_at) AS day,
+    max(bytes) AS bytes
+  FROM ops.database_size_history
+  WHERE database_name = current_database()
+    AND captured_at &gt;= now() - interval '30 days'
+  GROUP BY 1
+),
+delta AS (
+  SELECT day, bytes - lag(bytes) OVER (ORDER BY day) AS growth
+  FROM d
+)
+SELECT pg_size_pretty(avg(growth)::bigint) AS avg_daily_growth
+FROM delta
+WHERE growth IS NOT NULL;</code></pre>
+
+<h3>10.6 Plan maintenance capacity too</h3>
+<p>
+Capacity planning includes the ability to vacuum, analyze, create/rebuild indexes, take backups, and replay or archive WAL while normal workload continues. PostgreSQL notes that vacuum creates I/O traffic and that autovacuum may need parameter adjustment for heavily updated tables; a production system that runs acceptably only when maintenance is absent is under-provisioned operationally.<sup><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="connections">
+<h2>11. Connection management</h2>
+
+<h3>11.1 PostgreSQL uses a backend per connection</h3>
+<p>
+PostgreSQL's server process model gives client sessions dedicated backend processes. The configured <code>max_connections</code> also causes PostgreSQL to size certain resources in proportion to that limit. Production services should therefore avoid opening unbounded direct connections as application replicas or serverless workers scale.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>11.2 Pool at the application or proxy layer</h3>
+<p>
+A pool limits simultaneous database backends while allowing a larger number of application requests to share them over time. PostgreSQL itself supplies libpq and server connection controls, but external poolers are separate products; whichever pool is used, its maximum database-side concurrency should be chosen from measured database capacity, not from the maximum number of application threads.<sup><a href="#r28">[28]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>11.3 Put useful metadata in the connection string</h3>
+<pre><code>postgresql://app_user@db.internal:5432/appdb\
+?sslmode=verify-full\
+&amp;sslrootcert=/etc/postgresql/root.crt\
+&amp;application_name=orders-api\
+&amp;connect_timeout=5\
+&amp;keepalives=1\
+&amp;keepalives_idle=30\
+&amp;keepalives_interval=10\
+&amp;keepalives_count=3</code></pre>
+
+<p>
+libpq supports <code>application_name</code>, connection timeouts, TCP keepalive controls, TLS modes, and other connection parameters. Supplying a meaningful application name makes workload ownership visible in <code>pg_stat_activity</code>, which materially improves incident diagnosis.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>11.4 Timeouts are part of connection hygiene</h3>
+<pre><code>-- Role-specific defaults for an application.
+ALTER ROLE orders_app SET statement_timeout = '30s';
+ALTER ROLE orders_app SET idle_in_transaction_session_timeout = '60s';
+ALTER ROLE orders_app SET lock_timeout = '5s';</code></pre>
+
+<p>
+PostgreSQL exposes statement, lock, transaction, idle-session, and idle-in-transaction timeout controls. Long idle transactions are especially dangerous operationally because they can retain snapshots and locks and delay vacuum cleanup; timeouts should be tuned to application behavior and not applied blindly across workloads with intentionally long operations.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>11.5 Readiness versus liveness</h3>
+<p>
+<code>pg_isready</code> answers whether the server is accepting connections, rejecting them, or not responding. A production application's readiness check should usually go further by connecting with the actual application identity and executing a lightweight query, while avoiding expensive checks that themselves increase load during an incident.<sup><a href="#r25">[25]</a></sup>
+</p>
+</section>
+
+<section id="security">
+<h2>12. Security hardening</h2>
+
+<h3>12.1 Minimize network exposure</h3>
+<p>
+<code>listen_addresses</code> controls which network interfaces accept PostgreSQL TCP connections, while <code>pg_hba.conf</code> controls host-based authentication rules. Restrict listener interfaces and network firewalls/security groups to required paths, then use narrowly scoped HBA records rather than broad allow rules.<sup><a href="#r28">[28]</a><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>12.2 Require TLS and verify identity</h3>
+<pre><code># postgresql.conf
+ssl = on
+ssl_cert_file = '/etc/postgresql/tls/server.crt'
+ssl_key_file  = '/etc/postgresql/tls/server.key'
+ssl_min_protocol_version = 'TLSv1.2'</code></pre>
+
+<pre><code># pg_hba.conf
+hostssl appdb orders_app 10.20.10.0/24 scram-sha-256</code></pre>
+
+<pre><code># Client
+psql "host=db.internal dbname=appdb user=orders_app \
+sslmode=verify-full sslrootcert=/etc/postgresql/root.crt"</code></pre>
+
+<p>
+PostgreSQL supports TLS for client/server traffic. libpq's <code>verify-full</code> mode verifies both certificate trust and host identity and is recommended by the PostgreSQL documentation for most security-sensitive deployments. A server-side <code>hostssl</code> HBA rule ensures that the matching authentication rule only applies to TLS connections.<sup><a href="#r31">[31]</a><a href="#r32">[32]</a></sup>
+</p>
+
+<h3>12.3 Prefer SCRAM over legacy MD5 password authentication</h3>
+<p>
+PostgreSQL 18 defaults <code>password_encryption</code> to <code>scram-sha-256</code>, and MD5-encrypted password support is deprecated for removal in a future release. SCRAM also supports TLS channel binding where client/server capabilities permit it.<sup><a href="#r33">[33]</a><a href="#r34">[34]</a></sup>
+</p>
+
+<h3>12.4 Separate login identities from authorization roles</h3>
+<pre><code>-- No-login capability role.
+CREATE ROLE orders_rw NOLOGIN;
+
+GRANT CONNECT ON DATABASE appdb TO orders_rw;
+GRANT USAGE ON SCHEMA app TO orders_rw;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO orders_rw;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO orders_rw;
+
+-- Ensure future objects get the expected grants.
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO orders_rw;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA app
+GRANT USAGE, SELECT ON SEQUENCES TO orders_rw;
+
+-- Login identity.
+CREATE ROLE orders_app LOGIN;
+GRANT orders_rw TO orders_app;</code></pre>
+
+<p>
+PostgreSQL roles can represent users, groups, or both, and role membership composes privileges. <code>ALTER DEFAULT PRIVILEGES</code> defines grants for future objects created by a role, preventing the common production failure where existing tables work but newly deployed tables are inaccessible to the application.<sup><a href="#r35">[35]</a><a href="#r36">[36]</a></sup>
+</p>
+
+<h3>12.5 Keep applications away from superuser</h3>
+<p>
+An application role normally does not need <code>SUPERUSER</code>, <code>CREATEDB</code>, <code>CREATEROLE</code>, <code>REPLICATION</code>, or <code>BYPASSRLS</code>. PostgreSQL also provides predefined roles such as <code>pg_monitor</code> and <code>pg_maintain</code> to grant narrower operational capabilities than superuser where appropriate; the documentation warns that predefined role permissions can evolve and should be reviewed across upgrades.<sup><a href="#r35">[35]</a><a href="#r37">[37]</a></sup>
+</p>
+
+<h3>12.6 Secure operational secrets</h3>
+<p>
+Database passwords, replication credentials, client private keys, and backup/archive credentials should not be stored in application source code or world-readable configuration. PostgreSQL requires restrictive permissions on the server private key for TLS on Unix systems and provides mechanisms such as client certificates, GSSAPI, SCRAM, and OAuth depending on deployment requirements.<sup><a href="#r31">[31]</a><a href="#r34">[34]</a></sup>
+</p>
+</section>
+
+<section id="upgrade">
+<h2>13. Upgrade planning</h2>
+
+<h3>13.1 Minor and major upgrades are different</h3>
+<p>
+PostgreSQL publishes new major versions roughly annually and supports a major version for five years. Minor releases contain fixes, including security and corruption fixes, and the project recommends running the current minor release. Minor upgrades within a major do not require dump/reload; major upgrades can require <code>pg_upgrade</code>, dump/restore, or a replication-based migration because data-directory compatibility is not promised between major versions.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>13.2 Minor release process</h3>
+<ol class="checklist">
+<li>Read the release notes for every target minor release.</li>
+<li>Verify extensions, packaging, OS libraries, and automation in staging.</li>
+<li>Confirm current backup and recovery health.</li>
+<li>Drain or fail over traffic according to the HA design.</li>
+<li>Install the new minor binaries/packages and restart as required.</li>
+<li>Run smoke tests, replication checks, query/error-rate checks, and extension validation.</li>
+</ol>
+
+<p>
+The PostgreSQL versioning policy explicitly notes that minor updates normally require stopping the server, installing updated binaries, and restarting, while still advising operators to read release notes for any additional actions.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>13.3 Major upgrade with <code>pg_upgrade</code></h3>
+<pre><code># Preflight compatibility check using the NEW pg_upgrade binary.
+ /usr/lib/postgresql/18/bin/pg_upgrade \
+  --check \
+  --old-bindir=/usr/lib/postgresql/17/bin \
+  --new-bindir=/usr/lib/postgresql/18/bin \
+  --old-datadir=/var/lib/postgresql/17/main \
+  --new-datadir=/var/lib/postgresql/18/main</code></pre>
+
+<p>
+<code>pg_upgrade</code> upgrades a cluster to a later major version without the full logical dump/reload usually required for a major upgrade. It validates compatibility requirements and requires external modules to be available in a compatible form. PostgreSQL 18 can preserve optimizer statistics during <code>pg_upgrade</code>, reducing one traditional post-upgrade warm-up burden, although extended statistics are not preserved in the same way.<sup><a href="#r38">[38]</a><a href="#r39">[39]</a></sup>
+</p>
+
+<h3>13.4 Upgrade with logical replication</h3>
+<p>
+Logical replication can replicate between different PostgreSQL major versions and therefore provides a path to a low-downtime major upgrade: provision the target cluster, replicate selected data, validate it, quiesce or tightly control writes for cutover, allow the subscriber to catch up, redirect application traffic, and preserve a rollback plan. Logical replication has feature restrictions and operational complexity, so it is not a transparent substitute for <code>pg_upgrade</code>.<sup><a href="#r40">[40]</a></sup>
+</p>
+
+<h3>13.5 Extension compatibility is part of the upgrade</h3>
+<p>
+A major-version plan must inventory installed extensions, procedural languages, preload libraries, custom C modules, collations/locales, client drivers, and replication topology. <code>pg_upgrade</code> cannot prove arbitrary third-party modules are binary-compatible; operators must obtain or build extension versions for the target PostgreSQL release and follow each extension's upgrade instructions.<sup><a href="#r38">[38]</a></sup>
+</p>
+</section>
+
+<section id="compatibility">
+<h2>14. Version compatibility</h2>
+
+<h3>14.1 Supported major versions</h3>
+<p>
+As of 15 September 2026, the PostgreSQL project lists PostgreSQL 18.6, 17.11, 16.15, 15.19, and 14.24 as supported branches. PostgreSQL 14 is scheduled to reach its final release in November 2026, so an organization still running 14 should already have a tested major-upgrade plan rather than treating its remaining support window as long-term runway.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Major</th><th>Current minor on cited policy page</th><th>Support status on 15 Sep 2026</th><th>Final release date</th></tr></thead>
+<tbody>
+<tr><td>18</td><td>18.6</td><td>Supported</td><td>14 Nov 2030</td></tr>
+<tr><td>17</td><td>17.11</td><td>Supported</td><td>8 Nov 2029</td></tr>
+<tr><td>16</td><td>16.15</td><td>Supported</td><td>9 Nov 2028</td></tr>
+<tr><td>15</td><td>15.19</td><td>Supported</td><td>11 Nov 2027</td></tr>
+<tr><td>14</td><td>14.24</td><td>Supported</td><td>12 Nov 2026</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+These dates come from the PostgreSQL project's versioning policy and are time-sensitive. Production lifecycle management should alert well before EOL so operating-system packaging, extensions, applications, and DR environments can be upgraded while the source major still receives security and bug fixes.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>14.2 Client/server compatibility</h3>
+<p>
+PostgreSQL's wire protocol and libpq are designed for broad compatibility, but individual features and authentication methods have version requirements. For example, older clients might not support SCRAM, and newer SQL syntax or server functions are obviously unavailable on older servers. Deployment pipelines should test the exact driver major/minor versions that production applications use against the target server version rather than assuming “PostgreSQL-compatible” is sufficient.<sup><a href="#r29">[29]</a><a href="#r33">[33]</a></sup>
+</p>
+
+<h3>14.3 Replication compatibility</h3>
+<p>
+Physical streaming replication operates between compatible server binaries and is used for same-major HA topologies; logical replication is the PostgreSQL-native mechanism explicitly intended for use cases that include replication between different major versions. Upgrading a logical-replication topology has additional documented prerequisites, including special handling for logical slots and subscriptions.<sup><a href="#r19">[19]</a><a href="#r40">[40]</a><a href="#r41">[41]</a></sup>
+</p>
+</section>
+
+<section id="runbooks">
+<h2>15. Operational runbooks</h2>
+<p>
+A runbook should be executable by an operator who did not design the system. It should contain trigger conditions, safety checks, commands, decision points, expected outputs, escalation criteria, rollback/forward-recovery steps, and post-incident verification. PostgreSQL's own failover documentation recommends written administration procedures and regular switching tests so the failover mechanism is exercised before an emergency.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>15.1 Runbook: suspected primary failure</h3>
+<ol class="checklist">
+<li><strong>Confirm scope.</strong> Check application failures, <code>pg_isready</code>, host/process health, network path, and storage.</li>
+<li><strong>Avoid premature failover.</strong> Determine whether the primary is truly unavailable or only unreachable from part of the network.</li>
+<li><strong>Fence the old primary.</strong> Ensure it cannot accept writes if a standby will be promoted.</li>
+<li><strong>Check standby health.</strong> Verify recovery state, received/replayed WAL, and expected data-loss window.</li>
+<li><strong>Promote.</strong> Use the approved orchestrator or <code>pg_promote()</code>/<code>pg_ctl promote</code>.</li>
+<li><strong>Move the write endpoint.</strong> Update routing/DNS/VIP/service discovery according to the architecture.</li>
+<li><strong>Validate.</strong> Run application writes/reads and check replication/archive/backup systems.</li>
+<li><strong>Rebuild redundancy.</strong> Rewind or rebuild the former primary/new standby before declaring the incident resolved.</li>
+</ol>
+
+<pre><code>-- On the candidate standby:
+SELECT pg_is_in_recovery(),
+       pg_last_wal_receive_lsn(),
+       pg_last_wal_replay_lsn(),
+       pg_last_xact_replay_timestamp();
+
+-- After fencing and approval:
+SELECT pg_promote(wait =&gt; true, wait_seconds =&gt; 60);</code></pre>
+
+<p>
+PostgreSQL documents promotion and explicitly requires a mechanism to prevent the old primary from returning as a simultaneous writer. <code>pg_rewind</code> can help resynchronize a diverged former primary in suitable configurations rather than taking a complete new base backup.<sup><a href="#r20">[20]</a><a href="#r10">[10]</a><a href="#r42">[42]</a></sup>
+</p>
+
+<h3>15.2 Runbook: restore to a point in time</h3>
+<ol class="checklist">
+<li>Identify the target time/LSN/transaction/restore point and freeze further destructive activity.</li>
+<li>Select a base backup old enough to precede the target.</li>
+<li>Restore into isolated infrastructure, never over the only surviving production copy.</li>
+<li>Configure <code>restore_command</code> and the recovery target.</li>
+<li>Create <code>recovery.signal</code> and start PostgreSQL.</li>
+<li>Monitor recovery until the target is reached.</li>
+<li>Validate business data and application invariants.</li>
+<li>Choose cutover procedure and preserve the former environment for forensic comparison until explicitly released.</li>
+</ol>
+
+<p>
+PITR works by restoring a physical base backup and replaying archived WAL until the chosen target. Recovery timelines preserve branches of WAL history created by recovery/promotions, allowing later recovery operations to distinguish divergent histories.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>15.3 Runbook: runaway query or blocking transaction</h3>
+<pre><code>-- Identify old active statements and transactions.
+SELECT
+  pid, usename, application_name, state,
+  now() - xact_start AS xact_age,
+  now() - query_start AS query_age,
+  wait_event_type, wait_event,
+  left(query, 240) AS query
+FROM pg_stat_activity
+WHERE pid &lt;&gt; pg_backend_pid()
+ORDER BY xact_start NULLS LAST, query_start NULLS LAST;
+
+-- Identify blockers.
+SELECT pid, pg_blocking_pids(pid), left(query, 200)
+FROM pg_stat_activity
+WHERE cardinality(pg_blocking_pids(pid)) &gt; 0;
+
+-- Cancel the current query first when appropriate.
+SELECT pg_cancel_backend(12345);
+
+-- Escalate to session termination only when required.
+SELECT pg_terminate_backend(12345);</code></pre>
+
+<p>
+PostgreSQL provides server signaling functions for canceling a backend's current query or terminating a session. Termination is more disruptive because it aborts the session and its transaction; incident procedures should identify the owning service and business operation before killing a blocker whenever time permits.<sup><a href="#r10">[10]</a><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>15.4 Runbook: rapidly growing <code>pg_wal</code></h3>
+<ol class="checklist">
+<li>Check archiver failures in <code>pg_stat_archiver</code>.</li>
+<li>Check inactive/lagging physical and logical replication slots.</li>
+<li>Check standby connectivity and replication state.</li>
+<li>Check backup/replication consumers that may retain WAL.</li>
+<li>Measure current WAL generation rate and recent workload changes.</li>
+<li>Restore the failed consumer/archive path or intentionally remove an obsolete slot only after proving it is no longer required.</li>
+</ol>
+
+<pre><code>SELECT * FROM pg_stat_archiver;
+
+SELECT
+  slot_name,
+  slot_type,
+  active,
+  restart_lsn,
+  confirmed_flush_lsn,
+  wal_status,
+  safe_wal_size
+FROM pg_replication_slots;</code></pre>
+
+<p>
+Replication slots exist specifically to retain resources a consumer still needs, so deleting a required slot can force replica rebuild or lose logical-decoding continuity. PostgreSQL's routine-vacuuming documentation also notes that abandoned slots can hold old horizons and should be identified when investigating wraparound or retention problems.<sup><a href="#r19">[19]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>15.5 Runbook: disk nearing full</h3>
+<ol class="checklist">
+<li>Determine whether growth is tables/indexes, WAL, temporary files, logs, or backup/archive data.</li>
+<li>Protect service first: add capacity if possible before attempting risky reclamation.</li>
+<li>Investigate abnormal WAL retention, abandoned slots, failed archiving, or large transactions.</li>
+<li>Inspect largest relations and growth history.</li>
+<li>Avoid impulsive <code>VACUUM FULL</code> on busy large tables; it takes an exclusive lock and requires extra working disk space during rewrite.</li>
+<li>Correct the growth cause and revise alerts/capacity forecast.</li>
+</ol>
+
+<p>
+PostgreSQL warns that <code>VACUUM FULL</code> requires an <code>ACCESS EXCLUSIVE</code> lock and generally recommends regular standard vacuuming instead. Disk-space incidents should therefore be solved by understanding what is consuming storage rather than treating <code>VACUUM FULL</code> as a universal emergency command.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>15.6 Runbook: suspected corruption</h3>
+<ol class="checklist">
+<li>Preserve logs and avoid repeatedly restarting or rewriting the affected objects without a plan.</li>
+<li>Check checksum-failure statistics and storage/OS errors.</li>
+<li>Run targeted integrity checks against a replica or maintenance window where possible.</li>
+<li>Determine whether the problem is isolated to an index or affects heap data.</li>
+<li>Use restore/replica/reindex options appropriate to the damaged object; do not use destructive low-level repair tools without expert review and backups.</li>
+</ol>
+
+<pre><code>SELECT datname, checksum_failures, checksum_last_failure
+FROM pg_stat_database
+WHERE checksum_failures IS NOT NULL;
+
+# Targeted logical/physical consistency checks:
+pg_amcheck --database=appdb --table=public.orders</code></pre>
+
+<p>
+When checksums are enabled, PostgreSQL verifies data-page checksums during reads and reports failures. <code>pg_amcheck</code> invokes the supplied <code>amcheck</code> facilities to check supported relations and B-tree indexes and is designed for database corruption checks.<sup><a href="#r4">[4]</a><a href="#r43">[43]</a></sup>
+</p>
+
+<h3>15.7 Runbook: production schema change</h3>
+<ol class="checklist">
+<li>Classify the DDL lock level and whether it rewrites or scans the table.</li>
+<li>Check long transactions and blockers.</li>
+<li>Set deployment-local <code>lock_timeout</code> and <code>statement_timeout</code>.</li>
+<li>Use <code>CONCURRENTLY</code>, <code>NOT VALID</code>/<code>VALIDATE</code>, or expand/contract where applicable.</li>
+<li>Monitor progress and database load.</li>
+<li>Validate application compatibility before destructive cleanup.</li>
+</ol>
+
+<p>
+The safety details are command-specific: <code>ALTER TABLE</code> generally takes <code>ACCESS EXCLUSIVE</code> unless documented otherwise, while concurrent index creation preserves writes but performs additional scans and transaction waits. A runbook should cite the exact target PostgreSQL major-version command documentation for every high-impact DDL step.<sup><a href="#r12">[12]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>15.8 Runbook: major-version upgrade</h3>
+<ol class="checklist">
+<li>Confirm source and target versions are supported and read all intervening release notes.</li>
+<li>Inventory extensions, preload libraries, client drivers, locales/collations, replication slots, and logical replication.</li>
+<li>Test the chosen path—<code>pg_upgrade</code>, dump/restore, or logical-replication cutover—on a production-sized copy.</li>
+<li>Measure downtime and post-upgrade performance, not just upgrade command runtime.</li>
+<li>Take/verify backups before the production change.</li>
+<li>Run <code>pg_upgrade --check</code> if using <code>pg_upgrade</code>.</li>
+<li>Execute the change under the approved traffic/failover plan.</li>
+<li>Validate application behavior, extensions, query performance, replicas, backup/archive jobs, and observability.</li>
+<li>Retain rollback assets until the explicit rollback window closes.</li>
+</ol>
+
+<p>
+The PostgreSQL project permits skipping intervening major versions with <code>pg_upgrade</code>, but recommends reading the release notes for all intervening majors. Logical-replication cluster upgrades have their own documented prerequisites and non-transactional steps, so they require separate backup and rollback planning.<sup><a href="#r2">[2]</a><a href="#r38">[38]</a><a href="#r41">[41]</a></sup>
+</p>
+</section>
+
+<section id="checklist">
+<h2>16. Production readiness checklist</h2>
+<ol class="checklist">
+<li><strong>Lifecycle:</strong> PostgreSQL major version is supported; current minor release is scheduled or installed.<sup><a href="#r2">[2]</a></sup></li>
+<li><strong>Provisioning:</strong> initialization settings, checksums, locale, storage, OS account, and filesystem permissions are reproducible.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup></li>
+<li><strong>Configuration:</strong> one authoritative configuration workflow exists; drift and pending-restart settings are detectable.<sup><a href="#r7">[7]</a>-<a href="#r10">[10]</a></sup></li>
+<li><strong>Schema:</strong> migrations are reviewed for lock level, scans/rewrites, rollback behavior, and live-data volume.<sup><a href="#r12">[12]</a><a href="#r15">[15]</a></sup></li>
+<li><strong>Backups:</strong> base backups and WAL retention satisfy the defined RPO; automated restores demonstrate RTO.<sup><a href="#r5">[5]</a><a href="#r17">[17]</a><a href="#r18">[18]</a></sup></li>
+<li><strong>HA:</strong> replica lag is monitored; failover and fencing are tested; endpoint cutover is documented.<sup><a href="#r19">[19]</a><a href="#r20">[20]</a></sup></li>
+<li><strong>DR:</strong> an independent recovery copy exists and has been restored in a separate environment.</li>
+<li><strong>Monitoring:</strong> sessions, waits, locks, queries, I/O, vacuum, WAL, archive state, replicas, and storage growth are observable.<sup><a href="#r16">[16]</a><a href="#r27">[27]</a></sup></li>
+<li><strong>Capacity:</strong> growth, WAL, memory/concurrency, connection count, and maintenance headroom are forecast rather than watched only at failure thresholds.</li>
+<li><strong>Connections:</strong> application connection concurrency is bounded; timeouts and application names are configured.<sup><a href="#r13">[13]</a><a href="#r28">[28]</a><a href="#r29">[29]</a></sup></li>
+<li><strong>Security:</strong> network reachability is narrow, TLS identity is verified, SCRAM or stronger integrated authentication is used, and applications use least-privilege roles.<sup><a href="#r30">[30]</a>-<a href="#r37">[37]</a></sup></li>
+<li><strong>Upgrades:</strong> extensions and clients are inventoried; major upgrade rehearsals use production-sized data; EOL dates generate advance work.<sup><a href="#r2">[2]</a><a href="#r38">[38]</a></sup></li>
+<li><strong>Runbooks:</strong> failover, restore, blocking sessions, disk/WAL growth, corruption, migrations, and upgrades have tested procedures.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Core operating principle:</strong> a production PostgreSQL system is healthy only when it can be changed and recovered safely—not merely when queries are succeeding right now.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. PostgreSQL 18.6 documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Versioning policy [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/support/versioning/">https://www.postgresql.org/support/versioning/</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. <code>initdb</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-initdb.html">https://www.postgresql.org/docs/18/app-initdb.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Data checksums [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/checksums.html">https://www.postgresql.org/docs/18/checksums.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Backup and restore [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup.html">https://www.postgresql.org/docs/18/backup.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Server configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config.html">https://www.postgresql.org/docs/18/runtime-config.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Setting parameters [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/config-setting.html">https://www.postgresql.org/docs/18/config-setting.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. ALTER SYSTEM [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altersystem.html">https://www.postgresql.org/docs/18/sql-altersystem.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. <code>pg_settings</code> and <code>pg_file_settings</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-settings.html">https://www.postgresql.org/docs/18/view-pg-settings.html</a>; <a href="https://www.postgresql.org/docs/18/view-pg-file-settings.html">https://www.postgresql.org/docs/18/view-pg-file-settings.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. System administration functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Resource consumption settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. ALTER TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altertable.html">https://www.postgresql.org/docs/18/sql-altertable.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Client connection defaults: statement, lock, transaction, and idle timeouts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-client.html">https://www.postgresql.org/docs/18/runtime-config-client.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Transactions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-transactions.html">https://www.postgresql.org/docs/18/tutorial-transactions.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createindex.html">https://www.postgresql.org/docs/18/sql-createindex.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Monitoring database activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Continuous archiving and point-in-time recovery (PITR) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/continuous-archiving.html">https://www.postgresql.org/docs/18/continuous-archiving.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. <code>pg_basebackup</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgbasebackup.html">https://www.postgresql.org/docs/18/app-pgbasebackup.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Log-shipping standby servers and synchronous replication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/warm-standby.html">https://www.postgresql.org/docs/18/warm-standby.html</a>; <a href="https://www.postgresql.org/docs/18/runtime-config-replication.html">https://www.postgresql.org/docs/18/runtime-config-replication.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Failover [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/warm-standby-failover.html">https://www.postgresql.org/docs/18/warm-standby-failover.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Routine vacuuming [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Server configuration: resource consumption and connections [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a>; <a href="https://www.postgresql.org/docs/18/runtime-config-connection.html">https://www.postgresql.org/docs/18/runtime-config-connection.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Non-durable settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/non-durability.html">https://www.postgresql.org/docs/18/non-durability.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Progress reporting [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/progress-reporting.html">https://www.postgresql.org/docs/18/progress-reporting.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. <code>pg_isready</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pg-isready.html">https://www.postgresql.org/docs/18/app-pg-isready.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. <code>recovery.conf</code> merged into <code>postgresql.conf</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/recovery-config.html">https://www.postgresql.org/docs/18/recovery-config.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. <code>pg_stat_statements</code> — track statistics of SQL planning and execution [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. Connections and authentication settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-connection.html">https://www.postgresql.org/docs/18/runtime-config-connection.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. libpq database connection control functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/libpq-connect.html">https://www.postgresql.org/docs/18/libpq-connect.html</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. The <code>pg_hba.conf</code> file [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/auth-pg-hba-conf.html">https://www.postgresql.org/docs/18/auth-pg-hba-conf.html</a></li>
+
+<li id="r31">PostgreSQL Global Development Group. Secure TCP/IP connections with SSL [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ssl-tcp.html">https://www.postgresql.org/docs/18/ssl-tcp.html</a></li>
+
+<li id="r32">PostgreSQL Global Development Group. libpq SSL support [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/libpq-ssl.html">https://www.postgresql.org/docs/18/libpq-ssl.html</a></li>
+
+<li id="r33">PostgreSQL Global Development Group. Connections and authentication: password encryption [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-connection.html">https://www.postgresql.org/docs/18/runtime-config-connection.html</a></li>
+
+<li id="r34">PostgreSQL Global Development Group. SASL authentication and SCRAM-SHA-256 [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sasl-authentication.html">https://www.postgresql.org/docs/18/sasl-authentication.html</a></li>
+
+<li id="r35">PostgreSQL Global Development Group. Database roles [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/user-manag.html">https://www.postgresql.org/docs/18/user-manag.html</a></li>
+
+<li id="r36">PostgreSQL Global Development Group. ALTER DEFAULT PRIVILEGES [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-alterdefaultprivileges.html">https://www.postgresql.org/docs/18/sql-alterdefaultprivileges.html</a></li>
+
+<li id="r37">PostgreSQL Global Development Group. Predefined roles [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/predefined-roles.html">https://www.postgresql.org/docs/18/predefined-roles.html</a></li>
+
+<li id="r38">PostgreSQL Global Development Group. <code>pg_upgrade</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgupgrade.html">https://www.postgresql.org/docs/18/pgupgrade.html</a></li>
+
+<li id="r39">PostgreSQL Global Development Group. PostgreSQL 18 release notes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r40">PostgreSQL Global Development Group. Logical replication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication.html">https://www.postgresql.org/docs/18/logical-replication.html</a></li>
+
+<li id="r41">PostgreSQL Global Development Group. Upgrading logical replication clusters [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-upgrade.html">https://www.postgresql.org/docs/18/logical-replication-upgrade.html</a></li>
+
+<li id="r42">PostgreSQL Global Development Group. <code>pg_rewind</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgrewind.html">https://www.postgresql.org/docs/18/app-pgrewind.html</a></li>
+
+<li id="r43">PostgreSQL Global Development Group. <code>pg_amcheck</code> [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgamcheck.html">https://www.postgresql.org/docs/18/app-pgamcheck.html</a></li>
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a production-engineering reference, not a substitute for workload-specific testing. PostgreSQL settings, lock behavior, extension compatibility, supported versions, and operational semantics should be verified against the exact PostgreSQL major/minor release deployed in each environment.
+</p>
+</footer>
+</body>
+</html>

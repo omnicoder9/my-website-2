@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL replication and high availability: physical and streaming replication, WAL sender/receiver, slots, synchronous replication, logical replication and decoding, failover, read replicas, Patroni, etcd/Consul, HAProxy, routing, and load balancing.">
+<title>PostgreSQL Replication & High Availability</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1000px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:840px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Replication &amp; High Availability</h1>
+  <p class="dek">A production-oriented guide to physical and streaming replication, primary/standby architecture, WAL sender and receiver processes, replication slots, synchronous and asynchronous durability, logical replication and decoding, failover-capable logical slots, read replicas, connection routing, Patroni, etcd/Consul, HAProxy, failover, switchover, fencing, and load balancing.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Patroni 4.1.x context • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL provides two fundamentally different replication families. <em>Physical replication</em> reproduces the PostgreSQL cluster's physical changes by shipping and replaying write-ahead log (WAL); it is the native basis for warm/hot standby, streaming replication, read replicas, and fast primary/standby failover. <em>Logical replication</em> decodes WAL into table-level changes identified by logical row identity and applies selected publications to subscribing databases. Physical replication preserves an entire compatible PostgreSQL cluster; logical replication can select tables, columns, rows, and change types and can operate across major PostgreSQL versions and operating-system platforms.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup>
+</p>
+<p>
+Replication alone is not high availability. PostgreSQL deliberately leaves primary-failure detection, leader election, fencing, endpoint movement, and automatic client routing to surrounding infrastructure. A complete HA system needs an authoritative decision about which node may accept writes, a mechanism to prevent the former primary from becoming a second writer after failover, and a routing layer that sends write traffic only to the current primary. Frameworks such as Patroni combine PostgreSQL streaming replication with a distributed configuration store (DCS), while load balancers such as HAProxy can use Patroni's REST health endpoints to route clients to the current primary or eligible replicas.<sup><a href="#r5">[5]</a>-<a href="#r9">[9]</a></sup>
+</p>
+<p>
+The durability/availability trade-off remains explicit. Asynchronous streaming replication minimizes commit latency but can lose the most recent acknowledged transactions if the primary fails before their WAL reaches the promoted standby. Synchronous replication makes selected commits wait for one or more standby acknowledgements, reducing the data-loss window in exchange for latency and the possibility that commits wait when insufficient synchronous standbys are available. PostgreSQL exposes several acknowledgement levels—from remote operating-system write through remote flush to remote replay—through <code>synchronous_commit</code>.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">Replication and HA model</a></li>
+<li><a href="#wal">WAL as the replication substrate</a></li>
+<li><a href="#physical">Physical replication</a></li>
+<li><a href="#streaming">Streaming replication</a></li>
+<li><a href="#processes">WAL sender and WAL receiver</a></li>
+<li><a href="#setup">Building a physical standby</a></li>
+<li><a href="#slots">Replication slots</a></li>
+<li><a href="#async">Asynchronous replication</a></li>
+<li><a href="#sync">Synchronous replication</a></li>
+<li><a href="#readreplicas">Hot standby and read replicas</a></li>
+<li><a href="#cascading">Cascading replication</a></li>
+<li><a href="#monitoring">Physical replication monitoring</a></li>
+<li><a href="#logical">Logical replication</a></li>
+<li><a href="#publications">Publications</a></li>
+<li><a href="#subscriptions">Subscriptions</a></li>
+<li><a href="#decoding">Logical decoding</a></li>
+<li><a href="#origins">Replication origins</a></li>
+<li><a href="#logical-ha">Logical replication through failover</a></li>
+<li><a href="#failover">Failover and fencing</a></li>
+<li><a href="#switchover">Switchover</a></li>
+<li><a href="#routing">Connection routing</a></li>
+<li><a href="#patroni">Patroni</a></li>
+<li><a href="#dcs">etcd and Consul</a></li>
+<li><a href="#haproxy">HAProxy</a></li>
+<li><a href="#loadbalance">Load balancing and consistency</a></li>
+<li><a href="#operations">Operations and recovery</a></li>
+<li><a href="#architecture">Reference HA architecture</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. Replication and HA model</h2>
+
+<div class="diagram">                           clients
+                              |
+                +-------------+-------------+
+                |                           |
+                v                           v
+          write endpoint                read endpoint
+             HAProxy                      HAProxy
+                |                           |
+       Patroni /primary check      Patroni /replica check
+                |                           |
+                v                           v
+        +----------------+        +----------------+
+        | PostgreSQL pg1 |------->| PostgreSQL pg2 |
+        | PRIMARY        |  WAL   | STANDBY        |
+        +----------------+        +----------------+
+                |                         |
+                | WAL                     | optional cascading WAL
+                v                         v
+        +----------------+        +----------------+
+        | PostgreSQL pg3 |        | PostgreSQL pg4 |
+        | STANDBY        |        | STANDBY        |
+        +----------------+        +----------------+
+
+Each Patroni node
+       |
+       +------ leader lock / cluster state ------+
+                                                  |
+                              +-------------------+------------------+
+                              | distributed consensus store          |
+                              | etcd OR Consul (quorum-based DCS)    |
+                              +--------------------------------------+</div>
+
+<p>
+There are several independent questions in this architecture: where database changes are copied, which copies are durable enough to promote, who decides the writer, how the old writer is fenced, and how applications discover the new writer. Treating those as separate control planes makes failures easier to reason about.
+</p>
+
+<h3>1.1 Replication is not backup</h3>
+<p>
+Replication rapidly copies good changes and bad changes alike. An accidental <code>DELETE</code>, logical corruption, or compromised session can be replicated immediately. PostgreSQL documents backup/restore and continuous archiving as separate reliability mechanisms, including point-in-time recovery (PITR). HA therefore complements rather than replaces tested backups and WAL archives.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="wal">
+<h2>2. WAL as the replication substrate</h2>
+<p>
+PostgreSQL's write-ahead log records changes before the corresponding data pages need to reach durable storage. Each WAL position is identified by an LSN (<code>pg_lsn</code>), a monotonically increasing byte position that can be compared to quantify replication progress and lag. WAL normally lives in <code>pg_wal</code> as fixed-size segment files; 16 MiB is the normal default segment size unless another size was chosen at <code>initdb</code> time.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<pre><code>SELECT
+    pg_current_wal_lsn() AS current_lsn;
+
+SELECT
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            pg_current_wal_lsn(),
+            '0/0'::pg_lsn
+        )
+    );</code></pre>
+
+<p>
+Physical replication transports WAL itself. Logical replication uses WAL too, but decodes relevant records into logical row/table changes before transmission.<sup><a href="#r2">[2]</a><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="physical">
+<h2>3. Physical replication</h2>
+<p>
+Physical standby replication continuously replays WAL generated by an upstream PostgreSQL instance. It reproduces the entire cluster at the storage/recovery level rather than selecting individual tables. PostgreSQL's log-shipping and streaming-standby architecture therefore has stricter compatibility requirements than logical replication: physical primary/standby systems normally use the same PostgreSQL major release and compatible hardware architecture and tablespace paths.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>3.1 Warm standby versus hot standby</h3>
+<p>
+A standby continuously applying WAL is a warm standby in the HA sense. When <code>hot_standby=on</code> and recovery has reached a consistent state, PostgreSQL also permits read-only SQL connections during recovery, making the server useful as a read replica.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>3.2 Physical replication copies almost everything at cluster scope</h3>
+<p>
+Because recovery replays WAL describing physical database changes, DDL, indexes, catalog changes, and all databases in the cluster are reproduced as part of the standby's state. This simplicity is one reason physical replication is the natural mechanism for a byte-compatible HA standby.
+</p>
+</section>
+
+<section id="streaming">
+<h2>4. Streaming replication</h2>
+<p>
+Streaming replication sends WAL records across a live network connection as PostgreSQL generates them rather than waiting for complete WAL segments to be archived. It is asynchronous by default, usually giving a much smaller lag/data-loss window than file-at-a-time log shipping. A standby can also combine streaming with a WAL archive, allowing it to recover missing segments from the archive after an outage or large lag.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="diagram">PRIMARY                                          STANDBY
+backend transaction
+       |
+       v
+WAL inserted
+       |
+       +--> WAL flushed on primary
+       |
+       v
+  WAL sender  ===============================>  WAL receiver
+                                                      |
+                                                      v
+                                                write WAL locally
+                                                      |
+                                                      v
+                                                flush WAL
+                                                      |
+                                                      v
+                                                recovery replay
+                                                      |
+                                                      v
+                                              read-only visibility</div>
+
+<p>
+Streaming replication begins with <code>primary_conninfo</code> on a server in standby mode. PostgreSQL enters standby mode when a <code>standby.signal</code> file is present at startup; <code>pg_basebackup -R</code> can create that file and write connection settings automatically.<sup><a href="#r1">[1]</a><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="processes">
+<h2>5. WAL sender and WAL receiver</h2>
+<p>
+On a physical replication connection, the upstream PostgreSQL backend enters WAL-sender mode. A corresponding WAL receiver on the standby receives the stream, writes/flushed WAL locally, reports progress, and recovery replays those records. The streaming protocol carries receiver status messages containing write, flush, and apply LSNs, which are also exposed through PostgreSQL monitoring views.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>5.1 Primary-side WAL senders</h3>
+<pre><code>SELECT
+    pid,
+    application_name,
+    client_addr,
+    state,
+    sync_state,
+    sent_lsn,
+    write_lsn,
+    flush_lsn,
+    replay_lsn,
+    write_lag,
+    flush_lag,
+    replay_lag
+FROM pg_stat_replication
+ORDER BY application_name;</code></pre>
+
+<h3>5.2 Standby-side WAL receiver</h3>
+<pre><code>SELECT
+    pid,
+    status,
+    sender_host,
+    sender_port,
+    slot_name,
+    written_lsn,
+    flushed_lsn,
+    latest_end_lsn,
+    latest_end_time
+FROM pg_stat_wal_receiver;</code></pre>
+
+<p>
+The primary's <code>pg_stat_replication</code> view represents connected WAL senders, while the standby's <code>pg_stat_wal_receiver</code> describes its receiving process.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="setup">
+<h2>6. Building a physical streaming standby</h2>
+
+<h3>6.1 Primary configuration</h3>
+<pre><code># postgresql.conf on all nodes that may become primary
+wal_level = replica
+max_wal_senders = 10
+max_replication_slots = 10
+
+# Optional extra retention safety, not a replacement for slot monitoring.
+wal_keep_size = '2GB'
+
+# Cap physical/logical slot WAL retention according to operational policy.
+# Example value only:
+max_slot_wal_keep_size = '50GB'</code></pre>
+
+<p>
+<code>wal_level=replica</code> or higher is required for physical standby connections, and <code>max_wal_senders</code> controls concurrent WAL sender/base-backup connections. Replication slots require <code>max_replication_slots</code> capacity. PostgreSQL 18 also provides <code>max_slot_wal_keep_size</code> to bound WAL retained by slots at checkpoint time.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>6.2 Dedicated replication role</h3>
+<pre><code>CREATE ROLE physical_repl
+LOGIN
+REPLICATION
+PASSWORD 'managed-out-of-band';</code></pre>
+
+<pre><code># pg_hba.conf
+hostssl replication physical_repl 10.20.10.0/24 scram-sha-256</code></pre>
+
+<p>
+Physical standbys authenticate to the replication pseudo-database using a superuser or a role with <code>REPLICATION</code>; PostgreSQL recommends a dedicated replication account rather than a superuser.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>6.3 Seed the standby with <code>pg_basebackup</code></h3>
+<pre><code>pg_basebackup \
+  --host=pg1.internal \
+  --username=physical_repl \
+  --pgdata=/var/lib/postgresql/18/main \
+  --wal-method=stream \
+  --write-recovery-conf \
+  --create-slot \
+  --slot=pg2_physical \
+  --progress</code></pre>
+
+<p>
+<code>pg_basebackup</code> creates a cluster-wide physical base backup using the replication protocol. <code>-R</code>/<code>--write-recovery-conf</code> writes <code>standby.signal</code> and connection settings; <code>-C -S slot</code> can create/use a physical slot and persist that slot name for the future standby connection.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>6.4 Standby connection identity</h3>
+<pre><code># Typically written into postgresql.auto.conf by pg_basebackup -R.
+primary_conninfo =
+  'host=pg1.internal port=5432 user=physical_repl application_name=pg2 sslmode=verify-full'
+
+primary_slot_name = 'pg2_physical'</code></pre>
+
+<p>
+The standby's <code>application_name</code> is important when it is named in <code>synchronous_standby_names</code>.<sup><a href="#r18">[18]</a></sup>
+</p>
+</section>
+
+<section id="slots">
+<h2>7. Replication slots</h2>
+<p>
+A replication slot records how far a replication consumer has progressed so PostgreSQL retains resources the consumer still needs. For physical replication, this principally protects required WAL. Logical slots additionally retain WAL/catalog visibility required for logical decoding. Slots survive disconnects, which is precisely why an abandoned slot can consume unbounded disk space unless retention/inactivity safeguards and monitoring are configured.<sup><a href="#r1">[1]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>7.1 Create a physical slot</h3>
+<pre><code>SELECT *
+FROM pg_create_physical_replication_slot(
+    'pg3_physical'
+);</code></pre>
+
+<h3>7.2 Inspect all slots</h3>
+<pre><code>SELECT
+    slot_name,
+    slot_type,
+    active,
+    active_pid,
+    restart_lsn,
+    confirmed_flush_lsn,
+    wal_status,
+    safe_wal_size,
+    inactive_since,
+    invalidation_reason,
+    failover,
+    synced
+FROM pg_replication_slots
+ORDER BY slot_name;</code></pre>
+
+<p>
+PostgreSQL 18 exposes slot WAL status, remaining safe WAL size under configured limits, inactivity, invalidation reason, and logical failover/synchronization state. A slot can become unusable if required WAL is removed or other invalidation conditions occur.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>7.3 PostgreSQL 18 idle-slot invalidation</h3>
+<pre><code># Example operational safety net.
+idle_replication_slot_timeout = '24h'</code></pre>
+
+<p>
+PostgreSQL 18 added <code>idle_replication_slot_timeout</code>, which can invalidate slots that remain inactive longer than the configured duration. This helps contain abandoned-slot risk but must be set long enough for legitimate outages and maintenance windows.<sup><a href="#r18">[18]</a><a href="#r20">[20]</a></sup>
+</p>
+
+<div class="callout danger">
+<strong>A replication slot is a retention promise.</strong> If the consumer is offline, the producer can keep generating WAL while the slot prevents deletion. Monitor slot lag and disk space as one failure mode.
+</div>
+</section>
+
+<section id="async">
+<h2>8. Asynchronous replication</h2>
+<p>
+Physical streaming replication is asynchronous by default. The primary can acknowledge a transaction commit before a standby has durably received the commit WAL. If the primary is then lost and the standby is promoted, transactions present only on the old primary can disappear from the promoted history. The amount of potential loss depends on the replication delay at failure time.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>8.1 Why asynchronous replication is attractive</h3>
+<p>
+The primary does not add the standby network/storage round trip to ordinary commit latency. This works well for geographically distant read replicas, workloads willing to tolerate a small failover loss window, and replicas whose principal purpose is read scaling rather than zero-data-loss HA.
+</p>
+
+<h3>8.2 Measure byte lag, not just “connected” state</h3>
+<pre><code>SELECT
+    application_name,
+    state,
+    sync_state,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            pg_current_wal_lsn(),
+            replay_lsn
+        )
+    ) AS replay_byte_lag
+FROM pg_stat_replication;</code></pre>
+
+<p>
+A standby can be connected and streaming but still be too far behind to satisfy a particular failover loss objective.
+</p>
+</section>
+
+<section id="sync">
+<h2>9. Synchronous replication</h2>
+<p>
+Synchronous replication makes selected write transactions wait for confirmation from one or more synchronous replication consumers. In ordinary physical streaming replication, this improves durability because the application does not receive commit success until the configured remote acknowledgement has occurred. The trade-off is commit latency and write availability if PostgreSQL cannot obtain enough required acknowledgements.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>9.1 Priority-based synchronous standbys</h3>
+<pre><code># primary postgresql.conf
+synchronous_standby_names =
+  'FIRST 1 (pg2, pg3)'</code></pre>
+
+<p>
+With <code>FIRST 1</code>, PostgreSQL chooses the highest-priority currently eligible standby from the listed names; another candidate can take over synchronous responsibility if the preferred standby disconnects.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>9.2 Quorum-based synchronous standbys</h3>
+<pre><code>synchronous_standby_names =
+  'ANY 2 (pg2, pg3, pg4)'</code></pre>
+
+<p>
+<code>ANY 2</code> requires acknowledgements from any two of the listed synchronous candidates, avoiding a fixed priority ordering.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>9.3 <code>synchronous_commit</code> acknowledgement levels</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Setting</th><th>Commit waits for</th><th>Implication</th></tr></thead>
+<tbody>
+<tr><td><code>off</code></td><td>Does not wait for local WAL flush</td><td>Asynchronous commit; transaction can be lost after server/OS crash.</td></tr>
+<tr><td><code>local</code></td><td>Local primary flush</td><td>No synchronous-replica wait.</td></tr>
+<tr><td><code>remote_write</code></td><td>Standby has received and written commit WAL to its OS</td><td>Lower remote durability than flush-to-disk, potentially less latency.</td></tr>
+<tr><td><code>on</code></td><td>Required synchronous standby has flushed commit WAL durably</td><td>Standard synchronous durability mode.</td></tr>
+<tr><td><code>remote_apply</code></td><td>Required synchronous standby has replayed commit</td><td>Change is visible to new standby queries; highest acknowledgement latency.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+PostgreSQL documents <code>remote_apply</code> as useful in simple cases for load balancing with causal consistency because commit does not return until the synchronous standby has replayed the transaction.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>9.4 Per-transaction durability policy</h3>
+<pre><code>BEGIN;
+
+SET LOCAL synchronous_commit = 'remote_apply';
+
+INSERT INTO finance.payment(...);
+
+COMMIT;</code></pre>
+
+<p>
+Because <code>synchronous_commit</code> can be changed per transaction/session/user/database, a workload can reserve strongest remote durability for business-critical transactions without imposing it on every write.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Synchronous replication can reduce write availability.</strong> If commits require acknowledgements that no eligible standby can provide, write transactions can wait indefinitely until configuration changes, a suitable standby returns, or shutdown intervenes. Design the synchronous quorum and failure domains together.
+</div>
+</section>
+
+<section id="readreplicas">
+<h2>10. Hot standby and read replicas</h2>
+<p>
+With <code>hot_standby=on</code>, a physical standby accepts read-only connections after reaching a consistent recovery point. Replicas are useful for reporting, expensive reads, backup offload, and geographical read locality. Because WAL must be replayed after it is generated and transferred, an asynchronous read replica is eventually consistent with the primary rather than immediately identical at every wall-clock instant.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>10.1 Is this server a standby?</h3>
+<pre><code>SELECT pg_is_in_recovery();</code></pre>
+
+<h3>10.2 Receive versus replay progress</h3>
+<pre><code>SELECT
+    pg_last_wal_receive_lsn() AS received,
+    pg_last_wal_replay_lsn()  AS replayed,
+    pg_last_xact_replay_timestamp() AS last_replay_time;</code></pre>
+
+<h3>10.3 Query/recovery conflicts</h3>
+<p>
+A standby must replay the primary's WAL, including cleanup records. Long-running read queries can conflict with replay. <code>max_standby_streaming_delay</code> and <code>max_standby_archive_delay</code> determine how long replay can wait before conflicting standby queries are canceled. <code>hot_standby_feedback=on</code> can reduce cleanup conflicts by reporting standby visibility needs upstream, but PostgreSQL warns that it can increase bloat on the primary.<sup><a href="#r14">[14]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<pre><code># Reporting-oriented standby example; values are workload-specific.
+max_standby_streaming_delay = '5min'
+hot_standby_feedback = on</code></pre>
+
+<h3>10.4 Delayed replica</h3>
+<pre><code># Example disaster-recovery/read-replica safety window.
+recovery_min_apply_delay = '15min'</code></pre>
+
+<p>
+A delayed standby intentionally postpones replay of transaction commit records, providing a time window against some operator mistakes. This increases WAL accumulation and is not a replacement for PITR backups.<sup><a href="#r18">[18]</a></sup>
+</p>
+</section>
+
+<section id="cascading">
+<h2>11. Cascading replication</h2>
+<p>
+A physical standby can itself accept replication connections and relay WAL to downstream standbys. Cascading reduces direct WAL sender load on the primary and can reduce cross-site bandwidth when one regional relay feeds several local replicas. PostgreSQL currently treats cascading streaming as asynchronous; synchronous standby settings on the primary do not make downstream cascaded replicas synchronous with the primary.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="diagram">primary (region A)
+       |
+       +==== streaming ====> standby-a (region B)
+                                |
+                                +=====> standby-b1
+                                |
+                                +=====> standby-b2</div>
+
+<p>
+A downstream standby points its <code>primary_conninfo</code> to the upstream standby. The upstream must be configured to send WAL (<code>max_wal_senders</code>, authentication, and hot-standby-compatible settings).<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="monitoring">
+<h2>12. Monitoring physical replication</h2>
+
+<h3>12.1 Primary-side lag dimensions</h3>
+<pre><code>SELECT
+    application_name,
+    client_addr,
+    state,
+    sync_state,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            pg_current_wal_lsn(),
+            sent_lsn
+        )
+    ) AS sender_backlog,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            sent_lsn,
+            write_lsn
+        )
+    ) AS network_or_receiver_backlog,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            write_lsn,
+            flush_lsn
+        )
+    ) AS standby_flush_backlog,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            flush_lsn,
+            replay_lsn
+        )
+    ) AS replay_backlog
+FROM pg_stat_replication;</code></pre>
+
+<p>
+LSN differences help locate the bottleneck: WAL generation/sender, network/receive, standby disk flush, or replay. Time lag columns are useful but represent recent synchronous-feedback timings rather than a universal prediction of “seconds behind.”<sup><a href="#r1">[1]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>12.2 Slot retention pressure</h3>
+<pre><code>SELECT
+    slot_name,
+    active,
+    wal_status,
+    pg_size_pretty(
+        pg_wal_lsn_diff(
+            pg_current_wal_lsn(),
+            restart_lsn
+        )
+    ) AS retained_wal,
+    pg_size_pretty(safe_wal_size) AS safe_wal_remaining,
+    invalidation_reason
+FROM pg_replication_slots
+WHERE slot_type = 'physical';</code></pre>
+
+<h3>12.3 Standby conflict statistics</h3>
+<pre><code>SELECT *
+FROM pg_stat_database_conflicts
+ORDER BY datname;</code></pre>
+
+<p>
+A read replica that repeatedly cancels queries or delays replay is not simply “healthy because streaming is connected.” Monitor replay lag and recovery conflicts together.<sup><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="logical">
+<h2>13. Logical replication</h2>
+<p>
+Logical replication sends changes to database objects based on logical row identity rather than copying physical blocks. PostgreSQL's built-in logical replication uses a publish/subscribe model: a publisher exposes one or more publications, and subscribers connect, perform optional initial table synchronization, then continuously apply decoded changes in transactional order.<sup><a href="#r2">[2]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<div class="diagram">PUBLISHER
+SQL DML
+  |
+  v
+WAL
+  |
+  v
+walsender
+  |
+  v
+logical decoding + pgoutput
+  |
+  +--> publication filtering
+  |      tables / schemas
+  |      columns
+  |      row filters
+  |      INSERT UPDATE DELETE TRUNCATE
+  |
+  v
+logical replication protocol
+  |
+  v
+SUBSCRIBER apply worker
+  |
+  v
+ordinary target tables</div>
+
+<h3>13.1 Physical versus logical replication</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Dimension</th><th>Physical</th><th>Logical</th></tr></thead>
+<tbody>
+<tr><td>Replication unit</td><td>Cluster/WAL physical recovery</td><td>Selected logical table changes</td></tr>
+<tr><td>Typical HA standby</td><td>Yes</td><td>Usually not a direct replacement for whole-cluster HA</td></tr>
+<tr><td>Read replica</td><td>Hot standby</td><td>Subscriber is a normal writable PostgreSQL database unless operationally restricted</td></tr>
+<tr><td>Cross-major-version</td><td>Not normal/supported replication model</td><td>Supported use case</td></tr>
+<tr><td>Cross-platform</td><td>Physical compatibility restrictions</td><td>Supported use case</td></tr>
+<tr><td>Subset of data</td><td>No</td><td>Yes</td></tr>
+<tr><td>Independent subscriber indexes</td><td>No physical divergence</td><td>Yes</td></tr>
+<tr><td>DDL replication</td><td>Replayed physically</td><td>Schema definitions generally must be managed separately</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+PostgreSQL explicitly lists cross-version, cross-platform, subset replication, consolidation, and access isolation among logical replication use cases.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="publications">
+<h2>14. Publications</h2>
+<p>
+A publication is a set of changes from one PostgreSQL database. Tables can belong to multiple publications, and publications can select DML operation types. PostgreSQL also supports publication column lists, row filters, and whole-schema publication forms.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>14.1 Basic publication</h3>
+<pre><code>CREATE PUBLICATION app_changes
+FOR TABLE
+    app.customer,
+    app.orders
+WITH (
+    publish = 'insert, update, delete'
+);</code></pre>
+
+<h3>14.2 Row filter and column list</h3>
+<pre><code>CREATE PUBLICATION fulfillment_changes
+FOR TABLE app.orders (
+    order_id,
+    customer_id,
+    status,
+    total,
+    updated_at
+)
+WHERE (
+    status IN ('paid', 'packed', 'shipped')
+)
+WITH (
+    publish = 'insert, update, delete'
+);</code></pre>
+
+<p>
+When publishing <code>UPDATE</code> or <code>DELETE</code>, the publisher needs a replica identity that lets the subscriber identify the target row—usually the primary key. Publication column lists and row-filter expressions are subject to additional replica-identity rules for these operations.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>14.3 Replica identity</h3>
+<pre><code>ALTER TABLE app.orders
+REPLICA IDENTITY USING INDEX orders_pkey;
+
+-- Last resort for tables without a suitable key:
+ALTER TABLE legacy_table
+REPLICA IDENTITY FULL;</code></pre>
+
+<p>
+<code>REPLICA IDENTITY FULL</code> can allow updates/deletes without a suitable replica-identity index but transmits/compares more old-row information and is generally less efficient than a proper key.<sup><a href="#r22">[22]</a></sup>
+</p>
+</section>
+
+<section id="subscriptions">
+<h2>15. Subscriptions</h2>
+<p>
+A subscription defines the downstream connection and publications to consume. By default, PostgreSQL creates a logical replication slot on the publisher and initially copies pre-existing table data before continuously applying subsequent changes. Additional temporary synchronization slots can exist during initial table synchronization.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>15.1 Subscriber setup</h3>
+<pre><code>CREATE SUBSCRIPTION reporting_sub
+CONNECTION
+  'host=publisher.internal port=5432 dbname=appdb user=logical_repl sslmode=verify-full'
+PUBLICATION app_changes
+WITH (
+    copy_data = true,
+    streaming = parallel,
+    failover = true
+);</code></pre>
+
+<p>
+Logical replication publishers need <code>wal_level=logical</code>, sufficient WAL sender/slot capacity, and appropriate authentication. Subscriber worker settings such as <code>max_logical_replication_workers</code> and <code>max_worker_processes</code> must accommodate apply, table-sync, and optional parallel apply workers.<sup><a href="#r24">[24]</a></sup>
+</p>
+
+<h3>15.2 Monitor subscribers</h3>
+<pre><code>SELECT
+    subname,
+    worker_type,
+    pid,
+    leader_pid,
+    relid::regclass,
+    received_lsn,
+    latest_end_lsn,
+    last_msg_send_time,
+    last_msg_receipt_time
+FROM pg_stat_subscription
+ORDER BY subname, worker_type;</code></pre>
+
+<h3>15.3 Conflict monitoring</h3>
+<pre><code>SELECT *
+FROM pg_stat_subscription_stats
+ORDER BY subname;</code></pre>
+
+<p>
+A logical subscriber can also receive local writes. If incoming replicated changes violate constraints or encounter divergent local data, conflicts can occur; PostgreSQL records defined conflict categories and statistics for logical subscriptions.<sup><a href="#r25">[25]</a></sup>
+</p>
+</section>
+
+<section id="decoding">
+<h2>16. Logical decoding</h2>
+<p>
+Logical decoding is the lower-level infrastructure that extracts logical changes from WAL and feeds an output plugin. It is useful for custom CDC pipelines, audit/event systems, and replication products. Changes are consumed through logical replication slots, and the output plugin controls wire/content format.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>16.1 Create an example logical slot</h3>
+<pre><code>SELECT *
+FROM pg_create_logical_replication_slot(
+    'cdc_demo',
+    'test_decoding'
+);</code></pre>
+
+<h3>16.2 Consume changes with SQL</h3>
+<pre><code>SELECT *
+FROM pg_logical_slot_get_changes(
+    'cdc_demo',
+    NULL,
+    NULL
+);</code></pre>
+
+<h3>16.3 Stream through the replication protocol</h3>
+<pre><code>pg_recvlogical \
+  --dbname='host=publisher.internal dbname=appdb user=cdc_user' \
+  --slot=cdc_demo \
+  --start \
+  --file=-</code></pre>
+
+<p>
+The streaming replication protocol supports logical slot creation and <code>START_REPLICATION ... LOGICAL</code>; <code>pg_recvlogical</code> implements these operations for clients. The built-in logical replication system normally uses the standard <code>pgoutput</code> plugin instead of the human-oriented <code>test_decoding</code> example.<sup><a href="#r26">[26]</a><a href="#r16">[16]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Logical slots also retain WAL.</strong> A stopped CDC connector can fill producer storage just like an abandoned physical slot. Monitor every slot as a durable consumer obligation.
+</div>
+</section>
+
+<section id="origins">
+<h2>17. Replication origins</h2>
+<p>
+Replication origins track how far changes from an external logical source have been replayed and provide an origin identity for changes. PostgreSQL designed them to support safe logical replication progress tracking and to help replication systems distinguish locally generated changes from changes replayed from another origin, which is important in loop-prevention designs.<sup><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>17.1 Create and inspect an origin</h3>
+<pre><code>SELECT pg_replication_origin_create(
+    'mycdc/upstream-east'
+);
+
+SELECT *
+FROM pg_replication_origin;
+
+SELECT *
+FROM pg_replication_origin_status;</code></pre>
+
+<p>
+Built-in logical subscriptions use replication-origin infrastructure internally to track apply progress; custom logical replication implementations can use the same facilities through the replication-origin functions.<sup><a href="#r27">[27]</a></sup>
+</p>
+</section>
+
+<section id="logical-ha">
+<h2>18. Logical replication through physical failover</h2>
+<p>
+A historically difficult topology is a physical HA publisher that also feeds logical subscribers: promoting the physical standby changes the publisher server, but downstream logical replication also depends on logical slots. PostgreSQL 18 supports failover-capable logical slots that can be synchronized to physical standbys, allowing subscriptions to continue from the promoted publisher when the topology is configured correctly.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>18.1 Subscription requests a failover slot</h3>
+<pre><code>CREATE SUBSCRIPTION analytics_sub
+CONNECTION
+  'host=publisher-vip.internal dbname=appdb user=logical_repl sslmode=verify-full'
+PUBLICATION analytics_pub
+WITH (
+    failover = true
+);</code></pre>
+
+<h3>18.2 Primary coordinates physical and logical progress</h3>
+<pre><code># primary postgresql.conf
+synchronized_standby_slots = 'pg2_physical'</code></pre>
+
+<pre><code># physical standby postgresql.conf
+sync_replication_slots = on
+
+# Slot synchronization also requires a dbname in primary_conninfo.
+primary_conninfo =
+  'host=pg1.internal dbname=postgres user=physical_repl application_name=pg2'</code></pre>
+
+<p>
+PostgreSQL's failover documentation emphasizes that logical slot synchronization is asynchronous, so operators must verify the synchronized slots are ready before a planned switch. <code>synchronized_standby_slots</code> ensures logical WAL sending waits until the designated physical standby has received the WAL needed to preserve those failover slots.<sup><a href="#r18">[18]</a><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>18.3 Inspect failover readiness</h3>
+<pre><code>SELECT
+    slot_name,
+    slot_type,
+    failover,
+    synced,
+    active,
+    confirmed_flush_lsn,
+    restart_lsn,
+    invalidation_reason
+FROM pg_replication_slots
+WHERE slot_type = 'logical';</code></pre>
+</section>
+
+<section id="failover">
+<h2>19. Failover and fencing</h2>
+<p>
+Failover is an unplanned transition after the current primary becomes unavailable or unsuitable. Native PostgreSQL can promote a standby with <code>pg_ctl promote</code> or <code>pg_promote()</code>, but it does not itself provide the external failure detector, cluster-wide leader election, client endpoint update, or fencing mechanism needed for safe automatic HA.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>SELECT pg_promote(
+    wait_seconds =&gt; 60,
+    wait         =&gt; true
+);</code></pre>
+
+<h3>19.1 Split brain is the central safety failure</h3>
+<div class="diagram">network partition
+       |
+       +-------------------------+
+       |                         |
+old primary                  standby
+still writable              promoted
+       |                         |
+       v                         v
+   accepts writes            accepts writes
+       \                         /
+        \---- divergent WAL ----/
+
+Result: two primaries, conflicting histories, possible data loss.</div>
+
+<p>
+PostgreSQL's failover documentation explicitly requires a mechanism to ensure that a former primary cannot simply restart as primary after another standby has been promoted. This class of mechanism is often called fencing or STONITH. The exact implementation may be power fencing, hypervisor/cloud fencing, network isolation, storage fencing, or another authoritative mechanism.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>19.2 Promotion changes the timeline</h3>
+<p>
+When a standby is promoted, PostgreSQL creates a new recovery timeline. Other standbys can follow the new timeline when configured with <code>recovery_target_timeline='latest'</code> (the default). The old primary's divergent timeline must be reconciled before it can safely rejoin.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="switchover">
+<h2>20. Switchover</h2>
+<p>
+A switchover is a planned role transition performed while the cluster is healthy—for example, to patch the current primary, change infrastructure, or regularly test HA. A controlled system verifies the target standby is suitably caught up, prevents new writes on the old primary, promotes the target, redirects clients, and converts/rebuilds the old primary as a standby.<sup><a href="#r5">[5]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>20.1 Patroni switchover</h3>
+<pre><code>patronictl -c /etc/patroni.yml switchover \
+  postgres-ha \
+  --primary pg1 \
+  --candidate pg2</code></pre>
+
+<p>
+Patroni documents switchover as the preferred operation for a healthy cluster and failover as the operation intended for unhealthy situations. Forced/manual failover can cause data loss if the candidate is behind the former primary.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>20.2 Rejoin the old primary</h3>
+<p>
+PostgreSQL's <code>pg_rewind</code> can often synchronize a former primary with the new primary much faster than taking a full new base backup, provided the cluster was configured to preserve the information <code>pg_rewind</code> requires and the histories are suitable.<sup><a href="#r5">[5]</a><a href="#r30">[30]</a></sup>
+</p>
+</section>
+
+<section id="routing">
+<h2>21. Connection routing</h2>
+<p>
+After failover, applications should not need to know which host was promoted. A routing layer provides a stable endpoint and uses an authoritative health/leadership signal—not merely “TCP port 5432 accepts connections”—to distinguish the writer from replicas.
+</p>
+
+<div class="diagram">application
+    |
+    +--> db-write.internal:5432
+    |        |
+    |        v
+    |      HAProxy
+    |        |
+    |        +--> Patroni /primary == 200 ? pg1 : no
+    |        +--> Patroni /primary == 200 ? pg2 : yes  ---> PostgreSQL pg2
+    |        +--> Patroni /primary == 200 ? pg3 : no
+    |
+    +--> db-read.internal:5432
+             |
+             v
+           HAProxy
+             |
+             +--> /replica?lag=64MB -> pg1/pg3 eligible
+             +--> balance read traffic</div>
+
+<h3>21.1 DNS, virtual IPs, proxies, and service discovery</h3>
+<p>
+Common patterns include a floating virtual IP, a TCP proxy/load balancer, service discovery, or application drivers that can try multiple endpoints. A proxy usually gives the cleanest separation between database topology and application connection strings, but the proxy itself must be deployed redundantly so it does not become the new single point of failure.
+</p>
+</section>
+
+<section id="patroni">
+<h2>22. Patroni</h2>
+<p>
+Patroni is an HA orchestration framework for PostgreSQL. It uses PostgreSQL streaming replication for data movement and a distributed configuration store for cluster coordination/leader state. Patroni exposes a REST API used internally for leader races, by <code>patronictl</code> for operational actions, and by load balancers such as HAProxy for role-aware health checks.<sup><a href="#r6">[6]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>22.1 Minimalized Patroni configuration shape</h3>
+<pre><code>scope: postgres-ha
+namespace: /service/
+name: pg1
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: 10.20.10.11:8008
+
+etcd3:
+  hosts:
+    - 10.20.20.11:2379
+    - 10.20.20.12:2379
+    - 10.20.20.13:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        max_wal_senders: 10
+        max_replication_slots: 10
+        hot_standby: "on"
+
+  pg_hba:
+    - hostssl replication physical_repl 10.20.10.0/24 scram-sha-256
+    - hostssl all all 10.20.0.0/16 scram-sha-256
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: 10.20.10.11:5432
+  data_dir: /var/lib/postgresql/18/main
+
+  authentication:
+    replication:
+      username: physical_repl
+      password: ${REPLICATION_PASSWORD}
+    superuser:
+      username: postgres
+      password: ${POSTGRES_SUPERUSER_PASSWORD}</code></pre>
+
+<p>
+The example is architectural, not a drop-in production file. TLS for the Patroni REST API/DCS, authentication, watchdog/fencing integration, secret delivery, callbacks, bootstrap method, PostgreSQL parameters, and backup/restore integration require environment-specific design.
+</p>
+
+<h3>22.2 Leader lock and timing</h3>
+<p>
+Patroni stores dynamic configuration in the DCS. Its <code>ttl</code> is the lifetime of the leader lock, <code>loop_wait</code> controls its HA loop interval, and <code>retry_timeout</code> bounds retries for DCS/PostgreSQL operations. Patroni documents a relationship between these values and also provides <code>maximum_lag_on_failover</code> to exclude excessively lagged asynchronous replicas from automatic leader election.<sup><a href="#r32">[32]</a></sup>
+</p>
+
+<h3>22.3 Patroni health endpoints</h3>
+<pre><code># HTTP 200 only when node is PostgreSQL primary and holds leader lock:
+GET /primary
+
+# HTTP 200 only for an eligible replica:
+GET /replica
+
+# Include a lag threshold:
+GET /replica?lag=64MB</code></pre>
+
+<p>
+Patroni's current REST API documents <code>/primary</code>/<code>/read-write</code> for leader-primary health checks and <code>/replica</code> for load-balancer-eligible replicas, including optional lag thresholds.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>22.4 Synchronous mode</h3>
+<p>
+Patroni can manage PostgreSQL synchronous-replication settings to trade write availability for stronger durability. This does not eliminate the fundamental distributed-systems trade-off: a cluster that refuses writes without a synchronous copy is choosing data durability over availability during some failures; a cluster that promotes an asynchronous replica may lose acknowledged transactions if it is behind.<sup><a href="#r1">[1]</a><a href="#r32">[32]</a></sup>
+</p>
+</section>
+
+<section id="dcs">
+<h2>23. Distributed coordination with etcd or Consul</h2>
+<p>
+The DCS does not carry PostgreSQL table data; it carries coordination metadata such as leader state and cluster configuration. It must therefore provide a consistent, quorum-backed mechanism for leader coordination under node and network failures.
+</p>
+
+<h3>23.1 etcd</h3>
+<p>
+etcd is a distributed consistent key-value store widely used for metadata and coordination. Its v3 API exposes key/value operations, watches, and leases; leases have TTLs and attached keys are deleted when the lease expires. etcd uses a Raft-based replicated consensus design and provides revision metadata useful for ordered distributed coordination.<sup><a href="#r7">[7]</a><a href="#r33">[33]</a></sup>
+</p>
+
+<div class="diagram">Patroni pg1 ----+
+Patroni pg2 ----+----> etcd quorum
+Patroni pg3 ----+      etcd1  etcd2  etcd3
+                          \     |     /
+                           Raft consensus</div>
+
+<h3>23.2 Consul</h3>
+<p>
+Consul's server agents use Raft consensus for authoritative cluster state. Consul provides a KV store and <em>sessions</em> that bind node/health/TTL state to keys and can be used to implement distributed locks. Patroni can use Consul as an alternative DCS backend.<sup><a href="#r8">[8]</a><a href="#r34">[34]</a><a href="#r35">[35]</a></sup>
+</p>
+
+<h3>23.3 Keep DCS failure domains independent</h3>
+<p>
+Placing every DCS voting member on the same host, rack, or failure domain as one database node undermines the point of quorum coordination. A three-member DCS is normally spread across independent failure domains so the loss of one member does not eliminate quorum; exact topology should reflect infrastructure failure modes and latency.
+</p>
+
+<div class="callout warn">
+<strong>The DCS is part of the database HA control plane.</strong> Back it up where supported, monitor quorum and latency, secure client/peer traffic, and test database behavior when the DCS becomes unavailable or partitioned.
+</div>
+</section>
+
+<section id="haproxy">
+<h2>24. HAProxy routing with Patroni health checks</h2>
+<p>
+HAProxy provides active health checking and removes servers from load-balancing rotation when checks fail, restoring them after configured successful checks. Patroni's role-aware HTTP endpoints make it possible to check the Patroni control plane on port 8008 while sending PostgreSQL client connections to port 5432.<sup><a href="#r9">[9]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>24.1 Writer endpoint</h3>
+<pre><code>global
+    log stdout format raw local0
+
+defaults
+    mode tcp
+    timeout connect 5s
+    timeout client  1m
+    timeout server  1m
+
+frontend postgres_write
+    bind *:5432
+    default_backend postgres_primary
+
+backend postgres_primary
+    mode tcp
+    option httpchk GET /primary
+    http-check expect status 200
+
+    server pg1 10.20.10.11:5432 check port 8008 inter 2s fall 3 rise 2
+    server pg2 10.20.10.12:5432 check port 8008 inter 2s fall 3 rise 2
+    server pg3 10.20.10.13:5432 check port 8008 inter 2s fall 3 rise 2</code></pre>
+
+<p>
+Only the Patroni node that is PostgreSQL primary and holds the leader lock returns success from <code>/primary</code>, so the writer backend converges on a single eligible server.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>24.2 Read-replica endpoint</h3>
+<pre><code>frontend postgres_read
+    bind *:5433
+    default_backend postgres_replicas
+
+backend postgres_replicas
+    mode tcp
+    balance leastconn
+
+    option httpchk GET /replica?lag=64MB
+    http-check expect status 200
+
+    server pg1 10.20.10.11:5432 check port 8008 inter 2s fall 3 rise 2
+    server pg2 10.20.10.12:5432 check port 8008 inter 2s fall 3 rise 2
+    server pg3 10.20.10.13:5432 check port 8008 inter 2s fall 3 rise 2</code></pre>
+
+<p>
+Patroni's replica endpoint can exclude nodes with a configured <code>noloadbalance</code>-style tag/state and can apply a byte-lag limit supplied in the request. The HAProxy health check then keeps only eligible replicas in rotation.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<div class="callout">
+<strong>Make the routing tier HA too.</strong> Two redundant HAProxy instances behind a virtual IP, cloud/network load balancer, or another resilient front end are preferable to one proxy that turns a three-node PostgreSQL cluster into a single-endpoint single point of failure.
+</div>
+</section>
+
+<section id="loadbalance">
+<h2>25. Load balancing and consistency</h2>
+
+<h3>25.1 Writes go to one authoritative primary</h3>
+<p>
+In a standard physical-replication HA cluster, all ordinary writes go to the primary. A generic round-robin proxy must not send write connections across primary and standbys indiscriminately.
+</p>
+
+<h3>25.2 Reads can be distributed—but may be stale</h3>
+<p>
+Asynchronous replicas can lag. Sending a user to a replica immediately after a successful write can produce a read that does not yet observe that write. Applications can tolerate this, pin consistency-sensitive reads to the primary, enforce lag thresholds, or use stronger synchronous acknowledgement such as <code>remote_apply</code> in workflows where the latency trade-off is acceptable.<sup><a href="#r1">[1]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>25.3 Separate pools</h3>
+<pre><code># Application connection strings conceptually:
+DATABASE_WRITE_URL=postgresql://app@db-write.internal:5432/appdb
+DATABASE_READ_URL=postgresql://app_ro@db-read.internal:5433/appdb</code></pre>
+
+<p>
+Separate credentials can reinforce the routing contract: the read pool can use a role whose database privileges are read-only even if it accidentally reaches a writable server.
+</p>
+
+<h3>25.4 Existing connections do not teleport</h3>
+<p>
+A load balancer redirects new connections after failover; existing TCP sessions to the failed/demoted primary break and applications must reconnect. Connection pools should have bounded connection lifetimes/health checking and robust retry behavior at safe transaction boundaries.
+</p>
+</section>
+
+<section id="operations">
+<h2>26. HA operations, rewind, backups, and testing</h2>
+
+<h3>26.1 Rebuild the failed former primary</h3>
+<p>
+After promotion, the old primary's timeline can diverge. It must not simply reconnect as though nothing happened. PostgreSQL recommends recreating a standby and notes that <code>pg_rewind</code> can accelerate reconciliation for suitable clusters.<sup><a href="#r5">[5]</a><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>26.2 Backups from a standby</h3>
+<p>
+<code>pg_basebackup</code> can take a backup from a standby when required replication/hot-standby configuration is present, which can offload work from the primary. PostgreSQL documents several limitations, including failure if that standby is promoted during the backup.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>26.3 Regular switchovers are HA tests</h3>
+<p>
+PostgreSQL explicitly recommends regular primary/standby switching as both a maintenance technique and a test that the failover mechanism will function when needed. Runbooks should cover the database nodes, DCS, routing layer, application reconnection, logical slots, backups, monitoring, and rejoin procedure.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>26.4 Failure-injection matrix</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Failure</th><th>Expected behavior</th><th>Validate</th></tr></thead>
+<tbody>
+<tr><td>Primary PostgreSQL process crash</td><td>HA manager evaluates restart/failover policy</td><td>Promotion time, acknowledged-write loss, routing change</td></tr>
+<tr><td>Primary host loss</td><td>Replica promoted</td><td>Fencing of old primary, endpoint convergence</td></tr>
+<tr><td>Primary isolated from DCS but still reachable by clients</td><td>Must not remain an uncontrolled writer</td><td>Leader-lock/fencing behavior</td></tr>
+<tr><td>One standby fails</td><td>Primary continues according to sync policy</td><td>Commit latency/availability and replacement</td></tr>
+<tr><td>DCS member fails</td><td>DCS retains quorum</td><td>No unnecessary DB failover</td></tr>
+<tr><td>DCS loses quorum</td><td>Cluster follows configured safety behavior</td><td>No split brain</td></tr>
+<tr><td>HAProxy instance fails</td><td>Alternate routing endpoint remains</td><td>Proxy-tier HA</td></tr>
+<tr><td>Replica lags heavily</td><td>Excluded from failover/read routing if policy says so</td><td>Lag thresholds</td></tr>
+<tr><td>Logical publisher primary fails</td><td>Logical subscribers resume from promoted publisher</td><td>Failover slots are synchronized</td></tr>
+<tr><td>Old primary returns</td><td>Fenced/reinitialized/rewound before rejoin</td><td>No second writer</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="architecture">
+<h2>27. Reference three-node HA architecture</h2>
+
+<div class="diagram">                         APPLICATIONS
+                    +-------------------+
+                    | write pool | reads|
+                    +------+-----+---+--+
+                           |         |
+                  +--------v--+   +--v---------+
+                  | HAProxy A |   | HAProxy B  |
+                  +-----+-----+   +------+------+
+                        \                /
+                         \              /
+                 writer :5432     readers :5433
+                           \       /
+        +-------------------\-----/----------------------+
+        |                    \   /                       |
+        v                     v v                        v
+ +-------------+       +-------------+            +-------------+
+ | Patroni pg1 |       | Patroni pg2 |            | Patroni pg3 |
+ | PostgreSQL  |       | PostgreSQL  |            | PostgreSQL  |
+ | primary     |=====> | replica     |            | replica     |
+ +------+------+ WAL   +------+------+            +------+------+
+        |                     ^                          ^
+        |=====================|==========================|
+                   streaming replication
+
+ DCS:
+ +-------------+   +-------------+   +-------------+
+ | etcd/Consul |---| etcd/Consul |---| etcd/Consul |
+ | member 1    |   | member 2    |   | member 3     |
+ +-------------+   +-------------+   +-------------+
+
+ Independent:
+ +----------------------------------------------------+
+ | WAL archive + tested physical/logical backups/PITR|
+ +----------------------------------------------------+</div>
+
+<h3>27.1 Example durability profiles</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Profile</th><th>Replication</th><th>Write consequence</th><th>Failover consequence</th></tr></thead>
+<tbody>
+<tr><td>Latency-first</td><td>Asynchronous standbys</td><td>No remote commit wait</td><td>Recent acknowledged writes may be lost</td></tr>
+<tr><td>Local-HA durability</td><td><code>ANY 1 (pg2, pg3)</code>, <code>synchronous_commit=on</code></td><td>Waits for one remote durable flush</td><td>Promoting an acknowledged synchronous copy minimizes committed-data loss from primary-only failure</td></tr>
+<tr><td>Read-after-write replica visibility</td><td>Synchronous + <code>remote_apply</code></td><td>Waits through standby replay</td><td>Higher latency; synchronous replica has applied acknowledged commit</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+No durability profile survives every simultaneous failure, operator error, or storage-domain failure. Standby placement, shared infrastructure, fencing, and backup/PITR remain part of the guarantee.<sup><a href="#r1">[1]</a><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="pitfalls">
+<h2>28. Common pitfalls</h2>
+
+<h3>28.1 “Streaming” does not mean synchronous</h3>
+<p>
+PostgreSQL streaming replication is asynchronous unless synchronous standby configuration and a waiting <code>synchronous_commit</code> level make commits wait.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>28.2 Slots without alerts</h3>
+<p>
+An inactive slot can retain WAL until <code>pg_wal</code> fills. Configure retention limits/timeouts deliberately and alert on <code>restart_lsn</code> lag, <code>safe_wal_size</code>, inactivity, and invalidation.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>28.3 Two-node automatic failover without authoritative fencing</h3>
+<p>
+If a network partition makes each database side believe the other has failed, both can accept writes unless an external consensus/fencing mechanism prevents it. PostgreSQL specifically warns about the returning old primary and the need for STONITH-like protection.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>28.4 Treating read replicas as immediately consistent</h3>
+<p>
+Asynchronous hot standbys can lag and return older snapshots. Choose the read endpoint based on the consistency requirement of each request.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>28.5 Making <code>hot_standby_feedback</code> a universal fix</h3>
+<p>
+It reduces some standby query cancellations but can delay cleanup and create bloat on the primary. Monitor both replica usability and primary vacuum health.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>28.6 Forgetting logical slots during physical failover</h3>
+<p>
+A physical promotion can be perfect while downstream CDC/logical subscribers fail because their logical slots did not move. Use PostgreSQL's failover-slot synchronization when logical subscribers must survive publisher failover.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>28.7 Health checking only port 5432</h3>
+<p>
+A PostgreSQL process can accept TCP connections while being a standby or while the HA manager considers it ineligible for leadership. Route writes using role/leader-aware health state such as Patroni's <code>/primary</code> endpoint.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>28.8 One load balancer in front of three database nodes</h3>
+<p>
+Database redundancy does not help if the only client entry point is a single failed proxy. The routing layer needs its own redundancy strategy.
+</p>
+
+<h3>28.9 Promoting the most convenient replica instead of the safest one</h3>
+<p>
+With asynchronous replication, promotion candidate lag determines potential lost transactions. Patroni's <code>maximum_lag_on_failover</code> exists specifically to exclude replicas beyond an operator-defined lag threshold from automatic elections.<sup><a href="#r32">[32]</a></sup>
+</p>
+
+<h3>28.10 Assuming HA replaces disaster recovery</h3>
+<p>
+Replication protects availability from node failures. PITR/backups protect different failure classes, including replicated human/application mistakes and corruption scenarios.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="checklist">
+<h2>29. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Define durability and availability targets.</strong> Decide how much acknowledged-write loss is acceptable and how much commit latency/unavailability is acceptable.</li>
+<li><strong>Use dedicated replication identities.</strong> Protect replication connections with narrow HBA rules and TLS.</li>
+<li><strong>Capacity WAL senders and slots.</strong> Include physical replicas, base backups, logical subscriptions, and synchronization workers.</li>
+<li><strong>Monitor slot retention.</strong> Alert before WAL disk space becomes critical.</li>
+<li><strong>Choose asynchronous vs synchronous deliberately.</strong> Do not infer it from the word “streaming.”</li>
+<li><strong>Design synchronous quorum across failure domains.</strong></li>
+<li><strong>Monitor receive, flush, and replay progress separately.</strong></li>
+<li><strong>Tune read replicas for their purpose.</strong> HA replicas and long-query reporting replicas often need different conflict policies.</li>
+<li><strong>Fence the former primary.</strong> Promotion without fencing is not safe automatic HA.</li>
+<li><strong>Use a quorum-backed DCS for Patroni.</strong> Monitor DCS quorum, latency, and certificates/credentials.</li>
+<li><strong>Route by authoritative role state.</strong> Use Patroni-aware health checks rather than TCP-only writer checks.</li>
+<li><strong>Make routing redundant.</strong> HAProxy/load-balancer infrastructure needs its own HA design.</li>
+<li><strong>Separate writer and reader endpoints.</strong> Make replica staleness an explicit application contract.</li>
+<li><strong>Plan logical replication through failover.</strong> Synchronize failover slots before promotion.</li>
+<li><strong>Practice switchovers.</strong> Include application reconnect behavior and old-primary rejoin.</li>
+<li><strong>Test destructive/network failures.</strong> A diagram is not evidence that failover is safe.</li>
+<li><strong>Retain backups and WAL archives.</strong> HA is not PITR.</li>
+<li><strong>Document the degenerate state.</strong> After failover, rebuild redundancy promptly.</li>
+</ol>
+
+<div class="callout ok">
+<strong>HA principle:</strong> replication moves data; consensus chooses authority; fencing prevents two authorities; routing exposes the chosen authority to clients. A PostgreSQL HA design is correct only when all four behaviors agree during failures.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Log-Shipping Standby Servers: streaming replication, replication slots, cascading and synchronous replication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/warm-standby.html">https://www.postgresql.org/docs/18/warm-standby.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Logical Replication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication.html">https://www.postgresql.org/docs/18/logical-replication.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Logical Replication Architecture [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-architecture.html">https://www.postgresql.org/docs/18/logical-replication-architecture.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Logical Replication Use Cases [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication.html">https://www.postgresql.org/docs/18/logical-replication.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Failover [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/warm-standby-failover.html">https://www.postgresql.org/docs/18/warm-standby-failover.html</a></li>
+
+<li id="r6">Patroni Project. Patroni Documentation, Release 4.1.3 [Internet]. 2026 [cited 2026 Sep 15]. Available from: <a href="https://patroni.readthedocs.io/en/latest/">https://patroni.readthedocs.io/en/latest/</a></li>
+
+<li id="r7">etcd Project. etcd v3.6 API: KV, Watch, Lease and cluster metadata [Internet]. 2026 [cited 2026 Sep 15]. Available from: <a href="https://etcd.io/docs/v3.6/learning/api/">https://etcd.io/docs/v3.6/learning/api/</a></li>
+
+<li id="r8">HashiCorp. Consul consensus [Internet]. 2026 [cited 2026 Sep 15]. Available from: <a href="https://developer.hashicorp.com/consul/docs/concept/consensus">https://developer.hashicorp.com/consul/docs/concept/consensus</a></li>
+
+<li id="r9">HAProxy Technologies. Health checks [Internet]. HAProxy Configuration Tutorials; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.haproxy.com/documentation/haproxy-configuration-tutorials/reliability/health-checks/">https://www.haproxy.com/documentation/haproxy-configuration-tutorials/reliability/health-checks/</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. WAL settings: synchronous_commit [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-wal.html">https://www.postgresql.org/docs/18/runtime-config-wal.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Backup and Restore [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup.html">https://www.postgresql.org/docs/18/backup.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. WAL Internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-internals.html">https://www.postgresql.org/docs/18/wal-internals.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Logical Decoding [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logicaldecoding.html">https://www.postgresql.org/docs/18/logicaldecoding.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Hot Standby [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/hot-standby.html">https://www.postgresql.org/docs/18/hot-standby.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. pg_basebackup [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgbasebackup.html">https://www.postgresql.org/docs/18/app-pgbasebackup.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Streaming Replication Protocol [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/protocol-replication.html">https://www.postgresql.org/docs/18/protocol-replication.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Monitoring Database Activity: pg_stat_replication, pg_stat_wal_receiver and subscription views [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. Replication Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-replication.html">https://www.postgresql.org/docs/18/runtime-config-replication.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. pg_replication_slots [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-replication-slots.html">https://www.postgresql.org/docs/18/view-pg-replication-slots.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes: replication slot changes [Internet]. 2025-2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Logical Replication Architecture [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-architecture.html">https://www.postgresql.org/docs/18/logical-replication-architecture.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Logical Replication Publication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-publication.html">https://www.postgresql.org/docs/18/logical-replication-publication.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Logical Replication Subscription [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-subscription.html">https://www.postgresql.org/docs/18/logical-replication-subscription.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Logical Replication Configuration Settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-config.html">https://www.postgresql.org/docs/18/logical-replication-config.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Logical Replication Conflicts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-conflicts.html">https://www.postgresql.org/docs/18/logical-replication-conflicts.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. pg_recvlogical [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgrecvlogical.html">https://www.postgresql.org/docs/18/app-pgrecvlogical.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. Replication Progress Tracking (Replication Origins) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/replication-origins.html">https://www.postgresql.org/docs/18/replication-origins.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. Logical Replication Failover [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-failover.html">https://www.postgresql.org/docs/18/logical-replication-failover.html</a></li>
+
+<li id="r29">Patroni Project. patronictl failover and switchover; Patroni REST failover/switchover API [Internet]. Patroni Documentation 4.1.x; 2026 [cited 2026 Sep 15]. Available from: <a href="https://patroni.readthedocs.io/en/latest/">https://patroni.readthedocs.io/en/latest/</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. pg_rewind [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgrewind.html">https://www.postgresql.org/docs/18/app-pgrewind.html</a></li>
+
+<li id="r31">Patroni Project. Patroni REST API: health check endpoints [Internet]. Patroni Documentation, Release 4.1.3; 2026 [cited 2026 Sep 15]. Available from: <a href="https://patroni.readthedocs.io/en/latest/rest_api.html">https://patroni.readthedocs.io/en/latest/rest_api.html</a></li>
+
+<li id="r32">Patroni Project. Dynamic configuration settings: ttl, loop_wait, retry_timeout, maximum_lag_on_failover [Internet]. Patroni Documentation 4.1.x; 2026 [cited 2026 Sep 15]. Available from: <a href="https://patroni.readthedocs.io/en/latest/dynamic_configuration.html">https://patroni.readthedocs.io/en/latest/dynamic_configuration.html</a></li>
+
+<li id="r33">etcd Project. etcd versus other key-value stores: metadata and distributed coordination [Internet]. etcd v3.6 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://etcd.io/docs/v3.6/learning/why/">https://etcd.io/docs/v3.6/learning/why/</a></li>
+
+<li id="r34">HashiCorp. Consul sessions and distributed locks [Internet]. 2026 [cited 2026 Sep 15]. Available from: <a href="https://developer.hashicorp.com/consul/docs/automate/session">https://developer.hashicorp.com/consul/docs/automate/session</a></li>
+
+<li id="r35">HashiCorp. Consul key/value store overview [Internet]. 2026 [cited 2026 Sep 15]. Available from: <a href="https://developer.hashicorp.com/consul/docs/automate/kv">https://developer.hashicorp.com/consul/docs/automate/kv</a></li>
+
+<li id="r36">PostgreSQL Global Development Group. System Administration Functions: recovery and replication management [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r37">PostgreSQL Global Development Group. CREATE SUBSCRIPTION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createsubscription.html">https://www.postgresql.org/docs/18/sql-createsubscription.html</a></li>
+
+<li id="r38">PostgreSQL Global Development Group. Recovery configuration: standby.signal and recovery settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/recovery-config.html">https://www.postgresql.org/docs/18/recovery-config.html</a></li>
+
+<li id="r39">PostgreSQL Global Development Group. Synchronous Replication Support for Logical Decoding [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logicaldecoding-synchronous.html">https://www.postgresql.org/docs/18/logicaldecoding-synchronous.html</a></li>
+
+<li id="r40">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference, not a substitute for an HA test program. Replication guarantees depend on PostgreSQL settings, storage durability, network topology, standby placement, synchronous quorum, DCS behavior, fencing, router behavior, application retry semantics, and backup integrity. Test failover, failback, split-network conditions, degraded quorum, stale replicas, logical-slot continuity, and disaster recovery with representative production load before relying on the design.
+</p>
+</footer>
+
+</body>
+</html>

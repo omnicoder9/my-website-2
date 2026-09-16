@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL indexing: B-tree, Hash, GiST, SP-GiST, GIN, BRIN, multicolumn, unique, partial, expression and covering indexes, operator classes, design, selectivity, maintenance and query-driven indexing.">
+<title>PostgreSQL Indexing</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}
+.dek{max-width:1040px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}h4{margin-top:1.6em;font-size:1.08rem}p{margin:.92em 0}a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}pre code{color:inherit}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:860px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{body{background:#fff}header{background:#fff;color:#000;padding:18px 0}header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}a{color:#000;text-decoration:none}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Indexing</h1>
+<p class="dek">An expert guide to PostgreSQL index access methods and design: B-tree, Hash, GiST, SP-GiST, GIN and BRIN; multicolumn, unique, partial, expression and covering indexes; operator classes; selectivity and cardinality; read/write tradeoffs; maintenance; over-indexing; and query-driven index design.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>Indexes are secondary data structures that trade additional storage and write work for faster access to selected query patterns. PostgreSQL provides several built-in access methods rather than one universal index: B-tree for ordered scalar search and ordering, Hash for equality, GiST and SP-GiST as extensible search-tree frameworks, GIN as an inverted index for multi-component values, and BRIN as a compact block-range summary index for physically correlated data. The planner chooses whether to use an index from estimated selectivity, cardinality, ordering, heap-access cost, and complete plan cost—not merely because an index exists.<sup><a href="#r1">[1]</a>-<a href="#r3">[3]</a></sup></p>
+<p>Advanced index design is primarily about matching real query predicates. Multicolumn B-tree indexes are most effective when their leading columns constrain the searchable range, although PostgreSQL 18 can use skip scan in more cases. Partial indexes intentionally index only rows satisfying a predicate; expression indexes index computed values; unique indexes enforce uniqueness; and covering indexes use <code>INCLUDE</code> columns to make index-only scans possible without changing search-key semantics.<sup><a href="#r4">[4]</a>-<a href="#r8">[8]</a></sup></p>
+<p>Indexes are not free. Every extra index consumes disk, creates WAL, increases insert/delete maintenance, can make updates more expensive, and can reduce opportunities for heap-only tuple (HOT) updates when indexed attributes change. Wide or redundant indexes also enlarge working sets and lengthen maintenance operations. The correct question is therefore not “Which columns should have indexes?” but “Which recurring query paths justify an additional physical structure after accounting for write, storage, concurrency, and maintenance cost?”<sup><a href="#r1">[1]</a><a href="#r9">[9]</a><a href="#r10">[10]</a></sup></p>
+</section>
+
+<nav class="toc" aria-label="Table of contents"><h2>Contents</h2><ol>
+<li><a href="#model">Indexing model</a></li><li><a href="#planner">How the planner uses indexes</a></li><li><a href="#types">Index types</a></li><li><a href="#btree">B-tree</a></li>
+<li><a href="#hash">Hash</a></li><li><a href="#gist">GiST</a></li><li><a href="#spgist">SP-GiST</a></li><li><a href="#gin">GIN</a></li>
+<li><a href="#brin">BRIN</a></li><li><a href="#advanced">Advanced indexing</a></li><li><a href="#multicolumn">Composite/multicolumn indexes</a></li><li><a href="#skipscan">PostgreSQL 18 skip scan</a></li>
+<li><a href="#unique">Unique indexes</a></li><li><a href="#partial">Partial indexes</a></li><li><a href="#expression">Expression indexes</a></li><li><a href="#covering">Covering indexes</a></li>
+<li><a href="#indexonly">Index-only scans</a></li><li><a href="#opclasses">Operator classes/families</a></li><li><a href="#ordering">Indexes and ORDER BY</a></li><li><a href="#combining">Combining indexes</a></li>
+<li><a href="#selectivity">Selectivity and cardinality</a></li><li><a href="#design">Index design</a></li><li><a href="#tradeoffs">Read/write tradeoffs</a></li><li><a href="#hot">HOT interactions</a></li>
+<li><a href="#maintenance">Index maintenance</a></li><li><a href="#concurrent">Concurrent builds/rebuilds</a></li><li><a href="#monitoring">Monitoring index usage</a></li><li><a href="#overindexing">Over-indexing</a></li>
+<li><a href="#querydriven">Query-driven indexing</a></li><li><a href="#patterns">Design patterns</a></li><li><a href="#pitfalls">Common pitfalls</a></li><li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="model"><h2>1. PostgreSQL indexing model</h2>
+<p>PostgreSQL indexes are separate relations from the table heap. An ordinary index scan finds index entries and then fetches corresponding heap tuples, where MVCC visibility is checked and any non-indexed columns are obtained. This separation explains both index advantages and costs: index traversal can avoid scanning most heap pages, but a selective index can still generate many random heap fetches if matching rows are physically scattered.<sup><a href="#r8">[8]</a><a href="#r11">[11]</a></sup></p>
+<div class="diagram">table heap
++-----------------------------+
+| page 0: rows ...            |
+| page 1: rows ...            |
+| page 2: rows ...            |
++-----------------------------+
+
+secondary index
++-------------------------------------+
+| key -> TID(block, offset)           |
+| key -> TID(block, offset)           |
+| ...                                 |
++-------------------------------------+
+          |
+          v
+index scan finds TIDs
+          |
+          v
+heap fetch + MVCC visibility check</div>
+
+<h3>1.1 CREATE INDEX</h3>
+<pre><code>CREATE INDEX orders_customer_idx
+ON app.orders (customer_id);</code></pre>
+<p>B-tree is the default access method. Other methods are selected explicitly with <code>USING</code>.<sup><a href="#r2">[2]</a><a href="#r12">[12]</a></sup></p>
+<pre><code>CREATE INDEX event_payload_gin
+ON app.event
+USING gin (payload);</code></pre>
+</section>
+
+<section id="planner"><h2>2. How the planner decides whether to use an index</h2>
+<p>An index is only useful if its complete execution path is expected to be cheaper than alternatives such as a sequential scan, bitmap scan, another index, or an index combination. PostgreSQL estimates predicate selectivity using planner statistics, estimates the number of rows that will qualify, and then prices index traversal, index tuple processing, heap I/O, CPU filtering, ordering benefits, and parent-plan requirements.<sup><a href="#r13">[13]</a>-<a href="#r15">[15]</a></sup></p>
+
+<div class="diagram">WHERE customer_id = 42
+        |
+        v
+statistics -> selectivity estimate
+        |
+        v
+estimated rows
+        |
+        +--> Seq Scan cost
+        +--> Index Scan cost
+        +--> Bitmap Heap Scan cost
+        +--> alternative index costs
+        |
+        v
+lowest estimated complete-plan cost wins</div>
+
+<h3>2.1 An index is not a directive</h3>
+<pre><code>EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM app.orders
+WHERE status = 'complete';</code></pre>
+<p>If nearly every row has <code>status='complete'</code>, an index on <code>status</code> may be less efficient than scanning the heap. Low-cardinality values can still be worth indexing when a rare value is queried frequently, especially with a partial index; cardinality alone never determines usefulness.<sup><a href="#r6">[6]</a><a href="#r14">[14]</a></sup></p>
+</section>
+
+<section id="types"><h2>3. Built-in index types</h2>
+<p>PostgreSQL 18 provides B-tree, Hash, GiST, SP-GiST, GIN and BRIN as built-in index access methods. The supplied <code>bloom</code> module provides an additional index access method as an extension. Each access method defines different storage/search semantics and relies on operator classes to determine which operators and data types it can accelerate.<sup><a href="#r2">[2]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Type</th><th>Core model</th><th>Typical strengths</th><th>Typical examples</th></tr></thead><tbody>
+<tr><td>B-tree</td><td>Balanced ordered tree</td><td>Equality, ranges, ordering, uniqueness</td><td>IDs, timestamps, names, numeric ranges</td></tr>
+<tr><td>Hash</td><td>Hash buckets</td><td>Equality only</td><td>Equality on scalar values</td></tr>
+<tr><td>GiST</td><td>Generalized balanced search tree framework</td><td>Spatial, ranges, nearest neighbor, extensible predicates</td><td>Geometry, ranges, exclusion constraints</td></tr>
+<tr><td>SP-GiST</td><td>Space-partitioned generalized search tree</td><td>Non-balanced partitioned structures, nearest neighbor</td><td>Points, network prefixes, text prefix structures depending on opclass</td></tr>
+<tr><td>GIN</td><td>Inverted index</td><td>Values containing many components</td><td>Arrays, JSONB, full-text <code>tsvector</code></td></tr>
+<tr><td>BRIN</td><td>Block-range summaries</td><td>Huge physically correlated tables, very small indexes</td><td>Append-only timestamps, monotonic IDs</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="btree"><h2>4. B-tree indexes</h2>
+<p>B-tree is PostgreSQL's default and general-purpose ordered index. It supports data types with a well-defined linear order and is considered for comparisons using <code>&lt;</code>, <code>&lt;=</code>, <code>=</code>, <code>&gt;=</code>, and <code>&gt;</code>, plus constructs reducible to those comparisons such as <code>BETWEEN</code> and many <code>IN</code> cases. It is also the only built-in index type that can directly produce sorted output for <code>ORDER BY</code> and the only built-in access method that can currently enforce ordinary unique indexes.<sup><a href="#r2">[2]</a><a href="#r7">[7]</a><a href="#r16">[16]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_created_idx
+ON app.orders (created_at);
+
+SELECT *
+FROM app.orders
+WHERE created_at &gt;= timestamp '2026-09-01'
+  AND created_at &lt;  timestamp '2026-10-01';</code></pre>
+
+<h3>4.1 Ordering</h3>
+<pre><code>CREATE INDEX orders_created_desc_idx
+ON app.orders (created_at DESC);
+
+SELECT *
+FROM app.orders
+ORDER BY created_at DESC
+LIMIT 100;</code></pre>
+
+<p>A B-tree can normally be scanned forward or backward, so one simple ascending single-column B-tree can satisfy both ascending and descending order (with corresponding null ordering). Explicit per-column direction becomes more important in multicolumn indexes where mixed directions are required.<sup><a href="#r16">[16]</a></sup></p>
+
+<h3>4.2 Pattern matching</h3>
+<p>B-tree can support prefix pattern matching such as <code>LIKE 'foo%'</code> when the operator class/collation semantics allow it; PostgreSQL also provides pattern operator classes such as <code>text_pattern_ops</code> for cases where locale-aware ordering otherwise prevents the desired prefix behavior.<sup><a href="#r17">[17]</a></sup></p>
+
+<h3>4.3 B-tree implementation considerations</h3>
+<p>B-tree index tuples have size limits; PostgreSQL's implementation requires an index entry to fit within roughly one-third of an index page after applicable compression. Very wide values or covering payloads can therefore make index creation/insertion fail even when the heap column itself can store the value.<sup><a href="#r18">[18]</a></sup></p>
+</section>
+
+<section id="hash"><h2>5. Hash indexes</h2>
+<p>Hash indexes support simple equality comparisons through <code>=</code>. They do not provide range ordering, <code>ORDER BY</code> output, multicolumn keys, or uniqueness enforcement. PostgreSQL's own documentation recommends B-tree for typical concurrently accessed scalar data because B-tree has broader functionality and strong concurrency behavior; Hash remains a specialized equality structure.<sup><a href="#r2">[2]</a><a href="#r9">[9]</a></sup></p>
+
+<pre><code>CREATE INDEX session_token_hash_idx
+ON auth.session
+USING hash (session_token);
+
+SELECT *
+FROM auth.session
+WHERE session_token = $1;</code></pre>
+
+<p>Hash index access uses bucket-level locking internally, while B-tree, GiST, SP-GiST and GIN generally use shorter page-level locks. This implementation difference is one reason B-tree is normally the preferred scalar index unless a measured workload demonstrates a Hash advantage.<sup><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="gist"><h2>6. GiST</h2>
+<p>GiST (Generalized Search Tree) is an extensible balanced-tree framework rather than one fixed data structure. Operator classes supply the semantics needed to map a data type and its predicates into the GiST framework. Built-in and supplied operator classes support geometric types, range types, nearest-neighbor searches, and many extension-defined domains.<sup><a href="#r2">[2]</a><a href="#r19">[19]</a></sup></p>
+
+<pre><code>CREATE INDEX places_location_gist
+ON geo.place
+USING gist (location);
+
+SELECT *
+FROM geo.place
+ORDER BY location &lt;-&gt; point(-78.6382, 35.7796)
+LIMIT 10;</code></pre>
+
+<p>Nearest-neighbor search is an important GiST capability when the selected operator class defines an ordering operator such as distance. GiST also underlies common exclusion-constraint designs, where equality on one dimension and overlap on another can be combined using appropriate operator classes.<sup><a href="#r19">[19]</a><a href="#r20">[20]</a></sup></p>
+
+<h3>6.1 btree_gist</h3>
+<p>The supplied <code>btree_gist</code> extension provides GiST operator classes with B-tree-like comparison behavior for many scalar types. They do not generally outperform native B-tree and do not provide ordinary B-tree uniqueness, but are useful when scalar comparisons need to participate in a multicolumn GiST structure, especially exclusion constraints.<sup><a href="#r20">[20]</a></sup></p>
+</section>
+
+<section id="spgist"><h2>7. SP-GiST</h2>
+<p>SP-GiST (Space-Partitioned GiST) is an extensible framework for search structures that recursively partition a search space. Unlike GiST's balanced-tree abstraction, SP-GiST is designed to accommodate partitioning structures such as tries, radix trees, quadtrees and k-d trees through suitable operator classes. Supported operators depend on the chosen operator class.<sup><a href="#r2">[2]</a><a href="#r21">[21]</a></sup></p>
+
+<pre><code>CREATE INDEX point_spgist_idx
+ON geo.sample
+USING spgist (location);</code></pre>
+
+<p>SP-GiST can support nearest-neighbor ordering when its operator class implements the relevant distance semantics. It is attractive when the data's natural partitioning structure matches an available SP-GiST operator class.<sup><a href="#r2">[2]</a><a href="#r21">[21]</a></sup></p>
+</section>
+
+<section id="gin"><h2>8. GIN</h2>
+<p>GIN (Generalized Inverted Index) is designed for values containing many component values. Rather than indexing one scalar key per row, a GIN operator class extracts keys from each indexed value, stores an inverted mapping from key to matching heap rows, and supports queries based on component membership. Arrays, full-text <code>tsvector</code>, and JSONB are canonical uses.<sup><a href="#r2">[2]</a><a href="#r22">[22]</a></sup></p>
+
+<pre><code>CREATE INDEX article_search_gin
+ON content.article
+USING gin (search_vector);
+
+SELECT *
+FROM content.article
+WHERE search_vector @@ websearch_to_tsquery('english', 'postgres indexing');</code></pre>
+
+<pre><code>CREATE INDEX event_payload_gin
+ON app.event
+USING gin (payload);
+
+SELECT *
+FROM app.event
+WHERE payload @&gt; '{"type":"purchase"}'::jsonb;</code></pre>
+
+<h3>8.1 Write amplification and fast update</h3>
+<p>A single row can generate many GIN key entries, so GIN inserts are often substantially more expensive than scalar B-tree inserts. GIN's fast-update mechanism can accumulate pending entries for later consolidation; it is configurable through GIN storage parameters and maintenance behavior.<sup><a href="#r9">[9]</a><a href="#r12">[12]</a><a href="#r22">[22]</a></sup></p>
+
+<h3>8.2 PostgreSQL 18 parallel GIN build</h3>
+<p>PostgreSQL 18 added support for parallel creation of GIN indexes, reducing build time when the planner/build infrastructure can use parallel workers.<sup><a href="#r23">[23]</a></sup></p>
+</section>
+
+<section id="brin"><h2>9. BRIN</h2>
+<p>BRIN (Block Range INdex) stores summaries for ranges of consecutive heap blocks instead of one entry per indexed row. For min/max operator classes, each range records summary boundaries; if a query's predicate cannot match a block range's summary, PostgreSQL can skip that range. BRIN is therefore exceptionally compact and effective when column values correlate with physical row order.<sup><a href="#r2">[2]</a><a href="#r24">[24]</a></sup></p>
+
+<pre><code>CREATE INDEX telemetry_recorded_brin
+ON telemetry.sample
+USING brin (recorded_at)
+WITH (pages_per_range = 128);
+
+SELECT *
+FROM telemetry.sample
+WHERE recorded_at &gt;= now() - interval '1 hour';</code></pre>
+
+<div class="diagram">heap physical order
+
+blocks 0..127      time 2026-01-01 .. 2026-01-03
+blocks 128..255    time 2026-01-03 .. 2026-01-05
+blocks 256..383    time 2026-01-05 .. 2026-01-07
+
+BRIN summaries:
+range 0 -> [min Jan 1, max Jan 3]
+range 1 -> [min Jan 3, max Jan 5]
+range 2 -> [min Jan 5, max Jan 7]
+
+query Jan 6:
+range 0/1 can be skipped
+range 2 must be checked</div>
+
+<p>BRIN does not prove which individual rows match; it identifies ranges that might contain matches and therefore produces lossy candidates for heap rechecking. Its advantage is a tiny index and low maintenance cost on massive physically correlated tables.<sup><a href="#r24">[24]</a></sup></p>
+
+<h3>9.1 Correlation is the key</h3>
+<p>A BRIN on a randomly distributed UUID usually summarizes nearly the whole value domain in every block range and cannot prune much. An append-only timestamp or increasing identifier often has excellent physical correlation and is a much better candidate.</p>
+</section>
+
+<section id="advanced"><h2>10. Advanced indexing</h2>
+<p>Advanced PostgreSQL indexing is mostly about controlling <em>which values become keys</em>, <em>which rows receive entries</em>, <em>which extra values are stored as payload</em>, and <em>which operators give those keys meaning</em>. The <code>CREATE INDEX</code> grammar supports expressions, per-key collations, operator classes, direction/null ordering, included columns, storage parameters, tablespaces and partial-index predicates.<sup><a href="#r12">[12]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_lookup_idx
+ON app.orders
+USING btree (
+    tenant_id,
+    lower(email) text_pattern_ops,
+    created_at DESC
+)
+INCLUDE (order_id, total_amount)
+WHERE state = 'open'
+WITH (fillfactor = 90);</code></pre>
+
+<p>No single “advanced” feature should be added just because PostgreSQL supports it. Every extra predicate, expression and payload column should map to stable query behavior and a measurable access requirement.</p>
+</section>
+
+<section id="multicolumn"><h2>11. Composite and multicolumn indexes</h2>
+<p>A multicolumn index stores multiple key columns in one index entry. PostgreSQL 18 allows multicolumn key indexes for B-tree, GiST, GIN and BRIN; Hash and SP-GiST do not support multiple key columns. The compile-time limit is normally 32 total columns including <code>INCLUDE</code> columns.<sup><a href="#r4">[4]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_tenant_customer_created_idx
+ON app.orders (
+    tenant_id,
+    customer_id,
+    created_at DESC
+);</code></pre>
+
+<h3>11.1 B-tree leading-column behavior</h3>
+<p>For multicolumn B-tree, equality constraints on leading columns plus an inequality on the first non-equality column most directly narrow the range of index entries that must be scanned. Restrictions on later columns can still be checked in the index, and PostgreSQL 18 can sometimes use skip scan to reposition through leading-key groups, but leading-column design remains central.<sup><a href="#r4">[4]</a></sup></p>
+
+<pre><code>-- Excellent fit:
+SELECT *
+FROM app.orders
+WHERE tenant_id = 7
+  AND customer_id = 42
+  AND created_at &gt;= current_date - 30
+ORDER BY created_at DESC;</code></pre>
+
+<h3>11.2 Column order is query order, not “most selective first”</h3>
+<p>The blanket rule “put the most selective column first” is incomplete. For B-tree, column order should reflect equality/range predicates, required ordering, skip-scan opportunities, and actual query shapes. An equality-constrained tenant key often belongs before a timestamp range even if the timestamp has more distinct values, because doing so isolates the relevant tenant's ordered subrange.</p>
+
+<h3>11.3 GiST, GIN and BRIN differ</h3>
+<p>Multicolumn GiST can use conditions on any indexed column, but its first column is especially important to how much of the index must be searched. GIN and BRIN can use any subset of their indexed columns without the same leading-column search-effectiveness rule. This is one reason “leftmost prefix” folklore should not be generalized from B-tree to every access method.<sup><a href="#r4">[4]</a></sup></p>
+
+<div class="callout warn"><strong>Keep multicolumn indexes purposeful.</strong> PostgreSQL's documentation recommends using them sparingly and notes that indexes with more than three key columns are unlikely to help unless the workload is highly stylized.<sup><a href="#r4">[4]</a></sup></div>
+</section>
+
+<section id="skipscan"><h2>12. PostgreSQL 18 B-tree skip scan</h2>
+<p>PostgreSQL 18 added broader B-tree skip-scan support. When useful restrictions exist on later index columns but an earlier column lacks an equality condition, the planner can sometimes perform repeated index searches over distinct values/groups of the earlier key rather than scan the entire index. Whether this is profitable depends strongly on the number of distinct leading values and the selectivity of later conditions.<sup><a href="#r4">[4]</a><a href="#r23">[23]</a></sup></p>
+
+<pre><code>CREATE INDEX people_region_email_idx
+ON app.person(region, email);
+
+-- PostgreSQL 18 may use skip scan when region has
+-- relatively few distinct values:
+SELECT *
+FROM app.person
+WHERE email = 'alice@example.com';</code></pre>
+
+<div class="diagram">index order: (region, email)
+
+APAC:  a... b... alice...
+EU:    a... b... alice...
+US:    a... b... alice...
+
+skip scan conceptually:
+  search APAC + alice
+  reposition
+  search EU + alice
+  reposition
+  search US + alice
+
+instead of reading every entry between groups</div>
+
+<p>Skip scan improves index reuse but does not make column order irrelevant. If the leading column has millions of distinct values, repeated repositioning can be more expensive than another path. Use <code>EXPLAIN</code> against production-like cardinalities instead of assuming PostgreSQL 18 makes every reversed predicate efficient.</p>
+</section>
+
+<section id="unique"><h2>13. Unique indexes</h2>
+<p>Unique indexes enforce uniqueness of the indexed key values. PostgreSQL automatically creates a unique B-tree index for ordinary <code>UNIQUE</code> and <code>PRIMARY KEY</code> constraints, so manually creating a duplicate index on the same key is unnecessary. By default, SQL nulls are considered distinct for unique-index purposes; <code>NULLS NOT DISTINCT</code> requests that nulls compare as equal for uniqueness enforcement.<sup><a href="#r5">[5]</a><a href="#r25">[25]</a></sup></p>
+
+<pre><code>CREATE UNIQUE INDEX account_email_uq
+ON auth.account (lower(email))
+NULLS NOT DISTINCT;</code></pre>
+
+<p>Only B-tree can currently be declared as an ordinary unique index. Included columns do not participate in uniqueness enforcement: the uniqueness key is formed from key columns only.<sup><a href="#r5">[5]</a><a href="#r26">[26]</a></sup></p>
+
+<h3>13.1 Unique constraint versus unique index</h3>
+<pre><code>ALTER TABLE auth.account
+ADD CONSTRAINT account_username_uq
+UNIQUE (username);</code></pre>
+
+<p>Use a constraint when uniqueness is part of the logical data model because constraints communicate schema semantics and can be referenced by other features. Use an explicitly created unique index when the uniqueness rule is expression-based or partial, since those forms cannot be expressed as an ordinary simple unique constraint in the same way.</p>
+
+<h3>13.2 MVCC uniqueness</h3>
+<p>Unique-index enforcement is MVCC-aware. Physically duplicated index keys can temporarily refer to different row versions, but PostgreSQL ensures that no valid snapshot can observe two live rows that violate the uniqueness rule.<sup><a href="#r26">[26]</a></sup></p>
+</section>
+
+<section id="partial"><h2>14. Partial indexes</h2>
+<p>A partial index stores entries only for rows satisfying its predicate. This can dramatically shrink an index and reduce update overhead when applications repeatedly query a small, stable subset of a much larger table.<sup><a href="#r6">[6]</a><a href="#r12">[12]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_unbilled_customer_idx
+ON billing.orders (customer_id, created_at)
+WHERE billed IS NOT TRUE;</code></pre>
+
+<pre><code>SELECT *
+FROM billing.orders
+WHERE billed IS NOT TRUE
+  AND customer_id = 42
+ORDER BY created_at;</code></pre>
+
+<h3>14.1 Planner predicate implication</h3>
+<p>For PostgreSQL to use a partial index, the query's conditions must imply the index predicate. PostgreSQL recognizes straightforward logical implication patterns, but it is not a general theorem prover. Critically, parameterized clauses can prevent proof at planning time: an index predicate such as <code>x &lt; 2</code> cannot generally be proven from a generic prepared clause <code>x &lt; $1</code> for all possible parameter values.<sup><a href="#r6">[6]</a></sup></p>
+
+<h3>14.2 Partial unique indexes</h3>
+<pre><code>CREATE UNIQUE INDEX one_active_subscription_per_user
+ON billing.subscription(user_id)
+WHERE status = 'active';</code></pre>
+
+<p>This enforces uniqueness only within the indexed subset and is a powerful way to encode conditional uniqueness.<sup><a href="#r12">[12]</a></sup></p>
+
+<h3>14.3 Avoid pseudo-partitioning with many partial indexes</h3>
+<p>Do not create dozens or hundreds of mutually exclusive partial indexes as a substitute for table partitioning. The planner must reason about each candidate index, and the design becomes hard to maintain. Use declarative partitioning when the logical/storage unit is genuinely partitioned.</p>
+</section>
+
+<section id="expression"><h2>15. Expression indexes</h2>
+<p>An index key can be a scalar expression over table columns. PostgreSQL computes the expression when a row is inserted or when the indexed expression's source columns change, then stores the result in the index. Queries using the same indexable expression can search that precomputed value.<sup><a href="#r7">[7]</a><a href="#r12">[12]</a></sup></p>
+
+<pre><code>CREATE INDEX account_lower_email_idx
+ON auth.account (lower(email));
+
+SELECT account_id
+FROM auth.account
+WHERE lower(email) = lower($1);</code></pre>
+
+<h3>15.1 Functions must be immutable</h3>
+<p>Functions and operators appearing in index expressions or partial-index predicates must be immutable: the result for the same arguments must not depend on time, table contents, configuration or other outside state. Otherwise the stored index key could cease to represent the row correctly.<sup><a href="#r12">[12]</a></sup></p>
+
+<h3>15.2 Expression indexes and case-insensitive uniqueness</h3>
+<pre><code>CREATE UNIQUE INDEX account_email_ci_uq
+ON auth.account (lower(email));</code></pre>
+
+<p>This is a common technique when normalized/case-folded values should be unique, assuming the chosen normalization semantics are stable and appropriate for the application's locale requirements.</p>
+
+<h3>15.3 Cost on writes</h3>
+<p>Expression evaluation occurs during index maintenance, so a computationally expensive expression can increase insertion and update cost even if reads become faster. Store or generate a normalized column instead when the expression is central to the data model and needs reuse across many constraints/queries.</p>
+</section>
+
+<section id="covering"><h2>16. Covering indexes and included columns</h2>
+<p><code>INCLUDE</code> stores non-key payload columns in an index. Included columns do not participate in search-key semantics or B-tree ordering and do not affect uniqueness enforcement, but their values can be returned by an index-only scan when all other requirements are met.<sup><a href="#r8">[8]</a><a href="#r12">[12]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_customer_cover_idx
+ON app.orders (customer_id, created_at DESC)
+INCLUDE (order_id, status, total_amount);</code></pre>
+
+<pre><code>SELECT
+    order_id,
+    created_at,
+    status,
+    total_amount
+FROM app.orders
+WHERE customer_id = 42
+ORDER BY created_at DESC
+LIMIT 50;</code></pre>
+
+<h3>16.1 Key versus payload</h3>
+<div class="diagram">B-tree key:
+(customer_id, created_at DESC)
+  -> searchable
+  -> ordered
+  -> affects tree comparisons
+
+INCLUDE payload:
+(order_id, status, total_amount)
+  -> stored with leaf entry
+  -> not a search key
+  -> can satisfy output for index-only scan</div>
+
+<h3>16.2 Wider is not automatically better</h3>
+<p>Payload columns enlarge the index, increase cache pressure and write cost, and can cause tuple-size-limit failures if entries become too wide. Covering indexes work best when payload columns are relatively narrow and the target query is important enough to justify duplication.<sup><a href="#r8">[8]</a><a href="#r18">[18]</a></sup></p>
+</section>
+
+<section id="indexonly"><h2>17. Index-only scans</h2>
+<p>An index-only scan can return query results without fetching each matching heap tuple when two conditions hold: the index physically stores all values required by the query, and PostgreSQL can determine MVCC visibility without consulting the heap page. Visibility is checked through the table's visibility map; when a page is marked all-visible, the executor can trust the index entry without a heap visibility visit.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code>EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    order_id,
+    created_at,
+    total_amount
+FROM app.orders
+WHERE customer_id = 42
+ORDER BY created_at DESC
+LIMIT 50;</code></pre>
+
+<p>In an actual index-only plan, <code>Heap Fetches</code> shows how often the executor still had to visit the heap. A covering index on a frequently updated table can have limited benefit because modifications clear all-visible bits until VACUUM re-establishes them.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>17.1 Access method capability matters</h3>
+<p>B-tree indexes always support index-only retrieval of stored values. Whether GiST or SP-GiST can do so depends on the operator class. GIN fundamentally stores component keys rather than complete original values and therefore cannot generally reconstruct arbitrary original column values for index-only scans in the same way.<sup><a href="#r8">[8]</a></sup></p>
+</section>
+
+<section id="opclasses"><h2>18. Operator classes and operator families</h2>
+<p>An index access method alone does not define what a data type means inside that index. An operator class binds a data type to an index method and identifies the operators and support functions that implement the method's required semantics. Operator families group compatible operator classes and can add cross-data-type operators/support routines so the planner understands comparisons across related types.<sup><a href="#r27">[27]</a>-<a href="#r29">[29]</a></sup></p>
+
+<div class="diagram">index method: B-tree
+       |
+       +-- operator family: integer_ops
+              |
+              +-- int2_ops
+              +-- int4_ops
+              +-- int8_ops
+              |
+              +-- cross-type comparisons/support</div>
+
+<h3>18.1 Default versus alternate semantics</h3>
+<pre><code>CREATE INDEX customer_name_pattern_idx
+ON app.customer (name text_pattern_ops);</code></pre>
+
+<p>A data type can have multiple operator classes for the same index method when different index semantics are useful. One class can be marked default; an index definition names a non-default class explicitly when needed.<sup><a href="#r17">[17]</a><a href="#r28">[28]</a></sup></p>
+
+<h3>18.2 Why this matters for extensibility</h3>
+<p>GiST, SP-GiST, GIN and BRIN derive much of their usefulness from operator classes. Their access methods provide generic mechanics while operator classes define domain-specific strategies such as overlap, containment, nearest-neighbor distance, component extraction or block-range summary semantics.<sup><a href="#r19">[19]</a><a href="#r22">[22]</a><a href="#r24">[24]</a></sup></p>
+
+<h3>18.3 Inspect operator classes</h3>
+<pre><code>SELECT
+    am.amname AS method,
+    opc.opcname,
+    opc.opcintype::regtype AS indexed_type,
+    opc.opcdefault
+FROM pg_opclass AS opc
+JOIN pg_am AS am
+  ON am.oid = opc.opcmethod
+ORDER BY am.amname, indexed_type::text, opc.opcname;</code></pre>
+</section>
+
+<section id="ordering"><h2>19. Indexes and <code>ORDER BY</code></h2>
+<p>Only B-tree among PostgreSQL's built-in index types directly returns rows in a defined sorted key order. The planner compares scanning an ordered B-tree against retrieving rows another way and performing an explicit sort. For a large fraction of a table, sequential scan plus sort can be cheaper; for <code>ORDER BY ... LIMIT n</code>, a matching B-tree can be especially powerful because execution can stop after the first <code>n</code> qualifying entries.<sup><a href="#r16">[16]</a></sup></p>
+
+<pre><code>CREATE INDEX feed_tenant_time_idx
+ON social.feed_item (
+    tenant_id,
+    published_at DESC,
+    item_id DESC
+);
+
+SELECT *
+FROM social.feed_item
+WHERE tenant_id = 9
+ORDER BY published_at DESC, item_id DESC
+LIMIT 25;</code></pre>
+
+<h3>19.1 Mixed directions</h3>
+<pre><code>CREATE INDEX ranking_idx
+ON scoring.result (
+    competition_id ASC,
+    score DESC,
+    participant_id ASC
+);</code></pre>
+
+<p>A multicolumn index with explicitly mixed directions can satisfy an ordering that cannot be obtained simply by reversing a uniformly ascending index.<sup><a href="#r16">[16]</a></sup></p>
+</section>
+
+<section id="combining"><h2>20. Combining multiple indexes</h2>
+<p>PostgreSQL can combine index results through bitmap operations such as <code>BitmapAnd</code> and <code>BitmapOr</code>. This lets independent single-column indexes jointly serve some <code>AND</code>/<code>OR</code> predicates, although bitmap heap access loses the individual index's ordering and adds bitmap construction/recheck work.<sup><a href="#r30">[30]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_status_idx
+ON app.orders(status);
+
+CREATE INDEX orders_created_idx
+ON app.orders(created_at);
+
+EXPLAIN
+SELECT *
+FROM app.orders
+WHERE status = 'open'
+  AND created_at &gt;= current_date - 7;</code></pre>
+
+<p>A multicolumn index can still be better when the combination is frequent, highly selective, or needs key order for <code>ORDER BY</code>. Bitmap combination is valuable flexibility, not evidence that every multicolumn index is redundant.<sup><a href="#r30">[30]</a></sup></p>
+</section>
+
+<section id="selectivity"><h2>21. Selectivity and cardinality</h2>
+<p>Selectivity is the estimated fraction of input rows satisfying a predicate; cardinality is the resulting estimated number of rows. PostgreSQL's planner derives these values from statistics collected by <code>ANALYZE</code>, including null fractions, distinct counts, most-common values, histograms, and optional extended statistics. The resulting row estimate is a major determinant of whether index access appears cheaper than scanning.<sup><a href="#r13">[13]</a>-<a href="#r15">[15]</a></sup></p>
+
+<div class="diagram">10,000,000 rows
+      |
+WHERE tenant_id = 7
+estimated selectivity 0.001
+      |
+      v
+~10,000 candidate rows
+      |
+      +-- index access may be attractive
+
+WHERE active = true
+estimated selectivity 0.97
+      |
+      v
+~9,700,000 candidate rows
+      |
+      +-- sequential scan often more attractive</div>
+
+<h3>21.1 Cardinality is not the same as selectivity</h3>
+<p>A column can have only two distinct values yet still be a good index candidate if one value is extremely rare and frequently queried. Conversely, a unique column is highly selective but may not justify an index if no workload queries or joins on it and no uniqueness constraint is needed.</p>
+
+<h3>21.2 Statistics must match expression/query semantics</h3>
+<p>If a query filters on an expression or correlated column combination, ordinary per-column statistics may misestimate it. Expression statistics, higher statistics targets or extended statistics can improve planner evidence; otherwise a perfectly good index can remain unused because the optimizer believes the predicate is unselective.<sup><a href="#r13">[13]</a><a href="#r15">[15]</a></sup></p>
+</section>
+
+<section id="design"><h2>22. Index design principles</h2>
+<h3>22.1 Start from query shapes</h3>
+<p>List recurring predicates, joins, ordering/grouping requirements and projected columns before creating indexes. The index key should encode the access path the query needs, not simply mirror the table schema.</p>
+
+<h3>22.2 Equality, then range, then ordering—when that matches the workload</h3>
+<p>For many multicolumn B-tree queries, a useful pattern is equality-constrained keys first, then a range/order key. This follows how B-tree narrows contiguous ranges. It is a pattern, not a universal formula: skip scan, multiple query families and desired output order can change the best sequence.<sup><a href="#r4">[4]</a><a href="#r16">[16]</a></sup></p>
+
+<h3>22.3 Prefer one index that serves a query family</h3>
+<pre><code>-- Query family:
+WHERE tenant_id = $1
+  AND customer_id = $2
+ORDER BY created_at DESC
+LIMIT 50
+
+-- Strong candidate:
+CREATE INDEX orders_lookup_idx
+ON app.orders(
+    tenant_id,
+    customer_id,
+    created_at DESC
+)
+INCLUDE(order_id, status, total_amount);</code></pre>
+
+<p>This can be more valuable than three independent indexes because it constrains the exact ordered key range and may cover output. But if each column is also independently searched by important queries, additional indexes can still be justified.</p>
+
+<h3>22.4 Keep index predicates stable</h3>
+<p>Partial-index predicates should represent durable categories such as <code>deleted_at IS NULL</code> or <code>state='open'</code>, not sliding time windows like “last 30 days” based on <code>now()</code>, which is not immutable and is therefore invalid in an index definition.<sup><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="tradeoffs"><h2>23. Read/write tradeoffs</h2>
+<p>Every index must be maintained when relevant rows are inserted, deleted or updated. Maintenance can include computing expressions, extracting GIN component keys, updating tree pages or block-range summaries, checking uniqueness, generating WAL, dirtying additional buffers, and later vacuuming dead index entries. Larger index portfolios therefore increase write latency and storage even if many indexes are never chosen for reads.<sup><a href="#r1">[1]</a><a href="#r9">[9]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Benefit</th><th>Cost</th></tr></thead><tbody>
+<tr><td>Faster selective reads</td><td>Insert/update/delete index maintenance</td></tr>
+<tr><td>Avoided sort via B-tree order</td><td>Larger disk/cache working set</td></tr>
+<tr><td>Index-only scan potential</td><td>Duplicated payload columns</td></tr>
+<tr><td>Uniqueness/invariant enforcement</td><td>Conflict checking and additional write work</td></tr>
+<tr><td>Specialized JSON/text/spatial search</td><td>Potentially high GIN/GiST maintenance cost</td></tr>
+<tr><td>BRIN pruning on huge tables</td><td>Lossy rechecks; benefit depends on physical correlation</td></tr>
+</tbody></table></div>
+
+<h3>23.1 Write amplification is workload-specific</h3>
+<p>Updating a column not referenced by any index can sometimes be cheap enough to remain HOT. Updating an indexed key normally requires new index entries. GIN can require several key insertions for one row because one indexed value can decompose into many components.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup></p>
+</section>
+
+<section id="hot"><h2>24. Indexes and HOT updates</h2>
+<p>Heap-only tuple (HOT) updates allow PostgreSQL to create a new row version on the same heap page without creating new ordinary index entries when the update does not modify indexed attributes and enough same-page space exists. Consequently, indexing a frequently updated column can disable HOT for updates that change that column and increase write amplification.<sup><a href="#r10">[10]</a></sup></p>
+
+<pre><code>SELECT
+    relname,
+    n_tup_upd,
+    n_tup_hot_upd,
+    round(
+        100.0 * n_tup_hot_upd
+        / NULLIF(n_tup_upd, 0),
+        2
+    ) AS hot_pct
+FROM pg_stat_user_tables
+WHERE n_tup_upd &gt; 0
+ORDER BY hot_pct;</code></pre>
+
+<p>PostgreSQL's index access-method interface distinguishes summarizing indexes such as BRIN: because they summarize blocks rather than point to every individual tuple, some changes can remain HOT-compatible in ways ordinary tuple-pointing indexes cannot, although index-predicate columns still matter.<sup><a href="#r31">[31]</a></sup></p>
+</section>
+
+<section id="maintenance"><h2>25. Index maintenance</h2>
+<p>VACUUM removes or marks reclaimable dead index entries as part of normal MVCC maintenance, while each access method manages reusable pages according to its implementation. Indexes can still become physically inefficient after sustained churn. PostgreSQL specifically documents B-tree patterns where pages become sparsely populated but remain allocated, making periodic <code>REINDEX</code> worthwhile in some workloads.<sup><a href="#r32">[32]</a></sup></p>
+
+<h3>25.1 REINDEX</h3>
+<pre><code>REINDEX INDEX app.orders_customer_idx;</code></pre>
+
+<p>A standard rebuild takes stronger locks. In production, concurrent rebuilding is often preferable where supported.<sup><a href="#r32">[32]</a><a href="#r33">[33]</a></sup></p>
+
+<h3>25.2 B-tree fillfactor</h3>
+<pre><code>CREATE INDEX orders_created_idx
+ON app.orders(created_at)
+WITH (fillfactor = 80);</code></pre>
+
+<p>B-tree fillfactor controls initial leaf-page fullness. Lower values reserve room for future insertions/updates and can reduce page splits for some insertion patterns, at the cost of a larger initial index. The best setting depends on key distribution and write behavior.<sup><a href="#r12">[12]</a></sup></p>
+
+<h3>25.3 GIN maintenance</h3>
+<p>GIN's pending-list fast-update path changes the shape of maintenance: inserts can first accumulate pending entries and later merge them into the main GIN structure. Monitor index size, write behavior and VACUUM/autovacuum rather than treating GIN like a scalar B-tree.<sup><a href="#r22">[22]</a></sup></p>
+
+<h3>25.4 BRIN summarization</h3>
+<p>BRIN ranges may need summarization after new pages are populated. PostgreSQL exposes BRIN maintenance functions such as <code>brin_summarize_new_values()</code>, <code>brin_summarize_range()</code>, and <code>brin_desummarize_range()</code> for specialized maintenance/diagnosis.<sup><a href="#r34">[34]</a></sup></p>
+</section>
+
+<section id="concurrent"><h2>26. Concurrent index builds and rebuilds</h2>
+<p>A normal <code>CREATE INDEX</code> permits reads but blocks writes to the target table while the build runs. <code>CREATE INDEX CONCURRENTLY</code> performs more work and takes longer, including multiple table scans and transaction waits, but allows normal inserts, updates and deletes to continue for most of the build. It is therefore often required for large production tables.<sup><a href="#r12">[12]</a></sup></p>
+
+<pre><code>CREATE INDEX CONCURRENTLY orders_customer_idx
+ON app.orders(customer_id);</code></pre>
+
+<p>If a concurrent build fails, PostgreSQL can leave an invalid index behind. The planner will not use the incomplete index, but the invalid structure can still impose update overhead; drop it or rebuild it rather than ignoring it.<sup><a href="#r12">[12]</a></sup></p>
+
+<h3>26.1 Rebuild concurrently</h3>
+<pre><code>REINDEX INDEX CONCURRENTLY
+app.orders_customer_idx;</code></pre>
+
+<p>Concurrent REINDEX reduces write blocking compared with ordinary REINDEX, but it requires additional work/time and has operational restrictions. Use it when maintaining production availability is more important than the fastest possible rebuild.<sup><a href="#r32">[32]</a><a href="#r33">[33]</a></sup></p>
+</section>
+
+<section id="monitoring"><h2>27. Monitoring index usage</h2>
+<p>PostgreSQL explicitly recommends examining index usage against the real workload rather than assuming that every created index is useful. Start with current statistics and production-representative data, then inspect individual plans with <code>EXPLAIN</code>/<code>EXPLAIN ANALYZE</code> and aggregate usage with the cumulative statistics views.<sup><a href="#r35">[35]</a></sup></p>
+
+<h3>27.1 Index-level usage statistics</h3>
+<pre><code>SELECT
+    schemaname,
+    relname AS table_name,
+    indexrelname AS index_name,
+    idx_scan,
+    last_idx_scan,
+    idx_tup_read,
+    idx_tup_fetch,
+    pg_size_pretty(
+        pg_relation_size(indexrelid)
+    ) AS index_size
+FROM pg_stat_user_indexes
+ORDER BY idx_scan ASC, pg_relation_size(indexrelid) DESC;</code></pre>
+
+<p><code>idx_scan</code> counts index searches rather than necessarily one executor node per query; PostgreSQL 18 skip scan and some multi-value search patterns can perform several index searches during one scan node. <code>idx_tup_read</code> counts index entries returned, while <code>idx_tup_fetch</code> counts live heap rows fetched by simple index scans and can be smaller because of dead tuples or index-only scans.<sup><a href="#r36">[36]</a></sup></p>
+
+<h3>27.2 Usage counts are evidence, not deletion commands</h3>
+<p>An index with zero scans might still be critical for a unique constraint, a rarely executed incident/reconciliation query, foreign-key-related application paths, seasonal reports, or a newly deployed query. Statistics reset events and server restarts also change the observation window. Before dropping an index, inspect dependencies, constraints, query history and a sufficiently long workload period.</p>
+
+<h3>27.3 Workload-level query statistics</h3>
+<pre><code>SELECT
+    queryid,
+    calls,
+    mean_exec_time,
+    total_exec_time,
+    rows,
+    query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 25;</code></pre>
+
+<p>The supplied <code>pg_stat_statements</code> extension tracks normalized planning/execution statistics for query shapes, making it useful for identifying the queries whose cumulative latency justifies index work. It requires server-side loading and per-database extension installation.<sup><a href="#r37">[37]</a></sup></p>
+
+<h3>27.4 Verify with EXPLAIN</h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    SETTINGS,
+    TIMING OFF
+)
+SELECT ...;</code></pre>
+
+<p>Use estimated-versus-actual cardinalities and buffer activity to determine whether the index solves the intended problem. If the index is never chosen, PostgreSQL's documentation recommends checking ANALYZE/statistics first, then experimentally comparing alternative plan types rather than immediately forcing index usage.<sup><a href="#r35">[35]</a><a href="#r38">[38]</a></sup></p>
+</section>
+
+<section id="overindexing"><h2>28. Over-indexing</h2>
+<p>Over-indexing means maintaining more or wider index structures than the workload justifies. It is especially common when teams add one index per slow-query incident without periodically consolidating overlapping structures. PostgreSQL does not automatically merge or drop redundant indexes because apparently overlapping indexes can have different ordering, predicates, operator classes, included payloads, uniqueness semantics or workload roles.</p>
+
+<h3>28.1 Common redundancy pattern</h3>
+<pre><code>-- Existing:
+CREATE INDEX orders_tenant_idx
+ON app.orders(tenant_id);
+
+CREATE INDEX orders_tenant_customer_idx
+ON app.orders(tenant_id, customer_id);
+
+CREATE INDEX orders_tenant_customer_created_idx
+ON app.orders(tenant_id, customer_id, created_at DESC);</code></pre>
+
+<p>For B-tree, the longer indexes can often support predicates on their leading subsets, which may make a shorter index redundant. But smaller indexes can be cheaper to scan/cache and might support different workloads better. Test actual plans and usage before consolidation.<sup><a href="#r4">[4]</a></sup></p>
+
+<h3>28.2 Costs of excess indexes</h3>
+<div class="table-wrap"><table><thead><tr><th>Cost area</th><th>Effect of more indexes</th></tr></thead><tbody>
+<tr><td>INSERT</td><td>Every relevant index receives a new entry.</td></tr>
+<tr><td>UPDATE</td><td>Changed indexed attributes generate index maintenance and can prevent HOT.</td></tr>
+<tr><td>DELETE</td><td>Dead index entries remain until maintenance/reuse.</td></tr>
+<tr><td>WAL</td><td>Index changes generate additional logged modifications.</td></tr>
+<tr><td>Buffer/cache</td><td>Larger total index footprint competes for memory/cache residency.</td></tr>
+<tr><td>VACUUM</td><td>More indexes create more cleanup work.</td></tr>
+<tr><td>Backup/replication</td><td>Larger physical database affects backups and physical-replication/storage volume.</td></tr>
+<tr><td>DDL</td><td>Schema migrations/builds/rebuilds take longer and require more space.</td></tr>
+</tbody></table></div>
+
+<h3>28.3 Duplicate constraint indexes</h3>
+<p>A primary key or unique constraint already creates its enforcing unique index. Creating a second ordinary index on exactly the same key is usually pure duplication.<sup><a href="#r5">[5]</a><a href="#r25">[25]</a></sup></p>
+</section>
+
+<section id="querydriven"><h2>29. Query-driven indexing</h2>
+<p>Query-driven indexing starts with the workload rather than the schema. PostgreSQL's own index-usage guidance recommends real data, current ANALYZE statistics, experimentation and measured plans because small synthetic datasets and unrealistic distributions can make the planner choose entirely different access paths.<sup><a href="#r35">[35]</a></sup></p>
+
+<div class="diagram">1. Observe workload
+   pg_stat_statements / traces / slow queries
+          |
+          v
+2. Identify expensive recurring query family
+          |
+          v
+3. Inspect EXPLAIN ANALYZE
+   predicates, joins, ordering, rows, buffers
+          |
+          v
+4. Design candidate index
+   type + keys + order + predicate + INCLUDE
+          |
+          v
+5. Test on realistic cardinality/distribution
+          |
+          v
+6. Measure read improvement + write/storage cost
+          |
+          v
+7. Deploy (CONCURRENTLY if needed)
+          |
+          v
+8. Re-measure and prune obsolete indexes</div>
+
+<h3>29.1 Normalize query families</h3>
+<p>Index for recurring shapes such as “tenant + customer + newest 50,” not for one literal execution. Parameterized application SQL, normalized query IDs and repeated workload observations help reveal these stable families.</p>
+
+<h3>29.2 Design from predicates inward</h3>
+<p>For each high-value query, classify conditions into exact equality, range, membership/containment, spatial/distance, prefix text, full-text, ordering, and output payload. That classification usually reveals both the appropriate access method and key order.</p>
+
+<h3>29.3 Validate planner estimates</h3>
+<p>If actual rows differ dramatically from estimates, an index change may not be the first fix. Improve statistics or extended statistics so PostgreSQL can price existing and candidate indexes correctly.<sup><a href="#r13">[13]</a><a href="#r15">[15]</a></sup></p>
+
+<h3>29.4 Measure the write side</h3>
+<p>Benchmark inserts/updates at representative concurrency after adding an index. A 10× faster dashboard query may be a poor trade if the index makes the primary write path 2× slower and the dashboard runs once per hour; the reverse may also be true.</p>
+</section>
+
+<section id="patterns"><h2>30. Index design patterns</h2>
+
+<h3>30.1 Tenant-scoped newest-first lookup</h3>
+<pre><code>CREATE INDEX event_tenant_created_idx
+ON app.event(
+    tenant_id,
+    created_at DESC,
+    event_id DESC
+)
+INCLUDE(event_type);</code></pre>
+
+<p>Supports tenant equality plus stable newest-first pagination. The final unique-ish tie-breaker produces deterministic keyset ordering, and the included type can help covering reads.</p>
+
+<h3>30.2 Soft-delete active-row index</h3>
+<pre><code>CREATE INDEX customer_active_email_idx
+ON app.customer(lower(email))
+WHERE deleted_at IS NULL;</code></pre>
+
+<p>Useful when most historical/deleted rows are rarely queried and active records dominate lookup traffic. The query must contain a condition that allows the planner to prove the partial predicate.<sup><a href="#r6">[6]</a></sup></p>
+
+<h3>30.3 Conditional uniqueness</h3>
+<pre><code>CREATE UNIQUE INDEX team_one_primary_owner
+ON app.team_member(team_id)
+WHERE role = 'owner'
+  AND is_primary;</code></pre>
+
+<h3>30.4 JSONB containment</h3>
+<pre><code>CREATE INDEX asset_metadata_gin
+ON asset.item
+USING gin(metadata);
+
+SELECT *
+FROM asset.item
+WHERE metadata @&gt; '{"color":"blue"}'::jsonb;</code></pre>
+
+<p>GIN is usually the natural starting point when searching component values inside JSONB, though the exact JSONB operator class should be chosen around the operators the workload actually uses.<sup><a href="#r2">[2]</a><a href="#r22">[22]</a></sup></p>
+
+<h3>30.5 Time-series BRIN</h3>
+<pre><code>CREATE INDEX metrics_time_brin
+ON metrics.sample
+USING brin(sample_time);</code></pre>
+
+<p>Strong candidate when rows arrive approximately in timestamp order and the table is enormous. Compare index size and heap blocks visited against a B-tree for the actual time-window workload.</p>
+
+<h3>30.6 Range overlap with GiST</h3>
+<pre><code>CREATE INDEX booking_period_gist
+ON scheduling.booking
+USING gist(period);
+
+SELECT *
+FROM scheduling.booking
+WHERE period && tstzrange($start, $end, '[)');</code></pre>
+
+<h3>30.7 Queue partial B-tree</h3>
+<pre><code>CREATE INDEX job_ready_idx
+ON queue.job(priority DESC, job_id)
+WHERE state = 'ready';</code></pre>
+
+<p>A small partial index can make <code>FOR UPDATE SKIP LOCKED</code> worker claims efficient when only a small fraction of all historical jobs remain ready.</p>
+
+<h3>30.8 Case-insensitive exact lookup</h3>
+<pre><code>CREATE UNIQUE INDEX user_email_lower_uq
+ON auth.user_account(lower(email));</code></pre>
+</section>
+
+<section id="pitfalls"><h2>31. Common pitfalls</h2>
+
+<h3>31.1 Indexing every foreign-key column “because it is a foreign key”</h3>
+<p>PostgreSQL automatically indexes the referenced side of a primary/unique key, but it does not automatically create an index on each referencing foreign-key column. A referencing-side index is often valuable for joins and parent deletes/updates, but should still reflect actual workload and constraint-maintenance needs rather than a reflexive rule.<sup><a href="#r25">[25]</a></sup></p>
+
+<h3>31.2 Putting range columns before equality columns by “selectivity”</h3>
+<p>In a multicolumn B-tree, leading equality conditions usually narrow the searchable range more effectively than putting a frequently ranged column first. Design around B-tree search semantics and query order, not a single distinct-count ranking.<sup><a href="#r4">[4]</a></sup></p>
+
+<h3>31.3 Assuming PostgreSQL can always use a partial index with parameters</h3>
+<p>Parameterized predicates may not imply a partial-index predicate at planning time because a generic parameter can take values for which the implication is false.<sup><a href="#r6">[6]</a></sup></p>
+
+<h3>31.4 Making every index covering</h3>
+<p><code>INCLUDE</code> columns enlarge leaf entries, indexes, writes and cache footprint. Index-only scans also depend on visibility-map state, so volatile tables may still perform heap fetches.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>31.5 Expecting GIN to behave like B-tree</h3>
+<p>GIN is an inverted index whose values can generate many keys. It has different build/write/maintenance characteristics and does not provide B-tree ordering.<sup><a href="#r22">[22]</a></sup></p>
+
+<h3>31.6 Using BRIN without physical correlation</h3>
+<p>BRIN summarizes block ranges. If each range contains nearly the entire logical value domain, few ranges can be excluded and the index provides little pruning.<sup><a href="#r24">[24]</a></sup></p>
+
+<h3>31.7 Rebuilding indexes on a calendar without evidence</h3>
+<p>B-tree indexes can sometimes become inefficiently sparse, but REINDEX consumes I/O, disk and locking/concurrent-build resources. Monitor physical size and workload performance rather than scheduling universal weekly rebuilds.<sup><a href="#r32">[32]</a></sup></p>
+
+<h3>31.8 Dropping an “unused” index after a short statistics window</h3>
+<p>Usage statistics may have been reset, and rare business-critical queries can be absent from a short observation period. Check constraints, dependencies, historical query data and deployment timing first.<sup><a href="#r35">[35]</a><a href="#r36">[36]</a></sup></p>
+
+<h3>31.9 Forcing index scans instead of fixing estimates</h3>
+<p>Disabling sequential scans is useful as a diagnostic experiment, but PostgreSQL recommends first checking real data and ANALYZE statistics. If the forced index is genuinely faster, investigate selectivity/cost estimates rather than permanently disabling a plan type.<sup><a href="#r35">[35]</a></sup></p>
+
+<h3>31.10 Assuming a multicolumn index replaces all prefix indexes</h3>
+<p>The longer B-tree can often serve leading-prefix queries, but it is physically larger and can be more expensive to scan/cache. Keep or drop the shorter index based on measured query and write behavior.</p>
+</section>
+
+<section id="checklist"><h2>32. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Start with query shapes, not columns.</strong></li>
+<li><strong>Use B-tree by default for scalar equality/range/order workloads.</strong></li>
+<li><strong>Use Hash only for a measured equality-specific reason.</strong></li>
+<li><strong>Use GiST/SP-GiST when the operator class matches spatial, range, nearest-neighbor or partitioned-search semantics.</strong></li>
+<li><strong>Use GIN for multi-component values such as arrays, JSONB and full-text search.</strong></li>
+<li><strong>Use BRIN for very large physically correlated tables.</strong></li>
+<li><strong>Order multicolumn B-tree keys around equality, range and ordering semantics.</strong></li>
+<li><strong>Remember PostgreSQL 18 skip scan, but do not use it as an excuse for careless key order.</strong></li>
+<li><strong>Use unique constraints/indexes to enforce real invariants.</strong></li>
+<li><strong>Use partial indexes for stable, frequently queried subsets.</strong></li>
+<li><strong>Use expression indexes only with immutable semantics.</strong></li>
+<li><strong>Add INCLUDE payload only when index-only access has meaningful value.</strong></li>
+<li><strong>Inspect <code>Heap Fetches</code> before assuming a covering index is truly index-only.</strong></li>
+<li><strong>Understand the operator class behind specialized behavior.</strong></li>
+<li><strong>Keep ANALYZE statistics current.</strong></li>
+<li><strong>Validate selectivity/cardinality estimates with EXPLAIN ANALYZE.</strong></li>
+<li><strong>Measure write amplification and HOT impact after adding indexes.</strong></li>
+<li><strong>Use CREATE INDEX CONCURRENTLY for production builds where write availability is required.</strong></li>
+<li><strong>Monitor invalid concurrent builds and remove/rebuild them.</strong></li>
+<li><strong>Use REINDEX because evidence justifies it, not because a calendar says so.</strong></li>
+<li><strong>Observe <code>pg_stat_user_indexes</code> across a representative workload window.</strong></li>
+<li><strong>Use <code>pg_stat_statements</code> to prioritize index work by real query cost.</strong></li>
+<li><strong>Periodically look for overlapping and duplicate indexes.</strong></li>
+<li><strong>Retest after PostgreSQL upgrades.</strong> Planner and access-method capabilities evolve; PostgreSQL 18's B-tree skip scan and parallel GIN builds are examples.</li>
+</ol>
+
+<div class="callout ok"><strong>Index design principle:</strong> an index is a physical implementation of a query-access contract. Choose the smallest structure that makes an important, recurring query family cheap enough—then verify that its read benefit exceeds its permanent write, storage, cache and maintenance cost.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. Indexes: Introduction [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-intro.html">https://www.postgresql.org/docs/18/indexes-intro.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. Index Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-types.html">https://www.postgresql.org/docs/18/indexes-types.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. Chapter 11: Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes.html">https://www.postgresql.org/docs/18/indexes.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. Multicolumn Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-multicolumn.html">https://www.postgresql.org/docs/18/indexes-multicolumn.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. Unique Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-unique.html">https://www.postgresql.org/docs/18/indexes-unique.html</a></li>
+<li id="r6">PostgreSQL Global Development Group. Partial Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-partial.html">https://www.postgresql.org/docs/18/indexes-partial.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. Indexes on Expressions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-expressional.html">https://www.postgresql.org/docs/18/indexes-expressional.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. Index-Only Scans and Covering Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-index-only-scans.html">https://www.postgresql.org/docs/18/indexes-index-only-scans.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. Locking and Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/locking-indexes.html">https://www.postgresql.org/docs/18/locking-indexes.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. Heap-Only Tuples (HOT) [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-hot.html">https://www.postgresql.org/docs/18/storage-hot.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createindex.html">https://www.postgresql.org/docs/18/sql-createindex.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. Statistics Used by the Planner [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. Row Estimation Examples [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/row-estimation-examples.html">https://www.postgresql.org/docs/18/row-estimation-examples.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. ANALYZE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-analyze.html">https://www.postgresql.org/docs/18/sql-analyze.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. Indexes and ORDER BY [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-ordering.html">https://www.postgresql.org/docs/18/indexes-ordering.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. Operator Classes and Operator Families [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-opclass.html">https://www.postgresql.org/docs/18/indexes-opclass.html</a></li>
+<li id="r18">PostgreSQL Global Development Group. B-Tree Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/btree.html">https://www.postgresql.org/docs/18/btree.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. GiST Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/gist.html">https://www.postgresql.org/docs/18/gist.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. btree_gist — GiST operator classes with B-tree behavior [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/btree-gist.html">https://www.postgresql.org/docs/18/btree-gist.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. SP-GiST Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/spgist.html">https://www.postgresql.org/docs/18/spgist.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. GIN Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/gin.html">https://www.postgresql.org/docs/18/gin.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. BRIN Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/brin.html">https://www.postgresql.org/docs/18/brin.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. Constraints: Unique and Primary Key Constraints [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. Index Uniqueness Checks [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/index-unique-checks.html">https://www.postgresql.org/docs/18/index-unique-checks.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. Interfacing Extensions to Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xindex.html">https://www.postgresql.org/docs/18/xindex.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. pg_opclass [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-opclass.html">https://www.postgresql.org/docs/18/catalog-pg-opclass.html</a></li>
+<li id="r29">PostgreSQL Global Development Group. pg_opfamily [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-opfamily.html">https://www.postgresql.org/docs/18/catalog-pg-opfamily.html</a></li>
+<li id="r30">PostgreSQL Global Development Group. Combining Multiple Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-bitmap-scans.html">https://www.postgresql.org/docs/18/indexes-bitmap-scans.html</a></li>
+<li id="r31">PostgreSQL Global Development Group. Basic API Structure for Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/index-api.html">https://www.postgresql.org/docs/18/index-api.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. Routine Reindexing [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/routine-reindex.html">https://www.postgresql.org/docs/18/routine-reindex.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. REINDEX [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-reindex.html">https://www.postgresql.org/docs/18/sql-reindex.html</a></li>
+<li id="r34">PostgreSQL Global Development Group. BRIN Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/brin-functions.html">https://www.postgresql.org/docs/18/brin-functions.html</a></li>
+<li id="r35">PostgreSQL Global Development Group. Examining Index Usage [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-examine.html">https://www.postgresql.org/docs/18/indexes-examine.html</a></li>
+<li id="r36">PostgreSQL Global Development Group. The Cumulative Statistics System: pg_stat_all_indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-stats.html">https://www.postgresql.org/docs/18/monitoring-stats.html</a></li>
+<li id="r37">PostgreSQL Global Development Group. pg_stat_statements — track statistics of SQL planning and execution [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+<li id="r38">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+<li id="r39">PostgreSQL Global Development Group. pg_index [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-index.html">https://www.postgresql.org/docs/18/catalog-pg-index.html</a></li>
+<li id="r40">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol></section>
+
+</main>
+<footer><p>This article is a technical reference. Index effectiveness depends on PostgreSQL version, operator class, statistics quality, data distribution, table size, physical correlation, MVCC visibility, query parameters, cache/storage characteristics and write concurrency. Validate index changes with representative production-scale data and measure both read improvement and permanent write/storage overhead.</p></footer>
+</body>
+</html>

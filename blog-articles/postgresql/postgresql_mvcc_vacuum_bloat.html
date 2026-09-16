@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL MVCC, VACUUM, autovacuum, freezing, transaction ID wraparound, HOT updates, visibility maps, free-space maps, and table/index bloat.">
+<title>PostgreSQL MVCC, VACUUM &amp; Bloat</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1020px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:840px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL MVCC, VACUUM &amp; Bloat</h1>
+  <p class="dek">An expert guide to PostgreSQL's multiversion storage model: tuple visibility, snapshots, transaction IDs, dead tuples, pruning, HOT updates, autovacuum, ordinary and full vacuuming, ANALYZE, freezing and wraparound protection, visibility/free-space maps, table and index bloat, and production diagnostics.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL implements multiversion concurrency control (MVCC) by keeping multiple physical row versions when data changes. Each statement evaluates tuple visibility against a snapshot, allowing ordinary readers and writers to proceed without blocking one another merely because they access the same rows. This concurrency model shifts work into storage maintenance: an <code>UPDATE</code> normally creates a new row version, and a <code>DELETE</code> marks an existing version obsolete rather than immediately erasing it. Once no transaction can still see an old version, PostgreSQL can reclaim its space.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup>
+</p>
+<p>
+<code>VACUUM</code> is the maintenance mechanism that turns obsolete MVCC versions into reusable storage, cleans corresponding index references when appropriate, advances freezing horizons, and updates visibility metadata. Ordinary <code>VACUUM</code> operates in place and normally returns reusable space to the relation rather than the operating system. <code>VACUUM FULL</code>, by contrast, rewrites the table into a compact new file and requires an <code>ACCESS EXCLUSIVE</code> lock; PostgreSQL therefore recommends ordinary vacuuming as routine maintenance and reserves full rewrites for exceptional cases where physical shrinkage is worth the blocking and extra disk usage.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+<p>
+Bloat is best understood as inefficient physical allocation, not as a synonym for “dead tuples.” A relation may have many dead versions that ordinary vacuum can soon recycle, substantial reusable free space that is not harmful, or genuinely poor page/index utilization that imposes extra I/O and storage cost. Diagnosing bloat therefore requires combining activity statistics, physical size, tuple/free-space inspection, workload behavior, vacuum history, long-running transaction horizons, and index structure rather than relying on one percentage alone.<sup><a href="#r7">[7]</a>-<a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#mvcc">MVCC architecture</a></li>
+<li><a href="#tuple">Tuple versions and headers</a></li>
+<li><a href="#visibility">Tuple visibility and snapshots</a></li>
+<li><a href="#xids">Transaction IDs</a></li>
+<li><a href="#updates">UPDATE and DELETE lifecycle</a></li>
+<li><a href="#dead">Dead tuples</a></li>
+<li><a href="#pruning">Page pruning and tuple reuse</a></li>
+<li><a href="#hot">HOT updates</a></li>
+<li><a href="#fillfactor">Fillfactor and update-heavy tables</a></li>
+<li><a href="#vacuum">VACUUM</a></li>
+<li><a href="#vacuum-full">VACUUM FULL</a></li>
+<li><a href="#analyze">ANALYZE</a></li>
+<li><a href="#autovacuum">Autovacuum</a></li>
+<li><a href="#thresholds">Autovacuum thresholds</a></li>
+<li><a href="#cost">Vacuum cost control and memory</a></li>
+<li><a href="#freeze">Freezing</a></li>
+<li><a href="#wraparound">XID wraparound</a></li>
+<li><a href="#multixact">MultiXact wraparound</a></li>
+<li><a href="#vm">Visibility map</a></li>
+<li><a href="#fsm">Free-space map</a></li>
+<li><a href="#table-bloat">Table bloat</a></li>
+<li><a href="#index-bloat">Index bloat</a></li>
+<li><a href="#diagnostics">Bloat diagnostics</a></li>
+<li><a href="#longtx">Long transactions and vacuum horizons</a></li>
+<li><a href="#monitoring">Monitoring VACUUM</a></li>
+<li><a href="#tuning">Production tuning patterns</a></li>
+<li><a href="#remediation">Bloat remediation</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="mvcc">
+<h2>1. MVCC architecture</h2>
+<p>
+PostgreSQL uses multiversion concurrency control so each SQL statement operates against a logically consistent snapshot rather than reading whatever tuple happens to be newest in storage at every instant. Under normal MVCC reads, row-level writers do not block readers merely because they modify rows a query might read, and readers do not block writers merely by reading those rows. Explicit table/row locks still exist, and isolation-level rules can require waiting or serialization failure, but snapshot visibility—not a global read lock—is the foundation.<sup><a href="#r1">[1]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<div class="diagram">logical row: account_id = 42
+
+time --------------------------------------------------------->
+
+T1 INSERT
+heap version V1
+xmin=100, xmax=0
+balance=100
+     |
+     | T2 UPDATE
+     v
+V1: xmin=100, xmax=125 --------+
+                               |
+                               +--> V2: xmin=125, xmax=0
+                                    balance=125
+
+Concurrent snapshots:
+
+Snapshot before XID 125 committed:
+    sees V1
+    does not see V2
+
+Snapshot after XID 125 committed:
+    V1 obsolete to that snapshot
+    sees V2
+
+Storage may temporarily contain BOTH versions.</div>
+
+<p>
+The physical persistence of multiple versions is what enables an old snapshot to continue seeing an earlier row state while a newer transaction sees a later one. It is also why update/delete workloads create maintenance work even when the logical row count stays constant.<sup><a href="#r3">[3]</a><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="tuple">
+<h2>2. Tuple versions and heap tuple headers</h2>
+<p>
+The built-in heap table access method stores rows on fixed-size pages, normally 8 KiB. Each heap row has a tuple header containing MVCC metadata including the inserting transaction ID (<code>t_xmin</code>), deleting/updating transaction information (<code>t_xmax</code>), command identifiers, status bits, and a <code>t_ctid</code> pointer that can identify this row version or a newer version in an update chain.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="diagram">heap page
++------------------------------------------------------+
+| PageHeaderData                                       |
++------------------------------------------------------+
+| item pointers -> [tuple V1] [tuple V2] [...]         |
+|                                                      |
+| tuple header:                                        |
+|   t_xmin     inserting XID                           |
+|   t_xmax     deleting/updating XID or related state  |
+|   t_ctid     self/newer tuple pointer                |
+|   infomask   cached visibility/tuple-state bits      |
+|   ...                                                |
+| tuple user columns                                   |
++------------------------------------------------------+</div>
+
+<h3>2.1 System columns are observable</h3>
+<pre><code>SELECT
+    ctid,
+    xmin,
+    xmax,
+    *
+FROM app.account
+WHERE account_id = 42;</code></pre>
+
+<p>
+The SQL-visible system columns expose useful low-level information, but they are not suitable application identifiers. <code>ctid</code> is a physical tuple location and can change after updates or table rewrites; transaction IDs wrap and are implementation-level metadata.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>2.2 UPDATE is logically replacement</h3>
+<p>
+In the heap implementation, an update generally means creating a new tuple version and marking the old version as updated. The old row cannot be reclaimed until PostgreSQL can prove no relevant snapshot can still see it.<sup><a href="#r5">[5]</a><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="visibility">
+<h2>3. Tuple visibility and snapshots</h2>
+<p>
+A PostgreSQL snapshot describes transaction visibility at a point in time. The <code>pg_snapshot</code> representation contains <code>xmin</code>, <code>xmax</code>, and a list of transactions that were in progress. Roughly, transactions older than the snapshot horizon may be visible if committed, transactions at or beyond the upper horizon are too new, and transactions specifically listed as in progress are not visible to the snapshot.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<pre><code>SELECT pg_current_snapshot();
+
+SELECT
+    pg_snapshot_xmin(pg_current_snapshot()),
+    pg_snapshot_xmax(pg_current_snapshot());</code></pre>
+
+<h3>3.1 Visibility depends on both tuple metadata and transaction status</h3>
+<p>
+A tuple's <code>xmin</code>/<code>xmax</code> alone do not fully answer visibility without knowing whether those transactions committed, aborted, or remain in progress and how they relate to the current snapshot. PostgreSQL maintains transaction commit status and caches visibility outcomes in tuple hint/status bits to avoid repeatedly performing expensive status lookups.<sup><a href="#r3">[3]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>3.2 Snapshot timing follows isolation semantics</h3>
+<p>
+At PostgreSQL's default Read Committed isolation, each command obtains a new snapshot at command start, so two successive queries inside one transaction can see different committed data. Repeatable Read and Serializable use a transaction-level snapshot, subject to their additional isolation rules.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="xids">
+<h2>4. Transaction IDs</h2>
+<p>
+PostgreSQL distinguishes virtual transaction IDs from normal transaction IDs. Every transaction has a virtual identity, but a normal 32-bit XID is generally assigned only when the transaction first needs to write. XIDs come from a cluster-wide sequence across databases and are fundamental to MVCC visibility and recovery.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<pre><code>SELECT
+    pg_current_xact_id_if_assigned();
+
+CREATE TEMP TABLE xid_demo(id integer);
+
+INSERT INTO xid_demo VALUES (1);
+
+SELECT
+    pg_current_xact_id_if_assigned();</code></pre>
+
+<p>
+PostgreSQL also exposes 64-bit <code>xid8</code> interfaces for monitoring/SQL functions. The on-disk/internal normal XID used for tuple visibility remains 32-bit and therefore requires wraparound management.<sup><a href="#r4">[4]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>4.1 Age</h3>
+<pre><code>SELECT
+    relname,
+    age(relfrozenxid) AS xid_age
+FROM pg_class
+WHERE relkind IN ('r', 'm')
+ORDER BY xid_age DESC
+LIMIT 20;</code></pre>
+
+<p>
+The <code>age()</code> function is commonly used to express how old an XID is relative to the current XID counter using PostgreSQL's wraparound-aware arithmetic.<sup><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="updates">
+<h2>5. UPDATE and DELETE lifecycle</h2>
+
+<h3>5.1 UPDATE</h3>
+<div class="diagram">Before:
+page
+  [V1 xmin=100 xmax=0, value='A']
+
+UPDATE commits as XID 125:
+
+page
+  [V1 xmin=100 xmax=125, value='A']
+  [V2 xmin=125 xmax=0,   value='B']
+
+Eventually:
+- V1 no longer visible to any relevant snapshot
+- V1 becomes dead
+- pruning/VACUUM can reclaim its storage
+- V2 remains live</div>
+
+<h3>5.2 DELETE</h3>
+<div class="diagram">Before:
+[V1 xmin=100 xmax=0]
+
+DELETE by XID 150:
+[V1 xmin=100 xmax=150]
+
+After XID 150 commits:
+old snapshots may still see V1
+new snapshots do not
+
+Once no snapshot can see V1:
+V1 is dead and reclaimable</div>
+
+<p>
+PostgreSQL does not immediately overwrite or erase the old row because another transaction may have a snapshot under which that version is still valid. This is the fundamental reason vacuuming exists.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="dead">
+<h2>6. Dead tuples</h2>
+<p>
+A dead tuple is a row version that is no longer visible to any transaction that PostgreSQL must preserve. Updated/deleted versions can transition through states where they are invisible to some newer snapshots but still potentially visible to older transactions. Only after the global visibility horizon advances far enough can they be safely removed/reused.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>6.1 Estimated dead tuples</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    n_mod_since_analyze,
+    last_vacuum,
+    last_autovacuum,
+    vacuum_count,
+    autovacuum_count
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 25;</code></pre>
+
+<p>
+<code>n_live_tup</code> and <code>n_dead_tup</code> are statistics estimates, not exact physical counts. They are useful for trend monitoring and autovacuum diagnosis, not as a byte-accurate bloat measurement.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>6.2 Exact/approximate physical tuple statistics</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pgstattuple;
+
+SELECT *
+FROM pgstattuple_approx('app.orders'::regclass);</code></pre>
+
+<p>
+The supplied <code>pgstattuple</code> extension can inspect physical tuple/free-space statistics. <code>pgstattuple()</code> performs a full relation scan for exact data, while <code>pgstattuple_approx()</code> avoids scanning all pages where possible and returns exact dead-tuple statistics with approximations for live tuples/free space.<sup><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="pruning">
+<h2>7. Page pruning and tuple reuse</h2>
+<p>
+VACUUM is not the only mechanism that can remove obsolete heap tuple versions. PostgreSQL can perform page pruning during normal access when a page is visited and the page header indicates pruning may be useful. Pruning can remove tuple versions that are safely dead and compact free space within the page. HOT chains make this particularly powerful because some intermediate versions can be removed without immediately involving index cleanup.<sup><a href="#r3">[3]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<div class="diagram">same heap page
+
+index entry
+    |
+    v
+[V1] -> [V2] -> [V3] -> [V4]
+ dead     dead    live    newest
+
+HOT/pruning can collapse obsolete chain members:
+index entry
+    |
+    v
+redirect -------> [V3] -> [V4]
+
+freed tuple slots/page bytes become reusable</div>
+
+<h3>7.1 Reusable does not mean file shrinks</h3>
+<p>
+Pruning or VACUUM can make internal page space available for future inserts/updates, but that normally does not reduce the relation's file size. PostgreSQL can truncate completely empty pages from the physical end of a heap under ordinary vacuum when it can obtain the needed lock; otherwise physical shrinkage generally requires a rewrite.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="hot">
+<h2>8. Heap-Only Tuple (HOT) updates</h2>
+<p>
+HOT reduces the cost of MVCC updates. PostgreSQL can use HOT when the update does not modify columns referenced by ordinary indexes (BRIN, a summarizing index type, is treated differently) and when there is enough free space on the same heap page to store the new row version.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>8.1 Normal update versus HOT</h3>
+<div class="diagram">NON-HOT UPDATE
+heap:  V1 -> V2
+index A: old entry + new entry
+index B: old entry + new entry
+...
+later VACUUM removes dead heap/index entries
+
+HOT UPDATE
+heap same page: V1 -> V2
+index entry still points to HOT chain root
+no new entries in ordinary indexes
+pruning can remove intermediate versions earlier</div>
+
+<h3>8.2 Monitor HOT rate</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    n_tup_upd,
+    n_tup_hot_upd,
+    n_tup_newpage_upd,
+    round(
+        100.0 * n_tup_hot_upd
+        / NULLIF(n_tup_upd, 0),
+        2
+    ) AS hot_pct
+FROM pg_stat_user_tables
+WHERE n_tup_upd &gt; 0
+ORDER BY hot_pct ASC, n_tup_upd DESC;</code></pre>
+
+<p>
+<code>pg_stat_all_tables</code>/<code>pg_stat_user_tables</code> expose total updates, HOT updates, and updates that placed the new tuple on another page. A low HOT ratio on a heavily updated table can be caused by indexed-column changes, lack of page free space, or both.<sup><a href="#r13">[13]</a><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>8.3 Index design affects update cost</h3>
+<p>
+Adding an index to a frequently changed column can make updates non-HOT even when the index has modest read value. Index portfolio design is therefore also write-amplification and bloat design.
+</p>
+</section>
+
+<section id="fillfactor">
+<h2>9. Fillfactor and update-heavy tables</h2>
+<p>
+The table <code>fillfactor</code> storage parameter determines how fully PostgreSQL initially packs heap pages during insertion/rewrite operations. Leaving deliberate free space can increase the chance that future updated versions fit on the same page, enabling HOT updates. The default heap fillfactor is 100; lowering it trades larger initial table size for update headroom.<sup><a href="#r13">[13]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>ALTER TABLE app.account
+SET (fillfactor = 80);</code></pre>
+
+<p>
+Changing the parameter affects future page filling; it does not automatically rewrite all existing pages to 80% occupancy. A later rewrite such as <code>VACUUM FULL</code> or <code>CLUSTER</code> can physically lay out the table according to the new storage behavior, but such operations have significant locking and I/O consequences.<sup><a href="#r17">[17]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>9.1 Not every update-heavy table wants 80%</h3>
+<p>
+Wide rows, update frequency, indexed columns, page locality, storage cost, and read workload all affect the optimum. Measure HOT rates, relation growth, and query I/O before and after changing fillfactor.
+</p>
+</section>
+
+<section id="vacuum">
+<h2>10. Ordinary <code>VACUUM</code></h2>
+<p>
+Ordinary <code>VACUUM</code> scans a relation to reclaim space from row versions that are provably dead, perform index cleanup as needed, update the free-space and visibility maps, freeze eligible old tuple transaction metadata, and update relation-level vacuum statistics. It operates in place and normally permits concurrent <code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> operations.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>VACUUM app.orders;
+
+VACUUM (VERBOSE) app.orders;
+
+VACUUM (ANALYZE) app.orders;</code></pre>
+
+<h3>10.1 What ordinary VACUUM does to space</h3>
+<p>
+Dead heap space becomes available for future tuples in that table. It normally remains allocated to the relation rather than returning to the operating system. If completely empty pages occur at the physical end of the table, vacuum can attempt to truncate them and return that tail space, which requires a brief <code>ACCESS EXCLUSIVE</code> lock.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>10.2 Index cleanup</h3>
+<p>
+VACUUM removes dead index entries when index cleanup is useful/needed. PostgreSQL 18's default <code>INDEX_CLEANUP=AUTO</code> permits skipping a complete index vacuum when the number of dead tuples is so small that scanning the index would cost more than the expected benefit. Persistently suppressing index cleanup on frequently modified tables can allow index and heap line-pointer cleanup debt to accumulate.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>VACUUM (
+    VERBOSE,
+    INDEX_CLEANUP ON
+) app.orders;</code></pre>
+
+<h3>10.3 Parallel VACUUM</h3>
+<p>
+Ordinary VACUUM can use parallel workers for eligible index-vacuum/index-cleanup phases. It does not parallelize the heap scan itself. The requested worker count is further constrained by eligible indexes and <code>max_parallel_maintenance_workers</code>.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>VACUUM (
+    PARALLEL 4,
+    ANALYZE
+) app.orders;</code></pre>
+</section>
+
+<section id="vacuum-full">
+<h2>11. <code>VACUUM FULL</code></h2>
+<p>
+<code>VACUUM FULL</code> is not “more thorough ordinary vacuum.” It rewrites the entire table into a new compact file and rebuilds its indexes, returning unused physical space to the operating system. The rewrite requires extra disk space during execution and an <code>ACCESS EXCLUSIVE</code> lock that blocks other table access.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>VACUUM (FULL, ANALYZE, VERBOSE)
+app.orders;</code></pre>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Property</th><th>VACUUM</th><th>VACUUM FULL</th></tr></thead>
+<tbody>
+<tr><td>Storage strategy</td><td>In-place cleanup/reuse</td><td>Full table rewrite</td></tr>
+<tr><td>Concurrent reads/writes</td><td>Generally continue</td><td>Blocked by ACCESS EXCLUSIVE</td></tr>
+<tr><td>Returns internal free space to OS</td><td>Usually no, except possible empty tail truncation</td><td>Yes, compacts relation</td></tr>
+<tr><td>Extra disk space</td><td>Normal maintenance overhead</td><td>Requires new relation copy until rewrite completes</td></tr>
+<tr><td>Routine operation?</td><td>Yes</td><td>No; exceptional remediation</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>11.1 Alternatives</h3>
+<p>
+<code>CLUSTER</code> also rewrites a table (while physically ordering it by an index), and certain <code>ALTER TABLE</code> operations perform rewrites. For index-only bloat, <code>REINDEX</code> may be the right remedy without rewriting the heap.<sup><a href="#r5">[5]</a><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="analyze">
+<h2>12. <code>ANALYZE</code></h2>
+<p>
+<code>ANALYZE</code> samples table contents and updates planner statistics used to estimate row counts, selectivity, value distributions, and query costs. Vacuuming and statistics maintenance are related operationally but solve different problems; <code>VACUUM ANALYZE</code> simply runs both operations for convenience.<sup><a href="#r5">[5]</a><a href="#r20">[20]</a></sup>
+</p>
+
+<pre><code>ANALYZE app.orders;
+
+ANALYZE (VERBOSE)
+app.orders(customer_id, status, created_at);</code></pre>
+
+<h3>12.1 More statistics for skewed columns</h3>
+<pre><code>ALTER TABLE app.orders
+ALTER COLUMN status
+SET STATISTICS 500;
+
+ANALYZE app.orders;</code></pre>
+
+<p>
+Increasing a column's statistics target can give the planner a finer sample/model for skewed distributions at the cost of more ANALYZE work and catalog space.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>12.2 Partitioned parents</h3>
+<p>
+PostgreSQL's autovacuum daemon does not automatically issue <code>ANALYZE</code> for partitioned parent tables based on child modifications. If query planning depends on parent-level inheritance statistics, PostgreSQL documentation recommends running manual <code>ANALYZE</code> on the parent as needed.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="autovacuum">
+<h2>13. Autovacuum</h2>
+<p>
+Autovacuum automates both VACUUM and ANALYZE. An autovacuum launcher periodically visits databases and starts workers for relations whose activity or anti-wraparound age meets configured thresholds. Autovacuum is enabled by default and requires statistics collection (<code>track_counts</code>) for ordinary threshold-based decisions. Even if autovacuum is disabled globally or per table, PostgreSQL can still launch anti-wraparound vacuum work when necessary.<sup><a href="#r5">[5]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<pre><code>SHOW autovacuum;
+SHOW autovacuum_max_workers;
+SHOW autovacuum_naptime;</code></pre>
+
+<h3>13.1 Why autovacuum is part of normal operation</h3>
+<p>
+Autovacuum is not an optional “cleanup utility” for an MVCC PostgreSQL database. It is responsible for maintaining reusable storage, planner statistics, visibility-map coverage, and XID/MultiXact safety. Disabling it without a replacement maintenance system accumulates operational debt and can eventually cause transaction-ID safety shutdowns.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>13.2 Per-table tuning</h3>
+<pre><code>ALTER TABLE app.event_log
+SET (
+    autovacuum_vacuum_scale_factor = 0.01,
+    autovacuum_vacuum_threshold = 5000,
+    autovacuum_analyze_scale_factor = 0.02,
+    autovacuum_analyze_threshold = 5000
+);</code></pre>
+
+<p>
+Large/high-churn tables often need table-specific thresholds because a percentage-based default can allow too many obsolete tuples to accumulate before vacuum begins. PostgreSQL supports most autovacuum thresholds as per-table storage parameters.<sup><a href="#r22">[22]</a><a href="#r17">[17]</a></sup>
+</p>
+</section>
+
+<section id="thresholds">
+<h2>14. Autovacuum trigger formulas</h2>
+<p>
+For ordinary update/delete cleanup, PostgreSQL computes a vacuum threshold from a fixed threshold plus a fraction of the estimated table size, capped by PostgreSQL 18's <code>autovacuum_vacuum_max_threshold</code> when configured. PostgreSQL 18 added this fixed maximum threshold specifically to prevent percentage scaling from allowing extremely large absolute dead-tuple counts on very large tables.<sup><a href="#r5">[5]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<pre><code>vacuum threshold =
+  min(
+    autovacuum_vacuum_max_threshold,
+    autovacuum_vacuum_threshold
+      + autovacuum_vacuum_scale_factor * reltuples
+  )</code></pre>
+
+<p>
+When <code>autovacuum_vacuum_max_threshold=-1</code>, the cap is disabled. Insert-heavy tables also have an insert-triggered vacuum formula that includes the fraction of the table not yet frozen, allowing vacuum to maintain visibility/freeze state even when rows are mostly inserted rather than updated or deleted.<sup><a href="#r5">[5]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>14.1 Why 20% can be too late</h3>
+<pre><code>-- Conceptual example:
+table size = 1,000,000,000 rows
+scale factor = 0.20
+
+percentage component = 200,000,000 tuples</code></pre>
+
+<p>
+A threshold that is reasonable for a 10,000-row table may be unsuitable for a billion-row table. Tune based on acceptable dead-tuple accumulation, vacuum duration, update rate, and storage headroom—not merely the default percentage.
+</p>
+
+<h3>14.2 Analyze threshold</h3>
+<pre><code>analyze threshold =
+  autovacuum_analyze_threshold
+    + autovacuum_analyze_scale_factor * reltuples</code></pre>
+
+<p>
+Autoanalyze counts inserts, updates, and deletes because all can change planner statistics.<sup><a href="#r5">[5]</a><a href="#r22">[22]</a></sup>
+</p>
+</section>
+
+<section id="cost">
+<h2>15. Vacuum cost control, buffers, and memory</h2>
+<p>
+VACUUM can generate significant I/O. PostgreSQL provides cost-based delay controls that assign costs to buffer hits, misses, and dirtying; once a worker exceeds its cost budget it sleeps briefly. Autovacuum workers have separate cost settings and dynamically balance their global cost limit among active workers unless per-table limits override that behavior.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<pre><code>SHOW autovacuum_vacuum_cost_delay;
+SHOW autovacuum_vacuum_cost_limit;
+SHOW vacuum_cost_page_hit;
+SHOW vacuum_cost_page_miss;
+SHOW vacuum_cost_page_dirty;</code></pre>
+
+<h3>15.1 Vacuum buffer access strategy</h3>
+<pre><code>SHOW vacuum_buffer_usage_limit;
+
+VACUUM (
+    BUFFER_USAGE_LIMIT '512MB'
+) app.large_fact;</code></pre>
+
+<p>
+PostgreSQL uses a Buffer Access Strategy ring for VACUUM/ANALYZE so large maintenance scans need not evict the whole working set from shared buffers. PostgreSQL 18's default <code>vacuum_buffer_usage_limit</code> is 2 MiB; larger values can improve maintenance throughput but can displace more useful cache pages.<sup><a href="#r24">[24]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>15.2 Maintenance memory</h3>
+<p>
+Vacuum/index cleanup can use <code>maintenance_work_mem</code>; autovacuum can use <code>autovacuum_work_mem</code> per worker. Since multiple autovacuum workers run concurrently, per-worker memory settings should be sized with aggregate memory pressure in mind.<sup><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="freeze">
+<h2>16. Freezing old tuple transaction IDs</h2>
+<p>
+Because normal XIDs are finite and wrap, PostgreSQL must eventually mark sufficiently old committed row versions as permanently old. This process is called freezing. Modern PostgreSQL normally preserves the original tuple <code>xmin</code> and marks frozen status in tuple metadata rather than literally replacing every XID with the special frozen XID.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>16.1 Ordinary versus aggressive vacuum</h3>
+<p>
+Ordinary VACUUM can skip all-visible pages even when they contain old but not-yet-frozen tuples. When a relation approaches its freeze-age thresholds, PostgreSQL performs an aggressive vacuum that visits pages needed to advance the table's frozen-XID horizon, including all-visible but not all-frozen pages.<sup><a href="#r5">[5]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<pre><code>SELECT
+    c.oid::regclass AS relation,
+    age(c.relfrozenxid) AS xid_age,
+    c.relminmxid,
+    mxid_age(c.relminmxid) AS mxid_age
+FROM pg_class AS c
+WHERE c.relkind IN ('r', 'm')
+ORDER BY xid_age DESC
+LIMIT 30;</code></pre>
+
+<h3>16.2 Manual aggressive freeze</h3>
+<pre><code>VACUUM (
+    FREEZE,
+    VERBOSE
+) app.archive_2024;</code></pre>
+
+<p>
+<code>VACUUM FREEZE</code> effectively lowers the freeze-age thresholds for that invocation and aggressively freezes eligible tuples. It is useful in controlled cases such as static archival tables but is not a routine substitute for correctly configured autovacuum.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="wraparound">
+<h2>17. Transaction-ID wraparound</h2>
+<p>
+Normal transaction IDs are 32-bit and cycle every roughly four billion transactions. PostgreSQL's wraparound-aware ordering can distinguish approximately two billion “past” from two billion “future” XIDs around the current position. If a very old tuple remains unfrozen beyond the safe horizon, its old XID could otherwise be interpreted as being in the future. PostgreSQL prevents this through freezing and aggressive anti-wraparound vacuuming.<sup><a href="#r4">[4]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<div class="diagram">32-bit XID space (conceptual ring)
+
+           future
+        <----------+
+       /            \
+      |              |
+      | current XID  |
+      |              |
+       \            /
+        +---------->
+           past
+
+A tuple cannot retain an ordinary insertion XID indefinitely.
+Before it crosses the safety horizon, VACUUM freezes it.</div>
+
+<h3>17.1 Database-level monitoring</h3>
+<pre><code>SELECT
+    datname,
+    age(datfrozenxid) AS xid_age,
+    mxid_age(datminmxid) AS mxid_age
+FROM pg_database
+ORDER BY xid_age DESC;</code></pre>
+
+<h3>17.2 Table-level monitoring</h3>
+<pre><code>SELECT
+    n.nspname,
+    c.relname,
+    age(c.relfrozenxid) AS xid_age
+FROM pg_class AS c
+JOIN pg_namespace AS n
+  ON n.oid = c.relnamespace
+WHERE c.relkind IN ('r', 'm')
+ORDER BY xid_age DESC
+LIMIT 50;</code></pre>
+
+<h3>17.3 Emergency protection</h3>
+<p>
+PostgreSQL begins warning well before wraparound and eventually refuses commands that allocate new transaction IDs when the cluster approaches the hard safety boundary. The correct response is to remove horizon blockers such as very old transactions/prepared transactions/obsolete replication slots and run ordinary vacuum on affected databases/tables. PostgreSQL 18 specifically warns against using <code>VACUUM FULL</code> as an anti-wraparound emergency response.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="multixact">
+<h2>18. MultiXact IDs and wraparound</h2>
+<p>
+When multiple transactions hold row-level locks on the same tuple, PostgreSQL can represent that shared locking state using a MultiXact ID. MultiXact IDs also wrap and have their own freeze/age thresholds, so vacuum maintenance protects against both normal XID and MultiXact exhaustion.<sup><a href="#r5">[5]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<pre><code>SELECT
+    datname,
+    age(datfrozenxid) AS xid_age,
+    mxid_age(datminmxid) AS multixact_age
+FROM pg_database
+ORDER BY multixact_age DESC;</code></pre>
+
+<p>
+Workloads with heavy concurrent row locking can consume MultiXact IDs much faster than ordinary applications. Monitor both age systems rather than assuming XID health alone proves wraparound safety.
+</p>
+</section>
+
+<section id="vm">
+<h2>19. Visibility map</h2>
+<p>
+Every heap relation has a visibility-map fork (<code>_vm</code>). It stores two bits per heap page: <em>all-visible</em> means every tuple on the page is visible to all active and future transactions until the page is modified, and <em>all-frozen</em> means every tuple is frozen. Vacuum sets these bits; data modification clears them conservatively.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<div class="diagram">heap page 42
++----------------------------------+
+| all tuples globally visible? YES |
+| all tuples frozen?          YES  |
++----------------------------------+
+
+visibility map:
+page 42 -> [all-visible=1][all-frozen=1]
+
+Consequences:
+- ordinary vacuum can skip appropriate page work
+- index-only scan can avoid heap visibility fetch
+- anti-wraparound vacuum can skip all-frozen page</div>
+
+<h3>19.1 Index-only scans</h3>
+<p>
+PostgreSQL indexes generally do not store enough MVCC visibility information to prove a referenced heap tuple is visible. An index-only scan therefore checks the visibility map; if the heap page is all-visible, PostgreSQL can return values directly from the index without fetching the heap page for visibility confirmation.<sup><a href="#r5">[5]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<pre><code>EXPLAIN (ANALYZE, BUFFERS)
+SELECT order_id
+FROM app.orders
+WHERE customer_id = 42;</code></pre>
+
+<p>
+In an index-only plan, a low <code>Heap Fetches</code> count is often evidence that visibility-map coverage is effective.
+</p>
+
+<h3>19.2 Inspect visibility metadata</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_visibility;
+
+SELECT *
+FROM pg_visibility_map_summary(
+    'app.orders'::regclass
+);</code></pre>
+
+<p>
+The supplied <code>pg_visibility</code> extension can inspect visibility-map state and compare it with heap contents. Low-level correction functions are intended for corruption-recovery situations, not routine tuning.<sup><a href="#r27">[27]</a></sup>
+</p>
+</section>
+
+<section id="fsm">
+<h2>20. Free-space map</h2>
+<p>
+The free-space map (FSM) tracks available reusable space in heap and index relations (except hash indexes) in a separate <code>_fsm</code> fork. For heap pages, PostgreSQL records an approximate amount of free space so insert/update placement can locate pages with enough room without scanning the entire relation.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<div class="diagram">heap pages:
+page 0   almost full
+page 1   2 KB free
+page 2   4 KB free
+page 3   500 B free
+
+FSM tree:
+                 max
+               /     \
+             max     max
+            /  \     /  \
+          p0  p1   p2   p3
+
+Need ~3 KB?
+FSM directs insertion toward page 2.</div>
+
+<h3>20.1 Inspect the FSM</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_freespacemap;
+
+SELECT
+    blkno,
+    avail
+FROM pg_freespace('app.orders')
+ORDER BY avail DESC
+LIMIT 20;</code></pre>
+
+<p>
+FSM values are approximate and intentionally quantized. For heap relations they describe reusable free bytes per page; for indexes the representation indicates empty-page availability rather than meaningful byte-level free space.<sup><a href="#r9">[9]</a><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>20.2 VACUUM and FSM</h3>
+<p>
+When vacuum/pruning frees tuple storage, the relation can advertise that space through the FSM so later inserts/updates reuse existing pages. This is why a relation can remain physically large after cleanup without necessarily remaining inefficient: its pages may contain valuable reusable capacity.
+</p>
+</section>
+
+<section id="table-bloat">
+<h2>21. Table bloat</h2>
+<p>
+“Table bloat” is an operational term rather than a single PostgreSQL catalog field. It generally describes a heap occupying substantially more physical space/pages than its useful live data and intended free-space reserve require. Causes include sustained update/delete churn, vacuum falling behind, long-lived visibility horizons, non-HOT updates, workload shifts after mass deletion, and page-layout fragmentation.<sup><a href="#r5">[5]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>21.1 Dead tuples versus reusable free space versus bloat</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>State</th><th>Meaning</th><th>Typical action</th></tr></thead>
+<tbody>
+<tr><td>Dead tuples</td><td>Obsolete row versions not needed by snapshots</td><td>Let/force ordinary VACUUM reclaim them</td></tr>
+<tr><td>Reusable free space</td><td>Already reclaimed page capacity available to future rows</td><td>Often healthy; no shrink needed</td></tr>
+<tr><td>Physical bloat</td><td>Relation remains inefficiently large for current/live workload</td><td>Fix cause; consider rewrite if space/I/O cost justifies it</td></tr>
+<tr><td>Expected fillfactor headroom</td><td>Deliberately unused page space reserved for updates</td><td>Do not “fix” as bloat without measuring benefit</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>21.2 Size inventory</h3>
+<pre><code>SELECT
+    c.oid::regclass AS relation,
+    pg_size_pretty(pg_relation_size(c.oid)) AS heap_size,
+    pg_size_pretty(pg_indexes_size(c.oid)) AS indexes_size,
+    pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size
+FROM pg_class AS c
+JOIN pg_namespace AS n
+  ON n.oid = c.relnamespace
+WHERE c.relkind = 'r'
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY pg_total_relation_size(c.oid) DESC
+LIMIT 30;</code></pre>
+
+<h3>21.3 Mass deletion</h3>
+<pre><code>DELETE FROM app.audit_event
+WHERE occurred_at &lt; current_date - interval '2 years';
+
+VACUUM app.audit_event;</code></pre>
+
+<p>
+Ordinary VACUUM makes the freed space reusable but will not generally shrink a table from, say, 500 GB to 50 GB simply because 90% of rows were deleted. If the table is expected to regrow, retaining reusable capacity may be beneficial; if not, a rewrite or partition-drop strategy may be appropriate.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="index-bloat">
+<h2>22. Index bloat</h2>
+<p>
+Indexes have their own lifecycle. Updating/deleting heap tuples can leave index entries that later vacuum must remove. B-tree pages that become completely empty can be reclaimed for reuse, but sparsely populated pages can remain allocated, leading to inefficient space use under some delete/update patterns. PostgreSQL recommends periodic monitoring and <code>REINDEX</code> where this becomes significant.<sup><a href="#r10">[10]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>22.1 Inspect B-tree physical statistics</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pgstattuple;
+
+SELECT *
+FROM pgstatindex(
+    'app.orders_customer_id_idx'::regclass
+);</code></pre>
+
+<p>
+<code>pgstatindex</code> exposes B-tree metrics such as tree level, index size, leaf density, and fragmentation indicators. Interpret these in context; no universal percentage automatically means an index must be rebuilt.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>22.2 Rebuild online where appropriate</h3>
+<pre><code>REINDEX INDEX CONCURRENTLY
+app.orders_customer_id_idx;</code></pre>
+
+<p>
+Standard <code>REINDEX</code> rebuilds an index with stronger write blocking. <code>REINDEX CONCURRENTLY</code> uses more work and time but permits normal inserts/updates/deletes during most of the operation and is often preferable for production remediation.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>22.3 Deduplication and index behavior</h3>
+<p>
+Modern B-tree indexes can apply internal optimizations such as deduplication in suitable cases, but bloat remains workload-dependent. Monitor physical size and query behavior instead of applying periodic rebuilds blindly.
+</p>
+</section>
+
+<section id="diagnostics">
+<h2>23. Diagnosing bloat and vacuum health</h2>
+
+<h3>23.1 First-pass table statistics</h3>
+<pre><code>SELECT
+    relid::regclass AS relation,
+    n_live_tup,
+    n_dead_tup,
+    n_tup_ins,
+    n_tup_upd,
+    n_tup_hot_upd,
+    n_tup_newpage_upd,
+    n_tup_del,
+    last_autovacuum,
+    autovacuum_count,
+    last_autoanalyze,
+    autoanalyze_count
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 30;</code></pre>
+
+<h3>23.2 Compare statistics to physical size</h3>
+<pre><code>SELECT
+    s.relid::regclass AS relation,
+    s.n_live_tup,
+    s.n_dead_tup,
+    pg_size_pretty(pg_relation_size(s.relid)) AS heap,
+    pg_size_pretty(pg_indexes_size(s.relid)) AS indexes,
+    pg_size_pretty(pg_total_relation_size(s.relid)) AS total
+FROM pg_stat_user_tables AS s
+ORDER BY pg_total_relation_size(s.relid) DESC
+LIMIT 30;</code></pre>
+
+<h3>23.3 Physical sampling with <code>pgstattuple_approx</code></h3>
+<pre><code>SELECT
+    table_len,
+    approx_tuple_count,
+    dead_tuple_count,
+    dead_tuple_percent,
+    approx_free_space,
+    approx_free_percent
+FROM pgstattuple_approx('app.orders'::regclass);</code></pre>
+
+<h3>23.4 Visibility coverage</h3>
+<pre><code>SELECT *
+FROM pg_visibility_map_summary(
+    'app.orders'::regclass
+);</code></pre>
+
+<h3>23.5 FSM distribution</h3>
+<pre><code>SELECT
+    width_bucket(avail, 0, current_setting('block_size')::int, 10) AS bucket,
+    count(*) AS pages
+FROM pg_freespace('app.orders')
+GROUP BY 1
+ORDER BY 1;</code></pre>
+
+<h3>23.6 Index sizes</h3>
+<pre><code>SELECT
+    i.indexrelid::regclass AS index_name,
+    pg_size_pretty(pg_relation_size(i.indexrelid)) AS index_size,
+    s.idx_scan,
+    s.idx_tup_read,
+    s.idx_tup_fetch
+FROM pg_index AS i
+LEFT JOIN pg_stat_user_indexes AS s
+  ON s.indexrelid = i.indexrelid
+WHERE i.indrelid = 'app.orders'::regclass
+ORDER BY pg_relation_size(i.indexrelid) DESC;</code></pre>
+
+<div class="callout warn">
+<strong>Avoid a single-number “bloat threshold.”</strong> A large free-space percentage can be desirable on an update-heavy table, while a low dead-tuple count can coexist with poor index density after historical churn. Diagnose behavior, size, reuse, and workload together.
+</div>
+</section>
+
+<section id="longtx">
+<h2>24. Long-running transactions and vacuum horizons</h2>
+<p>
+VACUUM cannot remove a row version if some still-relevant transaction/snapshot might need it. Long-running transactions can therefore pin the visibility horizon and cause dead tuples to accumulate across tables that transaction could observe. An “idle in transaction” connection can create this problem even while executing no query.<sup><a href="#r5">[5]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>24.1 Find old transaction horizons</h3>
+<pre><code>SELECT
+    pid,
+    usename,
+    application_name,
+    state,
+    xact_start,
+    backend_xid,
+    backend_xmin,
+    age(backend_xid) AS xid_age,
+    age(backend_xmin) AS xmin_age,
+    left(query, 120) AS query
+FROM pg_stat_activity
+WHERE xact_start IS NOT NULL
+ORDER BY xact_start;</code></pre>
+
+<h3>24.2 Idle transaction timeout</h3>
+<pre><code>ALTER ROLE app_user
+SET idle_in_transaction_session_timeout = '5min';</code></pre>
+
+<p>
+PostgreSQL explicitly notes that open idle transactions can prevent vacuum from removing recently dead tuples and thereby contribute to bloat. Apply the timeout with awareness of connection pool/application behavior.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>24.3 Prepared transactions and replication slots</h3>
+<p>
+Old prepared transactions and logical replication slots with old <code>xmin</code>/<code>catalog_xmin</code> can also pin horizons. PostgreSQL's wraparound recovery guidance explicitly calls out prepared transactions, long-running backends, and stale replication slots as blockers that may need to be resolved before vacuum can advance database age.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>SELECT
+    gid,
+    prepared,
+    owner,
+    database,
+    transaction,
+    age(transaction) AS xid_age
+FROM pg_prepared_xacts
+ORDER BY xid_age DESC;
+
+SELECT
+    slot_name,
+    slot_type,
+    active,
+    xmin,
+    catalog_xmin,
+    age(xmin) AS xmin_age,
+    age(catalog_xmin) AS catalog_xmin_age
+FROM pg_replication_slots
+ORDER BY greatest(
+    coalesce(age(xmin), 0),
+    coalesce(age(catalog_xmin), 0)
+) DESC;</code></pre>
+</section>
+
+<section id="monitoring">
+<h2>25. Monitoring VACUUM and ANALYZE</h2>
+
+<h3>25.1 VACUUM progress</h3>
+<pre><code>SELECT
+    pid,
+    datname,
+    relid::regclass AS relation,
+    phase,
+    heap_blks_total,
+    heap_blks_scanned,
+    heap_blks_vacuumed,
+    index_vacuum_count,
+    num_dead_item_ids,
+    max_dead_item_ids
+FROM pg_stat_progress_vacuum;</code></pre>
+
+<p>
+PostgreSQL exposes one row per running ordinary VACUUM/autovacuum worker in <code>pg_stat_progress_vacuum</code>. <code>VACUUM FULL</code> is a table rewrite and reports through <code>pg_stat_progress_cluster</code> instead.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>25.2 VACUUM FULL progress</h3>
+<pre><code>SELECT
+    pid,
+    command,
+    relid::regclass AS relation,
+    phase,
+    heap_tuples_scanned,
+    heap_tuples_written
+FROM pg_stat_progress_cluster
+WHERE command = 'VACUUM FULL';</code></pre>
+
+<h3>25.3 ANALYZE progress</h3>
+<pre><code>SELECT
+    pid,
+    datname,
+    relid::regclass AS relation,
+    phase,
+    sample_blks_total,
+    sample_blks_scanned,
+    ext_stats_total,
+    ext_stats_computed
+FROM pg_stat_progress_analyze;</code></pre>
+
+<h3>25.4 Autovacuum worker activity</h3>
+<pre><code>SELECT
+    pid,
+    datname,
+    state,
+    wait_event_type,
+    wait_event,
+    query
+FROM pg_stat_activity
+WHERE backend_type = 'autovacuum worker'
+ORDER BY datname, pid;</code></pre>
+
+<p>
+PostgreSQL 18 introduced asynchronous I/O infrastructure that can improve operations including VACUUM, but vacuum throughput remains sensitive to storage, cost delay, buffer strategy, index work, and tuple horizon blockers.<sup><a href="#r23">[23]</a></sup>
+</p>
+</section>
+
+<section id="tuning">
+<h2>26. Production tuning patterns</h2>
+
+<h3>26.1 Large high-churn OLTP table</h3>
+<pre><code>ALTER TABLE app.session_state
+SET (
+    fillfactor = 80,
+
+    autovacuum_vacuum_scale_factor = 0.005,
+    autovacuum_vacuum_threshold = 10000,
+    autovacuum_analyze_scale_factor = 0.01,
+    autovacuum_analyze_threshold = 10000,
+
+    autovacuum_vacuum_cost_limit = 4000,
+    autovacuum_vacuum_cost_delay = 2
+);</code></pre>
+
+<p>
+The values are examples, not universal recommendations. The goal is to begin cleanup before dead versions become operationally expensive, preserve page headroom for HOT, and give workers enough throughput to keep pace with mutation rate.
+</p>
+
+<h3>26.2 Append-mostly table</h3>
+<pre><code>ALTER TABLE app.event_log
+SET (
+    autovacuum_vacuum_insert_scale_factor = 0.02,
+    autovacuum_vacuum_insert_threshold = 10000,
+    autovacuum_analyze_scale_factor = 0.01
+);</code></pre>
+
+<p>
+Insert-triggered vacuum can maintain visibility/freeze coverage even on tables that do not generate many dead versions through updates/deletes.<sup><a href="#r5">[5]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>26.3 Static historical partition</h3>
+<pre><code>VACUUM (FREEZE, ANALYZE)
+analytics.fact_2024_12;</code></pre>
+
+<p>
+For a partition that will become immutable, one aggressive vacuum can freeze old tuple metadata and mark pages all-visible/all-frozen, reducing future anti-wraparound work and improving index-only-scan opportunities. Do this only when the partition is genuinely stable.
+</p>
+
+<h3>26.4 Guard against old idle transactions</h3>
+<pre><code>ALTER ROLE web_app
+SET idle_in_transaction_session_timeout = '2min';</code></pre>
+
+<h3>26.5 PostgreSQL 18 absolute dead-tuple cap</h3>
+<pre><code># Global example:
+autovacuum_vacuum_max_threshold = 10000000</code></pre>
+
+<p>
+PostgreSQL 18's maximum threshold is useful when very large tables make pure percentage scaling operationally unsafe. Tune the cap based on vacuum throughput and acceptable dead-version inventory.<sup><a href="#r23">[23]</a></sup>
+</p>
+</section>
+
+<section id="remediation">
+<h2>27. Bloat remediation decision tree</h2>
+
+<div class="diagram">relation is large / slow
+        |
+        v
+Are dead tuples accumulating NOW?
+        |
+   +----+----+
+   |         |
+  yes        no
+   |         |
+   v         v
+Why isn't   Is space already reusable?
+vacuum      / index sparse?
+keeping up?     |
+   |            +-------------------------+
+   |                                      |
+fix thresholds/workers/              future growth will reuse?
+long transactions/slots                   |
+   |                                  +---+---+
+VACUUM                                yes     no
+   |                                   |       |
+   v                                   v       v
+reusable space                      leave it  remediation
+                                         |
+                          +--------------+--------------+
+                          |                             |
+                      heap bloat                    index bloat
+                          |                             |
+                  VACUUM FULL / CLUSTER        REINDEX [CONCURRENTLY]
+                  or online external tool*      / recreate index
+
+* external tooling not covered by PostgreSQL core docs</div>
+
+<h3>27.1 Start with the cause</h3>
+<p>
+Rewriting a bloated table without fixing an autovacuum deficit, long transaction, update pattern, or inappropriate index/fillfactor will often reproduce the bloat. Remediation should begin with the mechanism generating or retaining dead space.
+</p>
+
+<h3>27.2 Use ordinary VACUUM when reuse is enough</h3>
+<pre><code>VACUUM (
+    VERBOSE,
+    ANALYZE
+) app.orders;</code></pre>
+
+<h3>27.3 Use REINDEX for index-only problems</h3>
+<pre><code>REINDEX INDEX CONCURRENTLY
+app.orders_status_idx;</code></pre>
+
+<h3>27.4 Use VACUUM FULL only for justified heap shrinkage</h3>
+<pre><code>-- Requires outage/strong locking planning:
+VACUUM FULL app.orders;</code></pre>
+
+<h3>27.5 Partition lifecycle can eliminate chronic bulk-delete bloat</h3>
+<p>
+If bloat repeatedly comes from retention deletes on time-series data, range partitioning may be structurally superior: dropping or detaching an expired partition removes its storage as a unit instead of creating millions of dead versions that need vacuuming.<sup><a href="#r31">[31]</a></sup>
+</p>
+</section>
+
+<section id="pitfalls">
+<h2>28. Common pitfalls</h2>
+
+<h3>28.1 Treating dead tuples as permanent bloat</h3>
+<p>
+Dead versions may be normal short-lived MVCC debris that the next vacuum will recycle. Measure whether vacuum is keeping up and whether relation pages are actually poorly utilized before scheduling a rewrite.
+</p>
+
+<h3>28.2 Expecting ordinary VACUUM to shrink a 500 GB file</h3>
+<p>
+Ordinary vacuum normally makes space reusable inside the relation. It returns OS space only when empty pages at the physical tail can be truncated. Use a rewrite only if physical shrinkage is truly required.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>28.3 Using VACUUM FULL as routine maintenance</h3>
+<p>
+It blocks table access with <code>ACCESS EXCLUSIVE</code>, requires extra disk, and treats the symptom by rewriting storage. PostgreSQL recommends ordinary vacuum as the routine path.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>28.4 Increasing autovacuum workers without enough throughput/memory planning</h3>
+<p>
+More workers can improve concurrency across many hot tables but also multiply I/O and potentially <code>autovacuum_work_mem</code> consumption. Tune worker count, per-worker cost, memory, and storage capacity as one system.<sup><a href="#r22">[22]</a><a href="#r24">[24]</a></sup>
+</p>
+
+<h3>28.5 Long transactions hidden in connection pools</h3>
+<p>
+An application that opens a transaction and then waits on the client can pin old snapshots while appearing idle. Monitor <code>xact_start</code>/<code>backend_xmin</code>, not only currently executing queries.<sup><a href="#r16">[16]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>28.6 Indexing every mutable attribute</h3>
+<p>
+Every ordinary index referencing a changed column can prevent HOT for that update and adds new index entries/work. Indexes must justify their read benefit against update amplification.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>28.7 Confusing ANALYZE with cleanup</h3>
+<p>
+ANALYZE updates planner statistics; it does not reclaim dead tuple storage. VACUUM cleans storage; <code>VACUUM ANALYZE</code> does both.<sup><a href="#r6">[6]</a><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>28.8 Disabling autovacuum on an active table</h3>
+<p>
+Doing so removes routine cleanup/statistics work while anti-wraparound vacuum can still occur. If maintenance must be managed manually, it must explicitly replace every relevant autovacuum responsibility.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>28.9 Ignoring index cleanup debt</h3>
+<p>
+Forcing <code>INDEX_CLEANUP OFF</code> can be useful during an urgent anti-wraparound situation, but regular suppression can allow dead index entries and dead line pointers to accumulate and harm performance.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>28.10 Monitoring only database-level XID age</h3>
+<p>
+Database age tells you urgency but not which table is responsible. Drill into <code>pg_class.relfrozenxid</code> and also inspect MultiXact age and horizon blockers.
+</p>
+</section>
+
+<section id="checklist">
+<h2>29. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Keep autovacuum enabled.</strong> Treat it as part of normal MVCC operation.</li>
+<li><strong>Monitor both table churn and cleanup.</strong> Track dead tuples, vacuum frequency, update rates, and physical size.</li>
+<li><strong>Tune large hot tables individually.</strong> Percentage defaults can allow excessive absolute dead-tuple counts.</li>
+<li><strong>Use PostgreSQL 18's <code>autovacuum_vacuum_max_threshold</code></strong> where a fixed upper trigger is useful.</li>
+<li><strong>Monitor XID and MultiXact age.</strong> Check both databases and individual relations.</li>
+<li><strong>Find old transaction horizons.</strong> Long transactions, prepared transactions, and replication slots can block cleanup.</li>
+<li><strong>Consider <code>idle_in_transaction_session_timeout</code></strong> for application roles that should never idle in a transaction.</li>
+<li><strong>Measure HOT efficiency.</strong> Index only columns whose read benefit justifies update cost.</li>
+<li><strong>Use fillfactor intentionally.</strong> Reserve update headroom on hot tables when measurements support it.</li>
+<li><strong>Let ordinary VACUUM create reusable space.</strong> Do not require OS shrinkage unless storage/I/O economics demand it.</li>
+<li><strong>Reserve <code>VACUUM FULL</code> for exceptional rewrites.</strong> Plan locks, disk space, WAL, and downtime.</li>
+<li><strong>Use REINDEX for index-specific bloat.</strong> Prefer <code>CONCURRENTLY</code> when production write availability matters.</li>
+<li><strong>Keep planner statistics fresh.</strong> Analyze manually where autovacuum does not cover parent-table needs.</li>
+<li><strong>Monitor visibility-map coverage.</strong> It affects vacuum skipping and index-only-scan efficiency.</li>
+<li><strong>Understand FSM free space.</strong> Reusable pages are an asset, not automatically waste.</li>
+<li><strong>Use <code>pgstattuple</code>/<code>pg_visibility</code>/<code>pg_freespacemap</code> selectively</strong> for physical diagnosis.</li>
+<li><strong>Monitor active vacuum progress.</strong> Use the progress views before concluding maintenance is hung.</li>
+<li><strong>Fix the cause before rewriting bloat.</strong> Otherwise the relation will grow again.</li>
+<li><strong>Consider partitioning for bulk-retention workloads.</strong> Lifecycle DDL can avoid recurring mass-delete bloat.</li>
+</ol>
+
+<div class="callout ok">
+<strong>MVCC maintenance principle:</strong> PostgreSQL buys concurrency by retaining history. Healthy systems make that history short-lived: snapshots advance, HOT/pruning avoid unnecessary index churn, autovacuum reclaims versions early, and freezing turns truly old live tuples into permanent history-safe state.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Multiversion Concurrency Control: Introduction [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/mvcc-intro.html">https://www.postgresql.org/docs/18/mvcc-intro.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Concurrency Control [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/mvcc.html">https://www.postgresql.org/docs/18/mvcc.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Database Page Layout and Table Row Layout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage-page-layout.html">https://www.postgresql.org/docs/18/storage-page-layout.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Transactions and Identifiers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/transaction-id.html">https://www.postgresql.org/docs/18/transaction-id.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Routine Vacuuming [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. VACUUM [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-vacuum.html">https://www.postgresql.org/docs/18/sql-vacuum.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. pgstattuple — obtain tuple-level statistics [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstattuple.html">https://www.postgresql.org/docs/18/pgstattuple.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Visibility Map [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage-vm.html">https://www.postgresql.org/docs/18/storage-vm.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Free Space Map [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage-fsm.html">https://www.postgresql.org/docs/18/storage-fsm.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Routine Reindexing [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-reindex.html">https://www.postgresql.org/docs/18/routine-reindex.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Transaction Isolation [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/transaction-iso.html">https://www.postgresql.org/docs/18/transaction-iso.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. System Columns [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-system-columns.html">https://www.postgresql.org/docs/18/ddl-system-columns.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Heap-Only Tuples (HOT) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage-hot.html">https://www.postgresql.org/docs/18/storage-hot.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Transaction ID and Snapshot Information Functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-info.html">https://www.postgresql.org/docs/18/functions-info.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Transaction Status Information [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage-file-layout.html">https://www.postgresql.org/docs/18/storage-file-layout.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. The Cumulative Statistics System: pg_stat_all_tables and pg_stat_user_tables [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring-stats.html">https://www.postgresql.org/docs/18/monitoring-stats.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. CREATE TABLE: Storage Parameters [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtable.html">https://www.postgresql.org/docs/18/sql-createtable.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. CLUSTER [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-cluster.html">https://www.postgresql.org/docs/18/sql-cluster.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. REINDEX [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-reindex.html">https://www.postgresql.org/docs/18/sql-reindex.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. ANALYZE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-analyze.html">https://www.postgresql.org/docs/18/sql-analyze.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Statistics Used by the Planner [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Vacuuming Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-vacuum.html">https://www.postgresql.org/docs/18/runtime-config-vacuum.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. PostgreSQL 18 Documentation; 2025-2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Resource Consumption: maintenance_work_mem, autovacuum_work_mem and vacuum_buffer_usage_limit [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Vacuuming Configuration: Freezing [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-vacuum.html">https://www.postgresql.org/docs/18/runtime-config-vacuum.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. Multixacts and Wraparound [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/multixact.html">https://www.postgresql.org/docs/18/multixact.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. pg_visibility — visibility map information and utilities [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgvisibility.html">https://www.postgresql.org/docs/18/pgvisibility.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. pg_freespacemap — examine the free space map [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgfreespacemap.html">https://www.postgresql.org/docs/18/pgfreespacemap.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. Client Connection Defaults: idle_in_transaction_session_timeout [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-client.html">https://www.postgresql.org/docs/18/runtime-config-client.html</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. Progress Reporting: ANALYZE, CLUSTER and VACUUM [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/progress-reporting.html">https://www.postgresql.org/docs/18/progress-reporting.html</a></li>
+
+<li id="r31">PostgreSQL Global Development Group. Table Partitioning [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-partitioning.html">https://www.postgresql.org/docs/18/ddl-partitioning.html</a></li>
+
+<li id="r32">PostgreSQL Global Development Group. vacuumdb [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-vacuumdb.html">https://www.postgresql.org/docs/18/app-vacuumdb.html</a></li>
+
+<li id="r33">PostgreSQL Global Development Group. reindexdb [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-reindexdb.html">https://www.postgresql.org/docs/18/app-reindexdb.html</a></li>
+
+<li id="r34">PostgreSQL Global Development Group. Database Physical Storage [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/storage.html">https://www.postgresql.org/docs/18/storage.html</a></li>
+
+<li id="r35">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. MVCC maintenance behavior depends on PostgreSQL version, table/index layout, transaction horizons, replication/decoding slots, mutation rate, autovacuum configuration, storage throughput, and workload concurrency. Diagnose the cause of relation growth before rewriting data, and test maintenance tuning under representative production load.
+</p>
+</footer>
+
+</body>
+</html>

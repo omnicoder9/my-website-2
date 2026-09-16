@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL schema design and modeling: relational modeling, keys, normalization, constraints, generated and identity columns, sequences, denormalization and partitioning strategy.">
+<title>PostgreSQL Schema Design &amp; Modeling</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}.dek{max-width:1050px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+p{margin:.92em 0}a{color:var(--accent)}sup a{text-decoration:none;font-weight:700}code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:880px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.formula{background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:17px 19px;margin:18px 0;font-family:"SFMono-Regular",Consolas,monospace;overflow-x:auto}.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Schema Design &amp; Modeling</h1>
+<p class="dek">An expert guide to relational modeling in PostgreSQL: entities and relationships, primary/candidate/natural/surrogate keys, normalization through BCNF, deliberate denormalization, declarative constraints, generated and identity columns, sequences, cascading referential actions, exclusion/temporal constraints, and partitioning strategy.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+<main>
+<section id="abstract"><h2>Abstract</h2>
+<p>Schema design turns domain rules into relations whose rows have stable identities, whose relationships are explicit, and whose invalid states are rejected as close to the data as practical. Relational theory supplies entities, relationships, candidate keys, functional dependencies and normalization; PostgreSQL supplies concrete enforcement mechanisms such as <code>PRIMARY KEY</code>, <code>UNIQUE</code>, <code>NOT NULL</code>, <code>CHECK</code>, <code>FOREIGN KEY</code>, <code>EXCLUDE</code>, generated columns, identity columns and declarative partitioning.<sup><a href="#r1">[1]</a>-<a href="#r5">[5]</a></sup></p>
+<p>A candidate key is a minimal set of attributes that uniquely identifies a tuple; the primary key is one candidate key selected as the relation's designated identifier. Other candidate keys should normally still be enforced with <code>UNIQUE</code> and suitable nullability rules. PostgreSQL primary keys imply uniqueness and non-nullability and create an enforcing unique index; foreign keys enforce referential integrity against primary/unique keys.<sup><a href="#r4">[4]</a><a href="#r6">[6]</a><a href="#r7">[7]</a></sup></p>
+<p>Normalization uses functional dependencies to reduce redundancy and modification anomalies. 1NF removes repeating/multivalued groups from the relational representation; 2NF removes partial dependencies of non-prime attributes on composite candidate keys; 3NF removes problematic transitive dependencies; BCNF strengthens the rule so every nontrivial functional dependency has a superkey as determinant. Denormalization should therefore be an explicit performance/operational choice with a consistency mechanism, not an accidental by-product of modeling.<sup><a href="#r8">[8]</a>-<a href="#r12">[12]</a></sup></p>
+<p>Partitioning is a physical data-management strategy rather than a normal form. PostgreSQL range, list and hash partitioning splits one logical table into physical partitions and can improve pruning, bulk data removal and locality for very large tables, but poor partition-key choice or excessive partition counts can increase planning and operational complexity.<sup><a href="#r13">[13]</a></sup></p>
+</section>
+<nav class="toc"><h2>Contents</h2><ol>
+<li><a href="#modeling">Relational modeling</a></li><li><a href="#relationships">Entities and relationships</a></li><li><a href="#keys">Keys</a></li><li><a href="#candidate">Candidate keys</a></li>
+<li><a href="#natural-surrogate">Natural vs surrogate keys</a></li><li><a href="#normalization">Normalization</a></li><li><a href="#nf1">1NF</a></li><li><a href="#nf2">2NF</a></li>
+<li><a href="#nf3">3NF</a></li><li><a href="#bcnf">BCNF</a></li><li><a href="#denormalization">Denormalization</a></li><li><a href="#constraints">Constraints</a></li>
+<li><a href="#generated">Generated columns</a></li><li><a href="#identity">Identity columns</a></li><li><a href="#sequences">Sequences</a></li><li><a href="#partitioning">Partitioning strategy</a></li>
+<li><a href="#worked">Worked model</a></li><li><a href="#checklist">Production checklist</a></li><li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="modeling"><h2>1. Relational modeling</h2>
+<p>Relational modeling represents a domain as relations whose tuples describe facts and whose attributes draw values from defined domains/types. Keys identify tuples, foreign keys connect facts across relations, and functional dependencies describe semantic determination between attribute sets. Entity-relationship modeling is commonly used as a conceptual precursor: entity sets become relations and relationship sets become foreign keys or associative relations according to cardinality and attributes.<sup><a href="#r6">[6]</a><a href="#r14">[14]</a></sup></p>
+<div class="diagram">Customer -------- places -------- Order
+   |                               |
+   | customer_id                   | order_id
+   | email                         | created_at
+   |                               |
+   +----------- 1 : N -------------+
+
+Order -------- contains -------- Product
+   \----------- N : M -----------/
+                 |
+             OrderLine
+    (order_id, product_id,
+     quantity, unit_price)</div>
+<p>The key modeling question is the grain of each relation: what exactly does one row mean? Mixing facts with different lifecycles in one table usually creates redundancy or ambiguous update rules.</p>
+</section>
+
+<section id="relationships"><h2>2. Entities and relationships</h2>
+<p>A one-to-many relationship is normally represented by a foreign key on the “many” side. A one-to-one relationship can use a foreign key with uniqueness, often making the foreign key itself the primary key of the dependent table. A many-to-many relationship becomes an associative relation, especially when the relationship has attributes of its own.<sup><a href="#r14">[14]</a><a href="#r4">[4]</a></sup></p>
+<pre><code>CREATE TABLE commerce.customer (
+    customer_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email text NOT NULL UNIQUE,
+    display_name text NOT NULL
+);
+
+CREATE TABLE commerce.orders (
+    order_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_id bigint NOT NULL
+        REFERENCES commerce.customer(customer_id),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE commerce.order_line (
+    order_id bigint NOT NULL
+        REFERENCES commerce.orders(order_id) ON DELETE CASCADE,
+    product_id bigint NOT NULL
+        REFERENCES catalog.product(product_id),
+    quantity integer NOT NULL CHECK (quantity &gt; 0),
+    unit_price numeric(12,2) NOT NULL CHECK (unit_price &gt;= 0),
+    PRIMARY KEY (order_id, product_id)
+);</code></pre>
+</section>
+
+<section id="keys"><h2>3. Keys and functional dependencies</h2>
+<p>A superkey is an attribute set that uniquely identifies a tuple. A candidate key is a minimal superkey: no proper subset still uniquely identifies the tuple. If a relation has several candidate keys, one is designated as primary; the others remain alternate candidate keys. Functional dependencies are semantic constraints of the modeled domain, not accidental properties of today's sample rows.<sup><a href="#r6">[6]</a><a href="#r15">[15]</a></sup></p>
+<div class="formula">Functional dependency X → Y:
+if two valid tuples agree on X, they must agree on Y.</div>
+</section>
+
+<section id="candidate"><h2>4. Candidate and primary keys</h2>
+<p>PostgreSQL <code>PRIMARY KEY</code> combines uniqueness and non-nullability and automatically creates an enforcing unique B-tree index. A table can have only one primary key but can have many other candidate keys represented with <code>UNIQUE</code> plus suitable nullability rules.<sup><a href="#r4">[4]</a><a href="#r16">[16]</a></sup></p>
+<pre><code>CREATE TABLE auth.user_account (
+    user_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_no text NOT NULL UNIQUE,
+    email text NOT NULL UNIQUE,
+    display_name text NOT NULL
+);</code></pre>
+<p>Choosing <code>user_id</code> as the primary key does not make <code>account_no</code> or <code>email</code> stop being business candidate keys if the domain requires them to be unique.</p>
+</section>
+
+<section id="natural-surrogate"><h2>5. Natural versus surrogate keys</h2>
+<p>A natural key uses attributes that already have domain meaning; a surrogate key introduces an identifier primarily for row identity. Candidate-key theory does not require the primary key to be natural, so the decision is architectural. Surrogate keys are often chosen for stability and narrow foreign keys, while natural candidate keys should still be enforced when they express real uniqueness rules.<sup><a href="#r6">[6]</a><a href="#r17">[17]</a></sup></p>
+<div class="table-wrap"><table><thead><tr><th>Question</th><th>Natural key</th><th>Surrogate key</th></tr></thead><tbody>
+<tr><td>Business meaning</td><td>Yes</td><td>Usually none</td></tr>
+<tr><td>Change risk</td><td>Depends on business rule stability</td><td>Can be designed immutable</td></tr>
+<tr><td>Width</td><td>May be wide/composite</td><td>Often compact scalar</td></tr>
+<tr><td>Business uniqueness</td><td>Can enforce directly</td><td>Still needs separate UNIQUE on natural candidate key</td></tr>
+</tbody></table></div>
+<div class="callout warn"><strong>A surrogate does not normalize a relation.</strong> Adding an <code>id</code> column does not remove functional dependencies among the remaining attributes.</div>
+</section>
+
+<section id="normalization"><h2>6. Normalization</h2>
+<p>Normalization decomposes relation schemas to reduce redundancy and insertion/update/deletion anomalies using keys and functional dependencies. The goal is to store each independent fact in a relation where its determinant is represented correctly, while preserving the ability to reconstruct the intended information through joins.<sup><a href="#r8">[8]</a><a href="#r10">[10]</a></sup></p>
+<div class="diagram">Enrollment(
+ student_id,
+ student_name,
+ course_id,
+ course_title,
+ instructor_id,
+ instructor_name,
+ grade
+)
+
+student_id -> student_name
+course_id -> course_title, instructor_id
+instructor_id -> instructor_name
+(student_id, course_id) -> grade</div>
+</section>
+
+<section id="nf1"><h2>7. First Normal Form (1NF)</h2>
+<p>Practical 1NF guidance requires single relation values rather than spreadsheet-style repeating groups. Cornell describes the design goal as atomic values, no repeating groups and uniquely identifiable rows. “Atomic” is domain-relative: PostgreSQL arrays, ranges, JSON and composites are still single typed values, so 1NF is not a blanket prohibition on structured types.<sup><a href="#r8">[8]</a><a href="#r18">[18]</a></sup></p>
+<pre><code>-- Avoid fixed repeating columns:
+CREATE TABLE bad_order (
+    order_id bigint PRIMARY KEY,
+    product_1 bigint,
+    product_2 bigint,
+    product_3 bigint
+);
+
+-- Model arbitrary cardinality:
+CREATE TABLE order_line (
+    order_id bigint NOT NULL REFERENCES orders(order_id),
+    line_no integer NOT NULL,
+    product_id bigint NOT NULL REFERENCES product(product_id),
+    PRIMARY KEY (order_id, line_no)
+);</code></pre>
+</section>
+
+<section id="nf2"><h2>8. Second Normal Form (2NF)</h2>
+<p>A relation is in 2NF when it is in 1NF and every non-prime attribute is fully functionally dependent on every candidate key rather than on only part of a composite key. Partial-dependency problems therefore arise around composite candidate keys.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup></p>
+<div class="diagram">Inventory(
+ warehouse_id,
+ product_id,
+ warehouse_address,
+ quantity
+)
+
+key: (warehouse_id, product_id)
+
+warehouse_id -> warehouse_address     violation
+(warehouse_id, product_id) -> quantity</div>
+<pre><code>CREATE TABLE inventory.warehouse (
+    warehouse_id bigint PRIMARY KEY,
+    address text NOT NULL
+);
+
+CREATE TABLE inventory.stock (
+    warehouse_id bigint NOT NULL REFERENCES inventory.warehouse,
+    product_id bigint NOT NULL REFERENCES catalog.product,
+    quantity integer NOT NULL CHECK (quantity &gt;= 0),
+    PRIMARY KEY (warehouse_id, product_id)
+);</code></pre>
+</section>
+
+<section id="nf3"><h2>9. Third Normal Form (3NF)</h2>
+<p>Third Normal Form refines schemas so non-key facts are not stored through inappropriate transitive dependencies. A standard formal definition states that for every nontrivial functional dependency <code>X → A</code>, either <code>X</code> is a superkey or <code>A</code> is a prime attribute (belongs to some candidate key). This allows some dependencies that BCNF rejects, which is why BCNF is strictly stronger.<sup><a href="#r10">[10]</a><a href="#r11">[11]</a></sup></p>
+<div class="diagram">Employee(
+ employee_id,
+ department_id,
+ department_name
+)
+
+employee_id -> department_id
+department_id -> department_name
+
+therefore:
+employee_id -> department_name transitively
+
+department_name describes Department, not Employee.</div>
+<pre><code>CREATE TABLE org.department (
+    department_id bigint PRIMARY KEY,
+    department_name text NOT NULL UNIQUE
+);
+
+CREATE TABLE org.employee (
+    employee_id bigint PRIMARY KEY,
+    department_id bigint NOT NULL
+        REFERENCES org.department(department_id)
+);</code></pre>
+<p>This decomposition avoids storing the same department name once per employee and makes a department-name change one row update rather than many synchronized updates.</p>
+</section>
+
+<section id="bcnf"><h2>10. Boyce-Codd Normal Form (BCNF)</h2>
+<p>A relation is in BCNF when every nontrivial functional dependency <code>X → Y</code> has a superkey on the left side. BCNF therefore rejects any non-key determinant, even some cases that satisfy 3NF because the dependent attribute happens to be prime.<sup><a href="#r11">[11]</a><a href="#r12">[12]</a></sup></p>
+<div class="formula">BCNF:
+for every nontrivial FD X → Y,
+X must be a superkey.</div>
+<p>BCNF is useful when overlapping candidate keys create subtle redundancy. However, a BCNF decomposition can fail to preserve every functional dependency as a local constraint, while a 3NF synthesis can often preserve dependencies. Schema design therefore balances stronger normalization with enforceability and practical query structure.<sup><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="denormalization"><h2>11. Denormalization</h2>
+<p>Denormalization deliberately duplicates or precomputes information to reduce joins, aggregate work or remote reads. It is not the same as failing to normalize: a denormalized design should begin with a known source-of-truth model and explicitly define how redundant copies remain synchronized.</p>
+<div class="table-wrap"><table><thead><tr><th>Technique</th><th>Benefit</th><th>Consistency burden</th></tr></thead><tbody>
+<tr><td>Snapshot customer name/address on invoice</td><td>Preserves historical facts and avoids reconstructing old state</td><td>Often intentional independence, not synchronized duplication</td></tr>
+<tr><td>Store cached total on order</td><td>Faster reads</td><td>Must match order lines; trigger/application/generated design needed</td></tr>
+<tr><td>Materialized summary table/view</td><td>Faster analytics</td><td>Refresh/update latency</td></tr>
+<tr><td>Duplicate lookup label</td><td>Avoid join in hot path</td><td>Must propagate changes or accept staleness</td></tr>
+</tbody></table></div>
+<p>PostgreSQL gives several alternatives before duplicating ordinary columns: indexes improve join/access cost, generated columns derive same-row values, materialized views store derived query results, and partitioning changes physical layout. Denormalization is most defensible when profiling shows a real bottleneck and the consistency contract is explicit.</p>
+</section>
+
+<section id="constraints"><h2>12. Constraints as executable schema semantics</h2>
+<p>PostgreSQL constraints let the database reject invalid states regardless of which application or client submits the write. PostgreSQL 18 stores <code>CHECK</code>, <code>NOT NULL</code>, <code>PRIMARY KEY</code>, <code>UNIQUE</code>, <code>FOREIGN KEY</code>, and <code>EXCLUDE</code> constraints in <code>pg_constraint</code>.<sup><a href="#r4">[4]</a><a href="#r19">[19]</a></sup></p>
+<pre><code>CREATE TABLE booking.reservation (
+    reservation_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_id bigint NOT NULL
+        REFERENCES commerce.customer(customer_id),
+    party_size integer NOT NULL CHECK (party_size &gt; 0),
+    confirmation_code text NOT NULL UNIQUE
+);</code></pre>
+<p>Constraints should express invariant facts, not merely current UI assumptions. If the database must never contain a negative party size, that rule belongs in the schema even when every application form already validates it.</p>
+</section>
+
+<section id="notnull"><h2>13. <code>NOT NULL</code></h2>
+<p><code>NOT NULL</code> states that a column must contain a non-null value. PostgreSQL's documentation recommends marking columns non-null whenever null is not a meaningful domain state; in PostgreSQL 18 not-null constraints are represented in <code>pg_constraint</code> as well as column metadata.<sup><a href="#r4">[4]</a><a href="#r19">[19]</a></sup></p>
+<pre><code>CREATE TABLE catalog.category (
+    category_id bigint PRIMARY KEY,
+    name text NOT NULL
+);</code></pre>
+<p>Do not use nullable columns as a generic “future flexibility” mechanism. Null should have a modeled meaning such as unknown/not-applicable/not-yet-known, and those meanings may need to be distinguished explicitly when they matter operationally.</p>
+</section>
+
+<section id="unique"><h2>14. <code>UNIQUE</code></h2>
+<p>A unique constraint guarantees that constrained column combinations are unique. PostgreSQL implements it with a unique index. By default, nulls are treated as distinct for uniqueness; <code>NULLS NOT DISTINCT</code> changes this so nulls collide for the constraint.<sup><a href="#r4">[4]</a><a href="#r20">[20]</a></sup></p>
+<pre><code>CREATE TABLE auth.login_name (
+    user_id bigint PRIMARY KEY,
+    username text UNIQUE NULLS NOT DISTINCT
+);</code></pre>
+<p>A partial uniqueness rule cannot be expressed as a normal <code>UNIQUE</code> constraint, but can be enforced with a unique partial index, for example “only one active subscription per user.”<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>CREATE UNIQUE INDEX one_active_subscription
+ON billing.subscription(user_id)
+WHERE status = 'active';</code></pre>
+</section>
+
+<section id="check"><h2>15. <code>CHECK</code></h2>
+<p>A <code>CHECK</code> constraint requires its Boolean expression to be true or null for each row. PostgreSQL assumes the expression is effectively immutable with respect to database state: it does not continuously re-evaluate existing rows when an external function changes. Cross-row/table rules therefore generally should not be implemented as ordinary <code>CHECK</code> expressions.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>CREATE TABLE payroll.employee (
+    employee_id bigint PRIMARY KEY,
+    salary numeric(12,2) NOT NULL,
+    bonus numeric(12,2) NOT NULL DEFAULT 0,
+
+    CONSTRAINT salary_positive CHECK (salary &gt; 0),
+    CONSTRAINT bonus_nonnegative CHECK (bonus &gt;= 0)
+);</code></pre>
+</section>
+
+<section id="pk"><h2>16. <code>PRIMARY KEY</code></h2>
+<p>A primary key is the schema's designated row identifier. PostgreSQL enforces it as <code>UNIQUE</code> plus <code>NOT NULL</code> and creates an index automatically. There is no need to create a duplicate index over exactly the same key merely because the primary key exists.<sup><a href="#r4">[4]</a><a href="#r20">[20]</a></sup></p>
+<pre><code>CREATE TABLE school.enrollment (
+    student_id bigint NOT NULL,
+    course_id bigint NOT NULL,
+    term text NOT NULL,
+    grade text,
+
+    PRIMARY KEY (student_id, course_id, term)
+);</code></pre>
+</section>
+
+<section id="fk"><h2>17. <code>FOREIGN KEY</code></h2>
+<p>Foreign keys ensure that referencing values correspond to existing referenced keys and define the response when referenced rows are updated or deleted. Referenced columns must form a primary key, unique constraint, or qualifying non-partial unique index. PostgreSQL does not automatically index the referencing columns.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>CREATE TABLE support.ticket (
+    ticket_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    requester_id bigint NOT NULL,
+
+    CONSTRAINT ticket_requester_fk
+        FOREIGN KEY (requester_id)
+        REFERENCES auth.user_account(user_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);</code></pre>
+</section>
+
+<section id="exclude"><h2>18. <code>EXCLUDE</code> constraints</h2>
+<p>An exclusion constraint ensures that for any two rows, not all specified operator comparisons can be true simultaneously. PostgreSQL enforces exclusion constraints using an index of the chosen access method, commonly GiST. They are especially useful for non-overlap rules such as time/range bookings that ordinary equality-based uniqueness cannot express.<sup><a href="#r4">[4]</a><a href="#r21">[21]</a></sup></p>
+<pre><code>CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+CREATE TABLE booking.room_reservation (
+    reservation_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    room_id bigint NOT NULL,
+    during tstzrange NOT NULL,
+
+    EXCLUDE USING gist (
+        room_id WITH =,
+        during WITH &amp;&amp;
+    )
+);</code></pre>
+<p>The example prevents two reservations for the same room whose time ranges overlap.</p>
+</section>
+
+<section id="cascade"><h2>19. Cascading referential actions</h2>
+<p>Foreign keys support actions including <code>NO ACTION</code>, <code>RESTRICT</code>, <code>CASCADE</code>, <code>SET NULL</code>, and <code>SET DEFAULT</code> for referenced deletes/updates. PostgreSQL documents a meaningful distinction between <code>NO ACTION</code> and <code>RESTRICT</code>: <code>NO ACTION</code> can be deferred when the constraint is deferrable, while <code>RESTRICT</code> prevents the operation immediately and also differs for some equality/collation scenarios.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>CREATE TABLE blog.comment (
+    comment_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    post_id bigint NOT NULL
+        REFERENCES blog.post(post_id)
+        ON DELETE CASCADE,
+    author_id bigint
+        REFERENCES auth.user_account(user_id)
+        ON DELETE SET NULL
+);</code></pre>
+<p>Use <code>CASCADE</code> when the child fact has no independent meaning after the parent disappears. Use <code>RESTRICT</code>/<code>NO ACTION</code> when deletion should require explicit business handling. Use <code>SET NULL</code> only when “no referenced parent” is a valid modeled state.</p>
+</section>
+
+<section id="generated"><h2>20. Generated columns</h2>
+<p>A generated column is always computed from other columns. PostgreSQL 18 supports stored and virtual generated columns, with <strong>virtual now the default</strong>. Stored generated values are computed on write and occupy storage; virtual values are computed when read. Generation expressions can use only immutable behavior and cannot contain subqueries or reference other generated columns; generated columns cannot also have defaults or identity definitions and cannot be partition keys.<sup><a href="#r3">[3]</a><a href="#r22">[22]</a></sup></p>
+<pre><code>CREATE TABLE commerce.order_line_calc (
+    order_id bigint NOT NULL,
+    quantity integer NOT NULL CHECK (quantity &gt; 0),
+    unit_price numeric(12,2) NOT NULL CHECK (unit_price &gt;= 0),
+
+    line_total numeric(14,2)
+        GENERATED ALWAYS AS (quantity * unit_price) STORED
+);</code></pre>
+<p>Generated columns are appropriate when a value is a deterministic function of the same row. They are not a replacement for aggregate/cross-row derived data such as an order total across many line rows.</p>
+</section>
+
+<section id="identity"><h2>21. Identity columns</h2>
+<p>An identity column automatically obtains values from an implicit sequence. PostgreSQL supports <code>GENERATED ALWAYS</code> and <code>GENERATED BY DEFAULT</code>. Identity columns are automatically <code>NOT NULL</code>, but identity alone does <em>not</em> guarantee uniqueness; declare <code>PRIMARY KEY</code> or <code>UNIQUE</code> when uniqueness is required.<sup><a href="#r2">[2]</a></sup></p>
+<pre><code>CREATE TABLE app.event (
+    event_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    occurred_at timestamptz NOT NULL DEFAULT now(),
+    payload jsonb NOT NULL
+);</code></pre>
+<p><code>ALWAYS</code> rejects ordinary explicit values unless the statement uses an override clause; <code>BY DEFAULT</code> allows an explicit value to replace sequence generation. The former is often useful when application code should never assign identifiers directly.<sup><a href="#r2">[2]</a><a href="#r16">[16]</a></sup></p>
+</section>
+
+<section id="sequences"><h2>22. Sequences</h2>
+<p>A sequence is an independent number generator implemented as a special single-row relation. <code>nextval()</code> atomically returns distinct sequence values across concurrent sessions. Sequence calls such as <code>nextval</code> and <code>setval</code> are not rolled back, so gaps are normal and sequences are unsuitable for requirements demanding gapless assignment.<sup><a href="#r23">[23]</a></sup></p>
+<pre><code>CREATE SEQUENCE billing.invoice_number_seq
+    AS bigint
+    START WITH 100000
+    CACHE 50;
+
+SELECT nextval('billing.invoice_number_seq');</code></pre>
+<p>Use an identity column when the sequence exists specifically to generate one table column's identifiers. Use a standalone sequence when several operations/tables need explicit access to the generator or the sequence itself is part of the domain/integration contract.</p>
+</section>
+
+<section id="temporal"><h2>23. PostgreSQL 18 temporal/non-overlap constraints</h2>
+<p>PostgreSQL 18 adds non-overlapping forms of <code>PRIMARY KEY</code> and <code>UNIQUE</code> constraints using <code>WITHOUT OVERLAPS</code>, plus temporal foreign-key semantics using <code>PERIOD</code>. The last key column must be a range or multirange type. Conceptually, a temporal key identifies an entity together with a validity range while preventing overlapping validity intervals for the same entity key.<sup><a href="#r16">[16]</a><a href="#r24">[24]</a></sup></p>
+
+<pre><code>CREATE TABLE pricing.product_price (
+    product_id bigint NOT NULL,
+    valid_during daterange NOT NULL,
+    price numeric(12,2) NOT NULL CHECK (price &gt;= 0),
+
+    PRIMARY KEY (
+        product_id,
+        valid_during WITHOUT OVERLAPS
+    )
+);</code></pre>
+
+<p>These features can make bitemporal/valid-time style modeling more declarative, but they do not eliminate the need to define semantics such as whether adjacent intervals are allowed, how corrections are represented, or how application queries select the valid version.</p>
+</section>
+
+<section id="partitioning"><h2>24. Partitioning strategy</h2>
+<p>Declarative partitioning divides one logical table into physical partitions. PostgreSQL supports range, list and hash partitioning. The partitioned parent is virtual: storage belongs to its partitions, and inserted rows are routed to a partition according to the partition key.<sup><a href="#r13">[13]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Strategy</th><th>Good fit</th><th>Example</th></tr></thead><tbody>
+<tr><td>Range</td><td>Ordered/time-oriented lifecycle</td><td>Monthly event partitions by <code>occurred_at</code></td></tr>
+<tr><td>List</td><td>Discrete known categories</td><td>Region/tenant class</td></tr>
+<tr><td>Hash</td><td>Even distribution without natural ranges</td><td>Hash of customer/tenant ID</td></tr>
+</tbody></table></div>
+
+<h3>24.1 Partition for pruning and lifecycle, not merely table size</h3>
+<p>PostgreSQL recommends choosing partition keys that commonly appear in query <code>WHERE</code> clauses so partition pruning can eliminate irrelevant partitions. Data-retention operations are another strong reason: dropping or detaching an old partition can be far cheaper than deleting millions of old rows and then vacuuming the dead tuples.<sup><a href="#r13">[13]</a></sup></p>
+
+<pre><code>CREATE TABLE telemetry.event (
+    event_id bigint NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    device_id bigint NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (event_id, occurred_at)
+) PARTITION BY RANGE (occurred_at);
+
+CREATE TABLE telemetry.event_2026_09
+PARTITION OF telemetry.event
+FOR VALUES FROM ('2026-09-01')
+         TO   ('2026-10-01');
+
+CREATE TABLE telemetry.event_2026_10
+PARTITION OF telemetry.event
+FOR VALUES FROM ('2026-10-01')
+         TO   ('2026-11-01');</code></pre>
+
+<h3>24.2 Primary/unique keys on partitioned tables</h3>
+<p>PostgreSQL 18 requires a partitioned table's primary/unique key to include every partition-key column, with restrictions on expression partition keys, because uniqueness is enforced by indexes on individual partitions rather than one global index spanning the whole partition tree.<sup><a href="#r13">[13]</a><a href="#r16">[16]</a></sup></p>
+
+<h3>24.3 Too many partitions can hurt</h3>
+<p>More partitions are not inherently better. Large partition counts consume metadata and increase planning/management work; poorly chosen boundaries can leave queries touching many partitions anyway. Partition count should reflect data volume, pruning selectivity, retention operations, index sizes and operational automation.<sup><a href="#r13">[13]</a></sup></p>
+
+<h3>24.4 Partitioning is not sharding</h3>
+<p>Native declarative partitions remain tables within one PostgreSQL database and are managed by the same database instance unless foreign tables or external systems are deliberately introduced. Partitioning alone does not distribute write ownership or compute across independent PostgreSQL servers.</p>
+</section>
+
+<section id="worked"><h2>25. Worked schema: normalized commerce model</h2>
+<p>The following example combines candidate-key modeling, surrogate identifiers, relationship tables, constraints, generated columns and partitioning without mixing their responsibilities.</p>
+
+<pre><code>CREATE SCHEMA commerce;
+CREATE SCHEMA catalog;
+
+CREATE TABLE commerce.customer (
+    customer_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_no text NOT NULL,
+    email text NOT NULL,
+    display_name text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT customer_account_no_uq UNIQUE (account_no),
+    CONSTRAINT customer_email_uq UNIQUE (email)
+);
+
+CREATE TABLE catalog.product (
+    product_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    sku text NOT NULL,
+    name text NOT NULL,
+    current_price numeric(12,2) NOT NULL,
+
+    CONSTRAINT product_sku_uq UNIQUE (sku),
+    CONSTRAINT product_price_nonnegative
+        CHECK (current_price &gt;= 0)
+);
+
+CREATE TABLE commerce.orders (
+    order_id bigint GENERATED ALWAYS AS IDENTITY,
+    customer_id bigint NOT NULL,
+    order_date date NOT NULL DEFAULT current_date,
+    status text NOT NULL,
+    shipping_name text NOT NULL,
+    shipping_address text NOT NULL,
+
+    PRIMARY KEY (order_id, order_date),
+
+    CONSTRAINT orders_customer_fk
+        FOREIGN KEY (customer_id)
+        REFERENCES commerce.customer(customer_id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT orders_status_ck
+        CHECK (status IN (
+            'draft','submitted','paid','shipped','cancelled'
+        ))
+) PARTITION BY RANGE (order_date);
+
+CREATE TABLE commerce.orders_2026
+PARTITION OF commerce.orders
+FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+
+CREATE TABLE commerce.order_line (
+    order_id bigint NOT NULL,
+    order_date date NOT NULL,
+    line_no integer NOT NULL,
+    product_id bigint NOT NULL,
+    quantity integer NOT NULL,
+    unit_price numeric(12,2) NOT NULL,
+
+    line_total numeric(14,2)
+        GENERATED ALWAYS AS (
+            quantity * unit_price
+        ) STORED,
+
+    PRIMARY KEY (order_id, order_date, line_no),
+
+    CONSTRAINT order_line_order_fk
+        FOREIGN KEY (order_id, order_date)
+        REFERENCES commerce.orders(order_id, order_date)
+        ON DELETE CASCADE,
+
+    CONSTRAINT order_line_product_fk
+        FOREIGN KEY (product_id)
+        REFERENCES catalog.product(product_id),
+
+    CONSTRAINT order_line_quantity_ck
+        CHECK (quantity &gt; 0),
+
+    CONSTRAINT order_line_price_ck
+        CHECK (unit_price &gt;= 0)
+);</code></pre>
+
+<h3>25.1 Why snapshot shipping data?</h3>
+<p>The customer table stores current customer identity and contact state. An order's shipping name/address can intentionally be copied into the order if the requirement is to preserve what was used for that transaction even after the customer edits their profile. That is not accidental denormalization: it models a distinct historical fact with a different lifecycle.</p>
+
+<h3>25.2 Why copy unit price into the order line?</h3>
+<p><code>catalog.product.current_price</code> is current catalog state, whereas <code>order_line.unit_price</code> is the agreed transaction-time price. They may begin equal, but they represent different facts. Keeping only a foreign key to product price would make historical orders change meaning when catalog prices change.</p>
+
+<h3>25.3 Why generated <code>line_total</code>?</h3>
+<p>Line total is a deterministic same-row function of quantity and unit price, which fits a generated column. By contrast, an order-wide total is an aggregate across several rows and cannot be expressed as a generated column under PostgreSQL's generated-column rules.<sup><a href="#r22">[22]</a></sup></p>
+</section>
+
+<section id="evolution"><h2>26. Schema evolution and constraint rollout</h2>
+<p>Production schema design includes how invariants are introduced to existing data. PostgreSQL validates ordinary newly added constraints immediately unless a supported constraint form is added with deferred validation semantics. Large migrations often need staged backfills, concurrent indexes and final constraint validation rather than one blocking rewrite.</p>
+
+<h3>26.1 Add a constraint after cleaning data</h3>
+<pre><code>ALTER TABLE commerce.customer
+ADD CONSTRAINT customer_email_nonempty
+CHECK (email &lt;&gt; '') NOT VALID;
+
+-- Clean/verify legacy rows.
+
+ALTER TABLE commerce.customer
+VALIDATE CONSTRAINT customer_email_nonempty;</code></pre>
+
+<p><code>NOT VALID</code> is useful for supported <code>CHECK</code>/foreign-key deployment paths because new writes are constrained while validation of historical rows can be performed separately. Exact locking/validation behavior should be reviewed for the PostgreSQL version and command being deployed.<sup><a href="#r25">[25]</a></sup></p>
+
+<h3>26.2 Preserve candidate keys through migrations</h3>
+<p>When replacing a natural primary key with a surrogate key, do not automatically drop the old natural uniqueness rule. If the natural identifier remains a domain candidate key, migrate it to <code>UNIQUE NOT NULL</code> rather than allowing duplicates after the primary-key change.</p>
+</section>
+
+<section id="antipatterns"><h2>27. Common schema-design antipatterns</h2>
+
+<h3>27.1 Comma-separated IDs in a text column</h3>
+<pre><code>-- Hard to constrain and join correctly:
+product_ids text  -- '12,44,98'</code></pre>
+<p>Use an associative table when values represent relationships requiring referential integrity, independent querying or unbounded cardinality.</p>
+
+<h3>27.2 “Everything JSONB”</h3>
+<p>JSONB is valuable for genuinely document-like, sparse or evolving attributes, but core relational keys and invariants are easier to enforce when important attributes are typed columns with constraints. Use semi-structured storage deliberately rather than to avoid modeling decisions.</p>
+
+<h3>27.3 Surrogate key plus no business uniqueness</h3>
+<p>An auto-generated <code>id</code> prevents duplicate IDs but does nothing to prevent duplicate usernames, SKUs, account numbers or other candidate keys. Encode those invariants separately.</p>
+
+<h3>27.4 Nullable-by-default schemas</h3>
+<p>Leaving every column nullable weakens the data model and pushes mandatory-state rules into application code. Use null where absence/unknown is a legitimate state, and <code>NOT NULL</code> otherwise.<sup><a href="#r4">[4]</a></sup></p>
+
+<h3>27.5 Cascading deletes without lifecycle analysis</h3>
+<p><code>ON DELETE CASCADE</code> is appropriate when child rows have no meaning without the parent. Using it on independently valuable audit, financial or historical facts can make a single deletion unexpectedly destructive.</p>
+
+<h3>27.6 Storing derived aggregates without synchronization</h3>
+<p>If <code>order.total</code> duplicates the sum of lines, define who updates it, under what transaction boundary, and how inconsistencies are detected/repaired. Otherwise it is not a cache; it is a second competing source of truth.</p>
+
+<h3>27.7 Partitioning every table</h3>
+<p>Partitioning adds DDL, planning, index and operational complexity. PostgreSQL notes that benefits are generally most relevant for otherwise very large tables and workloads that can prune partitions or exploit partition-level lifecycle operations.<sup><a href="#r13">[13]</a></sup></p>
+
+<h3>27.8 Using a mutable business attribute as a primary key without considering propagation</h3>
+<p>A natural key can be an excellent primary key when stable. If it changes frequently, every referencing foreign key may need updates, possibly making a surrogate relationship key operationally simpler while retaining a unique constraint on the business value.</p>
+
+<h3>27.9 Assuming 3NF/BCNF automatically means fastest</h3>
+<p>Normal forms reason about dependencies and redundancy, not latency. A normalized design can require joins; whether a measured workload benefits from materialized/duplicated data is a separate physical-design question.</p>
+</section>
+
+<section id="checklist"><h2>28. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Define the grain of every table.</strong> One row should represent one clearly stated fact.</li>
+<li><strong>Identify all candidate keys before choosing the primary key.</strong></li>
+<li><strong>Enforce alternate candidate keys with UNIQUE and appropriate NOT NULL constraints.</strong></li>
+<li><strong>Choose natural versus surrogate primary keys based on stability, width, propagation and domain semantics.</strong></li>
+<li><strong>Do not treat a surrogate ID as a substitute for normalization.</strong></li>
+<li><strong>Model many-to-many relationships with associative tables when the relationship is queryable/constrained.</strong></li>
+<li><strong>Normalize repeated facts at least through the level justified by known functional dependencies.</strong></li>
+<li><strong>Use BCNF analysis for schemas with overlapping candidate keys or subtle determinants.</strong></li>
+<li><strong>Denormalize only with an explicit source of truth and synchronization contract.</strong></li>
+<li><strong>Use NOT NULL for mandatory facts.</strong></li>
+<li><strong>Use CHECK for same-row invariant expressions.</strong></li>
+<li><strong>Use UNIQUE/PRIMARY KEY for candidate-key constraints.</strong></li>
+<li><strong>Use FOREIGN KEY for referential integrity.</strong></li>
+<li><strong>Index referencing foreign-key columns when joins/deletes/updates justify it; PostgreSQL does not add that index automatically.</strong></li>
+<li><strong>Choose ON DELETE/ON UPDATE actions from entity lifecycle semantics, not convenience.</strong></li>
+<li><strong>Use EXCLUDE or PostgreSQL 18 temporal constraints for non-overlap rules.</strong></li>
+<li><strong>Use generated columns for immutable same-row derivations.</strong></li>
+<li><strong>Remember PostgreSQL 18 generated columns are virtual by default.</strong></li>
+<li><strong>Use identity columns for table-local generated identifiers.</strong></li>
+<li><strong>Do not assume identity implies uniqueness; add PRIMARY KEY or UNIQUE.</strong></li>
+<li><strong>Do not require gapless numbering from sequences.</strong></li>
+<li><strong>Partition only when pruning, lifecycle operations, locality or very large table/index sizes justify it.</strong></li>
+<li><strong>Choose partition keys from actual query predicates and retention operations.</strong></li>
+<li><strong>Account for PostgreSQL's requirement that partitioned primary/unique keys include partition-key columns.</strong></li>
+<li><strong>Test schema migrations and constraints against production-scale data and concurrent workloads.</strong></li>
+</ol>
+<div class="callout ok"><strong>Schema-design principle:</strong> model facts once, identify them explicitly, constrain relationships declaratively, and separate logical correctness from physical optimization. PostgreSQL's strongest schemas use the database not merely as storage, but as an executable specification of valid data.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. Data Definition [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl.html">https://www.postgresql.org/docs/18/ddl.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. Identity Columns [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-identity-columns.html">https://www.postgresql.org/docs/18/ddl-identity-columns.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. PostgreSQL 18 Documentation; 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. Constraints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. CREATE TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtable.html">https://www.postgresql.org/docs/18/sql-createtable.html</a></li>
+
+<li id="r6">University of New South Wales. Data modelling and OO/ER data models: Keys and Relationship Sets [Internet]. COMP3311 Database Systems; [cited 2026 Sep 16]. Available from: <a href="https://cgi.cse.unsw.edu.au/~cs3311/22T3/notes/A/notes.html">https://cgi.cse.unsw.edu.au/~cs3311/22T3/notes/A/notes.html</a></li>
+<li id="r7">University of Illinois Chicago. Database Systems notes: superkeys and candidate keys [Internet]. CS 480; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.cs.uic.edu/~bglavic/cs480/2026-spring/schedule/notes/">https://www.cs.uic.edu/~bglavic/cs480/2026-spring/schedule/notes/</a></li>
+<li id="r8">Cornell University Center for Advanced Computing. First Normal Form (1NF) [Internet]. Cornell Virtual Workshop; [cited 2026 Sep 16]. Available from: <a href="https://cvw.cac.cornell.edu/RelationalDBs/design-create/first_normal_form">https://cvw.cac.cornell.edu/RelationalDBs/design-create/first_normal_form</a></li>
+<li id="r9">Cornell University Center for Advanced Computing. Second Normal Form (2NF) [Internet]. Cornell Virtual Workshop; [cited 2026 Sep 16]. Available from: <a href="https://cvw.cac.cornell.edu/RelationalDBs/design-create/second_normal_form">https://cvw.cac.cornell.edu/RelationalDBs/design-create/second_normal_form</a></li>
+<li id="r10">University of Wollongong. Database Normalization: functional dependencies, 2NF, 3NF and BCNF [Internet]. CSCI235 Database Systems; 2026 [cited 2026 Sep 16]. Available from: <a href="https://documents.uow.edu.au/~jrg/235/slides/03databasenormalization/03databasenormalization.html">https://documents.uow.edu.au/~jrg/235/slides/03databasenormalization/03databasenormalization.html</a></li>
+<li id="r11">Rensselaer Polytechnic Institute. Normalization: Boyce-Codd Normal Form [Internet]. CSCI 4380 Database Systems; [cited 2026 Sep 16]. Available from: <a href="https://www.cs.rpi.edu/~sibel/csci4380/fall2023/course_notes/normalization.html">https://www.cs.rpi.edu/~sibel/csci4380/fall2023/course_notes/normalization.html</a></li>
+<li id="r12">Birkbeck, University of London. Relational Database Design: Normal Forms and BCNF [Internet]. Database Management lecture notes; [cited 2026 Sep 16]. Available from: <a href="https://www.dcs.bbk.ac.uk/~ptw/teaching/DBM/normal-forms.pdf">https://www.dcs.bbk.ac.uk/~ptw/teaching/DBM/normal-forms.pdf</a></li>
+<li id="r13">PostgreSQL Global Development Group. Table Partitioning [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-partitioning.html">https://www.postgresql.org/docs/18/ddl-partitioning.html</a></li>
+<li id="r14">University of New South Wales. Entity sets, keys and relationship sets [Internet]. COMP3311 notes; [cited 2026 Sep 16]. Available from: <a href="https://cgi.cse.unsw.edu.au/~cs3311/22T3/notes/A/notes.html">https://cgi.cse.unsw.edu.au/~cs3311/22T3/notes/A/notes.html</a></li>
+<li id="r15">University at Buffalo. Relational Model: Integrity constraints, superkeys and candidate keys [Internet]. CSE 462/562 Database Systems; 2024 [cited 2026 Sep 16]. Available from: <a href="https://cse.buffalo.edu/adblab/people/zzhao35/teaching/cse562_spring24/files/07-rm.pdf">https://cse.buffalo.edu/adblab/people/zzhao35/teaching/cse562_spring24/files/07-rm.pdf</a></li>
+<li id="r16">PostgreSQL Global Development Group. CREATE TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtable.html">https://www.postgresql.org/docs/18/sql-createtable.html</a></li>
+<li id="r17">Edinburgh Napier University. Database Systems: Keys [Internet]. [cited 2026 Sep 16]. Available from: <a href="https://soc-web-liv-20.napier.ac.uk/db/Notes/Model/keys/">https://soc-web-liv-20.napier.ac.uk/db/Notes/Model/keys/</a></li>
+<li id="r18">PostgreSQL Global Development Group. Data Types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype.html">https://www.postgresql.org/docs/18/datatype.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. pg_constraint [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-constraint.html">https://www.postgresql.org/docs/18/catalog-pg-constraint.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. Unique Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-unique.html">https://www.postgresql.org/docs/18/indexes-unique.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. Exclusion Constraints / CREATE TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. Generated Columns [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-generated-columns.html">https://www.postgresql.org/docs/18/ddl-generated-columns.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. CREATE SEQUENCE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createsequence.html">https://www.postgresql.org/docs/18/sql-createsequence.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes: Temporal Constraints [Internet]. 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. Modifying Tables [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-alter.html">https://www.postgresql.org/docs/18/ddl-alter.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. Information Schema: table_constraints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/infoschema-table-constraints.html">https://www.postgresql.org/docs/18/infoschema-table-constraints.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. ALTER SEQUENCE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altersequence.html">https://www.postgresql.org/docs/18/sql-altersequence.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. Sequence Information Schema [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/infoschema-sequences.html">https://www.postgresql.org/docs/18/infoschema-sequences.html</a></li>
+<li id="r29">Cornell University Center for Advanced Computing. Database Normalization [Internet]. Cornell Virtual Workshop; [cited 2026 Sep 16]. Available from: <a href="https://cvw.cac.cornell.edu/RelationalDBs/design-create/database_normalization">https://cvw.cac.cornell.edu/RelationalDBs/design-create/database_normalization</a></li>
+<li id="r30">Florida Institute of Technology. Relational Database Design: Keys and Functional Dependencies [Internet]. Database Systems lecture slides; [cited 2026 Sep 16]. Available from: <a href="https://cs.fit.edu/~pbernhar/teaching/Teaching/DatabaseSystems/Slides/DatabaseDesign.pdf">https://cs.fit.edu/~pbernhar/teaching/Teaching/DatabaseSystems/Slides/DatabaseDesign.pdf</a></li>
+<li id="r31">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol></section>
+</main>
+<footer><p>This article is a technical reference. Schema quality depends on the domain's actual keys, functional dependencies, lifecycle rules, null semantics, query/write workloads, retention policy and concurrency model. Treat normalization as a logical-design tool, constraints as executable invariants, and partitioning/denormalization as physical/operational choices validated with representative production behavior.</p></footer>
+</body>
+</html>

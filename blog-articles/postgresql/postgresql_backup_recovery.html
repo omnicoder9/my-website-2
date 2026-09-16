@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL backup and recovery: logical dumps, pg_dump, pg_dumpall, physical and incremental base backups, pg_basebackup, pg_restore, WAL archiving, PITR, recovery targets, disaster recovery, verification, and restore testing.">
+<title>PostgreSQL Backup &amp; Recovery</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1000px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:840px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Backup &amp; Recovery</h1>
+  <p class="dek">A production-oriented guide to logical dumps, <code>pg_dump</code>, <code>pg_dumpall</code>, physical and incremental base backups, <code>pg_basebackup</code>, <code>pg_restore</code>, continuous WAL archiving, point-in-time recovery, recovery targets and timelines, disaster recovery, backup verification, and recurring recovery tests.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL documents three fundamental backup approaches: SQL dumps, file-system-level backups, and continuous archiving. They solve different recovery problems. Logical dumps reconstruct database objects and data through SQL-level operations and are portable/selective. Physical backups copy the database cluster's files and are the normal starting point for fast whole-cluster recovery. Continuous archiving combines a physical base backup with an unbroken WAL archive so PostgreSQL can replay changes after the base backup and stop at a selected point in time, transaction, restore point, or WAL position.<sup><a href="#r1">[1]</a></sup>
+</p>
+<p>
+A backup system is defined by the recovery result it can actually produce, not by successful completion of a backup command. A <code>pg_dump</code> of one database does not include cluster-wide roles and tablespaces; an incremental <code>pg_basebackup</code> is not independently restorable; a base backup without required WAL cannot perform PITR; and a checksum/manifest verification does not prove that applications can start and operate after recovery. PostgreSQL's own <code>pg_verifybackup</code> documentation explicitly states that successful verification is not a substitute for test restores.<sup><a href="#r2">[2]</a>-<a href="#r6">[6]</a></sup>
+</p>
+<p>
+A production strategy therefore begins with recovery objectives. Recovery point objective (RPO) determines how much committed data may be lost, while recovery time objective (RTO) determines how long restoration may take. Those objectives drive backup frequency, WAL archival latency, full/incremental cadence, retention, restore parallelism, off-site copies, and how often recovery exercises must be performed.
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">Backup and recovery model</a></li>
+<li><a href="#objectives">RPO, RTO, and failure classes</a></li>
+<li><a href="#logical">Logical backups</a></li>
+<li><a href="#pgdump">pg_dump</a></li>
+<li><a href="#formats">Dump formats and parallelism</a></li>
+<li><a href="#pgdumpall">pg_dumpall and globals</a></li>
+<li><a href="#logical-restore">Logical restore</a></li>
+<li><a href="#pgrestore">pg_restore</a></li>
+<li><a href="#physical">Physical backups</a></li>
+<li><a href="#pgbasebackup">pg_basebackup</a></li>
+<li><a href="#incremental">Incremental physical backups</a></li>
+<li><a href="#combine">pg_combinebackup</a></li>
+<li><a href="#wal">WAL archiving</a></li>
+<li><a href="#continuous">Continuous archiving</a></li>
+<li><a href="#pitr">Point-in-time recovery</a></li>
+<li><a href="#targets">Recovery targets</a></li>
+<li><a href="#restorepoints">Named restore points</a></li>
+<li><a href="#timelines">Recovery timelines</a></li>
+<li><a href="#filesystem">File-system backups</a></li>
+<li><a href="#verify">Backup verification</a></li>
+<li><a href="#testing">Recovery testing</a></li>
+<li><a href="#disaster">Disaster recovery architecture</a></li>
+<li><a href="#monitoring">Monitoring backup health</a></li>
+<li><a href="#security">Security and trust</a></li>
+<li><a href="#runbooks">Recovery runbooks</a></li>
+<li><a href="#strategy">Reference backup strategy</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. Backup and recovery model</h2>
+
+<div class="diagram">                    PostgreSQL production cluster
+                              |
+              +---------------+----------------+
+              |                                |
+              v                                v
+       logical export                   physical base backup
+      pg_dump / pg_dumpall                pg_basebackup
+              |                                |
+              |                                +--------+
+              |                                         |
+              v                                         v
+       portable archive                         backup_manifest
+   schema + data + metadata                           +
+                                                    WAL archive
+                                                      |
+                                                      v
+                                                PITR recovery
+
+Recovery paths:
+
+logical dump  ---> new/empty database ---> pg_restore / psql
+physical full ---> data directory ------> PostgreSQL recovery
+incremental ---> pg_combinebackup ------> reconstructed full ---> recovery
+base + WAL ----> recovery.signal -------> restore_command -----> target point</div>
+
+<h3>1.1 Match the mechanism to the recovery unit</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Requirement</th><th>Primary mechanism</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Restore one table/schema/database</td><td><code>pg_dump</code>/<code>pg_restore</code></td><td>Logical/selective object-level recovery.</td></tr>
+<tr><td>Move database across architectures or major versions</td><td>Logical dump/restore</td><td>Logical representation is more portable than physical files.</td></tr>
+<tr><td>Fast full-cluster recovery</td><td><code>pg_basebackup</code> / physical backup</td><td>Restores database files rather than replaying object creation/data import.</td></tr>
+<tr><td>Recover to 10:31:42 before accidental DELETE</td><td>Base backup + continuous WAL archive</td><td>PITR replays WAL to a target.</td></tr>
+<tr><td>Preserve roles/tablespaces with per-database dumps</td><td><code>pg_dumpall --globals-only</code></td><td>Globals are cluster-wide and not included by <code>pg_dump</code>.</td></tr>
+<tr><td>Reduce large physical backup size/time</td><td>Incremental <code>pg_basebackup</code> + <code>pg_combinebackup</code></td><td>Backs up changed relation blocks relative to an earlier manifest.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout">
+<strong>Use more than one layer.</strong> A common production design keeps logical dumps for object-level portability and physical/PITR backups for whole-cluster disaster recovery. Each covers failure and recovery modes the other handles poorly.
+</div>
+</section>
+
+<section id="objectives">
+<h2>2. RPO, RTO, and failure classes</h2>
+<p>
+Before choosing tools, define what must survive. An RPO of 24 hours can be satisfied by a daily snapshot if that amount of data loss is acceptable. An RPO measured in minutes or seconds normally requires frequent/off-host WAL archival or another continuously captured change stream. RTO then determines whether recovery can spend hours replaying WAL/importing dumps or needs a recent physical base backup and heavily practiced automation.
+</p>
+
+<h3>2.1 Think in failure classes</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Failure</th><th>Likely recovery mechanism</th></tr></thead>
+<tbody>
+<tr><td>Accidentally dropped one table</td><td>Restore table from logical dump or restore physical/PITR copy elsewhere and extract table.</td></tr>
+<tr><td>Bad deployment at 14:06</td><td>PITR to just before the damaging transaction if rolling forward is not feasible.</td></tr>
+<tr><td>Entire data volume lost</td><td>Physical base backup + WAL archive, or logical rebuild if dataset/RTO permit.</td></tr>
+<tr><td>Primary and replicas corrupted by replicated mistake</td><td>Independent backup/PITR repository.</td></tr>
+<tr><td>Need cross-major migration</td><td><code>pg_dump</code>/<code>pg_restore</code>, <code>pg_upgrade</code>, or logical replication—not raw physical restore into a different major release.</td></tr>
+<tr><td>Need one user's row from yesterday</td><td>Recover backup/PITR to isolated server, extract data, reconcile selectively.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="logical">
+<h2>3. Logical backups</h2>
+<p>
+A logical backup represents database objects and data independently of PostgreSQL's on-disk page layout. <code>pg_dump</code> exports one database; <code>pg_dumpall</code> can export every database plus cluster-wide global objects. Logical dumps are consistent while the database is in use and do not block ordinary readers or writers, although they take locks that protect dumped objects from conflicting DDL while the dump is running.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>3.1 Strengths</h3>
+<p>
+Logical backups are selective, inspectable, and useful for migrations. Archive-format dumps let <code>pg_restore</code> select and reorder objects and can restore data/index creation in parallel. They are particularly valuable when one schema/table must be recovered without replacing the whole cluster.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>3.2 Limitations</h3>
+<p>
+Large logical restores can take substantially longer than physical recovery because PostgreSQL must create objects, load rows, build indexes, and validate constraints. <code>pg_dump</code> covers one database and does not include cluster-global roles/tablespaces. PostgreSQL's <code>pg_dump</code> documentation also cautions that it is generally not the right primary mechanism for regular production backups except in simpler cases.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="pgdump">
+<h2>4. <code>pg_dump</code></h2>
+
+<h3>4.1 Plain SQL dump</h3>
+<pre><code>pg_dump \
+  --host=db.internal \
+  --username=backup_user \
+  --dbname=appdb \
+  --file=appdb-2026-09-15.sql</code></pre>
+
+<pre><code># Restore with psql, not pg_restore:
+createdb -T template0 appdb_restore
+
+psql \
+  -X \
+  --dbname=appdb_restore \
+  --file=appdb-2026-09-15.sql</code></pre>
+
+<p>
+Plain-text output contains SQL commands and is restored through <code>psql</code>. PostgreSQL recommends <code>psql -X</code> for plain dump restoration so local <code>psqlrc</code> settings do not interfere with the restore.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>4.2 Custom archive</h3>
+<pre><code>pg_dump \
+  --format=custom \
+  --compress=zstd:6 \
+  --dbname=appdb \
+  --file=appdb-2026-09-15.dump</code></pre>
+
+<p>
+Custom-format archives are consumed by <code>pg_restore</code>, support selective restore, and permit parallel restore.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>4.3 Directory archive with parallel dump</h3>
+<pre><code>pg_dump \
+  --format=directory \
+  --jobs=8 \
+  --dbname=appdb \
+  --file=/backup/appdb-2026-09-15</code></pre>
+
+<p>
+Parallel dump is supported by directory format. PostgreSQL opens the leader connection plus worker connections, so the connection limit and production load must be considered.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>4.4 Selective logical backup</h3>
+<pre><code># Schema:
+pg_dump -Fc -n billing appdb &gt; billing.dump
+
+# Table and its matching patterns:
+pg_dump -Fc -t 'audit.*' appdb &gt; audit.dump
+
+# Schema only:
+pg_dump -Fc --schema-only appdb &gt; appdb-schema.dump
+
+# Data only:
+pg_dump -Fc --data-only appdb &gt; appdb-data.dump</code></pre>
+
+<div class="callout warn">
+<strong>Selective dumps can omit dependencies.</strong> PostgreSQL does not guarantee that a schema/table-only dump can restore into an empty database by itself because objects outside the selection may be required.<sup><a href="#r2">[2]</a></sup>
+</div>
+
+<h3>4.5 Version rules</h3>
+<p>
+A newer <code>pg_dump</code> can generally dump older PostgreSQL servers, but <code>pg_dump</code> refuses to dump a server newer than its own major version. Dump output is intended to load into newer server versions; loading into an older major version is not guaranteed and can require manual changes.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="formats">
+<h2>5. Dump formats and parallelism</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Format</th><th>Create</th><th>Restore</th><th>Parallel dump</th><th>Parallel restore</th><th>Selective restore</th></tr></thead>
+<tbody>
+<tr><td>Plain SQL</td><td><code>pg_dump -Fp</code></td><td><code>psql</code></td><td>No</td><td>No</td><td>Edit/filter SQL manually</td></tr>
+<tr><td>Custom</td><td><code>pg_dump -Fc</code></td><td><code>pg_restore</code></td><td>No</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Directory</td><td><code>pg_dump -Fd</code></td><td><code>pg_restore</code></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Tar</td><td><code>pg_dump -Ft</code></td><td><code>pg_restore</code></td><td>No</td><td>Limited by format; not the typical parallel choice</td><td>Yes</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>5.1 Parallel restore</h3>
+<pre><code>createdb -T template0 appdb_restore
+
+pg_restore \
+  --dbname=appdb_restore \
+  --jobs=8 \
+  --exit-on-error \
+  appdb-2026-09-15.dump</code></pre>
+
+<p>
+For custom/directory archives, <code>pg_restore -j</code> parallelizes time-consuming data loads, index creation, and constraint creation using multiple database sessions. PostgreSQL advises tuning job count to CPU, disk, client/server placement, and workload; excessive concurrency can cause contention.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="pgdumpall">
+<h2>6. <code>pg_dumpall</code> and cluster-global objects</h2>
+<p>
+<code>pg_dumpall</code> generates a SQL script for all databases and includes global objects that <code>pg_dump</code> does not: database roles, tablespaces, and grants for configuration parameters. Internally it invokes <code>pg_dump</code> for each database.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>6.1 Full cluster logical script</h3>
+<pre><code>pg_dumpall \
+  --file=cluster-2026-09-15.sql</code></pre>
+
+<pre><code>psql -X \
+  --dbname=postgres \
+  --file=cluster-2026-09-15.sql</code></pre>
+
+<h3>6.2 Globals-only companion backup</h3>
+<pre><code>pg_dumpall \
+  --globals-only \
+  --file=globals-2026-09-15.sql</code></pre>
+
+<p>
+A practical design is to dump each large application database in custom/directory format for parallel restore and separately dump cluster globals with <code>pg_dumpall --globals-only</code>.
+</p>
+
+<h3>6.3 Role-password sensitivity</h3>
+<pre><code>pg_dumpall \
+  --globals-only \
+  --no-role-passwords \
+  --file=globals-no-passwords.sql</code></pre>
+
+<p>
+By default, a complete globals dump can contain password verifiers for roles. PostgreSQL provides <code>--no-role-passwords</code> when those should not be included, but restored roles then require passwords to be set before password authentication can succeed.<sup><a href="#r3">[3]</a></sup>
+</p>
+</section>
+
+<section id="logical-restore">
+<h2>7. Logical restore workflow</h2>
+
+<div class="diagram">archive
+  |
+  +--> restore cluster globals (if needed)
+  |
+  +--> create empty database from template0
+  |
+  +--> restore pre-data schema
+  |
+  +--> load table data (parallel where possible)
+  |
+  +--> create indexes / constraints / triggers
+  |
+  +--> restore grants / comments / statistics (when present)
+  |
+  +--> ANALYZE as needed
+  |
+  +--> application validation</div>
+
+<h3>7.1 Restore into a truly empty database</h3>
+<pre><code>createdb \
+  --template=template0 \
+  appdb_restore
+
+pg_restore \
+  --dbname=appdb_restore \
+  --jobs=8 \
+  --exit-on-error \
+  appdb.dump</code></pre>
+
+<p>
+PostgreSQL recommends <code>template0</code> when an empty destination is required so local additions to <code>template1</code> do not collide with objects from the dump.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>7.2 Restore roles first when ownership matters</h3>
+<pre><code>psql -X \
+  --dbname=postgres \
+  --file=globals.sql
+
+createdb -T template0 appdb_restore
+
+pg_restore \
+  --dbname=appdb_restore \
+  appdb.dump</code></pre>
+
+<p>
+Object ownership and ACL recreation can fail if referenced roles do not exist. Restoring required roles before database objects avoids that class of failure.
+</p>
+</section>
+
+<section id="pgrestore">
+<h2>8. <code>pg_restore</code></h2>
+<p>
+<code>pg_restore</code> restores non-plain <code>pg_dump</code> archives. It can restore directly to a database or emit an equivalent SQL script, selectively include/exclude objects, reorder archive entries, and parallelize data/index/constraint work for custom and directory archives.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>8.1 Recreate original database</h3>
+<pre><code>pg_restore \
+  --clean \
+  --if-exists \
+  --create \
+  --dbname=postgres \
+  appdb.dump</code></pre>
+
+<p>
+With <code>--create</code>, the database specified to <code>--dbname</code> is used only as the initial connection from which the database embedded in the archive is dropped/created; restore then reconnects to that database.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>8.2 Inspect archive before restore</h3>
+<pre><code>pg_restore \
+  --list \
+  appdb.dump \
+  &gt; appdb.list</code></pre>
+
+<pre><code># Edit appdb.list, comment/reorder items, then:
+pg_restore \
+  --use-list=appdb.list \
+  --dbname=appdb_restore \
+  appdb.dump</code></pre>
+
+<h3>8.3 Restore one schema/table</h3>
+<pre><code>pg_restore \
+  --schema=billing \
+  --dbname=appdb_restore \
+  appdb.dump
+
+pg_restore \
+  --table=invoice \
+  --dbname=appdb_restore \
+  appdb.dump</code></pre>
+
+<p>
+Selective restore does not automatically restore every dependency of the selected object. Validate the target schema and dependency graph rather than assuming a table-only restore is self-contained.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>8.4 Transaction strategies</h3>
+<pre><code># Atomic all-or-nothing restore:
+pg_restore \
+  --single-transaction \
+  --dbname=appdb_restore \
+  appdb.dump
+
+# PostgreSQL 18: bounded object batches:
+pg_restore \
+  --transaction-size=2000 \
+  --dbname=appdb_restore \
+  appdb.dump</code></pre>
+
+<p>
+PostgreSQL 18 supports <code>--transaction-size</code>, which offers a middle ground between one transaction per command and one enormous restore transaction. The latter can consume large amounts of lock-table space in large schemas.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="physical">
+<h2>9. Physical backups</h2>
+<p>
+A physical backup copies the PostgreSQL cluster's storage files in a form usable by the PostgreSQL server. It includes all databases in that cluster and is tied to PostgreSQL's physical storage format. Physical backups are therefore ideal for rapid cluster recovery but are not the mechanism for selectively restoring one table or moving arbitrarily between major server versions.<sup><a href="#r1">[1]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>9.1 What must be consistent</h3>
+<p>
+PostgreSQL data spans the main data directory plus any tablespace directories. A naive live filesystem copy can capture mutually inconsistent pages unless PostgreSQL's online backup protocol/base-backup tooling or a filesystem snapshot strategy satisfying PostgreSQL's consistency requirements is used. Stopping the server and copying every required file is conceptually simple, while <code>pg_basebackup</code> is the normal online physical backup tool.<sup><a href="#r1">[1]</a><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="pgbasebackup">
+<h2>10. <code>pg_basebackup</code></h2>
+<p>
+<code>pg_basebackup</code> takes an online physical backup of a running PostgreSQL cluster using the replication protocol. A full backup is an exact cluster copy; PostgreSQL 18 also supports incremental base backups. The utility automatically manages PostgreSQL backup mode and can include/stream the WAL needed to make the resulting backup internally recoverable.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.1 Replication role and HBA</h3>
+<pre><code>CREATE ROLE backup_repl
+LOGIN
+REPLICATION
+PASSWORD 'managed-out-of-band';</code></pre>
+
+<pre><code># pg_hba.conf
+hostssl replication backup_repl 10.20.30.0/24 scram-sha-256</code></pre>
+
+<h3>10.2 Plain full backup</h3>
+<pre><code>pg_basebackup \
+  --host=pg-primary.internal \
+  --username=backup_repl \
+  --pgdata=/backup/full/2026-09-15 \
+  --format=plain \
+  --wal-method=stream \
+  --checkpoint=fast \
+  --progress</code></pre>
+
+<p>
+The replication account must have <code>REPLICATION</code> or superuser rights, HBA must permit the replication connection, and <code>max_wal_senders</code> must have capacity for the backup connection plus an extra sender when WAL is streamed concurrently.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.3 Tar-format backup</h3>
+<pre><code>pg_basebackup \
+  --host=pg-primary.internal \
+  --username=backup_repl \
+  --pgdata=/backup/tar/2026-09-15 \
+  --format=tar \
+  --compress=zstd:6 \
+  --wal-method=stream \
+  --progress</code></pre>
+
+<h3>10.4 Take backup from a standby</h3>
+<p>
+<code>pg_basebackup</code> can run against a suitably configured standby, which can offload backup I/O from the primary. PostgreSQL documents limitations: the primary must use <code>full_page_writes</code>, backup may wait for needed WAL under some modes, and the backup fails if the standby is promoted while the backup is running.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.5 Monitor base-backup progress</h3>
+<pre><code>SELECT
+    pid,
+    phase,
+    backup_total,
+    backup_streamed,
+    tablespaces_total,
+    tablespaces_streamed
+FROM pg_stat_progress_basebackup;</code></pre>
+
+<p>
+PostgreSQL exposes active base-backup progress through <code>pg_stat_progress_basebackup</code> on the server.<sup><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="incremental">
+<h2>11. Incremental physical backups</h2>
+<p>
+PostgreSQL 18 can take an incremental base backup relative to the manifest of an earlier backup from the same cluster. For relation files, the incremental can store only blocks changed since the reference backup; non-relation files are generally included in full. PostgreSQL determines changed blocks from WAL summary files under <code>pg_wal/summaries</code>.<sup><a href="#r6">[6]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>11.1 Enable WAL summarization</h3>
+<pre><code># postgresql.conf
+summarize_wal = on</code></pre>
+
+<p>
+Incremental backup requires suitable WAL summaries to exist for the needed interval. If required summaries are unavailable, the incremental backup fails.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>11.2 Take an incremental backup</h3>
+<pre><code>pg_basebackup \
+  --host=pg-primary.internal \
+  --username=backup_repl \
+  --pgdata=/backup/incr/2026-09-16 \
+  --incremental=/backup/full/2026-09-15/backup_manifest \
+  --wal-method=stream \
+  --progress</code></pre>
+
+<h3>11.3 Backup dependency graph</h3>
+<div class="diagram">Full F0
+  |
+  +--> Incremental I1
+         |
+         +--> Incremental I2
+                |
+                +--> Incremental I3
+
+To recover I3 state:
+F0 + I1 + I2 + I3
+        |
+        v
+pg_combinebackup
+        |
+        v
+synthetic/reconstructed full backup</div>
+
+<p>
+PostgreSQL does not maintain an external backup catalog that knows which older backups remain required by future incrementals. Operators must track chain dependencies and avoid deleting an ancestor needed to reconstruct a retained descendant.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>11.4 When incremental backups help</h3>
+<p>
+They are most useful for large clusters where only a modest fraction of relation blocks changes between backups. For small databases or highly rewritten data sets, full backups can be simpler and may provide little additional storage cost relative to incrementals.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="combine">
+<h2>12. <code>pg_combinebackup</code></h2>
+<p>
+An incremental base backup cannot be used directly as a PostgreSQL data directory. <code>pg_combinebackup</code> combines a full backup and all dependent incremental backups into a reconstructed full backup suitable for recovery. Input backups must be specified in chronological order.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<pre><code>pg_combinebackup \
+  /backup/full/2026-09-15 \
+  /backup/incr/2026-09-16 \
+  /backup/incr/2026-09-17 \
+  --output=/restore/full-2026-09-17</code></pre>
+
+<h3>12.1 Verify the reconstructed backup</h3>
+<pre><code>pg_verifybackup \
+  /restore/full-2026-09-17</code></pre>
+
+<p>
+By default, <code>pg_combinebackup</code> creates a new backup manifest for the reconstructed backup, which allows subsequent integrity verification.<sup><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="wal">
+<h2>13. WAL archiving</h2>
+<p>
+Continuous archiving relies on preserving completed WAL segment files outside <code>pg_wal</code>. Once PostgreSQL successfully archives a segment, the local segment can eventually be recycled or removed; the external archive must retain every WAL segment required to recover retained base backups through their desired recovery windows.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>13.1 Enable archiving</h3>
+<pre><code># postgresql.conf
+wal_level = replica
+archive_mode = on
+
+archive_command =
+  'test ! -f /mnt/postgres-wal/%f &amp;&amp; cp %p /mnt/postgres-wal/%f'</code></pre>
+
+<p>
+<code>%p</code> expands to the source WAL path and <code>%f</code> to its file name. The command must return zero only after successful archival. PostgreSQL repeatedly retries a failed archive command, so archive destinations/scripts should be idempotent and must not silently overwrite an existing segment with different contents.<sup><a href="#r6">[6]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>13.2 Archive module alternative</h3>
+<pre><code># Example module supplied by PostgreSQL:
+archive_mode = on
+archive_library = 'basic_archive'
+basic_archive.archive_directory = '/mnt/postgres-wal'</code></pre>
+
+<p>
+PostgreSQL supports <code>archive_library</code> modules as an alternative to shell-based <code>archive_command</code>. The documentation notes that an archive module can be more robust and performant than invoking a shell command for each archived segment; <code>basic_archive</code> is supplied as a working example rather than a complete remote backup product.<sup><a href="#r16">[16]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>13.3 Force a WAL switch</h3>
+<pre><code>SELECT pg_switch_wal();</code></pre>
+
+<p>
+Archiving normally occurs after a segment completes. <code>pg_switch_wal()</code> forces PostgreSQL to begin a new WAL segment so a partially used current segment becomes archivable.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>13.4 Archive timeout</h3>
+<pre><code># Example only; choose from RPO and WAL volume:
+archive_timeout = '5min'</code></pre>
+
+<p>
+<code>archive_timeout</code> can force WAL segment switches when workload is quiet, reducing how long committed WAL waits in the current segment before archiving. PostgreSQL warns against excessively short values because prematurely closed segments still consume full segment-sized archive storage.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<div class="callout danger">
+<strong>Archive-command failure is a storage incident.</strong> If archiving cannot succeed, PostgreSQL retains WAL in <code>pg_wal</code>. Persistent archival failure can consume the filesystem and eventually threaten database availability.
+</div>
+</section>
+
+<section id="continuous">
+<h2>14. Continuous archiving</h2>
+<p>
+The continuous-archive model combines two artifacts: a base backup and all archived WAL needed after that backup. During recovery, PostgreSQL restores the physical files from the base backup, then repeatedly obtains archived WAL and replays it forward. This can reconstruct the database to a much later point than the base backup itself.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<div class="diagram">time ------------------------------------------------------------>
+
+Base backup B0
+      |
+      v
+  [cluster files]
+      \
+       + WAL 001
+       + WAL 002
+       + WAL 003
+       + WAL 004
+       + WAL 005
+       + ...
+
+Restore:
+B0 + WAL 001 + 002 + 003 + 004
+                         ^
+                         |
+              recovery target here</div>
+
+<h3>14.1 Why base-backup age matters</h3>
+<p>
+An older retained base backup can still be used if every required WAL segment remains available, but recovery then has more WAL to replay. Base-backup cadence therefore affects RTO even when the WAL archive can satisfy the RPO.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>14.2 Keep the chain complete</h3>
+<p>
+A missing required WAL file can make an otherwise intact base backup unrecoverable to later points. Retention policies must consider the oldest retained recoverable base/incremental chain and retain the WAL required from that backup through the end of its advertised recovery window.
+</p>
+</section>
+
+<section id="pitr">
+<h2>15. Point-in-time recovery (PITR)</h2>
+<p>
+PITR restores a physical backup and replays WAL until a configured recovery target. In PostgreSQL 12 and later, recovery settings live in normal server configuration and archive recovery is requested by creating <code>recovery.signal</code> in the data directory. The old <code>recovery.conf</code> mechanism has been removed.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>15.1 Typical restore procedure</h3>
+<pre><code># 1. Stop PostgreSQL.
+systemctl stop postgresql
+
+# 2. Move damaged/current data directory aside.
+mv /var/lib/postgresql/18/main \
+   /var/lib/postgresql/18/main.failed
+
+# 3. Restore a full/reconstructed base backup.
+cp -a /restore/full-2026-09-15 \
+      /var/lib/postgresql/18/main
+
+# 4. Ensure ownership.
+chown -R postgres:postgres \
+    /var/lib/postgresql/18/main
+
+# 5. Request archive recovery.
+touch /var/lib/postgresql/18/main/recovery.signal</code></pre>
+
+<pre><code># postgresql.conf / postgresql.auto.conf in restored cluster
+restore_command =
+  'cp /mnt/postgres-wal/%f %p'
+
+recovery_target_time =
+  '2026-09-15 14:05:59-04'
+
+recovery_target_action = 'promote'</code></pre>
+
+<pre><code># 6. Start in isolated/restricted environment and watch recovery logs.
+systemctl start postgresql</code></pre>
+
+<p>
+The precise filesystem/service commands are environment-specific. The PostgreSQL semantics are that <code>restore_command</code> must retrieve requested archived WAL, <code>recovery.signal</code> enables targeted archive recovery, and the recovery target controls where replay stops.<sup><a href="#r6">[6]</a><a href="#r8">[8]</a><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>15.2 Prefer isolation during forensic recovery</h3>
+<p>
+When recovering from operator error or compromise, start the restored cluster away from normal application traffic. Validate the target point before exposing it, because choosing a target after the damaging transaction simply reconstructs the damaged state.
+</p>
+</section>
+
+<section id="targets">
+<h2>16. Recovery targets</h2>
+<p>
+PostgreSQL supports several mutually exclusive recovery targets. At most one of <code>recovery_target</code>, <code>recovery_target_lsn</code>, <code>recovery_target_name</code>, <code>recovery_target_time</code>, or <code>recovery_target_xid</code> may be configured. If none is set, archive recovery normally replays to the end of available WAL.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Target</th><th>Example</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>Earliest consistent point</td><td><code>recovery_target = 'immediate'</code></td><td>Recover only to the point where the restored online backup becomes consistent.</td></tr>
+<tr><td>Time</td><td><code>recovery_target_time = '2026-09-15 14:05:59-04'</code></td><td>Common operator-error recovery target.</td></tr>
+<tr><td>Named restore point</td><td><code>recovery_target_name = 'before_release_2026_09_15'</code></td><td>Recover to an application/deployment marker.</td></tr>
+<tr><td>Transaction ID</td><td><code>recovery_target_xid = '123456789'</code></td><td>Stop around a known transaction ID.</td></tr>
+<tr><td>WAL LSN</td><td><code>recovery_target_lsn = '5A/12345678'</code></td><td>Precise WAL-position recovery.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>16.1 Inclusive target</h3>
+<pre><code>recovery_target_time = '2026-09-15 14:06:00-04'
+recovery_target_inclusive = off</code></pre>
+
+<p>
+For time, XID, and LSN targets, <code>recovery_target_inclusive</code> controls whether recovery includes transactions exactly at the target boundary. The default is <code>on</code>.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>16.2 Action at the target</h3>
+<pre><code># Default:
+recovery_target_action = 'pause'
+
+# Or:
+recovery_target_action = 'promote'
+
+# Or:
+recovery_target_action = 'shutdown'</code></pre>
+
+<p>
+Pausing is useful when an operator wants to inspect the recovered state before promotion. A disaster-recovery automation may use <code>promote</code> after an already validated target policy.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="restorepoints">
+<h2>17. Named restore points</h2>
+<p>
+A restore point writes a named marker into WAL. It is useful before risky deployments, schema migrations, bulk jobs, or other known operational boundaries.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<pre><code>SELECT pg_create_restore_point(
+    'before_billing_release_2026_09_15'
+);</code></pre>
+
+<p>During recovery:</p>
+
+<pre><code>restore_command =
+  'cp /mnt/postgres-wal/%f %p'
+
+recovery_target_name =
+  'before_billing_release_2026_09_15'
+
+recovery_target_action = 'pause'</code></pre>
+
+<div class="callout warn">
+<strong>A restore point is only a WAL marker.</strong> It does not create a backup. Recovery to the marker still requires a suitable earlier base backup and an uninterrupted WAL chain through that marker.
+</div>
+</section>
+
+<section id="timelines">
+<h2>18. Recovery timelines</h2>
+<p>
+PostgreSQL creates a new timeline when archive recovery completes and the server begins a new history. Timeline history files allow recovery to follow branches and later recover to points after previous PITR operations without confusing WAL from divergent histories.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<div class="diagram">timeline 1: ----A----B----C----D
+                         |
+                      PITR/promote
+                         |
+timeline 2:              +----E----F
+                              |
+                           later PITR
+                              |
+timeline 3:                   +----G</div>
+
+<pre><code># Usually appropriate:
+recovery_target_timeline = 'latest'</code></pre>
+
+<p>
+<code>latest</code> is PostgreSQL's default and follows the latest timeline found in the archive. Explicit timeline selection is mainly needed in more complex re-recovery scenarios.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="filesystem">
+<h2>19. File-system-level backups</h2>
+<p>
+A cold filesystem backup made while PostgreSQL is cleanly shut down is straightforward: copy the complete cluster data directory and every tablespace. A live raw file copy without PostgreSQL's backup protocol or a sufficiently coordinated filesystem snapshot is unsafe because files can be captured at inconsistent points.<sup><a href="#r1">[1]</a><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>19.1 Cold backup shape</h3>
+<pre><code>systemctl stop postgresql
+
+rsync -aHAX \
+  /var/lib/postgresql/18/main/ \
+  /backup/cold/main/
+
+# Repeat for every external tablespace location.
+
+systemctl start postgresql</code></pre>
+
+<p>
+This is operationally simple but imposes downtime and must include all tablespaces and required configuration/secrets according to the deployment architecture.
+</p>
+
+<h3>19.2 Snapshot-based backup</h3>
+<p>
+Storage snapshots can provide an efficient physical backup when the snapshot mechanism captures all PostgreSQL storage consistently. Multi-volume/tablespace designs require particular care: a snapshot of only the main data directory while a tablespace is captured at another instant can be unusable.
+</p>
+</section>
+
+<section id="verify">
+<h2>20. Backup verification</h2>
+
+<h3>20.1 Base-backup manifests</h3>
+<p>
+<code>pg_basebackup</code> normally produces a <code>backup_manifest</code>. The manifest records files/checksums, the originating cluster system identifier in current manifest versions, required WAL ranges, and a checksum of the manifest itself. It is primarily intended for <code>pg_verifybackup</code>.<sup><a href="#r10">[10]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>20.2 Verify a plain physical backup</h3>
+<pre><code>pg_verifybackup \
+  --progress \
+  /backup/full/2026-09-15</code></pre>
+
+<p>
+Verification checks manifest integrity, expected files, file sizes/checksums, and required WAL readability when supported. PostgreSQL stresses that this cannot detect every problem and must be followed by actual recovery tests.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>20.3 Verify WAL stored separately</h3>
+<pre><code>pg_verifybackup \
+  --wal-directory=/mnt/postgres-wal \
+  /backup/full/2026-09-15</code></pre>
+
+<h3>20.4 Tar-format limitation</h3>
+<p>
+PostgreSQL 18's <code>pg_verifybackup</code> can verify tar-format backup files, including supported compression, but WAL parsing verification is currently supported only for plain-format backups. For tar format, use <code>--no-parse-wal</code> and validate recoverability through restore testing.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>20.5 Verify logical archives structurally</h3>
+<pre><code># Confirm archive is readable and inspect its TOC.
+pg_restore --list appdb.dump &gt; /tmp/appdb.toc
+
+# Generate SQL without executing it.
+pg_restore \
+  --file=/tmp/appdb-restore.sql \
+  appdb.dump</code></pre>
+
+<p>
+This catches archive-read problems and enables review but still does not prove successful restoration or application correctness.
+</p>
+</section>
+
+<section id="testing">
+<h2>21. Recovery testing</h2>
+<p>
+A backup test should execute the recovery path, not merely read backup metadata. PostgreSQL explicitly states that <code>pg_verifybackup</code> does not replace test restores.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>21.1 Logical restore test</h3>
+<pre><code>createdb -T template0 restore_test
+
+pg_restore \
+  --dbname=restore_test \
+  --jobs=8 \
+  --exit-on-error \
+  appdb.dump
+
+vacuumdb \
+  --analyze \
+  restore_test</code></pre>
+
+<h3>21.2 Physical/PITR test</h3>
+<div class="diagram">1. Provision isolated host/container/VM
+2. Select retained base/full reconstructed backup
+3. Restore data directory + tablespaces
+4. Configure restore_command
+5. Set a representative recovery target
+6. Create recovery.signal
+7. Start PostgreSQL
+8. Wait for target and promote/pause
+9. Run database integrity/application checks
+10. Record achieved RPO/RTO and cleanup</div>
+
+<h3>21.3 Validate application semantics</h3>
+<pre><code>-- Examples only; choose domain-specific invariants.
+SELECT count(*) FROM app.customer;
+SELECT count(*) FROM app.orders;
+
+SELECT min(created_at), max(created_at)
+FROM app.orders;
+
+SELECT *
+FROM pg_constraint
+WHERE NOT convalidated;
+
+SELECT extname, extversion
+FROM pg_extension
+ORDER BY extname;</code></pre>
+
+<p>
+Recovery tests should also confirm authentication, extensions, sequences/identity behavior, scheduled jobs, external integrations, ownership/grants, tablespace paths, and representative application queries.
+</p>
+
+<h3>21.4 Measure recovery, do not estimate it</h3>
+<p>
+Record restore download/copy time, decompression time, WAL replay time, index/data import time for logical restores, validation time, and client cutover time. RTO is an observed operational metric, not the theoretical speed of the backup tool.
+</p>
+</section>
+
+<section id="disaster">
+<h2>22. Disaster recovery architecture</h2>
+
+<div class="diagram">                 production PostgreSQL
+                         |
+          +--------------+---------------+
+          |                              |
+          v                              v
+  scheduled base backup              WAL archive
+    full/incremental              continuous segments
+          |                              |
+          +---------------+--------------+
+                          |
+                          v
+               backup repository A
+                    (local/site)
+                          |
+                          +------ replicated/copied -------+
+                                                        |
+                                                        v
+                                               repository B
+                                           independent failure domain
+                                                        |
+                                                        v
+                                               isolated restore test
+                                                        |
+                                                        v
+                                          DR PostgreSQL + validation</div>
+
+<h3>22.1 Separate failure domains</h3>
+<p>
+A backup stored only on the same host, filesystem, storage array, cloud account/credential boundary, or administrative path as production can fail with production. Disaster recovery requires copies that survive the failures in the stated threat model.
+</p>
+
+<h3>22.2 Backup catalog</h3>
+<p>
+Track at least: backup ID, PostgreSQL system identifier/version, start/end time, full/incremental parent chain, manifest location/checksum, tablespaces, encryption/storage metadata from the surrounding system, required WAL range, retention expiry, verification status, last restore-test result, and achieved recovery time.
+</p>
+
+<h3>22.3 Keep configuration outside the database backup plan too</h3>
+<p>
+Database files alone may not reproduce production service. Recovery automation also needs versioned configuration for PostgreSQL, HBA/authentication, TLS certificates/issuance process, extensions/packages, service units, storage mounts, backup credentials, DNS/load-balancer behavior, monitoring, and application secrets. Protect secrets through the organization's secret-management mechanism rather than embedding them in backup scripts.
+</p>
+</section>
+
+<section id="monitoring">
+<h2>23. Monitoring backup and archive health</h2>
+
+<h3>23.1 WAL archiver status</h3>
+<pre><code>SELECT
+    archived_count,
+    last_archived_wal,
+    last_archived_time,
+    failed_count,
+    last_failed_wal,
+    last_failed_time,
+    stats_reset
+FROM pg_stat_archiver;</code></pre>
+
+<p>
+<code>pg_stat_archiver</code> reports successful/failed archival statistics and recent WAL file/timestamps. It should be correlated with archive-repository observations and free space in <code>pg_wal</code>.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>23.2 Current WAL generation</h3>
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    wal_bytes,
+    wal_buffers_full,
+    stats_reset
+FROM pg_stat_wal;</code></pre>
+
+<p>
+Backup/archive capacity must account for peak WAL generation, not average database growth. Bulk loads, index builds, VACUUM-related full-page writes, and maintenance can change WAL volume significantly.
+</p>
+
+<h3>23.3 Backup progress</h3>
+<pre><code>SELECT *
+FROM pg_stat_progress_basebackup;</code></pre>
+
+<h3>23.4 Operational alerts</h3>
+<p>
+Alert on stale last-successful full/incremental backup, missing expected backup manifests, archive failure count increases, time since last archived WAL, repository free space, <code>pg_wal</code> free space, verification failure, broken incremental dependency chains, and overdue restore exercises.
+</p>
+</section>
+
+<section id="security">
+<h2>24. Backup security and trust</h2>
+
+<h3>24.1 Backups contain production data</h3>
+<p>
+A logical or physical backup can contain the same sensitive data as the live database, and cluster-global logical dumps can include role password verifiers unless explicitly omitted. Repository access should therefore be treated as production-data access.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>24.2 Restore is code execution</h3>
+<p>
+PostgreSQL warns that restoring logical dumps executes SQL originating from the source cluster, including code chosen by source superusers. If the source or supplied dump is not trusted, inspect it before restoration. For archive-format dumps, <code>pg_restore --file</code> can render the SQL for review.<sup><a href="#r2">[2]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<pre><code>pg_restore \
+  --file=/tmp/review.sql \
+  untrusted.dump</code></pre>
+
+<h3>24.3 Dedicated backup credentials</h3>
+<p>
+Use a dedicated role and narrow network access for physical backup connections. Logical dump privileges depend on what must be read/exported. Avoid embedding passwords directly in scripts or shell command history; use supported secure credential mechanisms.
+</p>
+</section>
+
+<section id="runbooks">
+<h2>25. Recovery runbooks</h2>
+
+<h3>25.1 Restore one database from custom dump</h3>
+<pre><code># Preconditions:
+# - PostgreSQL version/extension packages prepared
+# - global roles restored where needed
+# - target DB absent or disposable
+
+dropdb --if-exists appdb_restore
+createdb -T template0 appdb_restore
+
+pg_restore \
+  --dbname=appdb_restore \
+  --jobs=8 \
+  --exit-on-error \
+  /backup/appdb.dump
+
+vacuumdb --analyze appdb_restore</code></pre>
+
+<h3>25.2 Restore cluster with PITR</h3>
+<pre><code># Pseudocode/runbook shape:
+stop_postgres
+quarantine_old_data_directory
+restore_latest_valid_full_or_combined_backup
+restore_tablespace_layout
+write_restore_command
+write_recovery_target
+touch_recovery.signal
+start_postgres_isolated
+monitor_recovery_logs
+validate_target_state
+promote_if_paused
+run_database_checks
+switch_clients_only_after_validation</code></pre>
+
+<h3>25.3 Recover a table without rolling back the entire production cluster</h3>
+<div class="diagram">production remains online
+        |
+        +--> build isolated PITR restore to desired time
+                  |
+                  +--> pg_dump -t damaged_table recovered_db
+                              |
+                              v
+                       review/reconcile
+                              |
+                              v
+                       import selected rows/table
+                       into production</div>
+
+<p>
+This pattern is often safer than rolling the whole cluster back when only one logical object needs historical recovery.
+</p>
+</section>
+
+<section id="strategy">
+<h2>26. Reference backup strategy</h2>
+<p>
+The following is an illustrative architecture, not a universal schedule. Retention/frequency must come from RPO/RTO, database size, change rate, compliance rules, repository costs, and measured restore performance.
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Layer</th><th>Example cadence</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td>Continuous WAL archive</td><td>Continuous</td><td>PITR/RPO measured in WAL archival delay.</td></tr>
+<tr><td>Full physical backup</td><td>Weekly</td><td>Simple independent base and bounded replay time.</td></tr>
+<tr><td>Incremental physical backup</td><td>Daily</td><td>Reduce daily transfer/storage for large low-change clusters.</td></tr>
+<tr><td>Custom/directory logical dump</td><td>Daily/weekly per database</td><td>Selective recovery and migration portability.</td></tr>
+<tr><td>Globals dump</td><td>Daily and after role/tablespace changes</td><td>Roles, tablespaces, cluster-level config grants.</td></tr>
+<tr><td><code>pg_verifybackup</code></td><td>Every physical backup</td><td>Manifest/file/WAL integrity checks.</td></tr>
+<tr><td>Automated restore test</td><td>At least recurring, risk-driven</td><td>Prove recovery workflow and measure RTO.</td></tr>
+<tr><td>Full DR exercise</td><td>Regularly</td><td>Test infrastructure, routing, secrets, application validation, people/runbooks.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>26.1 Retention tiers</h3>
+<div class="diagram">WAL: retain for advertised PITR window + safety margin
+
+Physical:
+  recent full + dependent incrementals
+  |
+  +--> never delete an ancestor while a retained incremental depends on it
+
+Logical:
+  recent daily
+  weekly/monthly longer-term as policy requires
+
+Verification:
+  manifest verification result
+  restore-test result
+  recorded RTO/RPO
+  retained with backup catalog</div>
+</section>
+
+<section id="pitfalls">
+<h2>27. Common pitfalls</h2>
+
+<h3>27.1 Calling replication a backup</h3>
+<p>
+A replica normally replays accidental deletes and corrupt application writes. Replication improves availability; independently retained backups provide historical recovery.
+</p>
+
+<h3>27.2 Running <code>pg_dump</code> but forgetting globals</h3>
+<p>
+Per-database dumps do not contain cluster roles or tablespaces. Back up globals separately with <code>pg_dumpall</code> when a full logical rebuild must reproduce them.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>27.3 Restoring a plain dump with <code>pg_restore</code></h3>
+<p>
+Plain SQL scripts are restored with <code>psql</code>. <code>pg_restore</code> is for custom, directory, and tar archives created by <code>pg_dump</code>.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>27.4 Keeping a base backup but deleting required WAL</h3>
+<p>
+PITR depends on an unbroken WAL chain from the selected base backup through the recovery target. A base backup alone cannot reconstruct later database state.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>27.5 Keeping incrementals but deleting their ancestors</h3>
+<p>
+Incrementals are dependency chains. PostgreSQL does not manage the external retention graph for you.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>27.6 Trusting <code>pg_verifybackup</code> as a restore test</h3>
+<p>
+The utility detects many file/manifest/WAL problems but explicitly cannot reproduce every check performed by a running database and cannot verify application semantics. Restore and query the backup.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>27.7 Archive command that overwrites existing WAL</h3>
+<p>
+Archive naming is based on WAL segment names. A robust archival system must refuse or safely verify collisions rather than silently replacing existing content with a different file.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>27.8 Never measuring restore time</h3>
+<p>
+A backup can meet storage-retention goals and still fail the RTO because data transfer, decompression, replay, index creation, validation, or human coordination takes too long.
+</p>
+
+<h3>27.9 Recovering directly over the only production copy</h3>
+<p>
+When practical, preserve the failed/current data directory and recover into an isolated replacement. The old state can be invaluable for investigation or extracting transactions not present at the chosen recovery target.
+</p>
+
+<h3>27.10 Leaving recovery credentials/configuration undocumented</h3>
+<p>
+A perfect database backup is not sufficient if the team cannot recreate extensions, TLS, authentication, tablespaces, service configuration, storage mounts, or application connectivity during a site-level incident.
+</p>
+</section>
+
+<section id="checklist">
+<h2>28. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Write down RPO and RTO.</strong> Backup cadence must trace to explicit business objectives.</li>
+<li><strong>Use multiple recovery layers.</strong> Logical dumps and physical/PITR backups solve different problems.</li>
+<li><strong>Dump cluster globals.</strong> Roles/tablespaces are not included in per-database <code>pg_dump</code>.</li>
+<li><strong>Choose archive formats deliberately.</strong> Custom/directory formats give <code>pg_restore</code> selective and parallel restore capabilities.</li>
+<li><strong>Use <code>template0</code> for clean logical restore tests.</strong></li>
+<li><strong>Archive WAL continuously for PITR.</strong> Alert immediately on archival failure.</li>
+<li><strong>Make archive writes collision-safe and idempotent.</strong></li>
+<li><strong>Track incremental dependencies.</strong> Never expire a required ancestor backup.</li>
+<li><strong>Generate and retain backup manifests.</strong></li>
+<li><strong>Run <code>pg_verifybackup</code> on physical backups.</strong></li>
+<li><strong>Test restores regularly.</strong> Verification is not recovery.</li>
+<li><strong>Measure actual recovery time.</strong> Record restore, replay, validation, and cutover durations.</li>
+<li><strong>Test PITR targets.</strong> Time, restore-point, and timeline behavior should be familiar before an incident.</li>
+<li><strong>Keep copies in independent failure domains.</strong></li>
+<li><strong>Secure backups like production data.</strong></li>
+<li><strong>Monitor repository and <code>pg_wal</code> capacity.</strong></li>
+<li><strong>Version recovery infrastructure.</strong> PostgreSQL packages/extensions/configuration and automation must be reproducible.</li>
+<li><strong>Practice object-level recovery.</strong> Know how to restore one table without rolling back the whole cluster.</li>
+<li><strong>Practice full disaster recovery.</strong> Include people, routing, credentials, monitoring, and application validation—not only PostgreSQL startup.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Backup principle:</strong> a backup is trustworthy only when its dependencies are retained, its integrity is checked, and the organization has repeatedly demonstrated that it can restore the required data within the promised recovery window.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Backup and Restore [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup.html">https://www.postgresql.org/docs/18/backup.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. pg_dump [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgdump.html">https://www.postgresql.org/docs/18/app-pgdump.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. pg_dumpall [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pg-dumpall.html">https://www.postgresql.org/docs/18/app-pg-dumpall.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. pg_restore [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgrestore.html">https://www.postgresql.org/docs/18/app-pgrestore.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. pg_basebackup [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgbasebackup.html">https://www.postgresql.org/docs/18/app-pgbasebackup.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Continuous Archiving and Point-in-Time Recovery (PITR) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/continuous-archiving.html">https://www.postgresql.org/docs/18/continuous-archiving.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. pg_combinebackup [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgcombinebackup.html">https://www.postgresql.org/docs/18/app-pgcombinebackup.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. recovery.conf file merged into postgresql.conf [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/recovery-config.html">https://www.postgresql.org/docs/18/recovery-config.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Write Ahead Log configuration: Recovery Target [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-wal.html">https://www.postgresql.org/docs/18/runtime-config-wal.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. pg_verifybackup [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgverifybackup.html">https://www.postgresql.org/docs/18/app-pgverifybackup.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Backup Manifest Format [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup-manifest-format.html">https://www.postgresql.org/docs/18/backup-manifest-format.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. File System Level Backup [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup-file.html">https://www.postgresql.org/docs/18/backup-file.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Progress Reporting: Base Backup Progress Reporting [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/progress-reporting.html">https://www.postgresql.org/docs/18/progress-reporting.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. WAL Summarization [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/walsummarizer.html">https://www.postgresql.org/docs/18/walsummarizer.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Write Ahead Log configuration: Archiving [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-wal.html#RUNTIME-CONFIG-WAL-ARCHIVING">https://www.postgresql.org/docs/18/runtime-config-wal.html#RUNTIME-CONFIG-WAL-ARCHIVING</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Archive Modules [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/archive-modules.html">https://www.postgresql.org/docs/18/archive-modules.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. basic_archive — an example WAL archive module [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/basic-archive.html">https://www.postgresql.org/docs/18/basic-archive.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. System Administration Functions: backup and recovery control functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Backup Manifest Top-level Object [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup-manifest-toplevel.html">https://www.postgresql.org/docs/18/backup-manifest-toplevel.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Monitoring Database Activity: pg_stat_archiver and pg_stat_wal [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. WAL Internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-internals.html">https://www.postgresql.org/docs/18/wal-internals.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. pg_lsn Type [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-pg-lsn.html">https://www.postgresql.org/docs/18/datatype-pg-lsn.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. pg_receivewal [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgreceivewal.html">https://www.postgresql.org/docs/18/app-pgreceivewal.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Streaming Replication Protocol: BASE_BACKUP [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/protocol-replication.html">https://www.postgresql.org/docs/18/protocol-replication.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Backup Manifest WAL Range Object [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/backup-manifest-wal-ranges.html">https://www.postgresql.org/docs/18/backup-manifest-wal-ranges.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. CREATE DATABASE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createdatabase.html">https://www.postgresql.org/docs/18/sql-createdatabase.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. Routine Vacuuming: Updating Planner Statistics [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. PostgreSQL Client Applications [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/reference-client.html">https://www.postgresql.org/docs/18/reference-client.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. 2025-2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r30">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. Backup correctness depends on PostgreSQL version, storage/tablespace layout, WAL retention, archive implementation, extension availability, filesystem semantics, credentials, repository integrity, and application validation. Treat every backup policy as a recovery system and validate it by restoring under conditions representative of the failures it is intended to survive.
+</p>
+</footer>
+
+</body>
+</html>

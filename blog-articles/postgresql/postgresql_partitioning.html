@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL partitioning: declarative range, list and hash partitioning, multi-level partitioning, pruning, partition-wise joins, maintenance, time-series design, partitioned indexes, and partitioning vs sharding.">
+<title>PostgreSQL Partitioning: Design, Pruning, Maintenance, and Scale</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1000px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:820px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Partitioning</h1>
+  <p class="dek">A production-oriented guide to declarative range, list, and hash partitioning; subpartitioning; partition pruning; partition-wise joins and aggregates; partition maintenance; time-series retention; partitioned indexes and constraints; and the architectural boundary between partitioning and sharding.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL partitioning divides one logical table into smaller physical relations called partitions. In declarative partitioning, the parent is a virtual partitioned table with no row storage of its own; rows are stored in leaf partitions and PostgreSQL automatically routes inserts and partition-key-changing updates to the correct partition. PostgreSQL supports range, list, and hash strategies, and any partition can itself be partitioned to form a multi-level hierarchy.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+<p>
+Partitioning is most useful when the partition boundary matches actual workload boundaries. PostgreSQL can prune partitions whose bounds cannot satisfy a query, both during planning and—in supported parameterized cases—during execution. Partitioning can also make retention and bulk lifecycle operations much cheaper because entire partitions can be attached, detached, or dropped instead of deleting rows individually. However, partitioning is not a general-purpose accelerator: excessive partition counts increase planning and memory overhead, poorly chosen keys prevent pruning, and every partition still resides inside the same PostgreSQL cluster unless an external/distributed system places data on multiple nodes.<sup><a href="#r1">[1]</a><a href="#r3">[3]</a></sup>
+</p>
+<p>
+PostgreSQL 18 improves planning efficiency for queries involving many partitions and expands cases in which partition-wise joins can be applied while reducing their memory usage. These improvements do not remove the need for conservative partition counts and workload-driven design; partition-wise join and aggregate planning remain disabled by default because they can multiply plan nodes and memory consumption across partitions.<sup><a href="#r4">[4]</a><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#why">Why partition a table?</a></li>
+<li><a href="#architecture">Declarative partitioning architecture</a></li>
+<li><a href="#range">Range partitioning</a></li>
+<li><a href="#list">List partitioning</a></li>
+<li><a href="#hash">Hash partitioning</a></li>
+<li><a href="#multilevel">Multi-level partitioning</a></li>
+<li><a href="#routing">Tuple routing and updates</a></li>
+<li><a href="#pruning">Partition pruning</a></li>
+<li><a href="#runtime-pruning">Execution-time pruning</a></li>
+<li><a href="#joins">Partition-wise joins</a></li>
+<li><a href="#aggregates">Partition-wise aggregates</a></li>
+<li><a href="#indexes">Partitioned indexes</a></li>
+<li><a href="#unique">Unique and primary-key constraints</a></li>
+<li><a href="#maintenance">Partition maintenance</a></li>
+<li><a href="#attach">Low-lock attach workflow</a></li>
+<li><a href="#retention">Time-series partitioning</a></li>
+<li><a href="#default">DEFAULT partitions</a></li>
+<li><a href="#monitoring">Inspecting partition trees</a></li>
+<li><a href="#performance">Performance engineering</a></li>
+<li><a href="#sharding">Partitioning vs sharding</a></li>
+<li><a href="#patterns">Design patterns</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="why">
+<h2>1. Why partition a table?</h2>
+<p>
+Partitioning is a physical data-management technique. It can improve query performance when pruning reduces a query to a small subset of the data, improve cache locality by keeping hot partitions and their indexes small, enable sequential scans of appropriately sized partitions, and make bulk lifecycle operations such as retention much cheaper. PostgreSQL also allows different partitions to use different tablespaces, so cold data can be placed on slower storage while recent data remains on faster storage.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="diagram">logical table: telemetry
++-----------------------------------------------------------+
+| Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | ...     |
++-----------------------------------------------------------+
+   |     |     |     |     |
+   v     v     v     v     v
+physical partition relations
+
+Query:
+WHERE observed_at >= '2026-09-10'
+  AND observed_at <  '2026-09-11'
+
+Planner/executor:
+old partitions X X X X X X X X
+September partition -> scan only relevant leaf</div>
+
+<h3>1.1 What partitioning does not automatically solve</h3>
+<p>
+Partitioning does not automatically make every query faster. A query that cannot constrain the partition key may still scan many or all partitions. It does not eliminate the need for indexes inside partitions, and it does not create additional database servers or distribute writes across independent PostgreSQL nodes. It should be justified by measured query, maintenance, retention, or storage-placement needs.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="callout ok">
+<strong>Good partition keys align with real boundaries:</strong> common <code>WHERE</code> predicates, retention intervals, lifecycle operations, or naturally isolated data groups.
+</div>
+</section>
+
+<section id="architecture">
+<h2>2. Declarative partitioning architecture</h2>
+<p>
+A declaratively partitioned table is defined with <code>PARTITION BY</code>. The parent relation stores partition metadata but no table rows; storage belongs to its partitions. Each partition has bounds defining the subset it accepts, and PostgreSQL automatically routes rows inserted through the parent. Partitions are otherwise table-like relations and may have their own indexes, tablespaces, and additional constraints.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE telemetry.reading (
+    observed_at timestamptz NOT NULL,
+    device_id bigint NOT NULL,
+    metric_id integer NOT NULL,
+    value double precision NOT NULL
+)
+PARTITION BY RANGE (observed_at);</code></pre>
+
+<p>
+The partition key can use columns or expressions. Range and hash partition keys may contain multiple columns or expressions; list partitioning uses one column or expression. Range/list keys rely on B-tree operator classes, while hash partitioning uses a hash operator class.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>2.1 Parent, intermediate, and leaf relations</h3>
+<div class="diagram">telemetry.reading                      -- partitioned parent
+|
++-- reading_2026_08                    -- leaf table
+|
++-- reading_2026_09                    -- leaf table
+|
++-- reading_2026_10                    -- leaf table
+
+Multi-level hierarchy:
+
+events                                  -- RANGE by month
+|
++-- events_2026_09                      -- HASH by tenant_id
+|   +-- events_2026_09_h0               -- leaf
+|   +-- events_2026_09_h1               -- leaf
+|   +-- events_2026_09_h2               -- leaf
+|   +-- events_2026_09_h3               -- leaf
+|
++-- events_2026_10
+    +-- ...</div>
+</section>
+
+<section id="range">
+<h2>3. Range partitioning</h2>
+<p>
+Range partitioning divides values into non-overlapping intervals. Bounds are inclusive on the lower side and exclusive on the upper side. A monthly partition declared from <code>2026-09-01</code> to <code>2026-10-01</code> therefore contains September but not midnight at the start of October.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE telemetry.reading_2026_09
+PARTITION OF telemetry.reading
+FOR VALUES FROM ('2026-09-01 00:00:00+00')
+             TO ('2026-10-01 00:00:00+00');
+
+CREATE TABLE telemetry.reading_2026_10
+PARTITION OF telemetry.reading
+FOR VALUES FROM ('2026-10-01 00:00:00+00')
+             TO ('2026-11-01 00:00:00+00');</code></pre>
+
+<h3>3.1 Why range partitioning dominates time-series designs</h3>
+<p>
+A time predicate naturally maps to ordered intervals, old intervals can be detached/dropped as one unit, and new future partitions can be created predictably. Daily, weekly, monthly, or quarterly partitions are common choices; the correct interval depends on ingestion volume, retention operations, query windows, and acceptable partition count.
+</p>
+
+<h3>3.2 Multi-column range keys</h3>
+<pre><code>CREATE TABLE finance.ledger (
+    business_date date NOT NULL,
+    account_id bigint NOT NULL,
+    entry_id bigint NOT NULL,
+    amount numeric(18,2) NOT NULL
+)
+PARTITION BY RANGE (business_date, account_id);</code></pre>
+
+<p>
+Multi-column ranges use row-comparison semantics and can express complex ordered regions. They should be used only when application predicates and lifecycle boundaries actually benefit from the extra dimension; subpartitioning can sometimes be clearer.
+</p>
+
+<h3>3.3 MINVALUE and MAXVALUE</h3>
+<pre><code>CREATE TABLE finance.ledger_old
+PARTITION OF finance.ledger
+FOR VALUES FROM (MINVALUE, MINVALUE)
+             TO ('2024-01-01', MINVALUE);</code></pre>
+
+<p>
+<code>MINVALUE</code> and <code>MAXVALUE</code> provide open-ended range bounds. Their ordering follows the partition key definition and is subject to PostgreSQL's range-bound rules.<sup><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="list">
+<h2>4. List partitioning</h2>
+<p>
+List partitioning assigns explicit values to partitions. It is useful when the number of data groups is relatively small and semantically stable—for example geographic region, data source, or a small set of tenant tiers.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE commerce.order_event (
+    event_id bigint NOT NULL,
+    region_code text NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    payload jsonb NOT NULL
+)
+PARTITION BY LIST (region_code);
+
+CREATE TABLE commerce.order_event_us
+PARTITION OF commerce.order_event
+FOR VALUES IN ('US');
+
+CREATE TABLE commerce.order_event_ca
+PARTITION OF commerce.order_event
+FOR VALUES IN ('CA');
+
+CREATE TABLE commerce.order_event_eu
+PARTITION OF commerce.order_event
+FOR VALUES IN ('DE', 'FR', 'ES', 'IT', 'NL');</code></pre>
+
+<h3>4.1 NULL in list partitioning</h3>
+<pre><code>CREATE TABLE commerce.order_event_unknown
+PARTITION OF commerce.order_event
+FOR VALUES IN (NULL);</code></pre>
+
+<p>
+List partitioning can route null partition-key values explicitly when <code>NULL</code> is included in a partition bound.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>4.2 Avoid one-partition-per-entity explosions</h3>
+<p>
+A list partition per customer can seem attractive with tens of customers and become operationally expensive with tens of thousands. PostgreSQL's best-practice guidance specifically warns that future growth can make such a design impractical and suggests hash partitioning with a reasonable fixed number of partitions when entity count may grow substantially.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="hash">
+<h2>5. Hash partitioning</h2>
+<p>
+Hash partitioning assigns rows using a hash of the partition key and partitions described by a modulus/remainder pair. It is useful when the goal is relatively even distribution rather than semantic ranges or explicit value groups.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE app.session_event (
+    tenant_id bigint NOT NULL,
+    session_id uuid NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    payload jsonb NOT NULL
+)
+PARTITION BY HASH (tenant_id);
+
+CREATE TABLE app.session_event_h0
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 0);
+
+CREATE TABLE app.session_event_h1
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 1);
+
+CREATE TABLE app.session_event_h2
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 2);
+
+CREATE TABLE app.session_event_h3
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 3);
+
+CREATE TABLE app.session_event_h4
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 4);
+
+CREATE TABLE app.session_event_h5
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 5);
+
+CREATE TABLE app.session_event_h6
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 6);
+
+CREATE TABLE app.session_event_h7
+PARTITION OF app.session_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 7);</code></pre>
+
+<h3>5.1 Hash partitioning does not distribute across servers</h3>
+<p>
+These eight partitions are still relations inside the same PostgreSQL database cluster. Hash partitioning can spread data across partitions/tablespaces and improve local data management, but it is not the same thing as distributed sharding across independent nodes.<sup><a href="#r1">[1]</a><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="multilevel">
+<h2>6. Multi-level partitioning</h2>
+<p>
+A partition can itself be a partitioned table. This enables hierarchical strategies such as range-by-time followed by hash-by-tenant, or list-by-region followed by range-by-date. PostgreSQL does not verify that a subpartitioning definition is logically constrained to the parent partition's bounds, so administrators must define consistent subpartition ranges themselves.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>6.1 Range by month, then hash by tenant</h3>
+<pre><code>CREATE TABLE app.event (
+    tenant_id bigint NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    event_id uuid NOT NULL,
+    payload jsonb NOT NULL
+)
+PARTITION BY RANGE (occurred_at);
+
+CREATE TABLE app.event_2026_09
+PARTITION OF app.event
+FOR VALUES FROM ('2026-09-01')
+             TO ('2026-10-01')
+PARTITION BY HASH (tenant_id);
+
+CREATE TABLE app.event_2026_09_h0
+PARTITION OF app.event_2026_09
+FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+
+CREATE TABLE app.event_2026_09_h1
+PARTITION OF app.event_2026_09
+FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+
+CREATE TABLE app.event_2026_09_h2
+PARTITION OF app.event_2026_09
+FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+
+CREATE TABLE app.event_2026_09_h3
+PARTITION OF app.event_2026_09
+FOR VALUES WITH (MODULUS 4, REMAINDER 3);</code></pre>
+
+<h3>6.2 Partition-count multiplication</h3>
+<p>
+Hierarchies multiply quickly. Thirty-six monthly partitions each split into 32 hash partitions produce 1,152 leaf partitions. PostgreSQL can handle large trees, but planning time, memory consumption, metadata management, autovacuum activity, and schema operations all grow with partition count. PostgreSQL's best-practice guidance explicitly recommends restraint in subpartitioning designs.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="routing">
+<h2>7. Tuple routing and partition-key updates</h2>
+<p>
+Rows inserted through a partitioned parent are routed automatically according to the partition key. If no partition accepts the row and there is no default partition, the insert fails. Updating a partition key can move the row from one leaf partition to another.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<pre><code>INSERT INTO telemetry.reading(
+    observed_at,
+    device_id,
+    metric_id,
+    value
+)
+VALUES (
+    '2026-09-15 18:00:00+00',
+    101,
+    7,
+    42.5
+);</code></pre>
+
+<p>
+The application does not need to name <code>reading_2026_09</code>; PostgreSQL performs tuple routing internally.
+</p>
+
+<h3>7.1 Partition movement on UPDATE</h3>
+<pre><code>UPDATE telemetry.reading
+SET observed_at = '2026-10-01 00:00:00+00'
+WHERE device_id = 101
+  AND observed_at = '2026-09-30 23:59:59+00';</code></pre>
+
+<p>
+If the target key now belongs to October, PostgreSQL moves the row to the October partition. A limitation is that a <code>BEFORE ROW</code> trigger on <code>INSERT</code> cannot rewrite a row in a way that changes its final partition destination after routing semantics are determined.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="pruning">
+<h2>8. Partition pruning</h2>
+<p>
+Partition pruning eliminates partitions whose bounds cannot satisfy a query predicate. It relies on partition bounds, not indexes. A table can therefore benefit from pruning even without an index on the partition key; whether each surviving partition also needs an index depends on how much of that partition the query will scan.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>8.1 A pruning-friendly query</h3>
+<pre><code>SET enable_partition_pruning = on;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    device_id,
+    avg(value)
+FROM telemetry.reading
+WHERE observed_at &gt;= timestamptz '2026-09-10 00:00:00+00'
+  AND observed_at &lt;  timestamptz '2026-09-11 00:00:00+00'
+GROUP BY device_id;</code></pre>
+
+<p>
+If the table is partitioned monthly by <code>observed_at</code>, PostgreSQL can eliminate every partition except September before scanning tuples.
+</p>
+
+<h3>8.2 Predicate shape matters</h3>
+<pre><code>-- Direct key predicate: pruning-friendly.
+WHERE observed_at &gt;= $1
+  AND observed_at &lt;  $2
+
+-- Potentially less directly provable depending on expression/partition key:
+WHERE date_trunc('day', observed_at) = $1::date</code></pre>
+
+<p>
+Partitioning works best when common query predicates line up with the partition-key expression and bounds. PostgreSQL recommends choosing partition columns that frequently appear in compatible <code>WHERE</code> clauses.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>8.3 Pruning versus constraint exclusion</h3>
+<p>
+Declarative partition pruning uses partition bounds and can occur at planning and execution time. Constraint exclusion examines <code>CHECK</code> constraints and is primarily useful for legacy inheritance partitioning; it applies only at plan time and is slower to plan because it examines constraints rather than specialized partition metadata.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="runtime-pruning">
+<h2>9. Execution-time partition pruning</h2>
+<p>
+PostgreSQL can prune partitions after planning when parameter values become available only during execution. This includes prepared-statement parameters, values from subqueries, and parameterized inner scans of nested-loop joins. Pruning can happen during plan initialization or repeatedly during execution when a relevant parameter changes.<sup><a href="#r1">[1]</a><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>9.1 Prepared query</h3>
+<pre><code>PREPARE reading_window(timestamptz, timestamptz) AS
+SELECT
+    device_id,
+    observed_at,
+    value
+FROM telemetry.reading
+WHERE observed_at &gt;= $1
+  AND observed_at &lt;  $2;
+
+EXPLAIN (ANALYZE, BUFFERS)
+EXECUTE reading_window(
+    '2026-09-01',
+    '2026-09-02'
+);</code></pre>
+
+<p>
+In <code>EXPLAIN</code>, partitions eliminated during initialization can be reflected by a <code>Subplans Removed</code> count. Partitions eliminated dynamically during execution can appear with differing loop counts or as <code>(never executed)</code> in <code>EXPLAIN ANALYZE</code>.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>9.2 Important locking detail</h3>
+<p>
+PostgreSQL notes that partitions removed during initialization-time pruning are still locked at the beginning of query execution. Pruning reduces scan work; it does not necessarily eliminate every partition-related lock acquisition.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="joins">
+<h2>10. Partition-wise joins</h2>
+<p>
+Partition-wise join allows PostgreSQL to replace one large join between partitioned tables with joins between corresponding partitions. PostgreSQL 18's planner setting <code>enable_partitionwise_join</code> is disabled by default. It currently applies when join conditions include all partition keys, the key types match, and child partitions have one-to-one compatible bounds.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.1 Compatible partition layouts</h3>
+<pre><code>CREATE TABLE analytics.orders (
+    tenant_id bigint NOT NULL,
+    order_id bigint NOT NULL,
+    total numeric NOT NULL
+)
+PARTITION BY HASH (tenant_id);
+
+CREATE TABLE analytics.customers (
+    tenant_id bigint NOT NULL,
+    customer_id bigint NOT NULL,
+    name text NOT NULL
+)
+PARTITION BY HASH (tenant_id);
+
+-- Both hierarchies use the same MODULUS and REMAINDER layout.</code></pre>
+
+<pre><code>SET enable_partitionwise_join = on;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    o.tenant_id,
+    count(*),
+    sum(o.total)
+FROM analytics.orders AS o
+JOIN analytics.customers AS c
+  ON c.tenant_id = o.tenant_id
+WHERE o.tenant_id BETWEEN 100 AND 200
+GROUP BY o.tenant_id;</code></pre>
+
+<h3>10.2 Memory/planning trade-off</h3>
+<p>
+Partition-wise joining can create a separate join subtree for many partitions. PostgreSQL warns that this can increase planning CPU/memory and can multiply the number of execution nodes whose memory is limited independently by <code>work_mem</code>. It is therefore disabled by default and should be enabled/tested for workloads where compatible partition layouts create a measurable benefit.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>10.3 PostgreSQL 18 improvements</h3>
+<p>
+PostgreSQL 18 expanded the situations in which partition-wise joins can be used and reduced their memory usage, alongside improvements to planning queries that access many partitions. These are planner improvements, not a reason to ignore partition-count discipline.<sup><a href="#r4">[4]</a></sup>
+</p>
+</section>
+
+<section id="aggregates">
+<h2>11. Partition-wise aggregation</h2>
+<p>
+With <code>enable_partitionwise_aggregate</code>, PostgreSQL can perform grouping or aggregation independently in partitions before combining results. When <code>GROUP BY</code> includes the partition keys, aggregation can often be fully partition-local; otherwise PostgreSQL may perform partial aggregation per partition followed by finalization above the partitioned scans.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<pre><code>SET enable_partitionwise_aggregate = on;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    observed_at::date AS day,
+    device_id,
+    avg(value)
+FROM telemetry.reading
+WHERE observed_at &gt;= '2026-09-01'
+  AND observed_at &lt;  '2026-10-01'
+GROUP BY observed_at::date, device_id;</code></pre>
+
+<p>
+Like partition-wise joins, partition-wise aggregation can create many plan nodes and increase total memory consumption. The setting is therefore off by default.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="indexes">
+<h2>12. Partitioned indexes</h2>
+<p>
+An index declared on a partitioned table is itself a partitioned or “virtual” index. The actual index data lives in indexes on leaf partitions. Creating an index on the parent normally recurses through current partitions, attaches equivalent existing indexes where possible, and creates missing child indexes. Future partitions automatically receive/attach corresponding indexes.<sup><a href="#r1">[1]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>CREATE INDEX reading_device_time_idx
+ON telemetry.reading (
+    device_id,
+    observed_at DESC
+);</code></pre>
+
+<h3>12.1 The <code>CREATE INDEX CONCURRENTLY</code> limitation</h3>
+<p>
+PostgreSQL does not allow <code>CREATE INDEX CONCURRENTLY</code> directly on a partitioned parent. For large production tables, PostgreSQL documents a staged pattern: create the parent index with <code>ON ONLY</code> so it remains invalid, build child indexes concurrently, then attach each child index. When every required child index is attached, the parent index becomes valid automatically.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<pre><code>-- 1. Create invalid parent index without recursively building children.
+CREATE INDEX reading_device_time_idx
+ON ONLY telemetry.reading (
+    device_id,
+    observed_at DESC
+);
+
+-- 2. Build each leaf index concurrently.
+CREATE INDEX CONCURRENTLY reading_2026_09_device_time_idx
+ON telemetry.reading_2026_09 (
+    device_id,
+    observed_at DESC
+);
+
+-- 3. Attach it to the parent index.
+ALTER INDEX telemetry.reading_device_time_idx
+ATTACH PARTITION telemetry.reading_2026_09_device_time_idx;
+
+-- Repeat for all leaves.</code></pre>
+
+<h3>12.2 Per-partition indexes</h3>
+<p>
+Partitions may also have indexes not present on the parent. This can be useful when old/cold partitions have different access patterns from recent/hot partitions, although asymmetric index portfolios increase operational complexity.
+</p>
+</section>
+
+<section id="unique">
+<h2>13. Unique constraints and primary keys</h2>
+<p>
+Global uniqueness is constrained by physical partition boundaries. To create a <code>UNIQUE</code> or <code>PRIMARY KEY</code> constraint on a partitioned table, the constraint must include every partition-key column, and partition keys participating in such a constraint cannot be partition expressions. For multi-level hierarchies, PostgreSQL 18 requires the constraint to include partition-key columns of the target partitioned table and all descendant partitioned tables.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>13.1 Time-partitioned primary key</h3>
+<pre><code>CREATE TABLE app.event (
+    occurred_at timestamptz NOT NULL,
+    event_id uuid NOT NULL,
+    tenant_id bigint NOT NULL,
+    payload jsonb NOT NULL,
+    PRIMARY KEY (occurred_at, event_id)
+)
+PARTITION BY RANGE (occurred_at);</code></pre>
+
+<p>
+A primary key on <code>event_id</code> alone cannot be declared globally on this parent, because leaf indexes can only enforce uniqueness inside their own partitions and the partition layout would not prevent the same <code>event_id</code> from appearing in two time partitions.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>13.2 Application implication</h3>
+<p>
+If the logical identity must be globally unique independent of the partition key, options include changing the partition key, making the partition key part of the identity, maintaining a separate unpartitioned key registry, or using application-level/global coordination. Partitioning strategy and key design therefore cannot be decided independently.
+</p>
+</section>
+
+<section id="maintenance">
+<h2>14. Partition maintenance</h2>
+<p>
+The ability to manipulate entire partitions is one of partitioning's largest operational advantages. Dropping or detaching a partition avoids deleting rows one at a time and avoids the subsequent vacuum work caused by mass deletion.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>14.1 Drop expired data</h3>
+<pre><code>DROP TABLE telemetry.reading_2024_09;</code></pre>
+
+<p>
+Dropping a partition is fast relative to deleting its rows, but it requires an <code>ACCESS EXCLUSIVE</code> lock on the parent partitioned table.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>14.2 Detach before archiving</h3>
+<pre><code>ALTER TABLE telemetry.reading
+DETACH PARTITION telemetry.reading_2024_09;</code></pre>
+
+<p>
+After detachment, the former partition remains as an independent table. It can be backed up, aggregated, exported, moved, or dropped later.
+</p>
+
+<h3>14.3 Concurrent detach</h3>
+<pre><code>ALTER TABLE telemetry.reading
+DETACH PARTITION telemetry.reading_2024_09
+CONCURRENTLY;</code></pre>
+
+<p>
+PostgreSQL documents <code>DETACH PARTITION ... CONCURRENTLY</code> as requiring only a <code>SHARE UPDATE EXCLUSIVE</code> lock on the parent rather than the stronger lock used by ordinary detach, subject to the command's restrictions.<sup><a href="#r1">[1]</a><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="attach">
+<h2>15. Low-lock partition attachment workflow</h2>
+<p>
+Creating a new partition directly with <code>CREATE TABLE ... PARTITION OF</code> requires an <code>ACCESS EXCLUSIVE</code> lock on the parent. A production-friendly alternative is to create a standalone table, load and validate it independently, add a matching <code>CHECK</code> constraint, then attach it. <code>ATTACH PARTITION</code> needs a weaker <code>SHARE UPDATE EXCLUSIVE</code> lock on the parent.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>15.1 Create a staging partition</h3>
+<pre><code>CREATE TABLE telemetry.reading_2026_11
+(
+    LIKE telemetry.reading
+    INCLUDING DEFAULTS
+    INCLUDING CONSTRAINTS
+);
+
+ALTER TABLE telemetry.reading_2026_11
+ADD CONSTRAINT reading_2026_11_bounds
+CHECK (
+    observed_at &gt;= timestamptz '2026-11-01 00:00:00+00'
+    AND observed_at &lt; timestamptz '2026-12-01 00:00:00+00'
+);</code></pre>
+
+<h3>15.2 Load and index independently</h3>
+<pre><code>COPY telemetry.reading_2026_11
+FROM '/staging/reading_2026_11.csv'
+WITH (FORMAT csv, HEADER true);
+
+CREATE INDEX CONCURRENTLY reading_2026_11_device_time_idx
+ON telemetry.reading_2026_11 (
+    device_id,
+    observed_at DESC
+);</code></pre>
+
+<h3>15.3 Attach</h3>
+<pre><code>ALTER TABLE telemetry.reading
+ATTACH PARTITION telemetry.reading_2026_11
+FOR VALUES FROM ('2026-11-01')
+             TO ('2026-12-01');</code></pre>
+
+<p>
+If PostgreSQL cannot prove from a valid <code>CHECK</code> constraint that every row satisfies the proposed partition bound, it scans the table while holding an <code>ACCESS EXCLUSIVE</code> lock on the table being attached. A matching constraint allows PostgreSQL to avoid that validation scan. After successful attachment, the redundant check can be dropped.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>15.4 DEFAULT-partition caveat</h3>
+<p>
+If the parent has a <code>DEFAULT</code> partition, attaching a new explicit partition can require PostgreSQL to scan the default partition to prove it contains no rows that belong in the new range. Adding a matching exclusion <code>CHECK</code> constraint to the default partition can avoid that scan and its associated <code>ACCESS EXCLUSIVE</code> lock.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="retention">
+<h2>16. Time-series partitioning</h2>
+<p>
+Time-series workloads are a natural fit for range partitioning because data arrives in time order, queries frequently constrain time, and retention is typically time-based. Partition interval selection should be driven by workload shape rather than a fixed rule.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>16.1 Monthly time-series table</h3>
+<pre><code>CREATE TABLE metrics.sample (
+    ts timestamptz NOT NULL,
+    tenant_id bigint NOT NULL,
+    series_id bigint NOT NULL,
+    value double precision NOT NULL,
+    tags jsonb
+)
+PARTITION BY RANGE (ts);
+
+CREATE INDEX sample_tenant_series_ts_idx
+ON metrics.sample (
+    tenant_id,
+    series_id,
+    ts DESC
+);</code></pre>
+
+<h3>16.2 Pre-create future partitions</h3>
+<pre><code>CREATE TABLE metrics.sample_2026_10
+PARTITION OF metrics.sample
+FOR VALUES FROM ('2026-10-01')
+             TO ('2026-11-01');
+
+CREATE TABLE metrics.sample_2026_11
+PARTITION OF metrics.sample
+FOR VALUES FROM ('2026-11-01')
+             TO ('2026-12-01');</code></pre>
+
+<p>
+PostgreSQL does not automatically create missing declarative partitions when a row falls outside all explicit bounds. Production systems commonly automate future partition creation ahead of the ingest frontier.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>16.3 Retention as metadata operations</h3>
+<pre><code>ALTER TABLE metrics.sample
+DETACH PARTITION metrics.sample_2024_09 CONCURRENTLY;
+
+-- Archive/export if needed, then:
+DROP TABLE metrics.sample_2024_09;</code></pre>
+
+<h3>16.4 Choosing daily vs monthly</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Factor</th><th>Smaller intervals</th><th>Larger intervals</th></tr></thead>
+<tbody>
+<tr><td>Retention precision</td><td>More precise</td><td>Coarser</td></tr>
+<tr><td>Partition count</td><td>Higher</td><td>Lower</td></tr>
+<tr><td>Index size per partition</td><td>Smaller</td><td>Larger</td></tr>
+<tr><td>Planning overhead</td><td>Higher if many partitions survive planning metadata</td><td>Lower</td></tr>
+<tr><td>Typical broad scans</td><td>More child scans</td><td>Fewer child scans</td></tr>
+<tr><td>Detach/drop granularity</td><td>Fine</td><td>Coarse</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+The right interval balances query locality, retention operations, data volume, index size, and partition-count overhead.
+</p>
+</section>
+
+<section id="default">
+<h2>17. DEFAULT partitions</h2>
+<p>
+A default partition catches rows that do not fit any explicit partition bound. It can be useful as an operational safety net when new values or unexpected timestamps arrive, but it should not become a silent dumping ground that masks partition-management failures.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE telemetry.reading_default
+PARTITION OF telemetry.reading
+DEFAULT;</code></pre>
+
+<h3>17.1 Monitor it</h3>
+<pre><code>SELECT count(*)
+FROM telemetry.reading_default;</code></pre>
+
+<p>
+For strict time-series ingestion, many teams prefer failing fast when a future partition is missing, because the failure exposes an operational defect immediately. Where a default partition is used, alert on unexpected row growth and periodically migrate rows into the correct explicit partitions.
+</p>
+</section>
+
+<section id="monitoring">
+<h2>18. Inspecting partition trees</h2>
+<p>
+PostgreSQL provides partition-information functions that expose the relation hierarchy. <code>pg_partition_tree()</code> lists the root, intermediate partitions, and leaves with depth information; <code>pg_partition_ancestors()</code> and <code>pg_partition_root()</code> navigate upward.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>18.1 Tree inventory</h3>
+<pre><code>SELECT
+    relid,
+    parentrelid,
+    isleaf,
+    level
+FROM pg_partition_tree('telemetry.reading')
+ORDER BY level, relid::text;</code></pre>
+
+<h3>18.2 Partition sizes</h3>
+<pre><code>SELECT
+    relid,
+    pg_size_pretty(
+        pg_total_relation_size(relid)
+    ) AS total_size
+FROM pg_partition_tree('telemetry.reading')
+WHERE isleaf
+ORDER BY pg_total_relation_size(relid) DESC;</code></pre>
+
+<h3>18.3 Total leaf-table data size</h3>
+<pre><code>SELECT
+    pg_size_pretty(
+        sum(pg_relation_size(relid))
+    ) AS total_heap_size
+FROM pg_partition_tree('telemetry.reading')
+WHERE isleaf;</code></pre>
+
+<p>
+PostgreSQL's documentation demonstrates this partition-tree technique for measuring the physical data contained by a partitioned table.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>18.4 Catalog metadata</h3>
+<pre><code>SELECT
+    c.oid::regclass AS partitioned_table,
+    CASE p.partstrat
+        WHEN 'r' THEN 'range'
+        WHEN 'l' THEN 'list'
+        WHEN 'h' THEN 'hash'
+    END AS strategy,
+    p.partnatts,
+    p.partattrs
+FROM pg_partitioned_table AS p
+JOIN pg_class AS c
+  ON c.oid = p.partrelid;</code></pre>
+
+<p>
+<code>pg_partitioned_table</code> stores metadata for partitioned tables, including strategy and partition-key information.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="performance">
+<h2>19. Partitioning performance engineering</h2>
+
+<h3>19.1 Pruning must eliminate meaningful work</h3>
+<p>
+Partitioning has the highest query value when typical predicates remove most partitions. If almost every query scans all partitions, the design may add planning overhead without reducing execution work.
+</p>
+
+<h3>19.2 Index each surviving partition for its real access path</h3>
+<pre><code>-- Partition key drives pruning:
+WHERE observed_at &gt;= $1
+  AND observed_at &lt;  $2
+
+-- Device key narrows rows inside the surviving partitions:
+AND device_id = $3</code></pre>
+
+<pre><code>CREATE INDEX reading_device_time_idx
+ON telemetry.reading (
+    device_id,
+    observed_at DESC
+);</code></pre>
+
+<p>
+Pruning and indexing solve different problems. Pruning decides which relations can be ignored; indexes decide how to access tuples inside the remaining relations.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>19.3 Too many partitions</h3>
+<p>
+PostgreSQL warns that excessive partition counts increase planning time and memory use in both planning and execution. Large partition counts are most tolerable when typical queries prune down to a small subset. PostgreSQL 18 improves planning for many-partition queries, but this overhead remains a real design constraint.<sup><a href="#r1">[1]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>19.4 Plan with <code>EXPLAIN</code></h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    SETTINGS
+)
+SELECT *
+FROM telemetry.reading
+WHERE observed_at &gt;= '2026-09-15'
+  AND observed_at &lt;  '2026-09-16'
+  AND device_id = 101;</code></pre>
+
+<p>
+Look for the expected child relations, <code>Subplans Removed</code>, <code>(never executed)</code> subplans in runtime-pruning scenarios, and whether each surviving leaf uses an appropriate scan method.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>19.5 Statistics remain per relation</h3>
+<p>
+Partitions are physical relations and require normal <code>ANALYZE</code>/autovacuum attention. High-churn recent partitions may have different maintenance needs from historical partitions. PostgreSQL's automatic statistics and vacuum infrastructure applies to partition leaf tables like other relations.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>19.6 Do not partition small tables for aesthetics</h3>
+<p>
+Partitioning introduces additional relations, indexes, planner work, DDL automation, monitoring, backups, and migration complexity. PostgreSQL's documentation notes that the benefit generally appears only when tables are large enough for locality/maintenance gains to matter.<sup><a href="#r1">[1]</a></sup>
+</p>
+</section>
+
+<section id="sharding">
+<h2>20. Partitioning versus sharding</h2>
+<p>
+Partitioning and sharding both horizontally divide rows, but they operate at different architectural scopes. Native PostgreSQL declarative partitioning divides one logical table into physical relations managed by one PostgreSQL cluster. Sharding distributes subsets of data across multiple database servers/nodes and therefore introduces distributed query routing, placement, network communication, rebalancing, and distributed transaction concerns.<sup><a href="#r1">[1]</a><a href="#r24">[24]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Dimension</th><th>Native partitioning</th><th>Sharding / distributed PostgreSQL</th></tr></thead>
+<tbody>
+<tr><td>Physical scope</td><td>One PostgreSQL cluster</td><td>Multiple database nodes</td></tr>
+<tr><td>SQL target</td><td>One partitioned parent</td><td>Coordinator/router or application shard routing</td></tr>
+<tr><td>Main goal</td><td>Locality, lifecycle management, pruning, smaller relations</td><td>Scale data/CPU/write capacity beyond one node</td></tr>
+<tr><td>Network required for local scan</td><td>No</td><td>Often, for cross-node queries</td></tr>
+<tr><td>Cross-partition transaction</td><td>Ordinary local PostgreSQL transaction</td><td>May become distributed transaction</td></tr>
+<tr><td>Adding storage capacity</td><td>Add local storage/tablespaces</td><td>Add/rebalance nodes</td></tr>
+<tr><td>Typical tool</td><td><code>PARTITION BY</code></td><td>Application sharding or distributed systems/extensions such as Citus</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>20.1 Citus as a concrete distributed example</h3>
+<p>
+Current Citus documentation describes distributed tables as horizontally partitioned into shards placed across PostgreSQL worker nodes. A coordinator tracks the distribution metadata and routes or parallelizes queries to workers. That is fundamentally different from a native hash-partitioned PostgreSQL table whose partitions are still local relations inside one cluster.<sup><a href="#r24">[24]</a></sup>
+</p>
+
+<div class="callout">
+<strong>Partitioning is not a prerequisite for sharding, and sharding is not a stronger form of local partition pruning.</strong> They solve related but distinct problems: local physical organization versus distributed capacity.
+</div>
+</section>
+
+<section id="patterns">
+<h2>21. Practical partitioning patterns</h2>
+
+<h3>21.1 Time-series retention</h3>
+<pre><code>PARTITION BY RANGE (ts)
+-- monthly leaves
+-- detach/drop leaves at retention boundary</code></pre>
+
+<p><strong>Use when:</strong> most queries contain time predicates and retention is time-based.</p>
+
+<h3>21.2 Fixed-count tenant spreading</h3>
+<pre><code>PARTITION BY HASH (tenant_id)
+-- 16 or 32 stable hash partitions</code></pre>
+
+<p><strong>Use when:</strong> tenant count is large/unbounded but distributing local table/index size across a fixed number of relations is helpful.</p>
+
+<h3>21.3 Region + time hierarchy</h3>
+<pre><code>PARTITION BY LIST (region_code)
+-- each region partition:
+PARTITION BY RANGE (occurred_at)</code></pre>
+
+<p><strong>Use when:</strong> region is a stable operational/storage boundary and queries/retention are also time-oriented.</p>
+
+<h3>21.4 Time + hash hierarchy</h3>
+<pre><code>PARTITION BY RANGE (occurred_at)
+-- each time partition:
+PARTITION BY HASH (tenant_id)</code></pre>
+
+<p><strong>Use when:</strong> retention is time-oriented but single time partitions become too large or too hot. Verify that the multiplied partition count is operationally justified.</p>
+
+<h3>21.5 Sliding window table</h3>
+<div class="diagram">future:      [Oct] [Nov] [Dec]
+current:     [Sep]
+recent: [Jun][Jul][Aug]
+expired: detach May -> archive -> drop
+
+Automation:
+1. create N future partitions
+2. monitor default/no-match errors
+3. detach oldest partition
+4. archive/aggregate
+5. drop according to retention policy</div>
+</section>
+
+<section id="pitfalls">
+<h2>22. Common pitfalls</h2>
+
+<h3>22.1 Partitioning by a column queries do not filter</h3>
+<p>
+A partition key that rarely appears in predicates provides little pruning benefit. Choose keys from actual query and lifecycle behavior rather than from abstract data taxonomy.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.2 Partition explosion</h3>
+<pre><code>365 daily partitions/year
+× 100 tenant-list subpartitions
+= 36,500 new leaf partitions/year</code></pre>
+
+<p>
+This creates substantial catalog, DDL, planning, autovacuum, monitoring, and backup complexity. Hashing tenants into a fixed number of subpartitions or using only the time dimension may be better.
+</p>
+
+<h3>22.3 Assuming the partition key must be indexed</h3>
+<p>
+Partition pruning uses partition metadata, not the presence of a partition-key index. Index the partition key when queries inside surviving partitions benefit from it—not merely because it is the partition key.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.4 Forgetting uniqueness restrictions</h3>
+<pre><code>-- This cannot be a global PK on a table partitioned only by occurred_at:
+PRIMARY KEY (event_id)
+
+-- This can:
+PRIMARY KEY (occurred_at, event_id)</code></pre>
+
+<h3>22.5 Missing future partitions</h3>
+<p>
+An insert with no matching partition fails unless a default partition exists. Time-based systems should create future partitions proactively and monitor the partition horizon.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.6 Treating a DEFAULT partition as permanent storage</h3>
+<p>
+A default partition can hide missed maintenance and can complicate later attachments because PostgreSQL may need to validate that the default partition contains no rows belonging to a new explicit partition.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.7 Expecting <code>CREATE INDEX CONCURRENTLY</code> on the parent</h3>
+<p>
+Build the parent index with <code>ON ONLY</code>, create child indexes concurrently, then attach them.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>22.8 Enabling partition-wise join globally without measuring</h3>
+<p>
+The setting is off by default because plan size, planning work, and per-node memory can multiply with the number of partitions. Test per session/workload first.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>22.9 Confusing partitioning with distributed write scaling</h3>
+<p>
+Native partitions remain inside one PostgreSQL cluster. If one server's CPU, storage, or write throughput is the hard bottleneck, local partitioning does not create additional machines.<sup><a href="#r1">[1]</a><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="checklist">
+<h2>23. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Define the problem.</strong> Is partitioning solving query pruning, retention, storage placement, index size, or maintenance?</li>
+<li><strong>Choose a key from workload predicates.</strong> Partition bounds should align with common filters.</li>
+<li><strong>Choose a sustainable partition count.</strong> Model several years of growth before selecting granularity.</li>
+<li><strong>Prefer declarative partitioning.</strong> Use inheritance-based designs only for requirements declarative partitioning cannot meet.</li>
+<li><strong>Test pruning with real SQL.</strong> Inspect <code>EXPLAIN</code> and runtime pruning behavior.</li>
+<li><strong>Index surviving partitions.</strong> Partitioning and indexing are complementary.</li>
+<li><strong>Design primary/unique keys with partition constraints in mind.</strong></li>
+<li><strong>Pre-create future partitions.</strong> Do not let ingestion discover missing partitions first.</li>
+<li><strong>Automate retention.</strong> Detach/archive/drop entire partitions when time/data boundaries permit.</li>
+<li><strong>Use matching CHECK constraints before ATTACH.</strong> Avoid validation scans and long locks.</li>
+<li><strong>Account for DEFAULT partitions during ATTACH.</strong></li>
+<li><strong>Plan index rollout.</strong> Use child <code>CREATE INDEX CONCURRENTLY</code> plus <code>ATTACH PARTITION</code> for low-lock builds.</li>
+<li><strong>Evaluate partition-wise joins/aggregates deliberately.</strong> They can multiply planning and memory costs.</li>
+<li><strong>Monitor partition counts and sizes.</strong> Use <code>pg_partition_tree()</code> and relation-size functions.</li>
+<li><strong>Review autovacuum/statistics on hot leaves.</strong></li>
+<li><strong>Keep partitioning and sharding decisions separate.</strong> Local data organization is not distributed capacity.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Partitioning principle:</strong> partition around a boundary the workload already understands—time, a stable category, or a controlled hash domain. The best partitioning scheme removes work from queries and operations; the worst merely multiplies tables.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Table Partitioning [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-partitioning.html">https://www.postgresql.org/docs/18/ddl-partitioning.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. CREATE TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtable.html">https://www.postgresql.org/docs/18/sql-createtable.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Data Definition [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl.html">https://www.postgresql.org/docs/18/ddl.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. PostgreSQL 18 Documentation; 2025 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Query Planning Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-query.html">https://www.postgresql.org/docs/18/runtime-config-query.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createindex.html">https://www.postgresql.org/docs/18/sql-createindex.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. ALTER TABLE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altertable.html">https://www.postgresql.org/docs/18/sql-altertable.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. System Administration Functions: partitioning information functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-admin.html">https://www.postgresql.org/docs/18/functions-admin.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. pg_partitioned_table System Catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-partitioned-table.html">https://www.postgresql.org/docs/18/catalog-pg-partitioned-table.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Routine Vacuuming [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Planner Statistics [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Constraints [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Unique Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-unique.html">https://www.postgresql.org/docs/18/indexes-unique.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Indexes and ORDER BY [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-ordering.html">https://www.postgresql.org/docs/18/indexes-ordering.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Multicolumn Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-multicolumn.html">https://www.postgresql.org/docs/18/indexes-multicolumn.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Tablespaces [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/manage-ag-tablespaces.html">https://www.postgresql.org/docs/18/manage-ag-tablespaces.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. COPY [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-copy.html">https://www.postgresql.org/docs/18/sql-copy.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Explicit Locking [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/explicit-locking.html">https://www.postgresql.org/docs/18/explicit-locking.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Monitoring Database Activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. pg_class System Catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-class.html">https://www.postgresql.org/docs/18/catalog-pg-class.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes.html">https://www.postgresql.org/docs/18/indexes.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+<li id="r24">Citus Data. Concepts: nodes, distributed tables, sharding, and shards [Internet]. Citus 13 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.citusdata.com/en/latest/get_started/concepts.html">https://docs.citusdata.com/en/latest/get_started/concepts.html</a></li>
+
+<li id="r25">Citus Data. Creating and Modifying Distributed Objects [Internet]. Citus 13 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.citusdata.com/en/v13.0/develop/reference_ddl.html">https://docs.citusdata.com/en/v13.0/develop/reference_ddl.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. CREATE TABLESPACE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtablespace.html">https://www.postgresql.org/docs/18/sql-createtablespace.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. Index-Only Scans and Covering Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-index-only-scans.html">https://www.postgresql.org/docs/18/indexes-index-only-scans.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. CREATE TABLE AS [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtableas.html">https://www.postgresql.org/docs/18/sql-createtableas.html</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. The right partitioning strategy depends on data volume, query predicates, retention policy, write rate, key constraints, partition-count growth, index strategy, locking requirements, and PostgreSQL version. Validate pruning, planning time, execution memory, DDL locks, and maintenance procedures with representative production-scale data before deployment.
+</p>
+</footer>
+
+</body>
+</html>

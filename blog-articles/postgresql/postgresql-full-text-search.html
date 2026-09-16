@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL full-text search: tsvector, tsquery, text-search configurations, dictionaries, stemming, ranking, highlighting, GIN/GiST indexes, and production search applications.">
+<title>PostgreSQL Full-Text Search: From Lexemes to Production Search Applications</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.72
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:1000px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:820px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Full-Text Search</h1>
+  <p class="dek">An expert-level guide to PostgreSQL’s native text-search pipeline: tokenization, lexemes, <code>tsvector</code>, <code>tsquery</code>, configurations, dictionaries, stemming, phrase and prefix search, ranking, highlighting, GIN/GiST indexing, generated search columns, multilingual designs, and production search applications.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL includes a native full-text-search subsystem that converts natural-language documents into normalized searchable lexemes and user queries into Boolean/proximity query trees. The two central data types are <code>tsvector</code>, which represents a document as sorted lexemes with optional positions and weights, and <code>tsquery</code>, which represents a search expression. The match operator <code>@@</code> evaluates whether a vector satisfies a query. Text-search configurations connect parsers to dictionaries so token normalization can reflect language-specific stemming, stop words, synonyms, thesauri, or custom rules.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup>
+</p>
+<p>
+PostgreSQL also provides relevance functions (<code>ts_rank</code>, <code>ts_rank_cd</code>), query-to-snippet highlighting (<code>ts_headline</code>), document/query manipulation functions, and specialized GIN and GiST index operator classes. For conventional full-text document search, PostgreSQL identifies GIN as the preferred index type; GiST text-search indexes are lossy signature indexes and require row rechecks. A production search system therefore usually combines an explicit search configuration, a persistent or indexed document vector, a GIN index, a query-construction strategy suitable for user input, relevance ranking, and application-specific filters and business ranking signals.<sup><a href="#r5">[5]</a>-<a href="#r8">[8]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#architecture">Full-text-search architecture</a></li>
+<li><a href="#document">Documents, tokens, and lexemes</a></li>
+<li><a href="#tsvector">tsvector</a></li>
+<li><a href="#tsquery">tsquery</a></li>
+<li><a href="#query-builders">Query-building functions</a></li>
+<li><a href="#configuration">Text-search configurations</a></li>
+<li><a href="#dictionaries">Dictionaries</a></li>
+<li><a href="#stemming">Stemming and stop words</a></li>
+<li><a href="#synonyms">Synonyms and thesauri</a></li>
+<li><a href="#weighted">Weighted structured documents</a></li>
+<li><a href="#ranking">Ranking</a></li>
+<li><a href="#highlighting">Highlighting</a></li>
+<li><a href="#gin">GIN indexes</a></li>
+<li><a href="#gist">GiST indexes</a></li>
+<li><a href="#schema">Search-column schema patterns</a></li>
+<li><a href="#queries">Production query patterns</a></li>
+<li><a href="#multilingual">Multilingual search</a></li>
+<li><a href="#applications">Search application architecture</a></li>
+<li><a href="#performance">Performance engineering</a></li>
+<li><a href="#debugging">Testing and debugging</a></li>
+<li><a href="#limitations">Limitations and complementary techniques</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="architecture">
+<h2>1. PostgreSQL full-text-search architecture</h2>
+<p>
+Full-text search is not substring search. PostgreSQL parses text into typed tokens, maps tokens through dictionaries into normalized <em>lexemes</em>, and stores those lexemes in a searchable vector. The same normalization pipeline is applied to user query terms. This lets language-aware search match related surface forms—for example, an English stemmer can normalize grammatical variants to a common stem—rather than requiring byte-for-byte equality between the document and query text.<sup><a href="#r1">[1]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="diagram">DOCUMENT
+"title + body"
+     |
+     v
+text-search parser
+     |
+     +--> token type: word / asciiword / url / email / ...
+     |
+     v
+configured dictionary chain
+     |
+     +--> lowercasing
+     +--> stop-word removal
+     +--> stemming
+     +--> synonym/thesaurus mapping
+     |
+     v
+lexemes + positions + optional weights
+     |
+     v
+tsvector  -------------------------+
+                                     \
+                                      \  @@ match
+                                       \
+USER QUERY                              v
+     |                               tsquery
+     v                                  ^
+plainto_tsquery / to_tsquery /          |
+phraseto_tsquery / websearch_to_tsquery-+
+     |
+     +--> same configuration/dictionaries
+
+Matched rows
+  |
+  +--> ts_rank / ts_rank_cd
+  +--> application ranking factors
+  +--> ts_headline on final result set</div>
+
+<p>
+The selected text-search configuration is part of the semantics. A configuration chooses a parser and specifies which dictionaries are tried, in order, for each token type. PostgreSQL can host multiple configurations in one database, and callers can pass an explicit configuration to <code>to_tsvector</code> and query-construction functions rather than relying on the session's <code>default_text_search_config</code>.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="document">
+<h2>2. Documents, tokens, and lexemes</h2>
+<p>
+A text-search <em>document</em> can be a single text value or a structured combination of fields. PostgreSQL's parser divides a document into tokens and assigns token types such as ASCII word, word, host, URL, email, integer, floating-point number, and hyphenated-word forms. The configuration then maps each token type to one or more dictionaries. The first dictionary in that chain that recognizes a token determines the emitted lexeme or lexemes; a stop word can be recognized and intentionally emit nothing.<sup><a href="#r3">[3]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<pre><code>SELECT alias, description, token
+FROM ts_debug(
+    'english',
+    'PostgreSQL 18 supports full-text search at docs.example.com.'
+);</code></pre>
+
+<p>
+<code>ts_debug</code> exposes how a configuration parses and normalizes a sample document, including parser token types and dictionary decisions. It is one of the most useful tools for diagnosing “why did this word not match?” problems.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>2.1 Normalization changes the indexed representation</h3>
+<pre><code>SELECT to_tsvector(
+    'english',
+    'The databases are searching documents efficiently'
+);</code></pre>
+
+<p>
+The resulting vector does not necessarily contain the original words. English stop words can disappear and inflected words can be reduced by stemming. Full-text search therefore compares normalized lexical representations rather than the raw original text.<sup><a href="#r3">[3]</a></sup>
+</p>
+</section>
+
+<section id="tsvector">
+<h2>3. <code>tsvector</code></h2>
+<p>
+<code>tsvector</code> stores a sorted list of distinct lexemes. A lexeme can also carry one or more positional locations and one of four optional weight labels—<code>A</code>, <code>B</code>, <code>C</code>, or <code>D</code>. Positions enable phrase/proximity behavior and cover-density ranking; weights let an application distinguish structurally important fields such as a title from a body.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>3.1 Construct a vector</h3>
+<pre><code>SELECT to_tsvector(
+    'english',
+    'PostgreSQL databases support database text searching.'
+);</code></pre>
+
+<h3>3.2 Match a vector</h3>
+<pre><code>SELECT
+    to_tsvector(
+        'english',
+        'PostgreSQL databases support database text searching.'
+    )
+    @@
+    to_tsquery(
+        'english',
+        'database & search'
+    ) AS matched;</code></pre>
+
+<h3>3.3 Positional information</h3>
+<p>
+Positions encode where lexemes occur in the processed document and make phrase and proximity queries possible. PostgreSQL's <code>strip(tsvector)</code> function can remove positions and weights to reduce information, but stripped vectors cannot support the positional logic required by <code>ts_rank_cd</code> and lose information needed by some query restrictions.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>3.4 Concatenating vectors</h3>
+<pre><code>SELECT
+    to_tsvector('english', 'postgresql search')
+    ||
+    to_tsvector('english', 'index design');</code></pre>
+
+<p>
+The <code>||</code> operator combines two vectors and offsets positions in the right operand so positional information remains meaningful in the concatenated document.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="tsquery">
+<h2>4. <code>tsquery</code></h2>
+<p>
+<code>tsquery</code> represents a Boolean/proximity search expression over normalized lexemes. Its principal operators are <code>&amp;</code> (AND), <code>|</code> (OR), <code>!</code> (NOT), and phrase/proximity operators such as <code>&lt;-&gt;</code> (“followed immediately by”) and <code>&lt;N&gt;</code> (“followed at distance N”). Lexemes can also carry weight restrictions and prefix matching.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>4.1 Boolean queries</h3>
+<pre><code>SELECT to_tsquery(
+    'english',
+    'postgres & (index | search) & !mysql'
+);</code></pre>
+
+<h3>4.2 Phrase query</h3>
+<pre><code>SELECT to_tsquery(
+    'english',
+    'full &lt;-&gt; text &lt;-&gt; search'
+);</code></pre>
+
+<h3>4.3 Prefix query</h3>
+<pre><code>SELECT to_tsquery(
+    'english',
+    'postgr:*'
+);</code></pre>
+
+<p>
+The <code>:*</code> label changes a lexeme to prefix matching, so it can match lexemes beginning with the specified prefix. Prefix matching is lexical-prefix matching after query normalization; it is not arbitrary substring search inside words.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>4.4 Weight-restricted query</h3>
+<pre><code>SELECT to_tsquery(
+    'english',
+    'postgres:A & search'
+);</code></pre>
+
+<p>
+A query lexeme can be restricted to document lexemes carrying selected weights, such as only title-weight <code>A</code> occurrences. GIN full-text indexes do not store weight labels, so weight-restricted matches require row rechecks even when the GIN index identifies candidate rows.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="query-builders">
+<h2>5. Query-building functions</h2>
+<p>
+PostgreSQL exposes several functions for turning user text into a <code>tsquery</code>. They differ primarily in how much query syntax they expect and how forgiving they are of arbitrary input.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Function</th><th>Input style</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td><code>to_tsquery</code></td><td>Explicit operators and valid tsquery syntax</td><td>Advanced/programmatically generated search expressions.</td></tr>
+<tr><td><code>plainto_tsquery</code></td><td>Plain text</td><td>Implicit AND between normalized terms.</td></tr>
+<tr><td><code>phraseto_tsquery</code></td><td>Plain phrase text</td><td>Terms must occur in phrase order, accounting for stop words.</td></tr>
+<tr><td><code>websearch_to_tsquery</code></td><td>Search-engine-like text</td><td>Human-facing search boxes with quotes, OR, and minus-style negation.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>5.1 Plain text</h3>
+<pre><code>SELECT plainto_tsquery(
+    'english',
+    'PostgreSQL full text search'
+);</code></pre>
+
+<h3>5.2 Phrase text</h3>
+<pre><code>SELECT phraseto_tsquery(
+    'english',
+    'full text search'
+);</code></pre>
+
+<h3>5.3 Web-search syntax</h3>
+<pre><code>SELECT websearch_to_tsquery(
+    'english',
+    '"full text search" OR postgres -mysql'
+);</code></pre>
+
+<p>
+<code>websearch_to_tsquery</code> is designed for simplified web-search-like syntax and is deliberately more tolerant of raw user input than <code>to_tsquery</code>. It is often the best native front end for a human search box, while applications that need exact Boolean trees can build a <code>tsquery</code> more explicitly.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="callout">
+<strong>SQL parameterization still matters.</strong> Query-builder functions make text-search syntax safer to accept, but the search string should still be sent to PostgreSQL as a bound SQL parameter rather than concatenated into SQL source.
+</div>
+</section>
+
+<section id="configuration">
+<h2>6. Text-search configurations</h2>
+<p>
+A text-search configuration defines the complete token-to-lexeme pipeline: which parser breaks input into typed tokens and which ordered dictionary list handles each token type. The configuration is referenced by the catalog type <code>regconfig</code>. PostgreSQL ships predefined configurations for multiple languages and permits application-defined configurations.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>6.1 Inspect the default</h3>
+<pre><code>SHOW default_text_search_config;</code></pre>
+
+<h3>6.2 Make search semantics explicit</h3>
+<pre><code>SELECT to_tsvector(
+    'pg_catalog.english',
+    body
+)
+FROM app.article;</code></pre>
+
+<p>
+Specifying a configuration explicitly is particularly important for indexes and generated search columns. It makes document normalization independent of per-session changes to <code>default_text_search_config</code> and gives the planner a stable expression that matches the indexed definition.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>6.3 Create a configuration from an existing one</h3>
+<pre><code>CREATE TEXT SEARCH CONFIGURATION app.product_search (
+    COPY = pg_catalog.english
+);</code></pre>
+
+<h3>6.4 Change token mappings</h3>
+<pre><code>ALTER TEXT SEARCH CONFIGURATION app.product_search
+ALTER MAPPING FOR
+    asciiword,
+    asciihword,
+    hword_asciipart
+WITH
+    app.product_synonym,
+    pg_catalog.english_stem;</code></pre>
+
+<p>
+Dictionary ordering is meaningful: PostgreSQL tries dictionaries in the order configured for the token type and stops when a dictionary recognizes the token. Specialized synonym or domain dictionaries therefore normally appear before a broad stemmer that recognizes nearly every word.<sup><a href="#r9">[9]</a><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="dictionaries">
+<h2>7. Dictionaries</h2>
+<p>
+A text-search dictionary is responsible for recognizing a token and returning zero, one, or multiple normalized lexemes. Dictionaries are parameterized instances of dictionary templates. PostgreSQL ships templates for simple normalization, Snowball stemming, Ispell, synonyms, and thesauri, and extensions can supply additional templates.<sup><a href="#r12">[12]</a>-<a href="#r14">[14]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Dictionary/template</th><th>Purpose</th><th>Typical position in chain</th></tr></thead>
+<tbody>
+<tr><td><code>simple</code></td><td>Lowercase; optionally eliminate stop words</td><td>Exact-ish normalized tokens or fallback.</td></tr>
+<tr><td><code>snowball</code></td><td>Language-specific stemming + optional stop words</td><td>Usually late because it broadly recognizes words.</td></tr>
+<tr><td><code>ispell</code></td><td>Morphological dictionary based on affix/dictionary files</td><td>Before broad fallback stemmers.</td></tr>
+<tr><td><code>synonym</code></td><td>Replace a word with configured synonym</td><td>Before stemmer when domain mapping is desired.</td></tr>
+<tr><td><code>thesaurus</code></td><td>Phrase-aware substitution using a subdictionary</td><td>For domain-specific multiword concepts.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>7.1 Test one dictionary</h3>
+<pre><code>SELECT ts_lexize(
+    'pg_catalog.english_stem',
+    'databases'
+);</code></pre>
+
+<h3>7.2 Dictionary catalog</h3>
+<pre><code>SELECT
+    n.nspname AS schema_name,
+    d.dictname,
+    d.dictinitoption
+FROM pg_ts_dict AS d
+JOIN pg_namespace AS n
+  ON n.oid = d.dictnamespace
+ORDER BY schema_name, d.dictname;</code></pre>
+
+<p>
+The <code>pg_ts_dict</code> catalog records the dictionary, owner, template, schema, and template-specific initialization options. The implementation functions themselves are defined by the dictionary template.<sup><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="stemming">
+<h2>8. Stemming and stop words</h2>
+<p>
+Stemming reduces variant word forms to a language-specific stem. PostgreSQL's Snowball dictionary template is based on the Snowball stemming algorithms and is available for numerous languages. A Snowball dictionary can also use a stop-word list to eliminate high-frequency terms that are considered unhelpful for search.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<pre><code>SELECT to_tsvector(
+    'english',
+    'The searchable databases were searching database documents'
+);</code></pre>
+
+<p>
+The key engineering consequence is that search semantics are linguistic rather than exact-text semantics. Stemming can intentionally increase recall, while stop words reduce index/query noise. However, both are domain-sensitive: a term considered common in ordinary prose might carry meaning in legal, medical, product-code, or source-code corpora.
+</p>
+
+<h3>8.1 Simple versus stemmed search</h3>
+<pre><code>SELECT
+    to_tsvector('simple',  'running runners ran') AS simple_vector,
+    to_tsvector('english', 'running runners ran') AS english_vector;</code></pre>
+
+<p>
+The <code>simple</code> dictionary lowercases words and can apply stop words but does not perform language stemming. It is useful when preserving lexical forms is more important than matching morphological variants.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>8.2 Custom Snowball dictionary</h3>
+<pre><code>CREATE TEXT SEARCH DICTIONARY app.english_domain (
+    TEMPLATE = snowball,
+    Language = english,
+    StopWords = english
+);</code></pre>
+
+<p>
+Dictionary options are template-specific. Custom stop-word files and synonym/thesaurus rule files are server-side text-search resources, so packaging and deployment of those files becomes part of the database deployment process.<sup><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="synonyms">
+<h2>9. Synonyms and thesauri</h2>
+<p>
+A synonym dictionary maps one lexical form to another, while a thesaurus can recognize phrases and substitute normalized concepts. These are useful for domain vocabularies where different surface terms should match a shared concept—for example, “postgres” and “postgresql”, or a product abbreviation and its full name.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>9.1 Example synonym rule file</h3>
+<pre><code># postgres.syn (server-side dictionary file)
+postgres     postgresql
+pgsql        postgresql
+dbms         database</code></pre>
+
+<pre><code>CREATE TEXT SEARCH DICTIONARY app.product_synonym (
+    TEMPLATE = synonym,
+    SYNONYMS = postgres
+);
+
+CREATE TEXT SEARCH CONFIGURATION app.tech_search (
+    COPY = pg_catalog.english
+);
+
+ALTER TEXT SEARCH CONFIGURATION app.tech_search
+ALTER MAPPING FOR asciiword, word
+WITH app.product_synonym, pg_catalog.english_stem;</code></pre>
+
+<h3>9.2 Test the pipeline</h3>
+<pre><code>SELECT *
+FROM ts_debug(
+    'app.tech_search',
+    'Postgres is a DBMS'
+);</code></pre>
+
+<div class="callout warn">
+<strong>Synonym policy changes search semantics.</strong> Treat dictionary files/configuration changes like application code: version them, test representative queries, deploy consistently across primary/standby nodes, and re-evaluate persisted vectors when normalization rules change.
+</div>
+</section>
+
+<section id="weighted">
+<h2>10. Weighted structured documents</h2>
+<p>
+Most search documents are structured. A title match is often more important than a body match, while tags, author names, or product categories may fall between them. PostgreSQL lets applications label lexemes with weights <code>A</code> through <code>D</code> using <code>setweight()</code>, concatenate vectors, and supply corresponding numeric weights to ranking functions.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<pre><code>setweight(
+    to_tsvector(
+        'english',
+        coalesce(title, '')
+    ),
+    'A'
+)
+||
+setweight(
+    to_tsvector(
+        'english',
+        coalesce(tags_text, '')
+    ),
+    'B'
+)
+||
+setweight(
+    to_tsvector(
+        'english',
+        coalesce(summary, '')
+    ),
+    'C'
+)
+||
+setweight(
+    to_tsvector(
+        'english',
+        coalesce(body, '')
+    ),
+    'D'
+)</code></pre>
+
+<p>
+Using <code>coalesce</code> matters because <code>to_tsvector(NULL)</code> is null and PostgreSQL's vector concatenation would otherwise allow a nullable field to disrupt construction of the structured vector.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>10.1 Weight-aware query</h3>
+<pre><code>SELECT *
+FROM app.article
+WHERE search_vector
+      @@ to_tsquery(
+             'english',
+             'postgres:A | postgres'
+         );</code></pre>
+</section>
+
+<section id="ranking">
+<h2>11. Ranking search results</h2>
+<p>
+The <code>@@</code> operator answers whether a document matches a query; it does not define how matches should be ordered. PostgreSQL provides <code>ts_rank</code>, which primarily considers matching lexeme frequency and weights, and <code>ts_rank_cd</code>, which implements cover-density ranking and uses proximity information from lexeme positions. Relevance is application-specific, so built-in rank should often be combined with business signals such as recency, popularity, authority, tenancy, or product availability.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>11.1 Basic ranking</h3>
+<pre><code>WITH q AS (
+    SELECT websearch_to_tsquery(
+        'english',
+        $1
+    ) AS query
+)
+SELECT
+    a.article_id,
+    a.title,
+    ts_rank(
+        a.search_vector,
+        q.query
+    ) AS rank
+FROM app.article AS a
+CROSS JOIN q
+WHERE a.search_vector @@ q.query
+ORDER BY rank DESC, a.article_id DESC
+LIMIT 20;</code></pre>
+
+<h3>11.2 Weight customisation</h3>
+<pre><code>ts_rank(
+    ARRAY[
+        0.05,  -- D
+        0.20,  -- C
+        0.60,  -- B
+        1.00   -- A
+    ]::real[],
+    a.search_vector,
+    q.query
+)</code></pre>
+
+<p>
+The weight array is ordered <code>D</code>, <code>C</code>, <code>B</code>, <code>A</code>. Custom values can make title/tag hits dominate body-only matches while retaining the same vector and query.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>11.3 Cover-density rank</h3>
+<pre><code>SELECT
+    article_id,
+    title,
+    ts_rank_cd(
+        search_vector,
+        websearch_to_tsquery('english', $1),
+        32
+    ) AS rank
+FROM app.article
+WHERE search_vector
+      @@ websearch_to_tsquery('english', $1)
+ORDER BY rank DESC
+LIMIT 20;</code></pre>
+
+<p>
+<code>ts_rank_cd</code> uses positional proximity, so stripped vectors without positions cannot contribute to cover-density ranking. Normalization option 32 maps rank through <code>rank/(rank+1)</code>, which bounds the value below 1 but does not create a globally calibrated relevance probability.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>11.4 Hybrid application ranking</h3>
+<pre><code>WITH q AS (
+    SELECT websearch_to_tsquery('english', $1) AS query
+)
+SELECT
+    a.article_id,
+    a.title,
+    (
+        ts_rank_cd(a.search_vector, q.query, 32) * 0.80
+        +
+        LEAST(a.popularity_score / 100.0, 1.0) * 0.15
+        +
+        exp(
+            -EXTRACT(EPOCH FROM (now() - a.published_at))
+            / 86400.0
+            / 180.0
+        ) * 0.05
+    ) AS score
+FROM app.article AS a
+CROSS JOIN q
+WHERE a.search_vector @@ q.query
+ORDER BY score DESC
+LIMIT 20;</code></pre>
+
+<p>
+PostgreSQL explicitly notes that relevance is vague and application-specific and that its built-in ranking functions do not use corpus-wide information. Combining lexical rank with domain signals is therefore a normal application-layer design rather than a workaround.<sup><a href="#r3">[3]</a></sup>
+</p>
+</section>
+
+<section id="highlighting">
+<h2>12. Highlighting with <code>ts_headline</code></h2>
+<p>
+<code>ts_headline</code> returns an excerpt from the original document with query terms marked. It supports controls for fragment count, fragment length, delimiters, and start/stop markers. It operates on the original document text, not just the vector, so it can be relatively expensive and is normally best applied only to the small final page of results.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<pre><code>WITH q AS (
+    SELECT websearch_to_tsquery(
+        'english',
+        $1
+    ) AS query
+)
+SELECT
+    a.article_id,
+    a.title,
+    ts_headline(
+        'english',
+        a.body,
+        q.query,
+        'StartSel=&lt;mark&gt;, StopSel=&lt;/mark&gt;,
+         MaxFragments=2, MinWords=8, MaxWords=24,
+         FragmentDelimiter= … '
+    ) AS snippet
+FROM app.article AS a
+CROSS JOIN q
+WHERE a.search_vector @@ q.query
+ORDER BY ts_rank_cd(a.search_vector, q.query) DESC
+LIMIT 20;</code></pre>
+
+<div class="callout danger">
+<strong><code>ts_headline</code> is not an HTML sanitizer.</strong> PostgreSQL warns that its output is not guaranteed safe for direct insertion into a web page when the source text is untrusted. Strip unsafe markup before search or sanitize/escape the final rendered output according to the application's HTML policy.<sup><a href="#r3">[3]</a></sup>
+</div>
+
+<h3>12.1 Rank first, headline second</h3>
+<pre><code>WITH
+q AS (
+    SELECT websearch_to_tsquery('english', $1) AS query
+),
+top_hits AS (
+    SELECT
+        a.article_id,
+        a.title,
+        a.body,
+        ts_rank_cd(a.search_vector, q.query) AS rank,
+        q.query
+    FROM app.article AS a
+    CROSS JOIN q
+    WHERE a.search_vector @@ q.query
+    ORDER BY rank DESC
+    LIMIT 20
+)
+SELECT
+    article_id,
+    title,
+    rank,
+    ts_headline(
+        'english',
+        body,
+        query,
+        'StartSel=&lt;mark&gt;, StopSel=&lt;/mark&gt;, MaxFragments=2'
+    ) AS snippet
+FROM top_hits
+ORDER BY rank DESC;</code></pre>
+
+<p>
+This shape avoids generating snippets for every candidate match before the top result page is known.
+</p>
+</section>
+
+<section id="gin">
+<h2>13. GIN indexes</h2>
+<p>
+GIN—Generalized Inverted Index—is designed for composite values whose component keys need to be searched independently. For full-text search, the indexed keys are document lexemes and the posting lists identify rows containing each lexeme. PostgreSQL identifies GIN as the preferred text-search index type in ordinary full-text workloads.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>13.1 Basic GIN index</h3>
+<pre><code>CREATE INDEX article_search_gin
+ON app.article
+USING GIN (search_vector);</code></pre>
+
+<h3>13.2 Expression GIN index</h3>
+<pre><code>CREATE INDEX article_body_search_gin
+ON app.article
+USING GIN (
+    to_tsvector(
+        'english',
+        body
+    )
+);</code></pre>
+
+<p>
+When indexing <code>to_tsvector</code> as an expression, use the two-argument version with an explicit configuration. A query must use a compatible expression/configuration for PostgreSQL to match it to the index.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>13.3 Query using the expression index</h3>
+<pre><code>SELECT
+    article_id,
+    title
+FROM app.article
+WHERE to_tsvector('english', body)
+      @@ websearch_to_tsquery('english', $1);</code></pre>
+
+<h3>13.4 GIN write behavior</h3>
+<p>
+One row's vector typically contains many lexemes, so inserting one table row can create many index-key insertions. GIN supports a pending-list mechanism controlled by the <code>fastupdate</code> storage parameter and maintenance thresholds such as <code>gin_pending_list_limit</code>. This improves many write workloads by batching index maintenance, but pending-list growth and cleanup can create latency patterns worth monitoring on heavily updated search tables.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>ALTER INDEX app.article_search_gin
+SET (fastupdate = on);
+
+ALTER INDEX app.article_search_gin
+SET (gin_pending_list_limit = 8388608);</code></pre>
+
+<p>
+The numerical setting above is an example, not a universal recommendation. GIN tuning depends on write rate, autovacuum behavior, query latency objectives, available memory, and index size.
+</p>
+
+<h3>13.5 PostgreSQL 18 index builds</h3>
+<p>
+PostgreSQL 18 added support for parallel GIN index creation. This can reduce build time where the planner/build process can use parallel workers and sufficient CPU/I/O capacity is available.<sup><a href="#r16">[16]</a></sup>
+</p>
+</section>
+
+<section id="gist">
+<h2>14. GiST indexes</h2>
+<p>
+GiST—Generalized Search Tree—is an extensible balanced-tree framework supporting many operator classes, including text-search operator classes. A full-text GiST vector index stores a fixed-length signature rather than every lexeme/posting list exactly. The signature can produce false positive candidates, so the heap row must be rechecked. PostgreSQL performs these rechecks automatically.<sup><a href="#r5">[5]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<pre><code>CREATE INDEX article_search_gist
+ON app.article
+USING GIST (search_vector);</code></pre>
+
+<h3>14.1 Signature length</h3>
+<pre><code>CREATE INDEX article_search_gist_256
+ON app.article
+USING GIST (
+    search_vector tsvector_ops(siglen=256)
+);</code></pre>
+
+<p>
+Increasing the GiST text-search signature length can reduce false matches at the cost of a larger index. GIN is generally preferred when the primary workload is full-text matching; GiST becomes interesting when its size/update behavior or broader GiST ecosystem fits the application better.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>14.2 GIN versus GiST</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Property</th><th>GIN</th><th>GiST</th></tr></thead>
+<tbody>
+<tr><td>Representation</td><td>Inverted lexeme → posting lists</td><td>Fixed-length signatures for text vectors</td></tr>
+<tr><td>Full-text preference</td><td>PostgreSQL's preferred text-search index</td><td>Alternative</td></tr>
+<tr><td>False positives</td><td>Exact key membership; some query forms still require heap recheck (for example weights)</td><td>Lossy signature can generate false positives; row recheck required</td></tr>
+<tr><td>Write path</td><td>Can perform substantial work per document; optional pending list</td><td>Tree maintenance; signature-based representation</td></tr>
+<tr><td>Indexable type</td><td><code>tsvector</code></td><td><code>tsvector</code> and text-search support including <code>tsquery</code> operator classes</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="schema">
+<h2>15. Schema patterns for search vectors</h2>
+
+<h3>15.1 Stored generated <code>tsvector</code> column</h3>
+<p>
+For a document derived entirely from fields in the same row under a fixed configuration, a stored generated column is often the cleanest design. PostgreSQL's text-search documentation recommends generated columns over the older built-in <code>tsvector_update_trigger</code> approach for automatically maintained search vectors.<sup><a href="#r11">[11]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE app.article (
+    article_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    title text NOT NULL,
+    summary text,
+    body text NOT NULL,
+    published_at timestamptz NOT NULL DEFAULT now(),
+
+    search_vector tsvector
+    GENERATED ALWAYS AS (
+        setweight(
+            to_tsvector(
+                'english',
+                coalesce(title, '')
+            ),
+            'A'
+        )
+        ||
+        setweight(
+            to_tsvector(
+                'english',
+                coalesce(summary, '')
+            ),
+            'B'
+        )
+        ||
+        setweight(
+            to_tsvector(
+                'english',
+                coalesce(body, '')
+            ),
+            'D'
+        )
+    ) STORED
+);
+
+CREATE INDEX article_search_vector_gin
+ON app.article
+USING GIN (search_vector);</code></pre>
+
+<p>
+Generated expressions must use immutable functions and may refer only to the current row rather than querying other tables. A stored generated column is recomputed when the row changes and occupies storage. These restrictions fit fixed-configuration <code>to_tsvector(regconfig,text)</code> pipelines well.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>15.2 Expression index</h3>
+<pre><code>CREATE INDEX article_body_search_gin
+ON app.article
+USING GIN (
+    to_tsvector(
+        'english',
+        coalesce(body, '')
+    )
+);</code></pre>
+
+<p>
+An expression index avoids storing a visible vector column, but queries and ranking logic often become more repetitive because the vector expression must be reproduced. A stored vector is usually convenient when the application needs weighting, ranking, inspection, and many repeated searches.
+</p>
+
+<h3>15.3 Trigger-maintained vector</h3>
+<p>
+PostgreSQL still provides <code>tsvector_update_trigger</code> and <code>tsvector_update_trigger_column</code> for cases that need trigger-based maintenance, including a configuration name stored in another column. PostgreSQL 18's documentation describes the basic trigger approach as obsoleted for straightforward cases by stored generated columns.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE app.localized_document (
+    document_id bigint PRIMARY KEY,
+    search_config regconfig NOT NULL,
+    title text,
+    body text,
+    search_vector tsvector
+);
+
+CREATE TRIGGER localized_document_tsv
+BEFORE INSERT OR UPDATE
+ON app.localized_document
+FOR EACH ROW
+EXECUTE FUNCTION tsvector_update_trigger_column(
+    search_vector,
+    search_config,
+    title,
+    body
+);</code></pre>
+</section>
+
+<section id="queries">
+<h2>16. Production search-query patterns</h2>
+
+<h3>16.1 Filter first-class business dimensions with ordinary columns</h3>
+<pre><code>WITH q AS (
+    SELECT websearch_to_tsquery(
+        'english',
+        $1
+    ) AS query
+)
+SELECT
+    p.product_id,
+    p.name,
+    p.price,
+    ts_rank_cd(
+        p.search_vector,
+        q.query,
+        32
+    ) AS relevance
+FROM catalog.product AS p
+CROSS JOIN q
+WHERE p.store_id = $2
+  AND p.active
+  AND p.search_vector @@ q.query
+ORDER BY relevance DESC, p.product_id
+LIMIT $3;</code></pre>
+
+<p>
+Full-text search should complement ordinary relational filtering, not replace it. Tenant IDs, availability, dates, prices, permissions, workflow state, and other exact attributes belong in typed columns and ordinary predicates. PostgreSQL's planner can combine the text-search index with other indexes through bitmap operations when advantageous.
+</p>
+
+<h3>16.2 Phrase search</h3>
+<pre><code>SELECT *
+FROM app.article
+WHERE search_vector
+      @@ phraseto_tsquery(
+             'english',
+             $1
+         );</code></pre>
+
+<h3>16.3 Explicit proximity</h3>
+<pre><code>SELECT *
+FROM app.article
+WHERE search_vector
+      @@ to_tsquery(
+             'english',
+             'postgres &lt;3&gt; indexing'
+         );</code></pre>
+
+<h3>16.4 Prefix-autocomplete style query</h3>
+<pre><code>SELECT
+    product_id,
+    name
+FROM catalog.product
+WHERE search_vector
+      @@ to_tsquery(
+             'simple',
+             $1 || ':*'
+         )
+LIMIT 20;</code></pre>
+
+<p>
+If prefix text comes from a user, construct the <code>tsquery</code> carefully. Arbitrarily appending text into <code>to_tsquery</code> syntax can produce syntax errors or unintended operators. Applications often normalize/validate a single lexical prefix or construct queries with explicit query-combination functions rather than accepting raw advanced syntax.
+</p>
+
+<h3>16.5 Build a query with operators</h3>
+<pre><code>SELECT
+    plainto_tsquery('english', $1)
+    &amp;&amp;
+    to_tsquery('english', $2 || ':*');</code></pre>
+
+<p>
+PostgreSQL supplies operators and functions for combining existing <code>tsquery</code> values, which can be safer and clearer than generating one large textual query expression.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="multilingual">
+<h2>17. Multilingual search</h2>
+<p>
+Language-specific stemming requires a language-appropriate configuration. A corpus containing multiple languages should not blindly run all documents through one English stemmer. Designs include partitioning/searching by language, storing a <code>regconfig</code> alongside each document and maintaining its vector with a trigger, or maintaining separate language-specific searchable fields.<sup><a href="#r9">[9]</a><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>17.1 Configuration per row</h3>
+<pre><code>CREATE TABLE app.document (
+    document_id bigint PRIMARY KEY,
+    language_code text NOT NULL,
+    search_config regconfig NOT NULL,
+    title text NOT NULL,
+    body text NOT NULL,
+    search_vector tsvector
+);</code></pre>
+
+<pre><code>INSERT INTO app.document(
+    document_id,
+    language_code,
+    search_config,
+    title,
+    body
+)
+VALUES
+    (1, 'en', 'pg_catalog.english', 'Database indexing', '...'),
+    (2, 'es', 'pg_catalog.spanish', 'Índices de bases de datos', '...');</code></pre>
+
+<h3>17.2 Search with matching language</h3>
+<pre><code>SELECT
+    document_id,
+    title
+FROM app.document
+WHERE language_code = $1
+  AND search_vector
+      @@ websearch_to_tsquery(
+             search_config,
+             $2
+         );</code></pre>
+
+<p>
+This design avoids comparing a query normalized under one language to vectors normalized under an incompatible language. It also makes the selected linguistic policy explicit in the row schema.
+</p>
+</section>
+
+<section id="applications">
+<h2>18. Architecture of a search application</h2>
+
+<div class="diagram">Browser / API client
+       |
+       | query="postgres indexing"
+       v
+Application
+       |
+       +--> validate tenant/filter parameters
+       +--> bind search text as SQL parameter
+       |
+       v
+PostgreSQL
+  |
+  +--> websearch_to_tsquery(config, $query)
+  |
+  +--> GIN candidate lookup with @@
+  |
+  +--> relational filters:
+  |      tenant / permissions / state / date / category
+  |
+  +--> ts_rank_cd + business-ranking signals
+  |
+  +--> LIMIT top N
+  |
+  +--> ts_headline only for final N
+  |
+  v
+Search results
+ title + metadata + sanitized snippet + score</div>
+
+<h3>18.1 Example API query</h3>
+<pre><code>WITH
+q AS (
+    SELECT websearch_to_tsquery(
+        'english',
+        $1
+    ) AS query
+),
+ranked AS (
+    SELECT
+        a.article_id,
+        a.title,
+        a.summary,
+        a.body,
+        a.published_at,
+        q.query,
+        ts_rank_cd(
+            a.search_vector,
+            q.query,
+            32
+        ) AS lexical_score
+    FROM app.article AS a
+    CROSS JOIN q
+    WHERE a.tenant_id = $2
+      AND a.published
+      AND a.search_vector @@ q.query
+    ORDER BY
+        lexical_score DESC,
+        a.published_at DESC,
+        a.article_id DESC
+    LIMIT $3
+)
+SELECT
+    article_id,
+    title,
+    published_at,
+    lexical_score,
+    ts_headline(
+        'english',
+        body,
+        query,
+        'StartSel=&lt;mark&gt;, StopSel=&lt;/mark&gt;,
+         MaxFragments=2, MinWords=6, MaxWords=22'
+    ) AS snippet
+FROM ranked
+ORDER BY
+    lexical_score DESC,
+    published_at DESC,
+    article_id DESC;</code></pre>
+
+<h3>18.2 Stable pagination</h3>
+<p>
+Search relevance scores can tie and can change as document data changes. Add deterministic secondary keys such as publication time and primary key. For deep result sets, keyset-style pagination is often preferable to large <code>OFFSET</code> values, but keyset predicates must include all ordering keys used by the ranking query.
+</p>
+
+<h3>18.3 Security and tenancy</h3>
+<p>
+Do not search globally and filter sensitive rows in application memory. Permission and tenant predicates should be enforced in the SQL query—and, where appropriate, reinforced with PostgreSQL row-level security—so unauthorized documents are never returned from the database search.<sup><a href="#r18">[18]</a></sup>
+</p>
+</section>
+
+<section id="performance">
+<h2>19. Performance engineering</h2>
+
+<h3>19.1 Avoid recomputing vectors for every row at query time</h3>
+<pre><code>-- Functional but potentially expensive on a large table without
+-- a matching expression index:
+WHERE to_tsvector('english', title || ' ' || body)
+      @@ websearch_to_tsquery('english', $1)</code></pre>
+
+<p>
+A stored vector plus GIN index, or an exactly matching expression index, moves document parsing out of the hot read path and provides an indexable search representation.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>19.2 Explain the search plan</h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS
+)
+SELECT
+    article_id,
+    title
+FROM app.article
+WHERE search_vector
+      @@ websearch_to_tsquery(
+             'english',
+             'postgres indexing'
+         );</code></pre>
+
+<p>
+Use <code>EXPLAIN (ANALYZE, BUFFERS)</code> to verify that the intended text-search index is actually used and to quantify candidate rows, rechecks, heap access, and buffer traffic. Plan choice remains cost-based; an index is not necessarily chosen when a query matches a very large fraction of the table.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>19.3 Ranking can dominate after matching</h3>
+<p>
+A GIN index can find matching candidate rows efficiently, but sorting a huge match set by <code>ts_rank</code> still requires computing rank over those candidates and finding the top results. Narrow relational filters, selective queries, reasonable result limits, and application search syntax that discourages extremely broad queries can matter as much as index lookup latency.
+</p>
+
+<h3>19.4 Headline generation comes last</h3>
+<p>
+Because <code>ts_headline</code> reparses the original document and can be relatively expensive, generate it after candidate filtering, ranking, and limiting rather than for every match.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>19.5 Monitor GIN write costs</h3>
+<p>
+Search indexes increase write amplification because document changes require lexeme-index maintenance. Monitor table/index size, autovacuum, WAL, I/O, and query latency. On write-heavy systems, inspect GIN pending-list behavior and test whether default <code>fastupdate</code> behavior fits the workload.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>19.6 Statistics for vocabulary exploration</h3>
+<p>
+PostgreSQL's <code>ts_stat</code> function gathers statistics about lexemes contained in <code>tsvector</code> results. It can help inspect vocabulary frequency, diagnose corpus quality, and identify terms that dominate a search collection.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<pre><code>SELECT *
+FROM ts_stat(
+    'SELECT search_vector
+     FROM app.article'
+)
+ORDER BY nentry DESC
+LIMIT 50;</code></pre>
+</section>
+
+<section id="debugging">
+<h2>20. Testing and debugging text search</h2>
+
+<h3>20.1 psql inspection commands</h3>
+<pre><code>-- Configurations:
+\dF
+
+-- Detailed configuration:
+\dF+ english
+
+-- Dictionaries:
+\dFd
+
+-- Parsers:
+\dFp
+
+-- Templates:
+\dFt</code></pre>
+
+<p>
+PostgreSQL's psql client includes dedicated commands for listing configurations, dictionaries, parsers, and templates and for showing configuration mappings.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>20.2 Test full configuration behavior</h3>
+<pre><code>SELECT *
+FROM ts_debug(
+    'app.tech_search',
+    'Postgres databases are searchable.'
+);</code></pre>
+
+<h3>20.3 Test parser tokenization</h3>
+<pre><code>SELECT *
+FROM ts_parse(
+    'default',
+    'Email docs@example.com about PostgreSQL-18.'
+);</code></pre>
+
+<h3>20.4 Test dictionaries directly</h3>
+<pre><code>SELECT ts_lexize(
+    'english_stem',
+    'searching'
+);</code></pre>
+
+<h3>20.5 Regression-test search semantics</h3>
+<pre><code>-- Example assertions to keep in migration/application tests:
+SELECT
+    to_tsvector('app.tech_search', 'Postgres indexing')
+    @@ plainto_tsquery('app.tech_search', 'PostgreSQL index')
+    AS expected_match;
+
+SELECT
+    to_tsvector('english', 'full text search')
+    @@ phraseto_tsquery('english', 'full text search')
+    AS expected_phrase_match;</code></pre>
+
+<p>
+Search behavior can change intentionally when dictionary rules, stop-word files, configuration mappings, or source text change. Treat representative query/document pairs as regression fixtures so search-semantic changes are visible before deployment.
+</p>
+</section>
+
+<section id="limitations">
+<h2>21. Limitations and complementary techniques</h2>
+
+<h3>21.1 Full-text search is not typo tolerance</h3>
+<p>
+Stemming handles morphological variation, but native full-text search does not inherently turn a misspelling into the intended lexeme. PostgreSQL's <code>pg_trgm</code> extension provides trigram similarity and GIN/GiST indexing for fuzzy string matching and can complement full-text search for spelling suggestions, names, identifiers, or partial-string behavior.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>21.2 Ranking is not corpus-trained relevance</h3>
+<p>
+<code>ts_rank</code> and <code>ts_rank_cd</code> do not use global corpus statistics such as inverse document frequency. PostgreSQL explicitly describes relevance as application-specific and encourages custom ranking logic when built-in lexical/proximity ranking is insufficient.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>21.3 Search configuration is linguistic policy</h3>
+<p>
+A stemmer, stop-word list, synonym map, or thesaurus can create false positives or false negatives in specialized domains. Search quality engineering should measure relevance on representative queries, not only index performance.
+</p>
+
+<h3>21.4 Full-text search is not semantic vector search</h3>
+<p>
+Native text search matches normalized lexical concepts encoded by dictionaries and query operators. Embedding/vector similarity solves a different problem: numerical semantic-neighborhood search. Applications can use both approaches, but they should not be treated as interchangeable.
+</p>
+
+<h3>21.5 Very large search products may need specialized engines</h3>
+<p>
+PostgreSQL full-text search is attractive when search must stay transactionally close to relational data, permissions, filters, and application writes. Dedicated search engines can provide additional distributed indexing, analyzers, faceting, typo correction, relevance-learning, and operational scaling features. The decision is architectural: compare required search semantics and scale against the value of keeping search inside PostgreSQL.
+</p>
+</section>
+
+<section id="checklist">
+<h2>22. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Choose a configuration deliberately.</strong> Do not rely accidentally on whatever <code>default_text_search_config</code> happens to be.</li>
+<li><strong>Test tokenization and dictionaries.</strong> Use <code>ts_debug</code> for representative domain text.</li>
+<li><strong>Choose query syntax for the user interface.</strong> <code>websearch_to_tsquery</code> is often appropriate for human-facing search boxes.</li>
+<li><strong>Bind search strings as SQL parameters.</strong> Do not build SQL statements by string concatenation.</li>
+<li><strong>Persist or index the document vector.</strong> Avoid full-table reparsing in the read path.</li>
+<li><strong>Prefer GIN for conventional full-text matching.</strong> Use GiST only with a clear workload reason.</li>
+<li><strong>Weight fields intentionally.</strong> Titles, tags, summaries, and bodies normally have different relevance.</li>
+<li><strong>Separate lexical matching from business ranking.</strong> Add recency/popularity/authority explicitly.</li>
+<li><strong>Generate headlines only for final results.</strong> Sanitize/escape output before HTML rendering.</li>
+<li><strong>Keep exact filters relational.</strong> Tenant, state, price, date, permissions, and IDs are not text-search concerns.</li>
+<li><strong>Plan for multilingual data.</strong> Use language-appropriate configurations and query normalization.</li>
+<li><strong>Version dictionaries/configurations.</strong> Changes can alter both indexed vectors and query behavior.</li>
+<li><strong>Benchmark write cost.</strong> GIN indexes increase index maintenance and WAL.</li>
+<li><strong>Measure broad-query behavior.</strong> Index lookup can be fast while ranking/sorting huge match sets is expensive.</li>
+<li><strong>Regression-test relevance.</strong> Keep known document/query/expected-result fixtures alongside application tests.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Search-design principle:</strong> PostgreSQL full-text search works best when lexical normalization, indexing, ranking, and relational filtering are treated as one query-planning problem. Build a stable document representation, use the same configuration for documents and queries, let GIN narrow candidates, then spend expensive ranking and highlighting work only on the rows that matter.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Full Text Search [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch.html">https://www.postgresql.org/docs/18/textsearch.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Text search types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-textsearch.html">https://www.postgresql.org/docs/18/datatype-textsearch.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Controlling text search [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-controls.html">https://www.postgresql.org/docs/18/textsearch-controls.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Tables and indexes for full text search [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-tables.html">https://www.postgresql.org/docs/18/textsearch-tables.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Preferred index types for text search [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-indexes.html">https://www.postgresql.org/docs/18/textsearch-indexes.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. GIN indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/gin.html">https://www.postgresql.org/docs/18/gin.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. GiST indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/gist.html">https://www.postgresql.org/docs/18/gist.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Index types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-types.html">https://www.postgresql.org/docs/18/indexes-types.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Text search configuration example [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-configuration.html">https://www.postgresql.org/docs/18/textsearch-configuration.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Testing and debugging text search [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-debugging.html">https://www.postgresql.org/docs/18/textsearch-debugging.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Additional text-search features [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-features.html">https://www.postgresql.org/docs/18/textsearch-features.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Dictionaries [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-dictionaries.html">https://www.postgresql.org/docs/18/textsearch-dictionaries.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Text search dictionaries and templates: psql support [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-psql.html">https://www.postgresql.org/docs/18/textsearch-psql.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. CREATE TEXT SEARCH DICTIONARY [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtsdictionary.html">https://www.postgresql.org/docs/18/sql-createtsdictionary.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. pg_ts_dict system catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-ts-dict.html">https://www.postgresql.org/docs/18/catalog-pg-ts-dict.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. PostgreSQL 18 release notes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Generated columns [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-generated-columns.html">https://www.postgresql.org/docs/18/ddl-generated-columns.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. Row security policies [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-rowsecurity.html">https://www.postgresql.org/docs/18/ddl-rowsecurity.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. psql support for text search [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-psql.html">https://www.postgresql.org/docs/18/textsearch-psql.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. pg_trgm — support for similarity of text using trigram matching [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgtrgm.html">https://www.postgresql.org/docs/18/pgtrgm.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Text search functions and operators [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-textsearch.html">https://www.postgresql.org/docs/18/functions-textsearch.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. CREATE TEXT SEARCH CONFIGURATION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtsconfig.html">https://www.postgresql.org/docs/18/sql-createtsconfig.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. ALTER TEXT SEARCH CONFIGURATION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altertsconfig.html">https://www.postgresql.org/docs/18/sql-altertsconfig.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createindex.html">https://www.postgresql.org/docs/18/sql-createindex.html</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. Search quality depends on corpus language, dictionary policy, query construction, business ranking, data distribution, update rate, and PostgreSQL version. Benchmark relevance and performance with representative documents and real search queries before deploying configuration or index changes.
+</p>
+</footer>
+
+</body>
+</html>

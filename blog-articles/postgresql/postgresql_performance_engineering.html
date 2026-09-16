@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL performance engineering: query and index optimization, connections, memory, CPU, I/O, WAL, checkpoints, autovacuum, parallel query, JIT, partitioning, PgBouncer, caching, benchmarking, and load testing.">
+<title>PostgreSQL Performance Engineering</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:980px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.small{font-size:.92rem;color:var(--muted)}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Performance Engineering</h1>
+  <p class="dek">A production-oriented guide to query and index optimization, connection management, memory and CPU tuning, disk I/O, WAL and checkpoints, autovacuum, parallel query, JIT compilation, partitioning, PgBouncer, caching, benchmarking, and load testing.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL performance engineering is the disciplined process of identifying the resource or execution path that limits application objectives, changing one layer of the system, and validating the result under representative load. PostgreSQL provides planner and runtime instrumentation through <code>EXPLAIN</code>, cumulative statistics views, <code>pg_stat_statements</code>, WAL and I/O statistics, autovacuum progress, and server configuration parameters. These mechanisms make it possible to separate query-planning errors, lock contention, connection saturation, memory pressure, CPU saturation, temporary-file spills, storage latency, WAL pressure, checkpoint bursts, and maintenance debt rather than treating all latency as one problem.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup>
+</p>
+<p>
+Performance tuning is workload-specific. PostgreSQL's own documentation repeatedly frames values such as memory settings, planner cost constants, checkpoint configuration, and autovacuum thresholds as parameters to be selected for the actual system rather than universal best values. Accordingly, this article emphasizes measurement, controlled experimentation, and load testing instead of fixed “magic” configuration recipes.<sup><a href="#r5">[5]</a>-<a href="#r8">[8]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#method">Performance engineering method</a></li>
+<li><a href="#query">Query optimization</a></li>
+<li><a href="#stats">Planner statistics</a></li>
+<li><a href="#index">Index optimization</a></li>
+<li><a href="#connections">Connection management</a></li>
+<li><a href="#memory">Memory tuning</a></li>
+<li><a href="#cpu">CPU utilization</a></li>
+<li><a href="#io">Disk I/O</a></li>
+<li><a href="#wal">WAL tuning</a></li>
+<li><a href="#checkpoints">Checkpoint tuning</a></li>
+<li><a href="#autovacuum">Autovacuum tuning</a></li>
+<li><a href="#parallel">Parallel query</a></li>
+<li><a href="#jit">JIT compilation</a></li>
+<li><a href="#partitioning">Partitioning</a></li>
+<li><a href="#pooling">Connection pooling</a></li>
+<li><a href="#pgbouncer">PgBouncer</a></li>
+<li><a href="#caching">Caching</a></li>
+<li><a href="#benchmarking">Benchmarking</a></li>
+<li><a href="#loadtesting">Load testing</a></li>
+<li><a href="#workflow">Integrated tuning workflow</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="method">
+<h2>1. Performance engineering method</h2>
+<p>
+A database is fast only relative to a workload and an objective. The objective might be p99 API latency, sustained transactions per second, nightly batch completion time, replica freshness, maximum hardware cost, or a combination of these. An optimization that increases throughput while making tail latency unacceptable is not an improvement for a latency-sensitive service. Begin by defining workload shape and measurable service objectives before changing configuration.<sup><a href="#r1">[1]</a><a href="#r33">[33]</a></sup>
+</p>
+
+<div class="diagram">1. Define objective
+      |
+      v
+2. Reproduce workload
+      |
+      v
+3. Measure bottleneck
+   SQL / locks / CPU / RAM / I/O / WAL / checkpoints / vacuum / connections
+      |
+      v
+4. Form one hypothesis
+      |
+      v
+5. Change one variable
+      |
+      v
+6. Re-run controlled test
+      |
+      +---- no improvement ----> revert / new hypothesis
+      |
+      v
+7. Validate under production-shaped concurrency and duration
+      |
+      v
+8. Monitor regression over time</div>
+
+<h3>1.1 Build a performance baseline</h3>
+<pre><code>-- Workload-level query fingerprints.
+SELECT
+    queryid,
+    calls,
+    total_exec_time,
+    mean_exec_time,
+    rows,
+    shared_blks_hit,
+    shared_blks_read,
+    temp_blks_read,
+    temp_blks_written,
+    wal_bytes,
+    left(query, 220) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 30;
+
+-- Current sessions and waits.
+SELECT
+    pid,
+    application_name,
+    state,
+    wait_event_type,
+    wait_event,
+    now() - query_start AS query_age,
+    left(query, 180) AS query
+FROM pg_stat_activity
+WHERE state &lt;&gt; 'idle'
+ORDER BY query_start;</code></pre>
+
+<p>
+<code>pg_stat_statements</code> gives cumulative planning/execution data for normalized SQL statements and can expose block, temporary-I/O, WAL, and parallel-worker behavior. <code>pg_stat_activity</code> supplies current session and wait state. Taken together, they answer different questions: which statements consume resources over time, and what sessions are doing at this instant.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<div class="callout ok">
+<strong>Highest-leverage rule:</strong> fix unnecessary work before tuning the server to perform unnecessary work faster.
+</div>
+</section>
+
+<section id="query">
+<h2>2. Query optimization</h2>
+<p>
+PostgreSQL's planner evaluates alternative scans, joins, aggregates, sorts, and other plan shapes using estimated row counts and costs, then chooses the lowest-cost plan according to its model. <code>EXPLAIN</code> shows the selected plan, while <code>EXPLAIN ANALYZE</code> actually executes the statement and annotates the plan with observed row counts and timing. PostgreSQL 18 also supports options including <code>BUFFERS</code>, <code>WAL</code>, <code>SETTINGS</code>, and <code>MEMORY</code> for deeper analysis.<sup><a href="#r1">[1]</a><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>2.1 Start with estimated versus actual rows</h3>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    WAL,
+    VERBOSE,
+    SETTINGS,
+    MEMORY
+)
+SELECT
+    c.id,
+    c.email,
+    sum(o.total) AS lifetime_value
+FROM customer AS c
+JOIN orders AS o
+  ON o.customer_id = c.id
+WHERE c.status = 'active'
+  AND o.created_at &gt;= current_date - interval '90 days'
+GROUP BY c.id, c.email
+ORDER BY lifetime_value DESC
+LIMIT 100;</code></pre>
+
+<p>
+Large differences between estimated and actual row counts often indicate stale/inadequate statistics, correlated predicates the ordinary single-column statistics do not model well, or expressions for which the planner lacks useful information. Estimation errors can propagate upward and cause incorrect join-method, scan-method, memory, or parallelism choices.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>2.2 Use buffers to distinguish CPU from data access</h3>
+<p>
+<code>BUFFERS</code> reports block accesses such as shared-buffer hits and reads. A plan with enormous buffer traffic can be slow even if every block is cached because repeatedly examining millions of tuples consumes CPU and memory bandwidth. Conversely, a small number of high-latency storage reads may dominate wall-clock time. Pair plan data with <code>pg_stat_io</code> and operating-system/storage metrics before attributing a query to one resource.<sup><a href="#r1">[1]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>2.3 Avoid accidental row multiplication</h3>
+<pre><code>-- Potentially expensive if both detail tables contain many rows
+-- for each customer, because the join can multiply rows before aggregation.
+SELECT c.id, sum(o.total), count(t.id)
+FROM customer c
+JOIN orders o  ON o.customer_id = c.id
+JOIN tickets t ON t.customer_id = c.id
+GROUP BY c.id;
+
+-- Often clearer and cheaper: aggregate independently, then join.
+WITH order_totals AS (
+  SELECT customer_id, sum(total) AS total
+  FROM orders
+  GROUP BY customer_id
+),
+ticket_counts AS (
+  SELECT customer_id, count(*) AS tickets
+  FROM tickets
+  GROUP BY customer_id
+)
+SELECT c.id, o.total, t.tickets
+FROM customer c
+LEFT JOIN order_totals o USING (customer_id)
+LEFT JOIN ticket_counts t USING (customer_id);</code></pre>
+
+<p>
+The second form is not universally faster, but it illustrates a general optimization technique: reduce cardinality before combining large relations when the semantics allow it. The correct plan should always be verified with actual data and <code>EXPLAIN ANALYZE</code>.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<h3>2.4 Beware optimization by configuration forcing</h3>
+<p>
+Planner method settings such as <code>enable_seqscan</code> and <code>enable_nestloop</code> are valuable diagnostic tools, but permanently disabling plan methods is usually inferior to correcting statistics, indexing, cost assumptions, or query structure. If forcing an index scan makes a query faster, the useful question is why the planner believed the other plan was cheaper.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>2.5 DML and EXPLAIN ANALYZE</h3>
+<pre><code>BEGIN;
+
+EXPLAIN (ANALYZE, BUFFERS, WAL)
+UPDATE orders
+SET status = 'archived'
+WHERE created_at &lt; date '2024-01-01';
+
+ROLLBACK;</code></pre>
+
+<p>
+<code>EXPLAIN ANALYZE</code> executes data-modifying statements. PostgreSQL's documentation recommends wrapping a diagnostic DML execution in a transaction and rolling it back when the data change itself should not persist.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="stats">
+<h2>3. Planner statistics and cardinality estimation</h2>
+<p>
+PostgreSQL's optimizer depends heavily on statistics collected by <code>ANALYZE</code>, normally invoked automatically by autovacuum. These include null fractions, distinct-value estimates, most-common values, histograms, and other information in <code>pg_statistic</code>. Extended statistics can describe dependencies, multi-column distinct counts, and multi-column most-common values when predicates are correlated.<sup><a href="#r10">[10]</a><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>3.1 Increase statistics where estimation is poor</h3>
+<pre><code>ALTER TABLE orders
+ALTER COLUMN customer_id
+SET STATISTICS 1000;
+
+ANALYZE orders;</code></pre>
+
+<p>
+Increasing a column's statistics target allows <code>ANALYZE</code> to collect a more detailed sample for that column, at the cost of additional statistics storage and planning overhead. It should be targeted to columns where better selectivity estimates materially affect plans rather than applied indiscriminately.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>3.2 Extended statistics for correlated predicates</h3>
+<pre><code>CREATE STATISTICS orders_customer_region_stats
+    (dependencies, ndistinct, mcv)
+ON customer_id, region
+FROM orders;
+
+ANALYZE orders;</code></pre>
+
+<p>
+Extended statistics help the planner estimate predicates involving multiple related columns more accurately than assuming column independence. PostgreSQL documents functional dependencies, multivariate distinct counts, and multivariate most-common-value lists for this purpose.<sup><a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<section id="index">
+<h2>4. Index optimization</h2>
+<p>
+Indexes trade write cost and storage for faster access paths. PostgreSQL supports B-tree, Hash, GiST, SP-GiST, GIN, and BRIN index access methods in core, each suited to different operators and data distributions. B-tree remains the general choice for equality and ordered range access, while GIN, GiST, SP-GiST, and BRIN support specialized search patterns and data layouts.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>4.1 Index the predicates and orderings you actually execute</h3>
+<pre><code>-- Workload:
+SELECT id, customer_id, total, created_at
+FROM orders
+WHERE customer_id = $1
+ORDER BY created_at DESC
+LIMIT 50;
+
+-- Index aligned to equality filter followed by required ordering.
+CREATE INDEX orders_customer_created_idx
+ON orders (customer_id, created_at DESC);</code></pre>
+
+<p>
+Multicolumn B-tree indexes are most effective when constraints apply to the leading columns. PostgreSQL can use later columns too, including through skip-scan optimizations in appropriate cases, but column order still affects how much of the index must be scanned.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>4.2 Covering indexes and index-only scans</h3>
+<pre><code>CREATE INDEX orders_customer_created_cover_idx
+ON orders (customer_id, created_at DESC)
+INCLUDE (total, status);</code></pre>
+
+<p>
+<code>INCLUDE</code> columns can make required output values available directly from the index without changing the index's search key. PostgreSQL can perform index-only scans when the index contains all required columns and the visibility map shows that heap visibility checks can be skipped for the relevant pages. Index-only behavior therefore also depends on vacuum maintaining visibility-map information.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>4.3 Partial indexes</h3>
+<pre><code>CREATE INDEX orders_open_customer_idx
+ON orders (customer_id, created_at DESC)
+WHERE status IN ('pending', 'processing');</code></pre>
+
+<p>
+A partial index stores entries only for rows satisfying its predicate. It can be smaller and cheaper to maintain when queries consistently target a selective subset, but the planner can use it only when the query predicate logically implies the index predicate.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>4.4 Expression indexes</h3>
+<pre><code>CREATE UNIQUE INDEX customer_email_ci_uq
+ON customer (lower(email));</code></pre>
+
+<p>
+Expression indexes precompute indexed expressions, allowing predicates on those expressions to use an index. They make writes more expensive because PostgreSQL must maintain the computed index entry when indexed data changes.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>4.5 Find large low-use index candidates</h3>
+<pre><code>SELECT
+    s.schemaname,
+    s.relname,
+    s.indexrelname,
+    s.idx_scan,
+    pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size,
+    i.indisunique,
+    i.indisprimary
+FROM pg_stat_user_indexes AS s
+JOIN pg_index AS i
+  ON i.indexrelid = s.indexrelid
+ORDER BY s.idx_scan ASC, pg_relation_size(s.indexrelid) DESC;</code></pre>
+
+<div class="callout warn">
+<strong>Do not drop an index from <code>idx_scan = 0</code> alone.</strong> Statistics may have been reset, periodic workloads may be absent from the observation window, and uniqueness/constraint or rare incident-response queries may justify the index.
+</div>
+
+<h3>4.6 Write amplification</h3>
+<p>
+Every index that covers a modified row may require index maintenance. Excess or redundant indexes can therefore reduce insert/update throughput, increase WAL generation, enlarge backups, and add vacuum work. Performance engineering should evaluate the total index portfolio, not just whether each individual read query could be made faster by adding another index.<sup><a href="#r13">[13]</a><a href="#r2">[2]</a></sup>
+</p>
+</section>
+
+<section id="connections">
+<h2>5. Connection management</h2>
+<p>
+PostgreSQL uses a process-per-session architecture for ordinary client connections. <code>max_connections</code> determines the maximum concurrent connection count and affects allocation of server resources. Raising the limit can increase process and memory overhead and does not increase the amount of useful concurrent work the CPU and storage can sustain.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>5.1 Measure states, not only totals</h3>
+<pre><code>SELECT
+    count(*) AS total,
+    count(*) FILTER (WHERE state = 'active') AS active,
+    count(*) FILTER (WHERE state = 'idle') AS idle,
+    count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_tx,
+    count(*) FILTER (WHERE wait_event_type IS NOT NULL) AS waiting
+FROM pg_stat_activity
+WHERE backend_type = 'client backend';</code></pre>
+
+<p>
+A large number of idle sessions usually represents connection-management overhead rather than database throughput. A large number of simultaneously active sessions can create CPU scheduling and lock/I/O contention. The useful concurrency level is workload- and hardware-dependent, so application pools should bound concurrency rather than mirroring thread counts or request counts one-for-one.<sup><a href="#r3">[3]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>5.2 Protect against idle transactions</h3>
+<pre><code>ALTER ROLE orders_app
+SET idle_in_transaction_session_timeout = '60s';
+
+ALTER ROLE orders_app
+SET statement_timeout = '30s';</code></pre>
+
+<p>
+<code>idle_in_transaction_session_timeout</code> can terminate sessions that sit idle while holding an open transaction. Such sessions can retain locks and old snapshots and impede vacuum cleanup. Timeouts should be matched to the workload rather than applied blindly to legitimately long-running operations.<sup><a href="#r19">[19]</a></sup>
+</p>
+</section>
+
+<section id="memory">
+<h2>6. Memory tuning</h2>
+<p>
+PostgreSQL memory tuning requires distinguishing shared memory from per-operation memory. <code>shared_buffers</code> is the server's shared page cache. <code>work_mem</code> is a base memory limit used independently by sort and hash operations, and a query can contain multiple such operations. Parallel workers can multiply that consumption. <code>maintenance_work_mem</code> applies to maintenance operations such as <code>VACUUM</code> and index creation, while autovacuum can use separate <code>autovacuum_work_mem</code>.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>6.1 <code>shared_buffers</code></h3>
+<p>
+PostgreSQL's documentation suggests roughly 25% of system memory as a reasonable starting point for <code>shared_buffers</code> on a dedicated database server with at least 1 GB RAM, while noting that values much beyond roughly 40% are unlikely to outperform a smaller setting in many cases because PostgreSQL also depends on the operating system cache. These are starting points, not targets.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>6.2 <code>work_mem</code> is not “per connection”</h3>
+<pre><code>SHOW work_mem;
+SHOW hash_mem_multiplier;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT customer_id, sum(total)
+FROM orders
+GROUP BY customer_id
+ORDER BY sum(total) DESC;</code></pre>
+
+<p>
+A single query can use multiple sort or hash nodes and can execute them concurrently. Hash operations can use <code>work_mem × hash_mem_multiplier</code>. Consequently, setting <code>work_mem</code> to a large fraction of RAM can cause memory exhaustion under concurrency even if no individual query looks excessive.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>6.3 Detect temporary spills</h3>
+<pre><code>SELECT
+    datname,
+    temp_files,
+    pg_size_pretty(temp_bytes) AS temp_bytes
+FROM pg_stat_database
+WHERE datname IS NOT NULL
+ORDER BY temp_bytes DESC;</code></pre>
+
+<pre><code># Optional diagnostic logging.
+log_temp_files = '64MB'</code></pre>
+
+<p>
+Temporary-file creation can indicate sorts, hashes, or other operations exceeding available memory. Increasing <code>work_mem</code> can help some statements, but query/index improvements can often eliminate much more work. Per-role or per-session values are safer than raising a global value for one analytical query class.<sup><a href="#r5">[5]</a><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>6.4 Effective cache size</h3>
+<p>
+<code>effective_cache_size</code> does not allocate memory. It is a planner estimate of how much disk cache is likely to be available to one query, accounting for PostgreSQL and operating-system caching and sharing among concurrent queries. Higher estimates can make index scans appear cheaper; lower values can favor sequential scans.<sup><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="cpu">
+<h2>7. CPU utilization</h2>
+<p>
+PostgreSQL can use multiple CPU cores through concurrent backend processes and, for eligible queries, parallel workers. CPU saturation can come from efficient high throughput, poorly selective scans, excessive expression evaluation, sorting/hashing, contention-induced spinning, query planning, JIT compilation, or large numbers of runnable sessions. CPU percentage alone is therefore not a diagnosis.<sup><a href="#r3">[3]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>7.1 Find CPU-heavy query fingerprints</h3>
+<p>
+PostgreSQL does not directly assign host CPU time to each SQL statement in <code>pg_stat_statements</code>. However, high <code>total_exec_time</code> combined with low physical I/O and low wait evidence often identifies CPU-intensive SQL. Application/OS profilers and process metrics can confirm the hypothesis.</p>
+
+<pre><code>SELECT
+    queryid,
+    calls,
+    total_exec_time,
+    mean_exec_time,
+    shared_blks_hit,
+    shared_blks_read,
+    temp_blks_written,
+    left(query, 200) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 25;</code></pre>
+
+<h3>7.2 Reduce rows before expensive operations</h3>
+<p>
+CPU cost is often proportional to tuples processed rather than tuples returned. Applying selective predicates earlier, improving indexes, avoiding accidental join multiplication, and pre-aggregating where semantically valid can reduce CPU more effectively than adding cores.
+</p>
+</section>
+
+<section id="io">
+<h2>8. Disk I/O</h2>
+<p>
+PostgreSQL 18 exposes cluster I/O activity through <code>pg_stat_io</code>, including reads, writes, writebacks, extends, fsyncs, byte counters, timing, and eviction/reuse information by backend type, object, and context. I/O timing requires the corresponding timing settings where applicable and can have platform-dependent overhead.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>8.1 Inspect I/O by context</h3>
+<pre><code>SELECT
+    backend_type,
+    object,
+    context,
+    reads,
+    read_bytes,
+    read_time,
+    writes,
+    write_bytes,
+    write_time,
+    fsyncs,
+    fsync_time,
+    evictions,
+    reuses
+FROM pg_stat_io
+ORDER BY
+    coalesce(read_time,0)
+  + coalesce(write_time,0)
+  + coalesce(fsync_time,0) DESC;</code></pre>
+
+<h3>8.2 Cache hit ratio is not disk hit ratio</h3>
+<pre><code>SELECT
+    datname,
+    round(
+        100.0 * blks_hit
+        / NULLIF(blks_hit + blks_read, 0),
+        2
+    ) AS shared_buffer_hit_pct
+FROM pg_stat_database
+WHERE datname IS NOT NULL;</code></pre>
+
+<p>
+<code>blks_hit</code> measures hits in PostgreSQL's shared buffer cache, not the operating system page cache. A shared-buffer miss may still be served from RAM by the operating system. Treat the ratio as one database-cache signal and correlate it with I/O latency and storage telemetry.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>8.3 Storage benchmark versus database benchmark</h3>
+<p>
+A raw storage benchmark measures characteristics of the storage subsystem, while a PostgreSQL workload includes WAL, buffer management, locks, visibility checks, planning, transaction control, and data access. Storage microbenchmarks are useful for isolating device behavior, but capacity decisions should be validated with the actual database workload.<sup><a href="#r33">[33]</a></sup>
+</p>
+</section>
+
+<section id="wal">
+<h2>9. WAL tuning</h2>
+<p>
+Write-ahead logging is the foundation of PostgreSQL crash recovery. WAL records describing page changes must be durable before the corresponding changed data pages can be safely written. Performance tuning must therefore preserve durability requirements unless the workload explicitly accepts weaker guarantees.<sup><a href="#r22">[22]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>9.1 Observe WAL first</h3>
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full,
+    wal_write,
+    wal_sync,
+    wal_write_time,
+    wal_sync_time,
+    stats_reset
+FROM pg_stat_wal;</code></pre>
+
+<h3>9.2 WAL volume by query</h3>
+<pre><code>SELECT
+    queryid,
+    calls,
+    pg_size_pretty(wal_bytes::bigint) AS wal_generated,
+    left(query, 220) AS query
+FROM pg_stat_statements
+WHERE wal_bytes &gt; 0
+ORDER BY wal_bytes DESC
+LIMIT 25;</code></pre>
+
+<h3>9.3 WAL compression</h3>
+<p>
+<code>wal_compression</code> can compress full-page images using supported methods such as <code>pglz</code>, <code>lz4</code>, or <code>zstd</code> when PostgreSQL was built with the relevant libraries. PostgreSQL documents the tradeoff explicitly: compression can reduce WAL volume without reducing durability, but consumes additional CPU during WAL generation and replay.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<pre><code># Example candidate for a write-heavy workload after measurement.
+wal_compression = zstd</code></pre>
+
+<h3>9.4 <code>synchronous_commit</code></h3>
+<p>
+Changing <code>synchronous_commit</code> changes transaction durability/latency semantics rather than merely “making WAL faster.” PostgreSQL documents that turning it off can allow recently committed transactions to be lost after an operating-system crash, although it does not create the same database-corruption risk as disabling <code>fsync</code>. Any use of weaker commit durability must be a business-level durability decision, not a hidden tuning trick.<sup><a href="#r24">[24]</a></sup>
+</p>
+
+<div class="callout danger">
+<strong>Do not disable <code>fsync</code> or <code>full_page_writes</code> as routine production tuning.</strong> PostgreSQL documents these as non-durable settings for environments that explicitly accept the associated crash risks.<sup><a href="#r24">[24]</a></sup>
+</div>
+</section>
+
+<section id="checkpoints">
+<h2>10. Checkpoint tuning</h2>
+<p>
+A checkpoint ensures that dirty data pages are written such that recovery can begin from a known WAL position. Too-frequent checkpoints increase write pressure and full-page-image generation; very infrequent checkpoints can increase crash-recovery time and WAL-space requirements. PostgreSQL 18 schedules checkpoints based on <code>checkpoint_timeout</code> and WAL growth relative to <code>max_wal_size</code>.<sup><a href="#r23">[23]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<h3>10.1 Important settings</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Setting</th><th>PostgreSQL 18 default</th><th>Engineering effect</th></tr></thead>
+<tbody>
+<tr><td><code>checkpoint_timeout</code></td><td>5 min</td><td>Upper time interval between automatic checkpoints; increasing can lengthen crash recovery.<sup><a href="#r23">[23]</a></sup></td></tr>
+<tr><td><code>checkpoint_completion_target</code></td><td>0.9</td><td>Spreads checkpoint work over most of the checkpoint interval to smooth I/O.<sup><a href="#r23">[23]</a></sup></td></tr>
+<tr><td><code>max_wal_size</code></td><td>1 GB</td><td>Soft WAL-size trigger for automatic checkpoints; increasing can reduce checkpoint frequency but lengthen recovery.<sup><a href="#r23">[23]</a></sup></td></tr>
+<tr><td><code>min_wal_size</code></td><td>80 MB</td><td>Controls how much WAL is kept for recycling during ordinary operation.<sup><a href="#r23">[23]</a></sup></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>10.2 Observe checkpoint behavior</h3>
+<pre><code>SELECT *
+FROM pg_stat_checkpointer;</code></pre>
+
+<p>
+If checkpoints are repeatedly triggered by WAL accumulation rather than the timeout, <code>checkpoint_warning</code> can log warnings suggesting that <code>max_wal_size</code> may be too small. Increasing <code>shared_buffers</code> can also justify increasing <code>max_wal_size</code> so dirty-page writeback can be spread over a longer interval.<sup><a href="#r5">[5]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>10.3 Example tuning experiment</h3>
+<pre><code># Example only; benchmark before/after with production-shaped load.
+checkpoint_timeout = '15min'
+max_wal_size = '16GB'
+min_wal_size = '4GB'
+checkpoint_completion_target = 0.9</code></pre>
+
+<p>
+This configuration is not a recommended universal baseline. Its suitability depends on write rate, available WAL disk space, crash-recovery objective, replication/archive behavior, and storage throughput.
+</p>
+</section>
+
+<section id="autovacuum">
+<h2>11. Autovacuum tuning</h2>
+<p>
+Vacuum is required to reuse space left by updated/deleted tuples, update planner statistics, maintain the visibility map, and prevent transaction-ID/multixact wraparound. Autovacuum automates this work and should normally remain enabled. Standard <code>VACUUM</code> operates concurrently with ordinary reads/writes, whereas <code>VACUUM FULL</code> rewrites the table and takes an <code>ACCESS EXCLUSIVE</code> lock.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>11.1 Trigger formula</h3>
+<p>
+For ordinary update/delete-driven vacuuming, PostgreSQL describes the trigger as the minimum of a maximum threshold and the base threshold plus scale factor times estimated table tuples. PostgreSQL 18's default <code>autovacuum_vacuum_scale_factor</code> is 0.2, and its default maximum threshold is 100,000,000 tuples. Per-table storage parameters can override these values.<sup><a href="#r7">[7]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>11.2 Large hot table tuning</h3>
+<pre><code>ALTER TABLE orders SET (
+    autovacuum_vacuum_threshold = 10000,
+    autovacuum_vacuum_scale_factor = 0.02,
+    autovacuum_analyze_threshold = 5000,
+    autovacuum_analyze_scale_factor = 0.01
+);</code></pre>
+
+<p>
+These example values are intentionally illustrative. High-churn large tables often benefit from more frequent per-table vacuum/analyze than the cluster defaults, while small/static tables may not. Validate effectiveness using dead-tuple trends, vacuum duration, table/index growth, planner estimates, and I/O impact.<sup><a href="#r7">[7]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>11.3 Find maintenance lag</h3>
+<pre><code>SELECT
+    schemaname,
+    relname,
+    n_live_tup,
+    n_dead_tup,
+    n_mod_since_analyze,
+    last_autovacuum,
+    last_autoanalyze,
+    autovacuum_count,
+    autoanalyze_count
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 40;</code></pre>
+
+<h3>11.4 Monitor vacuum progress</h3>
+<pre><code>SELECT *
+FROM pg_stat_progress_vacuum;</code></pre>
+
+<h3>11.5 Cost-based throttling</h3>
+<p>
+PostgreSQL includes cost-based vacuum delay controls so maintenance can limit its resource impact. Making autovacuum excessively slow can allow dead tuples and visibility debt to accumulate; making it too aggressive can compete with foreground workload. Tune the cost settings and worker count using observed maintenance backlog and spare I/O capacity rather than simply maximizing workers.<sup><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<section id="parallel">
+<h2>12. Parallel query</h2>
+<p>
+PostgreSQL can execute eligible plan fragments with multiple worker processes. Parallel plans contain a <code>Gather</code> or <code>Gather Merge</code> node. <code>Gather</code> collects rows without preserving worker ordering; <code>Gather Merge</code> merges sorted streams while preserving order. Parallel scans, joins, aggregates, and appends can reduce elapsed time when enough work exists to amortize worker startup and tuple-transfer overhead.<sup><a href="#r21">[21]</a><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>12.1 Observe per-worker execution</h3>
+<pre><code>EXPLAIN (ANALYZE, VERBOSE, BUFFERS)
+SELECT
+    customer_id,
+    sum(total)
+FROM orders
+WHERE created_at &gt;= current_date - interval '1 year'
+GROUP BY customer_id;</code></pre>
+
+<p>
+PostgreSQL recommends <code>EXPLAIN (ANALYZE, VERBOSE)</code> to see per-worker statistics and judge whether work is evenly distributed.<sup><a href="#r27">[27]</a></sup>
+</p>
+
+<h3>12.2 Worker limits</h3>
+<pre><code>SHOW max_worker_processes;
+SHOW max_parallel_workers;
+SHOW max_parallel_workers_per_gather;</code></pre>
+
+<p>
+A plan can request workers that are unavailable at execution time because parallel workers come from finite server-wide pools. A plan intended to run with several workers can therefore execute with fewer workers or none, which is one reason benchmark results must include realistic concurrent load rather than isolated single-query tests.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>12.3 Parallelism is resource multiplication</h3>
+<p>
+Parallelism can reduce latency while increasing instantaneous CPU, memory, and I/O consumption. PostgreSQL notes that per-operation memory may be applied independently in workers, so a parallel query can consume substantially more aggregate memory than its serial equivalent.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>12.4 Do not force parallelism blindly</h3>
+<p>
+Planner settings such as <code>parallel_setup_cost</code> and <code>parallel_tuple_cost</code> influence whether parallel plans are selected. PostgreSQL's documentation notes that lowering them can be useful diagnostically if an expected parallel plan is not chosen, but the resulting plan can still be slower than the serial plan the optimizer originally preferred.<sup><a href="#r27">[27]</a></sup>
+</p>
+</section>
+
+<section id="jit">
+<h2>13. JIT compilation</h2>
+<p>
+PostgreSQL can use LLVM-based just-in-time compilation for expression evaluation and tuple deforming when PostgreSQL was built with JIT support. JIT has compilation overhead, so it is primarily beneficial for long-running CPU-bound queries—often analytical queries—where the saved execution time outweighs code-generation cost.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>13.1 Cost thresholds</h3>
+<p>
+PostgreSQL decides at plan time whether estimated query cost exceeds <code>jit_above_cost</code>, and uses additional thresholds for inlining and expensive JIT optimization. Prepared statements using generic plans inherit these decisions from the settings effective when the plan was prepared.<sup><a href="#r28">[28]</a></sup>
+</p>
+
+<pre><code>SHOW jit;
+SHOW jit_above_cost;
+SHOW jit_inline_above_cost;
+SHOW jit_optimize_above_cost;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    customer_id,
+    sum(total * tax_rate)
+FROM large_order_fact
+GROUP BY customer_id;</code></pre>
+
+<h3>13.2 OLTP versus analytical workloads</h3>
+<p>
+For short OLTP queries, JIT compilation overhead can exceed the time saved. For longer scans and aggregation-heavy CPU workloads, JIT may improve runtime. Test with identical warmed/cold-cache conditions and sufficient repetitions to separate compilation effects from ordinary run-to-run variation.<sup><a href="#r28">[28]</a></sup>
+</p>
+</section>
+
+<section id="partitioning">
+<h2>14. Partitioning</h2>
+<p>
+Declarative partitioning divides one logical table into smaller physical relations using range, list, or hash partitioning. Partition pruning can eliminate irrelevant partitions during planning and execution. PostgreSQL documents performance benefits when heavily accessed rows fall into a small number of partitions or when retention/maintenance can operate on partitions rather than row-by-row across one very large table.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>14.1 Time-range example</h3>
+<pre><code>CREATE TABLE events (
+    event_id    bigint GENERATED ALWAYS AS IDENTITY,
+    occurred_at timestamptz NOT NULL,
+    tenant_id   bigint NOT NULL,
+    payload     jsonb NOT NULL,
+    PRIMARY KEY (occurred_at, event_id)
+) PARTITION BY RANGE (occurred_at);
+
+CREATE TABLE events_2026_09
+PARTITION OF events
+FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
+
+CREATE TABLE events_2026_10
+PARTITION OF events
+FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');</code></pre>
+
+<h3>14.2 Pruning</h3>
+<pre><code>EXPLAIN
+SELECT *
+FROM events
+WHERE occurred_at &gt;= timestamptz '2026-09-10'
+  AND occurred_at &lt;  timestamptz '2026-09-11';</code></pre>
+
+<p>
+Partitioning helps only when the partition key aligns with access and lifecycle patterns. PostgreSQL warns that excessive partition counts can increase planning time and per-session memory usage, especially when queries fail to prune most partitions. More partitions are not inherently better.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>14.3 Retention without mass DELETE</h3>
+<pre><code>ALTER TABLE events
+DETACH PARTITION events_2025_09;
+
+DROP TABLE events_2025_09;</code></pre>
+
+<p>
+Partition detach/drop can make time-based retention substantially cheaper than deleting millions of old rows individually, and it can reduce vacuum/WAL work associated with such deletion patterns.<sup><a href="#r29">[29]</a></sup>
+</p>
+
+<div class="callout">
+<strong>Partitioning is not sharding.</strong> Native PostgreSQL partitioning organizes relations inside one PostgreSQL cluster; it does not create independent write servers.
+</div>
+</section>
+
+<section id="pooling">
+<h2>15. Connection pooling</h2>
+<p>
+A connection pool separates application concurrency from PostgreSQL session count. This reduces connection setup overhead and, more importantly, places a hard limit on simultaneous database backends. Pool sizing should be based on the concurrency PostgreSQL can process efficiently, multiplied across application instances, not on the maximum number of application requests that can exist at once.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>15.1 Queueing is preferable to uncontrolled saturation</h3>
+<div class="diagram">1000 application requests
+        |
+        v
+application pool / PgBouncer
+ max 40 PostgreSQL sessions
+        |
+        +---- 40 executing or waiting in PostgreSQL
+        |
+        +---- remaining callers queue with bounded timeout</div>
+
+<p>
+If 1000 callers each open a direct PostgreSQL connection, the server must schedule and maintain all of them even if the CPU can execute only a small subset usefully. A bounded pool converts uncontrolled database concurrency into an explicit queue with measurable checkout latency.
+</p>
+
+<h3>15.2 Monitor both sides</h3>
+<p>
+Database connection count by itself does not reveal pool saturation. Track application pool active/idle/waiting counts and checkout latency together with PostgreSQL session states. A database may appear to have a stable session count while callers are timing out in a saturated pool.
+</p>
+</section>
+
+<section id="pgbouncer">
+<h2>16. PgBouncer</h2>
+<p>
+PgBouncer is a lightweight external connection pooler for PostgreSQL. It accepts client connections and multiplexes them onto a smaller set of server connections. PgBouncer supports session, transaction, and statement pooling modes, which differ in when a PostgreSQL server connection is released for reuse.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>16.1 Pool modes</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Mode</th><th>Server connection released</th><th>Implication</th></tr></thead>
+<tbody>
+<tr><td><code>session</code></td><td>When the client disconnects</td><td>Highest session-semantic compatibility; less multiplexing.</td></tr>
+<tr><td><code>transaction</code></td><td>After the transaction finishes</td><td>Strong multiplexing; session-scoped state needs careful review.</td></tr>
+<tr><td><code>statement</code></td><td>After each query</td><td>Multi-statement transactions are disallowed.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>
+PgBouncer's current configuration documentation lists session pooling as the default. Transaction pooling is commonly used to reduce PostgreSQL backend counts for stateless application traffic, but any feature relying on a stable server session must be evaluated against transaction-pool semantics.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>16.2 Example configuration</h3>
+<pre><code>[databases]
+appdb = host=postgres-primary.internal port=5432 dbname=appdb
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+
+pool_mode = transaction
+
+max_client_conn = 2000
+default_pool_size = 50
+reserve_pool_size = 10
+reserve_pool_timeout = 2
+
+max_db_connections = 120
+
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+
+server_reset_query = DISCARD ALL
+ignore_startup_parameters = extra_float_digits</code></pre>
+
+<p>
+PgBouncer documents <code>max_client_conn</code> as the client-side limit and <code>default_pool_size</code> as the default maximum server connections per user/database pair. File-descriptor requirements can exceed <code>max_client_conn</code> because PgBouncer also holds server connections.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>16.3 Prepared statements in transaction pooling</h3>
+<p>
+Modern PgBouncer can track protocol-level named prepared statements in transaction and statement pooling when <code>max_prepared_statements</code> is non-zero. PgBouncer rewrites prepared-statement names and ensures the required statement is prepared on whichever server connection is assigned. SQL-level <code>PREPARE</code>/<code>EXECUTE</code> commands are not handled by that mechanism in the same way. The current documented default for <code>max_prepared_statements</code> is 200.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>16.4 Watch PgBouncer itself</h3>
+<pre><code>-- Connect to PgBouncer's administrative database, then:
+SHOW POOLS;
+SHOW STATS;
+SHOW CLIENTS;
+SHOW SERVERS;</code></pre>
+
+<p>
+A database performance incident can originate in the pooler: client queues, pool exhaustion, authentication latency, server connection creation, or a too-small pool can all increase application latency while PostgreSQL itself appears underutilized.
+</p>
+</section>
+
+<section id="caching">
+<h2>17. Caching</h2>
+<p>
+PostgreSQL has a shared buffer cache and also benefits from the operating system's filesystem cache. Application-level caches add a separate semantic cache that can avoid database execution entirely. These layers should be considered independently because a database page cache stores physical data pages, while an application cache stores query results or domain objects with application-defined freshness semantics.<sup><a href="#r5">[5]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>17.1 Observe shared-buffer contents</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_buffercache;
+
+SELECT
+    c.relname,
+    count(*) AS buffers,
+    pg_size_pretty(
+      count(*) * current_setting('block_size')::int::bigint
+    ) AS cached
+FROM pg_buffercache AS b
+JOIN pg_class AS c
+  ON c.relfilenode = b.relfilenode
+GROUP BY c.relname
+ORDER BY buffers DESC
+LIMIT 30;</code></pre>
+
+<p>
+The supplied <code>pg_buffercache</code> extension provides real-time information about shared-buffer occupancy. It is intended for operational inspection and does not include the operating-system cache.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>17.2 Prewarming</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_prewarm;
+
+SELECT pg_prewarm(
+    'orders',
+    mode =&gt; 'buffer'
+);</code></pre>
+
+<p>
+The supplied <code>pg_prewarm</code> module can load relation blocks into the operating-system cache or PostgreSQL buffers. Prewarming can reduce cold-start latency for a known working set but consumes I/O and can evict other useful data, so it should be used intentionally.<sup><a href="#r32">[32]</a></sup>
+</p>
+
+<h3>17.3 Application cache-aside</h3>
+<pre><code>function getProduct(productId):
+    key = "product:" + productId
+
+    value = cache.get(key)
+    if value exists:
+        return value
+
+    value = db.query(
+        "SELECT id, name, price, version FROM product WHERE id = $1",
+        productId
+    )
+
+    cache.set(key, value, ttl = 60 seconds)
+    return value</code></pre>
+
+<p>
+An application cache reduces database work only at the cost of a freshness policy. TTL caching permits bounded staleness; explicit invalidation creates coordination between the database transaction and the cache. Cache invalidation and failure behavior must therefore be designed as part of correctness, not only performance.
+</p>
+</section>
+
+<section id="benchmarking">
+<h2>18. Benchmarking</h2>
+<p>
+PostgreSQL ships <code>pgbench</code>, a benchmark client that executes SQL transaction scripts with configurable client concurrency, worker threads, duration, protocol mode, request rate, retries, and latency reporting. Its built-in workload is loosely based on TPC-B, but custom scripts are the more useful mode for application performance engineering.<sup><a href="#r33">[33]</a></sup>
+</p>
+
+<h3>18.1 Initialize the built-in dataset</h3>
+<pre><code>createdb perf_lab
+
+pgbench -i \
+  --scale=100 \
+  perf_lab</code></pre>
+
+<h3>18.2 Basic saturation benchmark</h3>
+<pre><code>pgbench \
+  --client=64 \
+  --jobs=8 \
+  --time=300 \
+  --progress=5 \
+  --report-per-command \
+  --protocol=prepared \
+  perf_lab</code></pre>
+
+<p>
+<code>--protocol=prepared</code> uses the extended query protocol with prepared statements and reuses parse analysis after the first iteration. pgbench reports processed and failed transactions, latency, connection setup time, and TPS; <code>--report-per-command</code> adds per-command latency/failure statistics.<sup><a href="#r33">[33]</a></sup>
+</p>
+
+<h3>18.3 Custom application-shaped script</h3>
+<pre><code>\set tenant_id random(1, 10000)
+\set amount random(100, 25000)
+
+BEGIN;
+
+SELECT balance
+FROM account
+WHERE tenant_id = :tenant_id
+  AND account_id = 1
+FOR UPDATE;
+
+UPDATE account
+SET balance = balance - :amount
+WHERE tenant_id = :tenant_id
+  AND account_id = 1;
+
+INSERT INTO ledger(tenant_id, account_id, amount, created_at)
+VALUES (:tenant_id, 1, -:amount, clock_timestamp());
+
+COMMIT;</code></pre>
+
+<pre><code>pgbench \
+  --file=transfer.sql \
+  --client=100 \
+  --jobs=8 \
+  --time=600 \
+  --protocol=prepared \
+  --progress=10 \
+  appdb</code></pre>
+
+<h3>18.4 Control the test environment</h3>
+<ul>
+<li>Use production-like data volume and data distribution.</li>
+<li>Match indexes, constraints, extensions, PostgreSQL parameters, and storage.</li>
+<li>Separate client-generator capacity from database capacity.</li>
+<li>Record CPU, RAM, I/O latency, WAL, checkpoints, vacuum, connections, and query metrics during the run.</li>
+<li>Repeat runs and report variation rather than one best number.</li>
+<li>Distinguish cold-cache, warm-cache, and steady-state tests.</li>
+</ul>
+
+<h3>18.5 TPS is not enough</h3>
+<p>
+A high TPS number can hide unacceptable tail latency or failed transactions. pgbench reports average latency and standard deviation and can log transactions for deeper percentile analysis. A benchmark should report throughput, latency distribution, errors/retries, saturation metrics, and resource use together.<sup><a href="#r33">[33]</a></sup>
+</p>
+</section>
+
+<section id="loadtesting">
+<h2>19. Load testing</h2>
+<p>
+A saturation benchmark asks “how fast can this system go?” A load test asks “what happens at the workload rate the application expects?” pgbench supports rate-limited execution with <code>--rate</code>, scheduling transaction starts on a Poisson-distributed timeline rather than simply starting the next transaction as soon as the previous one ends. This makes it useful for open-loop-style arrival-rate testing.<sup><a href="#r33">[33]</a></sup>
+</p>
+
+<h3>19.1 Arrival-rate test</h3>
+<pre><code>pgbench \
+  --file=app_workload.sql \
+  --client=200 \
+  --jobs=16 \
+  --time=900 \
+  --rate=2500 \
+  --latency-limit=100 \
+  --progress=5 \
+  --log \
+  appdb</code></pre>
+
+<p>
+With <code>--rate</code>, pgbench reports schedule lag as clients fall behind the requested arrival rate. If <code>--latency-limit</code> is also set, transactions already too far behind schedule to meet the limit can be skipped rather than submitted, making overload visible rather than hiding it in an ever-growing queue.<sup><a href="#r33">[33]</a></sup>
+</p>
+
+<h3>19.2 Test a concurrency curve</h3>
+<pre><code>for c in 1 2 4 8 16 32 64 128 256; do
+  echo "=== clients=$c ==="
+  pgbench \
+    --file=app_workload.sql \
+    --client="$c" \
+    --jobs=8 \
+    --time=120 \
+    --protocol=prepared \
+    appdb
+done</code></pre>
+
+<p>
+Plot throughput and p50/p95/p99 latency against concurrency. Healthy systems normally reach a region where additional concurrency no longer increases useful throughput and instead increases queueing, lock contention, CPU scheduling, or I/O wait. That “knee” is often a better input for connection-pool sizing than <code>max_connections</code>.
+</p>
+
+<h3>19.3 Soak tests</h3>
+<p>
+Short tests can miss vacuum lag, checkpoint patterns, WAL retention, cache churn, connection leaks, table/index growth, memory fragmentation, and thermal/credit throttling in infrastructure. Run long-duration soak tests when validating sustained production capacity, and observe maintenance behavior rather than disabling it for the benchmark.
+</p>
+
+<h3>19.4 Serialization/deadlock retries</h3>
+<p>
+pgbench can retry transactions that fail due to serialization anomalies or deadlocks using <code>--max-tries</code>; the default is one try, so retries are disabled unless explicitly configured. If a benchmark is intended to model an application that performs retries, configure pgbench accordingly and report both retried transactions and final failures.<sup><a href="#r33">[33]</a></sup>
+</p>
+
+<pre><code>pgbench \
+  --file=serializable_workload.sql \
+  --time=300 \
+  --client=64 \
+  --max-tries=5 \
+  --failures-detailed \
+  appdb</code></pre>
+</section>
+
+<section id="workflow">
+<h2>20. Integrated tuning workflow</h2>
+
+<h3>20.1 Scenario: p99 latency rises under peak load</h3>
+<ol class="checklist">
+<li><strong>Check application pool saturation.</strong> Is connection checkout latency rising?</li>
+<li><strong>Inspect PostgreSQL waits.</strong> Are active sessions CPU-running, lock-waiting, I/O-waiting, or client-waiting?</li>
+<li><strong>Inspect <code>pg_stat_statements</code>.</strong> Did one query class become dominant?</li>
+<li><strong>Compare plan estimates with actual rows.</strong> Correct statistics/indexes before tuning global settings.</li>
+<li><strong>Inspect temp I/O.</strong> Determine whether sorts/hashes spill.</li>
+<li><strong>Inspect <code>pg_stat_io</code>.</strong> Determine which backend/object/context is creating I/O.</li>
+<li><strong>Inspect WAL/checkpoints.</strong> Determine whether write bursts correspond to WAL sync or checkpoint pressure.</li>
+<li><strong>Inspect dead tuples/autovacuum.</strong> Determine whether maintenance debt has inflated table/index work.</li>
+<li><strong>Test one change.</strong> Re-run the same arrival-rate load and compare latency distribution and resource use.</li>
+</ol>
+
+<h3>20.2 Compact diagnostic pack</h3>
+<pre><code>-- Sessions and waits.
+SELECT pid, application_name, state, wait_event_type, wait_event,
+       now()-query_start AS age, left(query,160)
+FROM pg_stat_activity
+WHERE state &lt;&gt; 'idle'
+ORDER BY query_start;
+
+-- Top SQL.
+SELECT calls, total_exec_time, mean_exec_time,
+       shared_blks_read, temp_blks_written, wal_bytes,
+       left(query,160)
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 20;
+
+-- I/O.
+SELECT backend_type, object, context,
+       reads, read_bytes, read_time,
+       writes, write_bytes, write_time,
+       fsyncs, fsync_time
+FROM pg_stat_io;
+
+-- WAL.
+SELECT * FROM pg_stat_wal;
+
+-- Checkpoints.
+SELECT * FROM pg_stat_checkpointer;
+
+-- Vacuum debt.
+SELECT schemaname, relname, n_live_tup, n_dead_tup,
+       last_autovacuum, last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 30;</code></pre>
+
+<h3>20.3 Performance anti-patterns</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Anti-pattern</th><th>Why it fails</th><th>Better approach</th></tr></thead>
+<tbody>
+<tr><td>Raise <code>max_connections</code> whenever clients queue</td><td>Moves queueing into PostgreSQL and increases backend/memory/scheduling pressure</td><td>Bound concurrency with pools/PgBouncer and size from measured knee</td></tr>
+<tr><td>Set huge global <code>work_mem</code></td><td>Applied to multiple operations and workers concurrently</td><td>Use conservative global setting; raise per workload/session when justified</td></tr>
+<tr><td>Add every possible index</td><td>Increases writes, WAL, storage, vacuum and cache footprint</td><td>Design indexes from measured access paths and remove proven redundancy</td></tr>
+<tr><td>Disable durability to fix write latency</td><td>Changes failure guarantees rather than solving root cause</td><td>Measure WAL sync/storage/checkpoints; weaken durability only by explicit requirement</td></tr>
+<tr><td>Run <code>VACUUM FULL</code> as routine maintenance</td><td>Rewrites table and takes <code>ACCESS EXCLUSIVE</code> lock</td><td>Tune autovacuum and use ordinary vacuum as normal mechanism</td></tr>
+<tr><td>Partition every large table into thousands of partitions</td><td>Adds planning and metadata overhead if pruning is ineffective</td><td>Partition only around access/lifecycle boundaries</td></tr>
+<tr><td>Benchmark only maximum TPS</td><td>Can hide tail latency, failures, retries and overload queueing</td><td>Report latency distribution, failures, saturation and resource usage</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>20.4 Final checklist</h3>
+<ol class="checklist">
+<li><strong>Query plans:</strong> estimated and actual rows are reasonably aligned.</li>
+<li><strong>Indexes:</strong> important predicates/orderings have appropriate indexes; write cost is understood.</li>
+<li><strong>Connections:</strong> database concurrency is bounded and pool queueing is observable.</li>
+<li><strong>Memory:</strong> global and per-operation settings fit peak concurrency.</li>
+<li><strong>CPU:</strong> expensive SQL and parallelism are measured, not inferred.</li>
+<li><strong>I/O:</strong> storage latency, temp spills, cache behavior, and PostgreSQL I/O context are visible.</li>
+<li><strong>WAL:</strong> WAL volume and sync latency are monitored; durability tradeoffs are explicit.</li>
+<li><strong>Checkpoints:</strong> checkpoints do not create avoidable I/O spikes and recovery objectives are preserved.</li>
+<li><strong>Autovacuum:</strong> hot tables do not accumulate dead tuples or stale statistics faster than maintenance can keep up.</li>
+<li><strong>JIT:</strong> enabled/disabled based on measured analytical/OLTP behavior.</li>
+<li><strong>Partitioning:</strong> pruning and lifecycle benefits outweigh planning/metadata cost.</li>
+<li><strong>Benchmarking:</strong> tests use production-shaped data, concurrency, transactions, and duration.</li>
+<li><strong>Load testing:</strong> target arrival rates and latency objectives are tested before production peaks.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Performance engineering principle:</strong> optimize the path that dominates end-to-end latency or capacity, validate the change under controlled representative load, and preserve correctness and durability unless the requirements explicitly permit a tradeoff.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. pg_stat_statements — track statistics of SQL planning and execution [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. Monitoring database activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. Resource consumption [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Server configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config.html">https://www.postgresql.org/docs/18/runtime-config.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Routine vacuuming [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/routine-vacuuming.html">https://www.postgresql.org/docs/18/routine-vacuuming.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Query planning configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-query.html">https://www.postgresql.org/docs/18/runtime-config-query.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. How the planner uses statistics [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats-details.html">https://www.postgresql.org/docs/18/planner-stats-details.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Query planning: planner cost constants and method configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-query.html">https://www.postgresql.org/docs/18/runtime-config-query.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Statistics used by the planner [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Index types [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-types.html">https://www.postgresql.org/docs/18/indexes-types.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. Multicolumn indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-multicolumn.html">https://www.postgresql.org/docs/18/indexes-multicolumn.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Index-only scans and covering indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-index-only-scans.html">https://www.postgresql.org/docs/18/indexes-index-only-scans.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Partial indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-partial.html">https://www.postgresql.org/docs/18/indexes-partial.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Indexes on expressions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-expressional.html">https://www.postgresql.org/docs/18/indexes-expressional.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. Connections and authentication settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-connection.html">https://www.postgresql.org/docs/18/runtime-config-connection.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Client connection defaults and timeouts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-client.html">https://www.postgresql.org/docs/18/runtime-config-client.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. Error reporting and logging [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-logging.html">https://www.postgresql.org/docs/18/runtime-config-logging.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. Parallel query [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/parallel-query.html">https://www.postgresql.org/docs/18/parallel-query.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Write-ahead logging [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-intro.html">https://www.postgresql.org/docs/18/wal-intro.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Write-ahead-log configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-wal.html">https://www.postgresql.org/docs/18/runtime-config-wal.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. Non-durable settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/non-durability.html">https://www.postgresql.org/docs/18/non-durability.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Reliability and WAL internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/wal-configuration.html">https://www.postgresql.org/docs/18/wal-configuration.html</a>; <a href="https://www.postgresql.org/docs/18/wal-internals.html">https://www.postgresql.org/docs/18/wal-internals.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. Vacuum configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-vacuum.html">https://www.postgresql.org/docs/18/runtime-config-vacuum.html</a></li>
+
+<li id="r27">PostgreSQL Global Development Group. Parallel plans [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/parallel-plans.html">https://www.postgresql.org/docs/18/parallel-plans.html</a></li>
+
+<li id="r28">PostgreSQL Global Development Group. When to JIT? [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/jit-decision.html">https://www.postgresql.org/docs/18/jit-decision.html</a></li>
+
+<li id="r29">PostgreSQL Global Development Group. Table partitioning [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-partitioning.html">https://www.postgresql.org/docs/18/ddl-partitioning.html</a></li>
+
+<li id="r30">PgBouncer Project. PgBouncer configuration [Internet]. PgBouncer; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.pgbouncer.org/config.html">https://www.pgbouncer.org/config.html</a></li>
+
+<li id="r31">PostgreSQL Global Development Group. pg_buffercache — inspect PostgreSQL buffer cache [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgbuffercache.html">https://www.postgresql.org/docs/18/pgbuffercache.html</a></li>
+
+<li id="r32">PostgreSQL Global Development Group. pg_prewarm — preload relation data into buffer caches [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgprewarm.html">https://www.postgresql.org/docs/18/pgprewarm.html</a></li>
+
+<li id="r33">PostgreSQL Global Development Group. pgbench — run a benchmark test on PostgreSQL [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgbench.html">https://www.postgresql.org/docs/18/pgbench.html</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical performance-engineering reference. PostgreSQL tuning is workload-, platform-, durability-, and version-dependent. Benchmark changes under production-shaped data, concurrency, maintenance activity, and failure guarantees before deploying them broadly.
+</p>
+</footer>
+
+</body>
+</html>

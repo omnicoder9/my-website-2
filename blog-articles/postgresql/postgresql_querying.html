@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL SQL and querying: SELECT, INSERT, UPDATE, DELETE, MERGE, filtering, sorting, limiting, aggregation, joins, subqueries, CTEs, recursive CTEs, window functions, set operations, LATERAL, VALUES, RETURNING, and DISTINCT ON.">
+<title>PostgreSQL SQL &amp; Querying</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}.dek{max-width:1040px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+p{margin:.92em 0}a{color:var(--accent)}sup a{text-decoration:none;font-weight:700}code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:880px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL SQL &amp; Querying</h1>
+<p class="dek">A comprehensive guide to PostgreSQL query construction and data manipulation: SELECT, INSERT, UPDATE, DELETE, MERGE, filtering, sorting, limiting, aggregation, joins, subqueries, CTEs, recursive queries, windows, set operations, LATERAL, VALUES, RETURNING, and PostgreSQL-specific DISTINCT ON.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+<main>
+
+<section id="abstract"><h2>Abstract</h2>
+<p>PostgreSQL implements the SQL relational query model through a composable set of statements and clauses. <code>SELECT</code> derives result relations from source relations; <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, and <code>MERGE</code> change persistent rows; and <code>RETURNING</code> can expose modified rows without issuing a separate query. The same expression, subquery, join, common-table-expression, and set-operation machinery is reused across both reading and data modification.<sup><a href="#r1">[1]</a>-<a href="#r7">[7]</a></sup></p>
+<p>The logical processing model of a <code>SELECT</code> begins with CTEs and <code>FROM</code> sources, filters rows with <code>WHERE</code>, forms groups and applies <code>HAVING</code>, computes the output list, removes duplicates when requested, applies set operations, orders results, limits output, and finally applies row-locking clauses where present. This logical order explains common rules such as why aliases defined in the select list are unavailable in <code>WHERE</code>, why aggregate filters usually belong in <code>HAVING</code>, and why window functions must be filtered from an outer query rather than directly in <code>WHERE</code>.<sup><a href="#r1">[1]</a><a href="#r8">[8]</a><a href="#r9">[9]</a></sup></p>
+<p>PostgreSQL adds several practically important capabilities beyond basic SQL examples: <code>DISTINCT ON</code> for “first row per group” queries, <code>LATERAL</code> for row-dependent FROM items, data-modifying CTEs, recursive <code>WITH</code> with standard <code>SEARCH</code>/<code>CYCLE</code> clauses, <code>ON CONFLICT</code> upserts, <code>MERGE</code> with multiple conditional actions, and explicit old/new row references in PostgreSQL 18 <code>RETURNING</code> lists.<sup><a href="#r1">[1]</a><a href="#r3">[3]</a><a href="#r6">[6]</a><a href="#r10">[10]</a></sup></p>
+</section>
+
+<nav class="toc"><h2>Contents</h2><ol>
+<li><a href="#select">SELECT</a></li><li><a href="#logical-order">Logical query order</a></li><li><a href="#filtering">Filtering</a></li><li><a href="#sorting">Sorting</a></li>
+<li><a href="#limiting">Limiting</a></li><li><a href="#insert">INSERT</a></li><li><a href="#update">UPDATE</a></li><li><a href="#delete">DELETE</a></li>
+<li><a href="#merge">MERGE</a></li><li><a href="#returning">RETURNING</a></li><li><a href="#aggregation">Aggregation</a></li><li><a href="#groupby">GROUP BY</a></li>
+<li><a href="#having">HAVING</a></li><li><a href="#joins">Joins</a></li><li><a href="#inner">INNER JOIN</a></li><li><a href="#outer">LEFT/RIGHT/FULL</a></li>
+<li><a href="#cross">CROSS JOIN</a></li><li><a href="#self">Self joins</a></li><li><a href="#subqueries">Subqueries</a></li><li><a href="#correlated">Correlated subqueries</a></li>
+<li><a href="#cte">CTEs</a></li><li><a href="#recursive">Recursive CTEs</a></li><li><a href="#windows">Window functions</a></li><li><a href="#setops">Set operations</a></li>
+<li><a href="#lateral">LATERAL</a></li><li><a href="#values">VALUES</a></li><li><a href="#distincton">DISTINCT ON</a></li><li><a href="#patterns">Query patterns</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li><li><a href="#checklist">Production checklist</a></li><li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="select"><h2>1. <code>SELECT</code></h2>
+<p><code>SELECT</code> retrieves rows from zero or more table-like sources and computes an output list. FROM items can be base tables, views, subqueries, CTEs, <code>VALUES</code>, functions, joins and <code>LATERAL</code> items. PostgreSQL's syntax also supports grouping sets, window definitions, set operations, ordering, limiting and row-locking clauses.<sup><a href="#r1">[1]</a><a href="#r8">[8]</a></sup></p>
+<pre><code>SELECT
+    o.order_id,
+    o.customer_id,
+    o.created_at,
+    o.total_amount
+FROM app.orders AS o
+WHERE o.status = 'paid'
+  AND o.created_at &gt;= timestamptz '2026-09-01 00:00:00+00'
+ORDER BY o.created_at DESC, o.order_id DESC
+LIMIT 100;</code></pre>
+
+<h3>1.1 Output expressions</h3>
+<pre><code>SELECT
+    order_id,
+    total_amount,
+    total_amount * 0.07 AS estimated_tax,
+    upper(status) AS status_upper
+FROM app.orders;</code></pre>
+<p>The select list consists of arbitrary value expressions, not only raw columns. Aliases label the result columns and can be used by later logical stages such as <code>ORDER BY</code>, subject to name-resolution rules.<sup><a href="#r11">[11]</a></sup></p>
+</section>
+
+<section id="logical-order"><h2>2. Logical processing order</h2>
+<p>The SQL text is not evaluated strictly top-to-bottom. PostgreSQL documents the conceptual processing order as CTEs, FROM sources, WHERE filtering, grouping/aggregation and HAVING, output expressions, DISTINCT, set operations, ORDER BY, LIMIT/OFFSET and row locking.<sup><a href="#r1">[1]</a></sup></p>
+<div class="diagram">WITH
+  ↓
+FROM / JOIN / LATERAL
+  ↓
+WHERE
+  ↓
+GROUP BY + aggregate calculation
+  ↓
+HAVING
+  ↓
+SELECT output expressions
+  ↓
+DISTINCT / DISTINCT ON
+  ↓
+UNION / INTERSECT / EXCEPT
+  ↓
+ORDER BY
+  ↓
+LIMIT / OFFSET / FETCH
+  ↓
+row-locking clauses</div>
+<p>This is a semantic model; the optimizer is free to transform the physical plan while preserving query meaning.<sup><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="filtering"><h2>3. Filtering with <code>WHERE</code></h2>
+<p><code>WHERE</code> retains rows whose condition evaluates to SQL true. False and null/unknown conditions are removed. Because SQL uses three-valued logic, comparisons with null normally yield null rather than true or false; use <code>IS NULL</code>/<code>IS NOT NULL</code> when testing nullness.<sup><a href="#r8">[8]</a><a href="#r13">[13]</a></sup></p>
+<pre><code>SELECT *
+FROM app.orders
+WHERE customer_id = 42
+  AND status IN ('open', 'paid')
+  AND cancelled_at IS NULL
+  AND total_amount BETWEEN 50 AND 500;</code></pre>
+
+<h3>3.1 Predicate placement matters with outer joins</h3>
+<pre><code>-- Preserve customers with no paid orders:
+SELECT c.customer_id, o.order_id
+FROM app.customer AS c
+LEFT JOIN app.orders AS o
+  ON o.customer_id = c.customer_id
+ AND o.status = 'paid';</code></pre>
+<p>Putting <code>o.status='paid'</code> in <code>WHERE</code> instead would reject the null-extended rows produced for customers with no match, changing the effective semantics toward an inner join.<sup><a href="#r8">[8]</a></sup></p>
+</section>
+
+<section id="sorting"><h2>4. Sorting with <code>ORDER BY</code></h2>
+<p>SQL does not guarantee result order unless <code>ORDER BY</code> is specified. PostgreSQL permits ordering by expressions, output names or select-list ordinal numbers, with per-key <code>ASC</code>/<code>DESC</code> and <code>NULLS FIRST</code>/<code>NULLS LAST</code> options.<sup><a href="#r14">[14]</a></sup></p>
+<pre><code>SELECT order_id, customer_id, created_at
+FROM app.orders
+ORDER BY
+    created_at DESC,
+    order_id DESC;</code></pre>
+<p>Multiple ordering keys are important when deterministic pagination or “first row” semantics are required. A non-unique ordering such as timestamp alone can leave peer rows in an unspecified relative order.</p>
+</section>
+
+<section id="limiting"><h2>5. Limiting and pagination</h2>
+<p><code>LIMIT</code>, <code>OFFSET</code>, and standard <code>FETCH FIRST/NEXT</code> restrict the output subset. PostgreSQL warns that a limit without a unique deterministic <code>ORDER BY</code> can return unpredictable subsets, and a large <code>OFFSET</code> can be inefficient because skipped rows still have to be computed.<sup><a href="#r15">[15]</a></sup></p>
+<pre><code>SELECT *
+FROM app.orders
+ORDER BY created_at DESC, order_id DESC
+LIMIT 50 OFFSET 1000;</code></pre>
+
+<h3>5.1 Keyset pagination</h3>
+<pre><code>SELECT *
+FROM app.orders
+WHERE (created_at, order_id)
+      &lt; ($last_created_at, $last_order_id)
+ORDER BY created_at DESC, order_id DESC
+LIMIT 50;</code></pre>
+<p>Keyset pagination avoids repeatedly computing and discarding a growing offset and is typically better for deep, stable pagination when a suitable ordered key exists.</p>
+</section>
+
+<section id="insert"><h2>6. <code>INSERT</code></h2>
+<p><code>INSERT</code> creates rows from explicit values, <code>DEFAULT VALUES</code>, or a query result. Missing target columns receive their declared defaults or null if no default exists. PostgreSQL also supports <code>ON CONFLICT</code> for unique/exclusion-conflict handling.<sup><a href="#r3">[3]</a></sup></p>
+<pre><code>INSERT INTO app.customer(email, display_name)
+VALUES
+    ('alice@example.com', 'Alice'),
+    ('bob@example.com',   'Bob')
+RETURNING customer_id, email;</code></pre>
+
+<h3>6.1 INSERT ... SELECT</h3>
+<pre><code>INSERT INTO archive.orders (
+    order_id,
+    customer_id,
+    created_at,
+    total_amount
+)
+SELECT
+    order_id,
+    customer_id,
+    created_at,
+    total_amount
+FROM app.orders
+WHERE created_at &lt; date '2024-01-01';</code></pre>
+
+<h3>6.2 Upsert with <code>ON CONFLICT</code></h3>
+<pre><code>INSERT INTO app.user_setting(user_id, setting_name, setting_value)
+VALUES ($1, 'theme', 'dark')
+ON CONFLICT (user_id, setting_name)
+DO UPDATE
+SET setting_value = EXCLUDED.setting_value
+RETURNING *;</code></pre>
+<p><code>ON CONFLICT DO UPDATE</code> provides deterministic insert-or-update behavior based on a unique/exclusion conflict target.<sup><a href="#r3">[3]</a></sup></p>
+</section>
+
+<section id="update"><h2>7. <code>UPDATE</code></h2>
+<p><code>UPDATE</code> changes column values for rows satisfying its condition. New expressions can use old row values, scalar subqueries, defaults, and columns from relations listed in PostgreSQL's <code>FROM</code> extension.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>UPDATE app.product
+SET price = price * 1.05,
+    updated_at = clock_timestamp()
+WHERE category_id = 10
+RETURNING product_id, price;</code></pre>
+
+<h3>7.1 UPDATE ... FROM</h3>
+<pre><code>UPDATE inventory.stock AS s
+SET quantity = s.quantity + d.delta
+FROM inventory.adjustment AS d
+WHERE d.stock_id = s.stock_id
+  AND d.batch_id = $1
+RETURNING s.stock_id, s.quantity;</code></pre>
+<div class="callout warn"><strong>Join multiplicity matters.</strong> Ensure the <code>FROM</code> join produces at most one relevant source row per target row unless nondeterministic source-row choice is acceptable. Pre-aggregate or constrain the source when necessary.</div>
+</section>
+
+<section id="delete"><h2>8. <code>DELETE</code></h2>
+<p><code>DELETE</code> removes rows satisfying its condition. Omitting <code>WHERE</code> deletes every row. PostgreSQL supports <code>USING</code> to join other relations into the delete condition and <code>RETURNING</code> to expose deleted rows.<sup><a href="#r5">[5]</a></sup></p>
+<pre><code>DELETE FROM queue.job
+WHERE state = 'complete'
+  AND finished_at &lt; now() - interval '90 days'
+RETURNING job_id, finished_at;</code></pre>
+
+<h3>8.1 DELETE ... USING</h3>
+<pre><code>DELETE FROM app.session AS s
+USING app.user_account AS u
+WHERE u.user_id = s.user_id
+  AND u.disabled
+RETURNING s.session_id;</code></pre>
+</section>
+
+<section id="merge"><h2>9. <code>MERGE</code></h2>
+<p><code>MERGE</code> compares a source relation with a target table and conditionally executes <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, or <code>DO NOTHING</code> actions. PostgreSQL determines each candidate row's match status, then evaluates <code>WHEN</code> clauses in order; at most one action is taken for each candidate change row.<sup><a href="#r6">[6]</a></sup></p>
+
+<pre><code>MERGE INTO inventory.product AS p
+USING staging.product_feed AS s
+ON p.sku = s.sku
+
+WHEN MATCHED
+ AND s.discontinued THEN
+    UPDATE SET active = false
+
+WHEN MATCHED THEN
+    UPDATE SET
+        name = s.name,
+        price = s.price,
+        active = true
+
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (sku, name, price, active)
+    VALUES (s.sku, s.name, s.price, true)
+
+WHEN NOT MATCHED BY SOURCE
+ AND p.source = 'supplier-x' THEN
+    UPDATE SET active = false
+
+RETURNING
+    merge_action() AS action,
+    p.product_id,
+    p.sku;</code></pre>
+
+<p><code>MERGE</code> is useful when several target actions depend on match status. For simple unique-key upsert, <code>INSERT ... ON CONFLICT</code> is often shorter and expresses conflict-driven semantics directly; <code>MERGE</code> is broader because it can include deletes, source-missing actions, and several ordered conditions.<sup><a href="#r3">[3]</a><a href="#r6">[6]</a></sup></p>
+</section>
+
+<section id="returning"><h2>10. <code>RETURNING</code></h2>
+<p><code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, and <code>MERGE</code> can return rows directly from the modification. This avoids a follow-up query and makes it easy to obtain identity/default/generated values or the rows that were actually changed. PostgreSQL 18 can explicitly expose old and new row versions in supported <code>RETURNING</code> lists.<sup><a href="#r7">[7]</a></sup></p>
+
+<pre><code>INSERT INTO app.customer(email, display_name)
+VALUES ('ada@example.com', 'Ada')
+RETURNING customer_id, created_at;</code></pre>
+
+<pre><code>UPDATE app.product
+SET price = price * 1.10
+WHERE product_id = 42
+RETURNING
+    OLD.price AS old_price,
+    NEW.price AS new_price;</code></pre>
+
+<pre><code>DELETE FROM app.session
+WHERE expires_at &lt; now()
+RETURNING OLD.session_id, OLD.user_id;</code></pre>
+
+<p>The <code>RETURNING</code> list has select-list-like expression syntax, so computed expressions can be returned as well.<sup><a href="#r7">[7]</a></sup></p>
+</section>
+
+<section id="aggregation"><h2>11. Aggregation</h2>
+<p>Aggregate functions reduce sets of input rows to one result per group. Common examples include <code>count</code>, <code>sum</code>, <code>avg</code>, <code>min</code>, <code>max</code>, <code>array_agg</code>, <code>jsonb_agg</code>, and <code>string_agg</code>. Except for <code>count</code>, most built-in aggregates return null when no input rows are selected unless the query applies a fallback such as <code>COALESCE</code>.<sup><a href="#r16">[16]</a></sup></p>
+
+<pre><code>SELECT
+    count(*) AS orders,
+    sum(total_amount) AS revenue,
+    avg(total_amount) AS average_order
+FROM app.orders
+WHERE status = 'paid';</code></pre>
+
+<h3>11.1 Aggregate FILTER</h3>
+<pre><code>SELECT
+    customer_id,
+    count(*) AS all_orders,
+    count(*) FILTER (WHERE status = 'paid') AS paid_orders,
+    sum(total_amount) FILTER (WHERE status = 'paid') AS paid_revenue
+FROM app.orders
+GROUP BY customer_id;</code></pre>
+
+<p><code>FILTER</code> lets several differently filtered aggregates share one grouped input instead of requiring separate subqueries.<sup><a href="#r8">[8]</a><a href="#r17">[17]</a></sup></p>
+
+<h3>11.2 Ordering inside aggregates</h3>
+<pre><code>SELECT
+    customer_id,
+    array_agg(order_id ORDER BY created_at DESC) AS newest_first
+FROM app.orders
+GROUP BY customer_id;</code></pre>
+<p>Order-sensitive aggregates should specify <code>ORDER BY</code> inside the aggregate when ordering affects the result.<sup><a href="#r16">[16]</a></sup></p>
+</section>
+
+<section id="groupby"><h2>12. <code>GROUP BY</code></h2>
+<p><code>GROUP BY</code> condenses rows sharing the same grouping values into one group and computes aggregate functions over each group. PostgreSQL also supports <code>GROUPING SETS</code>, <code>ROLLUP</code>, and <code>CUBE</code> for multiple grouping levels in one statement.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code>SELECT
+    customer_id,
+    date_trunc('month', created_at) AS month,
+    count(*) AS order_count,
+    sum(total_amount) AS revenue
+FROM app.orders
+WHERE status = 'paid'
+GROUP BY customer_id, date_trunc('month', created_at);</code></pre>
+
+<h3>12.1 ROLLUP</h3>
+<pre><code>SELECT
+    region,
+    category,
+    sum(revenue) AS revenue
+FROM reporting.sales
+GROUP BY ROLLUP (region, category);</code></pre>
+
+<p><code>ROLLUP</code> produces hierarchical subtotals, while <code>CUBE</code> produces combinations of grouping dimensions. <code>GROUPING()</code> can distinguish subtotal-generated nulls from ordinary null values.<sup><a href="#r18">[18]</a></sup></p>
+</section>
+
+<section id="having"><h2>13. <code>HAVING</code></h2>
+<p><code>WHERE</code> filters input rows before grouping; <code>HAVING</code> filters group rows after grouping and aggregate computation. PostgreSQL also treats a query containing <code>HAVING</code> but no explicit <code>GROUP BY</code> as a grouped query with one implicit group.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code>SELECT
+    customer_id,
+    count(*) AS orders,
+    sum(total_amount) AS revenue
+FROM app.orders
+WHERE status = 'paid'
+GROUP BY customer_id
+HAVING sum(total_amount) &gt; 10000;</code></pre>
+
+<p>If a condition can be applied before aggregation and does not depend on aggregate results, place it in <code>WHERE</code> so fewer rows need to participate in grouping.</p>
+</section>
+
+<section id="joins"><h2>14. Joins</h2>
+<p>A join combines two FROM items according to a relationship between their rows. PostgreSQL supports inner, left outer, right outer, full outer, and cross joins. Join conditions can be written with <code>ON</code>, <code>USING</code>, or <code>NATURAL</code>, although explicit <code>ON</code>/<code>USING</code> is generally safer for evolving schemas.<sup><a href="#r8">[8]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Join</th><th>Rows preserved</th><th>Typical use</th></tr></thead><tbody>
+<tr><td>INNER</td><td>Only matching combinations</td><td>Require relationship match</td></tr>
+<tr><td>LEFT</td><td>All left rows + matches</td><td>Optional child/right data</td></tr>
+<tr><td>RIGHT</td><td>All right rows + matches</td><td>Equivalent to reversed LEFT in many cases</td></tr>
+<tr><td>FULL</td><td>All rows from both sides</td><td>Reconciliation/difference reports</td></tr>
+<tr><td>CROSS</td><td>All combinations</td><td>Cartesian generation</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="inner"><h2>15. Inner joins</h2>
+<pre><code>SELECT
+    o.order_id,
+    c.email,
+    o.total_amount
+FROM app.orders AS o
+JOIN app.customer AS c
+  ON c.customer_id = o.customer_id
+WHERE o.status = 'paid';</code></pre>
+
+<p>An inner join returns only combinations satisfying the join condition. <code>USING</code> is shorthand when both inputs use the same join-column names and also returns one merged copy of each named join column.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code>SELECT *
+FROM app.orders
+JOIN app.customer
+USING (customer_id);</code></pre>
+</section>
+
+<section id="outer"><h2>16. Left, right, and full outer joins</h2>
+<h3>16.1 LEFT JOIN</h3>
+<pre><code>SELECT
+    c.customer_id,
+    c.email,
+    o.order_id
+FROM app.customer AS c
+LEFT JOIN app.orders AS o
+  ON o.customer_id = c.customer_id
+ AND o.status = 'open';</code></pre>
+
+<p>A left join includes every matching pair plus one null-extended row for each unmatched left row. Right join mirrors this behavior with the right input preserved, while full join preserves unmatched rows from both sides.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>16.2 FULL JOIN reconciliation</h3>
+<pre><code>SELECT
+    a.external_id AS source_a_id,
+    b.external_id AS source_b_id,
+    a.amount AS a_amount,
+    b.amount AS b_amount
+FROM source_a.transaction AS a
+FULL JOIN source_b.transaction AS b
+  ON b.external_id = a.external_id
+WHERE a.external_id IS NULL
+   OR b.external_id IS NULL
+   OR a.amount IS DISTINCT FROM b.amount;</code></pre>
+</section>
+
+<section id="cross"><h2>17. Cross joins</h2>
+<p><code>CROSS JOIN</code> returns the Cartesian product: every left row combined with every right row. It is equivalent to an inner join with an always-true condition. Cross joins are useful when generating combinations deliberately, but accidental Cartesian products can explode row counts.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code>SELECT
+    r.region,
+    d.day
+FROM reporting.region AS r
+CROSS JOIN generate_series(
+    date '2026-09-01',
+    date '2026-09-30',
+    interval '1 day'
+) AS d(day);</code></pre>
+</section>
+
+<section id="self"><h2>18. Self joins</h2>
+<p>A self join is ordinary join syntax in which the same relation appears more than once under different aliases. Aliases are essential because each occurrence represents a different logical role.<sup><a href="#r1">[1]</a></sup></p>
+
+<pre><code>SELECT
+    e.employee_id,
+    e.name AS employee_name,
+    m.name AS manager_name
+FROM org.employee AS e
+LEFT JOIN org.employee AS m
+  ON m.employee_id = e.manager_id;</code></pre>
+</section>
+
+<section id="subqueries"><h2>19. Subqueries</h2>
+<p>A subquery is a query embedded inside another SQL expression or FROM item. PostgreSQL supports scalar subqueries, row subqueries, derived tables, <code>EXISTS</code>, <code>IN</code>, <code>ANY/SOME</code>, and <code>ALL</code> constructs.<sup><a href="#r19">[19]</a></sup></p>
+
+<h3>19.1 Scalar subquery</h3>
+<pre><code>SELECT
+    p.product_id,
+    p.price,
+    (
+        SELECT avg(price)
+        FROM app.product
+    ) AS average_price
+FROM app.product AS p;</code></pre>
+
+<p>A scalar subquery must return at most one row and one value; zero rows produce null.</p>
+
+<h3>19.2 EXISTS</h3>
+<pre><code>SELECT c.*
+FROM app.customer AS c
+WHERE EXISTS (
+    SELECT 1
+    FROM app.orders AS o
+    WHERE o.customer_id = c.customer_id
+      AND o.status = 'open'
+);</code></pre>
+
+<p><code>EXISTS</code> depends only on whether the subquery returns at least one row, so its select list is normally irrelevant and PostgreSQL can stop once existence has been established.<sup><a href="#r19">[19]</a></sup></p>
+
+<h3>19.3 NOT IN and nulls</h3>
+<p><code>NOT IN (subquery)</code> can evaluate to null rather than true when the subquery contains null values and no equal row exists. <code>NOT EXISTS</code> is often easier to reason about for anti-join logic when nullability is possible.<sup><a href="#r19">[19]</a></sup></p>
+</section>
+
+<section id="correlated"><h2>20. Correlated subqueries</h2>
+<p>A correlated subquery references columns from an outer query level. Conceptually, those outer values act as parameters for the inner query during evaluation. The optimizer can often transform correlated constructs into joins or semijoins, but the SQL semantics remain row-dependent.<sup><a href="#r19">[19]</a></sup></p>
+
+<pre><code>SELECT
+    c.customer_id,
+    c.email
+FROM app.customer AS c
+WHERE EXISTS (
+    SELECT 1
+    FROM app.orders AS o
+    WHERE o.customer_id = c.customer_id
+      AND o.total_amount &gt; 1000
+);</code></pre>
+
+<h3>20.1 Correlated scalar aggregate</h3>
+<pre><code>SELECT
+    c.customer_id,
+    (
+        SELECT count(*)
+        FROM app.orders AS o
+        WHERE o.customer_id = c.customer_id
+    ) AS order_count
+FROM app.customer AS c;</code></pre>
+
+<p>For bulk reports, an explicit grouped join can be easier for humans to analyze and sometimes gives the planner a more obvious global aggregation opportunity. Measure both forms rather than assuming correlation is inherently slow.</p>
+</section>
+
+<section id="cte"><h2>21. Common table expressions (CTEs)</h2>
+<p>A <code>WITH</code> clause defines named query results that can be referenced by the primary statement. CTEs improve compositional readability and can also contain data-modifying statements whose <code>RETURNING</code> output becomes the CTE relation.<sup><a href="#r10">[10]</a><a href="#r1">[1]</a></sup></p>
+
+<pre><code>WITH paid_orders AS (
+    SELECT
+        customer_id,
+        total_amount
+    FROM app.orders
+    WHERE status = 'paid'
+)
+SELECT
+    customer_id,
+    count(*) AS orders,
+    sum(total_amount) AS revenue
+FROM paid_orders
+GROUP BY customer_id;</code></pre>
+
+<h3>21.1 CTE materialization</h3>
+<p>PostgreSQL can fold a side-effect-free, nonrecursive CTE into its parent query when it is referenced once, allowing joint optimization. <code>MATERIALIZED</code> can force a separate CTE result, while <code>NOT MATERIALIZED</code> can request folding when semantically allowed. A CTE is therefore not automatically an optimization fence in modern PostgreSQL.<sup><a href="#r10">[10]</a></sup></p>
+
+<pre><code>WITH recent AS NOT MATERIALIZED (
+    SELECT *
+    FROM app.orders
+    WHERE created_at &gt;= current_date - 30
+)
+SELECT *
+FROM recent
+WHERE customer_id = 42;</code></pre>
+
+<h3>21.2 Data-modifying CTE</h3>
+<pre><code>WITH moved AS (
+    DELETE FROM queue.job
+    WHERE state = 'complete'
+      AND finished_at &lt; now() - interval '90 days'
+    RETURNING *
+)
+INSERT INTO archive.job
+SELECT *
+FROM moved;</code></pre>
+
+<p>Data-modifying CTEs execute once even if their output is not fully consumed, and sibling data-modifying CTEs conceptually share the same command snapshot. Avoid designs where several modifying CTEs target the same row because PostgreSQL documents the result as unspecified.<sup><a href="#r10">[10]</a></sup></p>
+</section>
+
+<section id="recursive"><h2>22. Recursive CTEs</h2>
+<p><code>WITH RECURSIVE</code> allows a CTE to reference itself. PostgreSQL evaluates a nonrecursive seed term, then repeatedly evaluates the recursive term using rows produced by the previous iteration until no new rows remain. Although written recursively, the implementation is iterative.<sup><a href="#r10">[10]</a></sup></p>
+
+<pre><code>WITH RECURSIVE org_tree AS (
+    SELECT
+        employee_id,
+        manager_id,
+        name,
+        0 AS depth
+    FROM org.employee
+    WHERE employee_id = $root
+
+    UNION ALL
+
+    SELECT
+        e.employee_id,
+        e.manager_id,
+        e.name,
+        t.depth + 1
+    FROM org.employee AS e
+    JOIN org_tree AS t
+      ON e.manager_id = t.employee_id
+)
+SELECT *
+FROM org_tree
+ORDER BY depth, employee_id;</code></pre>
+
+<h3>22.1 Hierarchical paths</h3>
+<pre><code>WITH RECURSIVE tree AS (
+    SELECT
+        employee_id,
+        manager_id,
+        ARRAY[employee_id] AS path
+    FROM org.employee
+    WHERE manager_id IS NULL
+
+    UNION ALL
+
+    SELECT
+        e.employee_id,
+        e.manager_id,
+        t.path || e.employee_id
+    FROM org.employee AS e
+    JOIN tree AS t
+      ON e.manager_id = t.employee_id
+)
+SELECT *
+FROM tree
+ORDER BY path;</code></pre>
+
+<h3>22.2 SEARCH and CYCLE</h3>
+<p>PostgreSQL supports SQL-standard <code>SEARCH DEPTH FIRST</code>/<code>SEARCH BREADTH FIRST</code> clauses that synthesize an ordering column, and <code>CYCLE</code> clauses that mark and stop recursive paths that revisit specified keys.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup></p>
+
+<pre><code>WITH RECURSIVE graph_walk(id, link, depth) AS (
+    SELECT id, link, 0
+    FROM graph
+    WHERE id = $start
+
+    UNION ALL
+
+    SELECT g.id, g.link, w.depth + 1
+    FROM graph AS g
+    JOIN graph_walk AS w
+      ON g.id = w.link
+)
+SEARCH DEPTH FIRST BY id SET traversal_order
+CYCLE id SET is_cycle USING cycle_path
+SELECT *
+FROM graph_walk
+ORDER BY traversal_order;</code></pre>
+</section>
+
+<section id="windows"><h2>23. Window functions</h2>
+<p>A window function computes over rows related to the current output row while preserving each row's identity. The <code>OVER</code> clause defines partitioning, ordering, and optionally the window frame. Ordinary aggregates can become window functions when followed by <code>OVER</code>.<sup><a href="#r9">[9]</a><a href="#r20">[20]</a></sup></p>
+
+<pre><code>SELECT
+    customer_id,
+    order_id,
+    total_amount,
+    sum(total_amount) OVER (
+        PARTITION BY customer_id
+        ORDER BY created_at, order_id
+        ROWS BETWEEN UNBOUNDED PRECEDING
+             AND CURRENT ROW
+    ) AS running_spend
+FROM app.orders;</code></pre>
+
+<h3>23.1 Ranking</h3>
+<pre><code>SELECT
+    customer_id,
+    order_id,
+    total_amount,
+    row_number() OVER (
+        PARTITION BY customer_id
+        ORDER BY total_amount DESC, order_id
+    ) AS position,
+    rank() OVER (
+        PARTITION BY customer_id
+        ORDER BY total_amount DESC
+    ) AS amount_rank
+FROM app.orders;</code></pre>
+
+<p><code>row_number</code> assigns sequential numbers; <code>rank</code> assigns equal peer values the same rank and leaves gaps; <code>dense_rank</code> does not leave gaps.<sup><a href="#r20">[20]</a></sup></p>
+
+<h3>23.2 LAG and LEAD</h3>
+<pre><code>SELECT
+    recorded_at,
+    reading,
+    reading - lag(reading) OVER (
+        ORDER BY recorded_at
+    ) AS change_from_previous
+FROM telemetry.sample;</code></pre>
+
+<h3>23.3 Frame semantics</h3>
+<p><code>first_value</code>, <code>last_value</code>, and aggregate windows operate over the current frame, not automatically the whole partition. With window <code>ORDER BY</code>, the default frame can end at the current row's last peer, which is frequently surprising for <code>last_value</code>. Specify an explicit frame when whole-partition or rolling-window semantics are intended.<sup><a href="#r20">[20]</a></sup></p>
+
+<pre><code>last_value(total_amount) OVER (
+    PARTITION BY customer_id
+    ORDER BY created_at
+    ROWS BETWEEN UNBOUNDED PRECEDING
+         AND UNBOUNDED FOLLOWING
+)</code></pre>
+
+<h3>23.4 Filtering window output</h3>
+<p>Window functions are logically evaluated after <code>WHERE</code>, <code>GROUP BY</code>, and <code>HAVING</code>, and PostgreSQL permits window calls only in the select list and <code>ORDER BY</code>. To filter by a window result, use a subquery or CTE.<sup><a href="#r9">[9]</a></sup></p>
+
+<pre><code>SELECT *
+FROM (
+    SELECT
+        o.*,
+        row_number() OVER (
+            PARTITION BY customer_id
+            ORDER BY created_at DESC, order_id DESC
+        ) AS rn
+    FROM app.orders AS o
+) AS ranked
+WHERE rn &lt;= 3;</code></pre>
+</section>
+
+<section id="setops"><h2>24. Set operations: <code>UNION</code>, <code>INTERSECT</code>, <code>EXCEPT</code></h2>
+<p>Set operations combine the results of two compatible queries. The two inputs must produce the same number of columns and corresponding columns must resolve to compatible data types.<sup><a href="#r21">[21]</a><a href="#r22">[22]</a></sup></p>
+
+<h3>24.1 UNION</h3>
+<pre><code>SELECT email FROM app.customer
+UNION
+SELECT email FROM crm.lead;</code></pre>
+<p><code>UNION</code> removes duplicates; <code>UNION ALL</code> preserves them and normally avoids duplicate-elimination work.<sup><a href="#r21">[21]</a></sup></p>
+
+<h3>24.2 INTERSECT</h3>
+<pre><code>SELECT customer_id
+FROM app.orders
+WHERE created_at &gt;= current_date - 30
+
+INTERSECT
+
+SELECT customer_id
+FROM app.support_ticket
+WHERE created_at &gt;= current_date - 30;</code></pre>
+
+<h3>24.3 EXCEPT</h3>
+<pre><code>SELECT customer_id FROM app.customer
+EXCEPT
+SELECT customer_id FROM app.orders;</code></pre>
+
+<p><code>EXCEPT</code> returns rows present in the first result but not the second. All three operators support <code>ALL</code> variants. <code>INTERSECT</code> binds more tightly than <code>UNION</code> and <code>EXCEPT</code>; parentheses should be used whenever compound-query intent could be ambiguous.<sup><a href="#r21">[21]</a></sup></p>
+</section>
+
+<section id="lateral"><h2>25. <code>LATERAL</code></h2>
+<p><code>LATERAL</code> allows a FROM subquery to reference columns from FROM items to its left. PostgreSQL evaluates the lateral item for each relevant left-side row or row set, then joins the generated rows back into the query. Table functions can already reference earlier FROM columns without writing the keyword explicitly, so <code>LATERAL</code> is optional for function calls.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>25.1 Top-N child rows per parent</h3>
+<pre><code>SELECT
+    c.customer_id,
+    c.email,
+    recent.order_id,
+    recent.created_at,
+    recent.total_amount
+FROM app.customer AS c
+LEFT JOIN LATERAL (
+    SELECT
+        o.order_id,
+        o.created_at,
+        o.total_amount
+    FROM app.orders AS o
+    WHERE o.customer_id = c.customer_id
+    ORDER BY o.created_at DESC, o.order_id DESC
+    LIMIT 3
+) AS recent
+ON true;</code></pre>
+
+<p>With an index such as <code>(customer_id, created_at DESC, order_id DESC)</code>, this form can express a very efficient bounded lookup for each selected customer.</p>
+
+<h3>25.2 LATERAL with set-returning functions</h3>
+<pre><code>SELECT
+    e.event_id,
+    kv.key,
+    kv.value
+FROM app.event AS e
+CROSS JOIN LATERAL
+jsonb_each_text(e.payload) AS kv(key, value);</code></pre>
+</section>
+
+<section id="values"><h2>26. <code>VALUES</code></h2>
+<p><code>VALUES</code> creates a constant table without creating a stored table. Every row must have the same number of expressions and each result column resolves to a common compatible type using the same family of type-resolution rules as set operations.<sup><a href="#r23">[23]</a><a href="#r22">[22]</a></sup></p>
+
+<pre><code>SELECT *
+FROM (
+    VALUES
+        (1, 'low'),
+        (2, 'medium'),
+        (3, 'high')
+) AS priority(code, label)
+ORDER BY code;</code></pre>
+
+<h3>26.1 Join application-supplied small sets</h3>
+<pre><code>SELECT
+    p.product_id,
+    p.name,
+    requested.quantity
+FROM (
+    VALUES
+        (101::bigint, 2),
+        (205::bigint, 1),
+        (999::bigint, 5)
+) AS requested(product_id, quantity)
+JOIN catalog.product AS p
+USING (product_id);</code></pre>
+
+<p><code>VALUES</code> can be used anywhere a select-like table expression is allowed and is particularly convenient as an <code>INSERT</code> source or small inline lookup relation.<sup><a href="#r23">[23]</a></sup></p>
+</section>
+
+<section id="distincton"><h2>27. PostgreSQL <code>DISTINCT ON</code></h2>
+<p><code>DISTINCT ON (expr...)</code> is a PostgreSQL extension that keeps the first row for each equal group of the specified expressions. The “first” row is unpredictable unless <code>ORDER BY</code> establishes the desired ordering, and the <code>DISTINCT ON</code> expressions must match the leftmost <code>ORDER BY</code> expressions.<sup><a href="#r1">[1]</a><a href="#r11">[11]</a></sup></p>
+
+<h3>27.1 Latest row per customer</h3>
+<pre><code>SELECT DISTINCT ON (customer_id)
+    customer_id,
+    order_id,
+    created_at,
+    total_amount
+FROM app.orders
+ORDER BY
+    customer_id,
+    created_at DESC,
+    order_id DESC;</code></pre>
+
+<p>This is often the most concise PostgreSQL solution for one row per group when a deterministic ordering defines which row should win. A window-function solution is more portable and easier to extend when the requirement becomes top-N rather than top-1.</p>
+
+<h3>27.2 Equivalent window pattern</h3>
+<pre><code>SELECT *
+FROM (
+    SELECT
+        o.*,
+        row_number() OVER (
+            PARTITION BY customer_id
+            ORDER BY created_at DESC, order_id DESC
+        ) AS rn
+    FROM app.orders AS o
+) AS x
+WHERE rn = 1;</code></pre>
+</section>
+
+<section id="patterns"><h2>28. Practical query patterns</h2>
+
+<h3>28.1 Anti-join with NOT EXISTS</h3>
+<pre><code>SELECT c.*
+FROM app.customer AS c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM app.orders AS o
+    WHERE o.customer_id = c.customer_id
+);</code></pre>
+
+<h3>28.2 Conditional aggregation</h3>
+<pre><code>SELECT
+    customer_id,
+    count(*) FILTER (WHERE status = 'open') AS open_orders,
+    count(*) FILTER (WHERE status = 'paid') AS paid_orders,
+    sum(total_amount) FILTER (WHERE status = 'paid') AS revenue
+FROM app.orders
+GROUP BY customer_id;</code></pre>
+
+<h3>28.3 Top-N per group</h3>
+<pre><code>WITH ranked AS (
+    SELECT
+        o.*,
+        row_number() OVER (
+            PARTITION BY customer_id
+            ORDER BY total_amount DESC, order_id
+        ) AS rn
+    FROM app.orders AS o
+)
+SELECT *
+FROM ranked
+WHERE rn &lt;= 5;</code></pre>
+
+<h3>28.4 Hierarchical ancestry</h3>
+<pre><code>WITH RECURSIVE ancestry AS (
+    SELECT employee_id, manager_id, name, 0 AS level
+    FROM org.employee
+    WHERE employee_id = $1
+
+    UNION ALL
+
+    SELECT m.employee_id, m.manager_id, m.name, a.level + 1
+    FROM org.employee AS m
+    JOIN ancestry AS a
+      ON m.employee_id = a.manager_id
+)
+SELECT *
+FROM ancestry
+ORDER BY level;</code></pre>
+
+<h3>28.5 Batch delete</h3>
+<pre><code>WITH doomed AS (
+    SELECT ctid
+    FROM app.event
+    WHERE created_at &lt; now() - interval '2 years'
+    ORDER BY created_at
+    FOR UPDATE
+    LIMIT 10000
+)
+DELETE FROM app.event AS e
+USING doomed AS d
+WHERE e.ctid = d.ctid;</code></pre>
+
+<p>PostgreSQL's <code>DELETE</code> has no direct <code>LIMIT</code>. The documentation demonstrates a bounded CTE pattern for batch deletion; <code>ctid</code> is safe here only as a transient physical locator within the statement/batch pattern, not as persistent identity.<sup><a href="#r5">[5]</a></sup></p>
+
+<h3>28.6 Atomic change plus returned result</h3>
+<pre><code>UPDATE inventory.product
+SET quantity = quantity - 1
+WHERE product_id = $1
+  AND quantity &gt; 0
+RETURNING product_id, quantity;</code></pre>
+
+<p>The affected-row count or empty <code>RETURNING</code> result becomes the application-visible success test without a preceding read-then-write race.</p>
+</section>
+
+<section id="pitfalls"><h2>29. Common querying pitfalls</h2>
+
+<h3>29.1 Assuming row order without ORDER BY</h3>
+<p>Heap order, index order, parallel execution and changed plans can all alter output order. PostgreSQL explicitly documents unspecified order without <code>ORDER BY</code>.<sup><a href="#r1">[1]</a><a href="#r14">[14]</a></sup></p>
+
+<h3>29.2 LIMIT without deterministic order</h3>
+<p>A limit over an unordered/non-unique result can return different subsets across executions or plans. Add enough ordering keys to define the result you actually mean.<sup><a href="#r15">[15]</a></sup></p>
+
+<h3>29.3 Large OFFSET pagination</h3>
+<p>The server must still compute rows that are skipped. Prefer keyset/cursor pagination for deep interactive result sets when possible.<sup><a href="#r15">[15]</a></sup></p>
+
+<h3>29.4 Turning LEFT JOIN into INNER JOIN accidentally</h3>
+<p>A right-side condition in <code>WHERE</code> rejects null-extended unmatched rows. Put match-specific optional-side predicates in the join's <code>ON</code> clause when unmatched left rows must remain.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>29.5 <code>NOT IN</code> with nullable subquery output</h3>
+<p>A null on the right can make <code>NOT IN</code> evaluate to unknown. Use <code>NOT EXISTS</code>, enforce non-nullability, or explicitly handle null semantics.<sup><a href="#r19">[19]</a></sup></p>
+
+<h3>29.6 Using HAVING for row filters</h3>
+<p>Filters that do not depend on grouped/aggregate values usually belong in <code>WHERE</code>, allowing rows to be eliminated before grouping.<sup><a href="#r8">[8]</a></sup></p>
+
+<h3>29.7 Assuming CTEs always materialize</h3>
+<p>Modern PostgreSQL can fold eligible single-use CTEs into the parent query. Use <code>MATERIALIZED</code>/<code>NOT MATERIALIZED</code> only when the semantic/performance tradeoff is understood.<sup><a href="#r10">[10]</a></sup></p>
+
+<h3>29.8 Forgetting window-frame semantics</h3>
+<p><code>last_value</code> over the default ordered frame often returns the current peer group's last value rather than the partition's final value. Specify the intended frame explicitly.<sup><a href="#r20">[20]</a></sup></p>
+
+<h3>29.9 Using UNION when duplicates do not need removal</h3>
+<p><code>UNION</code> performs duplicate elimination. Use <code>UNION ALL</code> when duplicate preservation is semantically correct; it can avoid unnecessary deduplication work.<sup><a href="#r21">[21]</a></sup></p>
+
+<h3>29.10 Ambiguous UPDATE ... FROM matches</h3>
+<p>If several source rows join to one update target row, do not rely on whichever source row happens to be chosen. Make source cardinality one-to-one by constraint, aggregation or a deterministic subquery.</p>
+
+<h3>29.11 Treating DISTINCT as a fix for a bad join</h3>
+<p>If a join unexpectedly multiplies rows, adding <code>DISTINCT</code> can hide the symptom while preserving wrong semantics and extra work. Diagnose the relationship cardinality and join predicate first.</p>
+
+<h3>29.12 Using MERGE when ON CONFLICT states the rule more directly</h3>
+<p><code>MERGE</code> is broader, but simple unique-key upsert logic can be clearer with <code>INSERT ... ON CONFLICT</code>. Choose the construct that maps most directly to the concurrency/business rule.<sup><a href="#r3">[3]</a><a href="#r6">[6]</a></sup></p>
+</section>
+
+<section id="checklist"><h2>30. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Always define deterministic ORDER BY when result order matters.</strong></li>
+<li><strong>Use keyset pagination for deep/high-traffic pagination when a stable ordered key exists.</strong></li>
+<li><strong>Filter rows in WHERE before GROUP BY whenever the condition is row-level.</strong></li>
+<li><strong>Use HAVING for conditions on groups/aggregates.</strong></li>
+<li><strong>Use FILTER for multiple conditional aggregates over the same grouping.</strong></li>
+<li><strong>Place optional-side predicates carefully in outer joins.</strong></li>
+<li><strong>Use EXISTS/NOT EXISTS when the requirement is existence rather than returning joined rows.</strong></li>
+<li><strong>Handle NOT IN null semantics explicitly.</strong></li>
+<li><strong>Use CTEs for clarity, but understand folding/materialization behavior.</strong></li>
+<li><strong>Use recursive CTEs for graphs/hierarchies and protect against cycles.</strong></li>
+<li><strong>Specify window frames when defaults do not exactly match the requirement.</strong></li>
+<li><strong>Filter window results from an outer query.</strong></li>
+<li><strong>Prefer UNION ALL when duplicate elimination is not required.</strong></li>
+<li><strong>Use LATERAL for per-row dependent subqueries/functions.</strong></li>
+<li><strong>Use VALUES for small inline relations and bulk literal input.</strong></li>
+<li><strong>Use DISTINCT ON with deterministic ORDER BY for concise top-1-per-group PostgreSQL queries.</strong></li>
+<li><strong>Use RETURNING instead of follow-up SELECTs when you need modified row values.</strong></li>
+<li><strong>Use INSERT ... ON CONFLICT for conflict-driven upsert and MERGE for broader match-state workflows.</strong></li>
+<li><strong>Ensure UPDATE ... FROM and MERGE source cardinality matches intended target cardinality.</strong></li>
+<li><strong>Parameterize application queries rather than interpolating values into SQL text.</strong></li>
+<li><strong>Validate expensive queries with EXPLAIN (ANALYZE, BUFFERS) on representative data.</strong></li>
+</ol>
+
+<div class="callout ok"><strong>Query-design principle:</strong> SQL is declarative. Express the exact relational result and modification semantics first—rows, groups, matches, windows, set membership, and ordering—then let PostgreSQL optimize that expression. Clear cardinality and deterministic semantics are usually better optimization inputs than clever but ambiguous SQL.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. SELECT [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-select.html">https://www.postgresql.org/docs/18/sql-select.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. Chapter 7: Queries [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries.html">https://www.postgresql.org/docs/18/queries.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. INSERT [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-insert.html">https://www.postgresql.org/docs/18/sql-insert.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. UPDATE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-update.html">https://www.postgresql.org/docs/18/sql-update.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. DELETE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-delete.html">https://www.postgresql.org/docs/18/sql-delete.html</a></li>
+<li id="r6">PostgreSQL Global Development Group. MERGE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-merge.html">https://www.postgresql.org/docs/18/sql-merge.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. Returning Data from Modified Rows [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/dml-returning.html">https://www.postgresql.org/docs/18/dml-returning.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. Table Expressions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-table-expressions.html">https://www.postgresql.org/docs/18/queries-table-expressions.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. Window Functions Tutorial [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-window.html">https://www.postgresql.org/docs/18/tutorial-window.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. WITH Queries (Common Table Expressions) [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-with.html">https://www.postgresql.org/docs/18/queries-with.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. Select Lists [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-select-lists.html">https://www.postgresql.org/docs/18/queries-select-lists.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. The Path of a Query [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/query-path.html">https://www.postgresql.org/docs/18/query-path.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. Comparison Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-comparison.html">https://www.postgresql.org/docs/18/functions-comparison.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. Sorting Rows (ORDER BY) [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-order.html">https://www.postgresql.org/docs/18/queries-order.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. LIMIT and OFFSET [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-limit.html">https://www.postgresql.org/docs/18/queries-limit.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. Aggregate Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-aggregate.html">https://www.postgresql.org/docs/18/functions-aggregate.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. Aggregate Expressions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-expressions.html#SYNTAX-AGGREGATES">https://www.postgresql.org/docs/18/sql-expressions.html#SYNTAX-AGGREGATES</a></li>
+<li id="r18">PostgreSQL Global Development Group. GROUPING SETS, CUBE, and ROLLUP [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-table-expressions.html#QUERIES-GROUPING-SETS">https://www.postgresql.org/docs/18/queries-table-expressions.html#QUERIES-GROUPING-SETS</a></li>
+<li id="r19">PostgreSQL Global Development Group. Subquery Expressions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-subquery.html">https://www.postgresql.org/docs/18/functions-subquery.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. Window Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-window.html">https://www.postgresql.org/docs/18/functions-window.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. Combining Queries (UNION, INTERSECT, EXCEPT) [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-union.html">https://www.postgresql.org/docs/18/queries-union.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. UNION, CASE, and Related Constructs — Type Resolution [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/typeconv-union-case.html">https://www.postgresql.org/docs/18/typeconv-union-case.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. VALUES Lists [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-values.html">https://www.postgresql.org/docs/18/queries-values.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. VALUES [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-values.html">https://www.postgresql.org/docs/18/sql-values.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. Set Returning Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-srf.html">https://www.postgresql.org/docs/18/functions-srf.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. Conditional Expressions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-conditional.html">https://www.postgresql.org/docs/18/functions-conditional.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. Row and Array Comparisons [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-comparisons.html">https://www.postgresql.org/docs/18/functions-comparisons.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. SQL Value Expressions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-expressions.html">https://www.postgresql.org/docs/18/sql-expressions.html</a></li>
+<li id="r29">PostgreSQL Global Development Group. Tutorial: Querying a Table [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-select.html">https://www.postgresql.org/docs/18/tutorial-select.html</a></li>
+<li id="r30">PostgreSQL Global Development Group. Tutorial: Joins Between Tables [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-join.html">https://www.postgresql.org/docs/18/tutorial-join.html</a></li>
+<li id="r31">PostgreSQL Global Development Group. Tutorial: Aggregate Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-agg.html">https://www.postgresql.org/docs/18/tutorial-agg.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. Tutorial: Updates [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-update.html">https://www.postgresql.org/docs/18/tutorial-update.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. Deleting Data [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/dml-delete.html">https://www.postgresql.org/docs/18/dml-delete.html</a></li>
+<li id="r34">PostgreSQL Global Development Group. Populating a Table With Rows [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-populate.html">https://www.postgresql.org/docs/18/tutorial-populate.html</a></li>
+<li id="r35">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+<li id="r36">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+<li id="r37">PostgreSQL Global Development Group. Row Constructors [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-expressions.html#SQL-SYNTAX-ROW-CONSTRUCTORS">https://www.postgresql.org/docs/18/sql-expressions.html#SQL-SYNTAX-ROW-CONSTRUCTORS</a></li>
+<li id="r38">PostgreSQL Global Development Group. SELECT Output Columns and Type Resolution [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/typeconv-select.html">https://www.postgresql.org/docs/18/typeconv-select.html</a></li>
+<li id="r39">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r40">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol></section>
+</main>
+<footer><p>This article is a technical reference. Query behavior depends on PostgreSQL version, schema constraints, data distribution, indexes, parameter values, transaction isolation and concurrency. Validate performance-sensitive SQL with representative data and EXPLAIN/EXPLAIN ANALYZE, and validate semantics with edge cases involving nulls, duplicates, empty sets and concurrent writes.</p></footer>
+</body>
+</html>

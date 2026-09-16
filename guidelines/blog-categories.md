@@ -62,6 +62,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Physics**: Physical theory and scientific topics involving mechanics, electromagnetism, thermodynamics, quantum phenomena, cosmology, and related conceptual debates.
 - **Philosophy**: Conceptual, epistemic, metaphysical, or philosophical analysis not primarily framed as ethics.
 - **Privacy**: Digital privacy, anonymity, surveillance resistance, exposure reduction, and operational privacy practices.
+- **PostgreSQL**: PostgreSQL database topics, including SQL, schema design, indexing, transactions, MVCC, WAL, administration, operations, cloud deployments, extensions, internals, and application integration.
 - **Programming & Software**: General programming-language, software-development, or software-industry topics that are not tied to one framework or language category.
 - **Programming Languages**: Articles centered on one specific programming language as a language, such as its design, ecosystem, runtime model, tradeoffs, and historical role.
 - **Python**: Python language internals, concurrency, ecosystem, idioms, and Python-specific engineering topics beyond Django alone.

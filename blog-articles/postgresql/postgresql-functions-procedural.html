@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL functions and procedural programming: SQL functions, PL/pgSQL, procedures, variables, control flow, loops, exceptions, dynamic SQL, cursors, function volatility, and SECURITY DEFINER functions.">
+<title>PostgreSQL Functions and Procedural Programming</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:980px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Functions &amp; Procedural Programming</h1>
+  <p class="dek">A technical guide to SQL functions, PL/pgSQL, procedures, variables, control flow, loops, exception handling, dynamic SQL, cursors, volatility categories, planner contracts, transaction management, and secure SECURITY DEFINER design.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL supports database-resident programming at several levels. Simple logic can be expressed as SQL-language functions. More procedural logic can be implemented with PL/pgSQL, which adds variables, blocks, conditionals, loops, exception handling, dynamic SQL, and cursors. Procedures, invoked with <code>CALL</code>, are distinct from functions and can perform transaction control in specific top-level call contexts. PostgreSQL also supports additional procedural languages such as PL/Python, PL/Perl, and PL/Tcl, as well as C-language functions for lower-level extension work.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup>
+</p>
+<p>
+Server-side programming is tightly integrated with the PostgreSQL optimizer and security model. Function attributes such as <code>IMMUTABLE</code>, <code>STABLE</code>, <code>VOLATILE</code>, <code>STRICT</code>, execution cost, parallel safety, and <code>SECURITY DEFINER</code> are not documentation-only annotations; they alter planning, snapshot visibility, invocation frequency, and privilege boundaries. Correct classification is therefore part of correctness, not merely performance tuning.<sup><a href="#r5">[5]</a><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">Programming model</a></li>
+<li><a href="#sqlfunctions">SQL functions</a></li>
+<li><a href="#returns">Arguments and return types</a></li>
+<li><a href="#plpgsql">PL/pgSQL</a></li>
+<li><a href="#variables">Variables and declarations</a></li>
+<li><a href="#sqlstatements">Executing SQL in PL/pgSQL</a></li>
+<li><a href="#control">Control flow</a></li>
+<li><a href="#loops">Loops</a></li>
+<li><a href="#exceptions">Exceptions</a></li>
+<li><a href="#dynamic">Dynamic SQL</a></li>
+<li><a href="#cursors">Cursors</a></li>
+<li><a href="#procedures">Procedures</a></li>
+<li><a href="#transactions">Transaction control</a></li>
+<li><a href="#volatility">Function volatility</a></li>
+<li><a href="#parallel">Parallel safety and cost</a></li>
+<li><a href="#security">SECURITY DEFINER functions</a></li>
+<li><a href="#patterns">Design patterns</a></li>
+<li><a href="#performance">Performance and planning</a></li>
+<li><a href="#testing">Testing and observability</a></li>
+<li><a href="#guidelines">Production guidelines</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. PostgreSQL's server-side programming model</h2>
+<p>
+PostgreSQL supports user-defined functions written in SQL, procedural languages, internal server functions, and C. Procedural languages are implemented through language handlers loaded by PostgreSQL. The standard distribution includes PL/pgSQL, PL/Tcl, PL/Perl, and PL/Python, while additional languages can be supplied by extensions.<sup><a href="#r1">[1]</a><a href="#r7">[7]</a></sup>
+</p>
+
+<div class="diagram">application SQL
+     |
+     v
+PostgreSQL parser / analyzer / planner
+     |
+     +---------------------+
+     |                     |
+     v                     v
+SQL function          PL/pgSQL function/procedure
+     |                     |
+     |                     +--> variables / control flow
+     |                     +--> static SQL
+     |                     +--> EXECUTE dynamic SQL
+     |                     +--> cursors
+     |                     +--> exception blocks
+     |
+     +-----------> PostgreSQL executor
+                         |
+                         v
+                  tables / indexes / MVCC</div>
+
+<p>
+Functions are expressions from SQL's point of view: they have a return type and may be invoked in expressions, queries, indexes, generated expressions subject to restrictions, and other database objects. Procedures are invoked with <code>CALL</code> and do not participate as ordinary SQL expression values. Their main semantic distinction is that procedures can perform transaction control when invoked in the permitted context.<sup><a href="#r2">[2]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<h3>1.1 Choose the simplest level that fits</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Need</th><th>Usually prefer</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Pure relational calculation</td><td>SQL function</td><td>Concise and optimizer-friendly.</td></tr>
+<tr><td>Conditional procedural logic</td><td>PL/pgSQL function</td><td>Variables, branches, loops, exception handling.</td></tr>
+<tr><td>Top-level administrative workflow with COMMIT/ROLLBACK</td><td>Procedure</td><td>Supports transaction control in allowed call contexts.</td></tr>
+<tr><td>One-off procedural execution</td><td><code>DO</code></td><td>Anonymous procedural block without defining a permanent routine.</td></tr>
+<tr><td>Low-level server integration</td><td>C or extension language</td><td>Access to lower-level PostgreSQL APIs.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="sqlfunctions">
+<h2>2. SQL functions</h2>
+<p>
+SQL-language functions execute SQL statements and return a value or set of values according to the declared return type. In the classic string-body form, a function body can contain multiple SQL statements and returns the result of the final query; the final statement must produce a value compatible with the function's declared return type unless the function returns <code>void</code>. SQL functions cannot use transaction-control commands such as <code>COMMIT</code> or <code>SAVEPOINT</code>.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>2.1 Scalar SQL function</h3>
+<pre><code>CREATE FUNCTION app.net_price(
+    gross numeric,
+    discount_rate numeric
+)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+RETURN gross * (1 - discount_rate);</code></pre>
+
+<pre><code>SELECT app.net_price(125.00, 0.15);
+-- 106.2500</code></pre>
+
+<p>
+The <code>RETURN expression</code> SQL-function form is concise for a single expression. <code>STRICT</code> is shorthand for <code>RETURNS NULL ON NULL INPUT</code>, allowing PostgreSQL to return null without invoking the function whenever any argument is null. <code>IMMUTABLE</code> and <code>PARALLEL SAFE</code> are valid here because this function depends only on its arguments and has no side effects.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>2.2 Table-reading SQL function</h3>
+<pre><code>CREATE FUNCTION app.customer_order_total(p_customer_id bigint)
+RETURNS numeric
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT COALESCE(sum(o.total), 0)
+    FROM app.orders AS o
+    WHERE o.customer_id = p_customer_id;
+$$;</code></pre>
+
+<p>
+A function that reads database tables should generally not be labeled <code>IMMUTABLE</code> because its result can change as table contents change. <code>STABLE</code> is appropriate when the function performs reads and returns a value that is consistent for the same arguments throughout one statement snapshot.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>2.3 Data-modifying SQL function</h3>
+<pre><code>CREATE FUNCTION app.close_order(p_order_id bigint)
+RETURNS app.orders
+LANGUAGE SQL
+VOLATILE
+AS $$
+    UPDATE app.orders
+    SET status = 'closed',
+        closed_at = statement_timestamp()
+    WHERE order_id = p_order_id
+    RETURNING *;
+$$;</code></pre>
+
+<p>
+A function that changes database state must be marked <code>VOLATILE</code>. <code>VOLATILE</code> is PostgreSQL's default if no volatility category is specified.<sup><a href="#r5">[5]</a><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="returns">
+<h2>3. Arguments, output parameters, sets, and table functions</h2>
+<p>
+PostgreSQL functions can accept base, composite, array, domain, range, polymorphic, and other supported SQL types. They can return one scalar value, a composite row, <code>SETOF</code> a type, output parameters, or <code>RETURNS TABLE</code>. Named arguments can be called positionally, by name, or with mixed notation subject to PostgreSQL's argument rules.<sup><a href="#r1">[1]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>3.1 Named and default arguments</h3>
+<pre><code>CREATE FUNCTION app.calculate_tax(
+    subtotal numeric,
+    tax_rate numeric DEFAULT 0.07
+)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+RETURN subtotal * tax_rate;</code></pre>
+
+<pre><code>SELECT app.calculate_tax(100);
+SELECT app.calculate_tax(
+    tax_rate =&gt; 0.0825,
+    subtotal =&gt; 100
+);</code></pre>
+
+<h3>3.2 <code>RETURNS TABLE</code></h3>
+<pre><code>CREATE FUNCTION app.recent_orders(
+    p_customer_id bigint,
+    p_limit integer DEFAULT 20
+)
+RETURNS TABLE (
+    order_id bigint,
+    created_at timestamptz,
+    total numeric
+)
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT
+        o.order_id,
+        o.created_at,
+        o.total
+    FROM app.orders AS o
+    WHERE o.customer_id = p_customer_id
+    ORDER BY o.created_at DESC
+    LIMIT p_limit;
+$$;</code></pre>
+
+<pre><code>SELECT *
+FROM app.recent_orders(42, 10);</code></pre>
+
+<p>
+<code>RETURNS TABLE</code> is effectively a set-returning function with named output columns. SQL functions returning sets return all rows from the final query rather than only the first row.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>3.3 Output parameters</h3>
+<pre><code>CREATE FUNCTION app.order_stats(
+    p_customer_id bigint,
+    OUT order_count bigint,
+    OUT order_total numeric
+)
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT
+        count(*),
+        COALESCE(sum(total), 0)
+    FROM app.orders
+    WHERE customer_id = p_customer_id;
+$$;</code></pre>
+
+<pre><code>SELECT *
+FROM app.order_stats(42);</code></pre>
+</section>
+
+<section id="plpgsql">
+<h2>4. PL/pgSQL</h2>
+<p>
+PL/pgSQL is PostgreSQL's built-in SQL procedural language. A PL/pgSQL routine consists of blocks containing an optional label, an optional <code>DECLARE</code> section, a <code>BEGIN</code>/<code>END</code> body, and an optional <code>EXCEPTION</code> section. Blocks can be nested, which provides lexical scope for variables and supports localized exception handling.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>4.1 Basic function</h3>
+<pre><code>CREATE OR REPLACE FUNCTION app.account_status(
+    p_balance numeric,
+    p_credit_limit numeric
+)
+RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+AS $$
+BEGIN
+    IF p_balance &lt; 0 THEN
+        RETURN 'credit';
+
+    ELSIF p_balance &gt; p_credit_limit THEN
+        RETURN 'over-limit';
+
+    ELSE
+        RETURN 'normal';
+    END IF;
+END;
+$$;</code></pre>
+
+<h3>4.2 PL/pgSQL still executes SQL through PostgreSQL</h3>
+<p>
+PL/pgSQL expressions and static SQL statements are processed by PostgreSQL's SQL engine. Variables used inside optimizable statements are converted to query parameters, and PL/pgSQL can cache and reuse execution plans. This means PL/pgSQL is not a separate query engine layered over PostgreSQL; its SQL statements still use the standard parser, optimizer, executor, indexes, MVCC, and privileges.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="variables">
+<h2>5. Variables and declarations</h2>
+<p>
+PL/pgSQL variables are declared in a block's <code>DECLARE</code> section and can use SQL data types. PostgreSQL provides <code>%TYPE</code> to copy the type of a table column or other variable and <code>%ROWTYPE</code> to declare a row matching a table or composite type. Record variables can adapt dynamically to query row structures.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<pre><code>CREATE FUNCTION app.describe_customer(p_customer_id bigint)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_customer app.customer%ROWTYPE;
+    v_order_count bigint := 0;
+    v_total app.orders.total%TYPE;
+    v_summary text;
+BEGIN
+    SELECT *
+    INTO STRICT v_customer
+    FROM app.customer
+    WHERE customer_id = p_customer_id;
+
+    SELECT
+        count(*),
+        COALESCE(sum(total), 0)
+    INTO
+        v_order_count,
+        v_total
+    FROM app.orders
+    WHERE customer_id = p_customer_id;
+
+    v_summary :=
+        format(
+            '%s: %s orders, total %s',
+            v_customer.display_name,
+            v_order_count,
+            v_total
+        );
+
+    RETURN v_summary;
+END;
+$$;</code></pre>
+
+<h3>5.1 Constants and defaults</h3>
+<pre><code>DECLARE
+    c_max_attempts CONSTANT integer := 5;
+    v_attempt integer := 0;
+    v_started_at timestamptz := clock_timestamp();</code></pre>
+
+<p>
+PL/pgSQL declarations can initialize variables with expressions. Initialization occurs each time control enters the block, not at function-definition time.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>5.2 Scope and labels</h3>
+<pre><code>CREATE FUNCTION app.scope_demo()
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    x integer := 1;
+BEGIN
+    &lt;&lt;inner_block&gt;&gt;
+    DECLARE
+        x integer := 2;
+    BEGIN
+        RAISE NOTICE 'inner x = %', x;
+        RAISE NOTICE 'outer x = %', scope_demo.x;
+    END;
+
+    RETURN x;
+END;
+$$;</code></pre>
+
+<p>
+Nested blocks can shadow outer names. Explicit naming conventions such as <code>p_</code> for parameters and <code>v_</code> for local variables reduce ambiguity between PL/pgSQL variables and SQL column names.<sup><a href="#r11">[11]</a><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="sqlstatements">
+<h2>6. Executing SQL inside PL/pgSQL</h2>
+
+<h3>6.1 Static SQL</h3>
+<pre><code>UPDATE app.orders
+SET status = 'closed'
+WHERE order_id = p_order_id;</code></pre>
+
+<p>
+Optimizable SQL statements written directly in PL/pgSQL can reference PL/pgSQL variables. PostgreSQL substitutes their values as query parameters and may cache a plan for later executions.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>6.2 <code>SELECT ... INTO</code></h3>
+<pre><code>SELECT
+    status,
+    total
+INTO
+    v_status,
+    v_total
+FROM app.orders
+WHERE order_id = p_order_id;</code></pre>
+
+<p>
+PL/pgSQL's <code>SELECT ... INTO</code> assigns query output to variables; it is distinct from SQL's table-creating <code>SELECT INTO</code>. Without <code>STRICT</code>, the first row is assigned and zero rows produce nulls. With <code>STRICT</code>, exactly one row is required; otherwise PostgreSQL raises <code>NO_DATA_FOUND</code> or <code>TOO_MANY_ROWS</code>.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<pre><code>SELECT *
+INTO STRICT v_order
+FROM app.orders
+WHERE order_id = p_order_id;</code></pre>
+
+<h3>6.3 <code>FOUND</code></h3>
+<pre><code>UPDATE app.orders
+SET status = 'closed'
+WHERE order_id = p_order_id
+  AND status &lt;&gt; 'closed';
+
+IF FOUND THEN
+    RAISE NOTICE 'order % closed', p_order_id;
+ELSE
+    RAISE NOTICE 'order % unchanged or missing', p_order_id;
+END IF;</code></pre>
+
+<p>
+PL/pgSQL maintains a special Boolean variable <code>FOUND</code> for many statements. Its meaning depends on the most recently executed relevant PL/pgSQL statement, so read it immediately when its value matters.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>6.4 <code>GET DIAGNOSTICS</code></h3>
+<pre><code>UPDATE app.orders
+SET status = 'archived'
+WHERE created_at &lt; current_date - interval '2 years';
+
+GET DIAGNOSTICS v_rows = ROW_COUNT;
+
+RAISE NOTICE 'archived % rows', v_rows;</code></pre>
+</section>
+
+<section id="control">
+<h2>7. Control flow</h2>
+<p>
+PL/pgSQL provides <code>IF</code>, <code>ELSIF</code>, <code>ELSE</code>, searched and simple <code>CASE</code>, block labels, <code>EXIT</code>, and <code>CONTINUE</code>. These constructs operate around ordinary SQL statements executed by PostgreSQL.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>7.1 <code>IF</code></h3>
+<pre><code>IF v_balance &lt; 0 THEN
+    v_state := 'credit';
+ELSIF v_balance = 0 THEN
+    v_state := 'empty';
+ELSE
+    v_state := 'positive';
+END IF;</code></pre>
+
+<h3>7.2 <code>CASE</code></h3>
+<pre><code>CASE v_status
+    WHEN 'pending' THEN
+        v_priority := 10;
+    WHEN 'processing' THEN
+        v_priority := 20;
+    WHEN 'failed' THEN
+        v_priority := 100;
+    ELSE
+        v_priority := 0;
+END CASE;</code></pre>
+
+<h3>7.3 Early return</h3>
+<pre><code>IF p_amount &lt;= 0 THEN
+    RETURN false;
+END IF;</code></pre>
+</section>
+
+<section id="loops">
+<h2>8. Loops</h2>
+<p>
+PL/pgSQL supports unconditional <code>LOOP</code>, <code>WHILE</code>, integer-range <code>FOR</code>, query <code>FOR</code>, array <code>FOREACH</code>, and cursor loops. <code>EXIT</code> leaves a loop or labeled block, while <code>CONTINUE</code> advances to the next iteration.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>8.1 Integer loop</h3>
+<pre><code>FOR i IN 1..10 LOOP
+    RAISE DEBUG 'i=%', i;
+END LOOP;</code></pre>
+
+<h3>8.2 Query loop</h3>
+<pre><code>FOR v_order IN
+    SELECT order_id, total
+    FROM app.orders
+    WHERE customer_id = p_customer_id
+    ORDER BY created_at
+LOOP
+    v_running_total := v_running_total + v_order.total;
+END LOOP;</code></pre>
+
+<h3>8.3 Prefer set-based SQL when possible</h3>
+<pre><code>-- Procedural loop:
+FOR v_order IN
+    SELECT order_id
+    FROM app.orders
+    WHERE status = 'pending'
+LOOP
+    UPDATE app.orders
+    SET status = 'expired'
+    WHERE order_id = v_order.order_id;
+END LOOP;
+
+-- Usually better:
+UPDATE app.orders
+SET status = 'expired'
+WHERE status = 'pending';</code></pre>
+
+<p>
+A loop is appropriate when each iteration genuinely needs procedural branching or a different operation. When one relational statement expresses the same transformation, set-based SQL generally gives the optimizer more freedom and reduces per-row interpreter and execution overhead.
+</p>
+
+<h3>8.4 <code>FOREACH</code> arrays</h3>
+<pre><code>FOREACH v_tag IN ARRAY p_tags LOOP
+    INSERT INTO app.order_tag(order_id, tag)
+    VALUES (p_order_id, v_tag)
+    ON CONFLICT DO NOTHING;
+END LOOP;</code></pre>
+</section>
+
+<section id="exceptions">
+<h2>9. Exceptions and error handling</h2>
+<p>
+By default, an error inside a PL/pgSQL function aborts the function and propagates outward. A block with an <code>EXCEPTION</code> section catches specified errors. PostgreSQL implements such a block using a subtransaction: when an error is caught, database changes made inside the block are rolled back, while PL/pgSQL variables retain their values as they stood when the error occurred.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>9.1 Catch a uniqueness violation</h3>
+<pre><code>CREATE FUNCTION app.create_customer(
+    p_email text,
+    p_name text
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_customer_id bigint;
+BEGIN
+    BEGIN
+        INSERT INTO app.customer(email, display_name)
+        VALUES (p_email, p_name)
+        RETURNING customer_id
+        INTO v_customer_id;
+
+    EXCEPTION
+        WHEN unique_violation THEN
+            SELECT customer_id
+            INTO STRICT v_customer_id
+            FROM app.customer
+            WHERE email = p_email;
+    END;
+
+    RETURN v_customer_id;
+END;
+$$;</code></pre>
+
+<div class="callout warn">
+<strong>Prefer declarative conflict handling when it fits.</strong> For ordinary insert conflicts, <code>INSERT ... ON CONFLICT</code> is usually clearer than using exceptions for expected control flow. Exception blocks have additional overhead because they establish subtransaction machinery.<sup><a href="#r15">[15]</a></sup>
+</div>
+
+<h3>9.2 Raise application errors</h3>
+<pre><code>IF p_amount &lt;= 0 THEN
+    RAISE EXCEPTION
+        'amount must be positive: %',
+        p_amount
+        USING
+            ERRCODE = '22023',
+            HINT = 'Pass an amount greater than zero.';
+END IF;</code></pre>
+
+<p>
+<code>RAISE</code> supports severity levels <code>DEBUG</code>, <code>LOG</code>, <code>INFO</code>, <code>NOTICE</code>, <code>WARNING</code>, and <code>EXCEPTION</code>. It can assign SQLSTATE codes and structured fields such as <code>DETAIL</code>, <code>HINT</code>, table name, column name, and constraint name.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>9.3 Inspect an exception</h3>
+<pre><code>EXCEPTION
+    WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS
+            v_sqlstate = RETURNED_SQLSTATE,
+            v_message  = MESSAGE_TEXT,
+            v_detail   = PG_EXCEPTION_DETAIL,
+            v_hint     = PG_EXCEPTION_HINT;
+
+        RAISE LOG
+            'operation failed state=% message=% detail=% hint=%',
+            v_sqlstate,
+            v_message,
+            v_detail,
+            v_hint;
+
+        RAISE;  -- rethrow original error
+END;</code></pre>
+</section>
+
+<section id="dynamic">
+<h2>10. Dynamic SQL</h2>
+<p>
+PL/pgSQL's <code>EXECUTE</code> executes a command constructed at runtime. Unlike static SQL in PL/pgSQL, an <code>EXECUTE</code> command is planned each time it runs rather than using PL/pgSQL's normal plan cache. Dynamic SQL is necessary when identifiers or statement structure vary at runtime, such as changing the target table or column.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>10.1 Parameterize values</h3>
+<pre><code>EXECUTE
+    'SELECT count(*) FROM app.orders
+     WHERE customer_id = $1
+       AND created_at &gt;= $2'
+INTO v_count
+USING p_customer_id, p_since;</code></pre>
+
+<p>
+The <code>USING</code> clause binds data values without converting them to SQL text. PostgreSQL's documentation specifically recommends this approach because it avoids quoting problems, unnecessary text conversion, and SQL-injection risk.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>10.2 Quote identifiers with <code>format()</code></h3>
+<pre><code>CREATE FUNCTION admin.count_rows(
+    p_schema name,
+    p_table name
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_count bigint;
+BEGIN
+    EXECUTE format(
+        'SELECT count(*) FROM %I.%I',
+        p_schema,
+        p_table
+    )
+    INTO v_count;
+
+    RETURN v_count;
+END;
+$$;</code></pre>
+
+<p>
+Parameters cannot substitute SQL identifiers. Use <code>format('%I', ...)</code> or <code>quote_ident()</code> for identifiers and <code>USING</code> for values. <code>%L</code> can quote a literal when textual insertion is truly required.<sup><a href="#r12">[12]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>10.3 Dynamic DDL</h3>
+<pre><code>EXECUTE format(
+    'CREATE INDEX %I ON %I.%I (%I)',
+    p_index_name,
+    p_schema,
+    p_table,
+    p_column
+);</code></pre>
+
+<p>
+Utility commands generally cannot accept query parameters for identifiers or structural elements, so runtime-varying DDL must be constructed as SQL text. Validate authorization and allowed object names before exposing such functionality to untrusted callers.<sup><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="cursors">
+<h2>11. Cursors</h2>
+<p>
+PL/pgSQL cursor variables use the <code>refcursor</code> type and represent portal names. Cursors allow incremental retrieval from a query rather than immediately transferring all rows to the client or procedural code. PL/pgSQL supports bound and unbound cursors, explicit <code>OPEN</code>/<code>FETCH</code>/<code>MOVE</code>/<code>CLOSE</code>, and cursor <code>FOR</code> loops.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>11.1 Return a cursor to a client</h3>
+<pre><code>CREATE FUNCTION app.open_customer_orders(
+    p_customer_id bigint
+)
+RETURNS refcursor
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_cursor refcursor := 'customer_orders';
+BEGIN
+    OPEN v_cursor FOR
+        SELECT
+            order_id,
+            created_at,
+            total
+        FROM app.orders
+        WHERE customer_id = p_customer_id
+        ORDER BY created_at DESC;
+
+    RETURN v_cursor;
+END;
+$$;</code></pre>
+
+<pre><code>BEGIN;
+
+SELECT app.open_customer_orders(42);
+
+FETCH FORWARD 50 FROM customer_orders;
+
+CLOSE customer_orders;
+
+COMMIT;</code></pre>
+
+<p>
+A regular cursor exists within a transaction, so callers normally keep the transaction open while fetching. PostgreSQL also converts certain cursor loops in procedures into holdable cursors automatically if the procedure commits during the loop, with important consequences for locking and materialization.<sup><a href="#r18">[18]</a><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>11.2 Dynamic cursor</h3>
+<pre><code>OPEN v_cursor FOR EXECUTE format(
+    'SELECT * FROM %I.%I
+     WHERE customer_id = $1
+     ORDER BY created_at DESC',
+    p_schema,
+    p_table
+)
+USING p_customer_id;</code></pre>
+
+<h3>11.3 Prefer ordinary queries when streaming is handled by the driver</h3>
+<p>
+Many application drivers already provide fetch-size or streaming APIs. Returning a PostgreSQL cursor is most useful when server-side procedural logic itself needs cursor behavior or when a client explicitly wants a named portal protocol. It should not be added solely because a result set is large without considering the driver's normal streaming facilities.
+</p>
+</section>
+
+<section id="procedures">
+<h2>12. Procedures</h2>
+<p>
+Procedures are created with <code>CREATE PROCEDURE</code> and invoked with <code>CALL</code>. They can have input and output parameters but do not return values as ordinary SQL expressions. In simple cases, a procedure and a function returning <code>void</code> may look similar, but procedures have distinct transaction-control capabilities and SQL-standard semantics.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>12.1 Simple procedure</h3>
+<pre><code>CREATE PROCEDURE app.archive_orders(
+    p_before timestamptz
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE app.orders
+    SET status = 'archived'
+    WHERE created_at &lt; p_before
+      AND status = 'closed';
+END;
+$$;
+
+CALL app.archive_orders(
+    current_timestamp - interval '2 years'
+);</code></pre>
+
+<h3>12.2 Output parameters</h3>
+<pre><code>CREATE PROCEDURE app.archive_orders(
+    p_before timestamptz,
+    OUT archived_rows bigint
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE app.orders
+    SET status = 'archived'
+    WHERE created_at &lt; p_before
+      AND status = 'closed';
+
+    GET DIAGNOSTICS archived_rows = ROW_COUNT;
+END;
+$$;</code></pre>
+
+<pre><code>CALL app.archive_orders(
+    current_timestamp - interval '2 years',
+    NULL
+);</code></pre>
+
+<p>
+When calling a procedure from ordinary SQL, arguments are supplied for output parameters as required by <code>CALL</code>; PostgreSQL documentation notes that writing <code>NULL</code> is customary for pure <code>OUT</code> parameters.<sup><a href="#r3">[3]</a><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="transactions">
+<h2>13. Transaction control in procedures</h2>
+<p>
+PL/pgSQL procedures invoked with top-level <code>CALL</code>, and anonymous <code>DO</code> blocks invoked at the top level, can execute <code>COMMIT</code> and <code>ROLLBACK</code>. PostgreSQL automatically starts a new transaction after each such transaction-ending command. Transaction control is restricted by call-stack context: nested procedures can do it when the chain consists of <code>CALL</code>/<code>DO</code> invocations without an intervening ordinary SQL command.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>13.1 Batch procedure</h3>
+<pre><code>CREATE PROCEDURE admin.process_work_queue()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_job record;
+BEGIN
+    FOR v_job IN
+        SELECT job_id
+        FROM admin.work_queue
+        WHERE state = 'ready'
+        ORDER BY job_id
+    LOOP
+        UPDATE admin.work_queue
+        SET state = 'processed',
+            processed_at = clock_timestamp()
+        WHERE job_id = v_job.job_id;
+
+        COMMIT AND CHAIN;
+    END LOOP;
+END;
+$$;</code></pre>
+
+<p>
+<code>COMMIT AND CHAIN</code> starts the next transaction with the same transaction characteristics as the previous transaction. In a cursor loop, the first transaction end can convert the cursor to a holdable cursor, fully evaluating it and releasing locks that its query had held; this must be considered for large or concurrency-sensitive loops.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>13.2 Exception blocks and transaction control</h3>
+<p>
+PL/pgSQL exception blocks use subtransactions internally. PostgreSQL does not allow ending the transaction with <code>COMMIT</code> or <code>ROLLBACK</code> while such a subtransaction is active. PL/pgSQL also does not expose SQL savepoint commands directly; ordinary savepoint-style recovery is represented by nested blocks with exception handlers.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Functions cannot commit.</strong> If a workflow needs multiple independently committed units of work, use a top-level procedure or move transaction orchestration to the client. Do not attempt to hide transaction boundaries inside an ordinary function.
+</div>
+</section>
+
+<section id="volatility">
+<h2>14. Function volatility: <code>IMMUTABLE</code>, <code>STABLE</code>, and <code>VOLATILE</code></h2>
+<p>
+Every PostgreSQL function has a volatility classification. It is a contract with the optimizer about how results and side effects behave. If omitted, the default is <code>VOLATILE</code>. PostgreSQL recommends selecting the strictest category that is actually valid.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Category</th><th>Promise</th><th>Typical examples</th><th>Planner consequence</th></tr></thead>
+<tbody>
+<tr>
+<td><code>IMMUTABLE</code></td>
+<td>Same arguments produce the same result indefinitely; no database modification.</td>
+<td>Pure arithmetic, deterministic parsing independent of session settings.</td>
+<td>Constant calls can be folded during planning.</td>
+</tr>
+<tr>
+<td><code>STABLE</code></td>
+<td>Same arguments produce the same result within one statement; no database modification.</td>
+<td>Table lookups, <code>current_timestamp</code>, functions depending on session configuration.</td>
+<td>Can be reused within a scan and used in index scan conditions.</td>
+</tr>
+<tr>
+<td><code>VOLATILE</code></td>
+<td>Result may change between calls; side effects permitted.</td>
+<td><code>random()</code>, sequence operations, data-modifying functions.</td>
+<td>Must be evaluated where required; optimizer cannot assume repeatability.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>14.1 Immutable example</h3>
+<pre><code>CREATE FUNCTION app.celsius_to_fahrenheit(c numeric)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+RETURN (c * 9 / 5) + 32;</code></pre>
+
+<h3>14.2 Stable example</h3>
+<pre><code>CREATE FUNCTION app.product_price(p_product_id bigint)
+RETURNS numeric
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT price
+    FROM app.product
+    WHERE product_id = p_product_id;
+$$;</code></pre>
+
+<h3>14.3 Volatile example</h3>
+<pre><code>CREATE FUNCTION app.next_external_id()
+RETURNS bigint
+LANGUAGE SQL
+VOLATILE
+AS $$
+    SELECT nextval('app.external_id_seq');
+$$;</code></pre>
+
+<h3>14.4 Snapshot semantics</h3>
+<p>
+For SQL and standard procedural-language functions, volatility also affects snapshot visibility. <code>STABLE</code> and <code>IMMUTABLE</code> functions use the calling query's established snapshot, while <code>VOLATILE</code> functions obtain a fresh snapshot for each SQL query they execute. This is why a supposedly stable function should not be used to observe changes made earlier by the same calling command.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>14.5 The danger of false immutability</h3>
+<pre><code>-- Incorrect if result depends on TimeZone.
+CREATE FUNCTION app.bad_local_date(ts timestamptz)
+RETURNS date
+LANGUAGE SQL
+IMMUTABLE
+RETURN ts::date;</code></pre>
+
+<p>
+A cast from <code>timestamptz</code> to <code>date</code> can depend on the session's <code>TimeZone</code>. PostgreSQL explicitly warns that functions depending on configuration parameters should not be labeled immutable. Mislabeling can cause a value to be folded into a prepared/cached plan and then reused after the environment changes.<sup><a href="#r9">[9]</a></sup>
+</p>
+</section>
+
+<section id="parallel">
+<h2>15. Parallel safety, strictness, cost, and row estimates</h2>
+<p>
+Volatility is not the same as parallel safety. User-defined functions are <code>PARALLEL UNSAFE</code> by default. Authors may mark a function <code>PARALLEL SAFE</code> if it can execute safely in parallel worker processes, or <code>PARALLEL RESTRICTED</code> if it may run only in the parallel group leader.<sup><a href="#r5">[5]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>15.1 Parallel safety</h3>
+<pre><code>CREATE FUNCTION app.square(x numeric)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+RETURN x * x;</code></pre>
+
+<p>
+Functions that modify database state, alter transaction state, access sequences, or persistently modify settings must be marked parallel unsafe. Functions using temporary tables, cursors, prepared statements, or other backend-local state are generally parallel restricted. Incorrectly marking a function safe can lead to errors or incorrect behavior in parallel plans.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>15.2 Function cost</h3>
+<pre><code>CREATE FUNCTION app.expensive_score(p jsonb)
+RETURNS numeric
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+COST 500
+AS $$
+BEGIN
+    -- Expensive deterministic computation...
+    RETURN 0;
+END;
+$$;</code></pre>
+
+<p>
+<code>COST</code> tells the optimizer the estimated execution cost relative to <code>cpu_operator_cost</code>. PostgreSQL's default is 1 for C/internal functions and 100 for other languages. A realistic cost can influence join order and how often the planner is willing to invoke a function.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>15.3 Set-returning row estimate</h3>
+<pre><code>CREATE FUNCTION app.customer_recent_orders(
+    p_customer_id bigint
+)
+RETURNS SETOF app.orders
+LANGUAGE SQL
+STABLE
+ROWS 20
+AS $$
+    SELECT *
+    FROM app.orders
+    WHERE customer_id = p_customer_id
+    ORDER BY created_at DESC
+    LIMIT 20;
+$$;</code></pre>
+
+<p>
+For set-returning functions, <code>ROWS</code> provides the planner with an expected result cardinality. The default estimate is 1000 rows if no value is supplied.<sup><a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<section id="security">
+<h2>16. <code>SECURITY DEFINER</code> functions</h2>
+<p>
+Functions run as <code>SECURITY INVOKER</code> by default, meaning object access is checked using the privileges of the calling user. <code>SECURITY DEFINER</code> instead executes the function with the privileges of its owner. This can create a narrow capability API around protected tables, but it also creates a privilege-escalation boundary that must be hardened carefully.<sup><a href="#r5">[5]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>16.1 Unsafe design</h3>
+<pre><code>CREATE FUNCTION app_private.lookup_token(p_user_id bigint)
+RETURNS text
+LANGUAGE SQL
+SECURITY DEFINER
+AS $$
+    SELECT token
+    FROM user_token
+    WHERE user_id = p_user_id;
+$$;</code></pre>
+
+<p>
+If an untrusted user can create a table, view, operator, or function in a schema earlier on the function's <code>search_path</code>, unqualified object references can resolve to malicious objects. PostgreSQL's documentation specifically warns that the temporary schema is normally writable and searched early unless a safe <code>search_path</code> is fixed.<sup><a href="#r5">[5]</a><a href="#r22">[22]</a></sup>
+</p>
+
+<h3>16.2 Hardened design</h3>
+<pre><code>BEGIN;
+
+CREATE FUNCTION api.lookup_token(p_user_id bigint)
+RETURNS text
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, app_private, pg_temp
+AS $$
+    SELECT t.token
+    FROM app_private.user_token AS t
+    WHERE t.user_id = p_user_id;
+$$;
+
+ALTER FUNCTION api.lookup_token(bigint)
+OWNER TO token_service_owner;
+
+REVOKE ALL
+ON FUNCTION api.lookup_token(bigint)
+FROM PUBLIC;
+
+GRANT EXECUTE
+ON FUNCTION api.lookup_token(bigint)
+TO support_api;
+
+COMMIT;</code></pre>
+
+<p>
+A secure <code>SECURITY DEFINER</code> function should use a minimally privileged owner, schema-qualify sensitive objects, set a trusted <code>search_path</code> with <code>pg_temp</code> last, and revoke the default <code>PUBLIC</code> execute privilege before selectively granting access. PostgreSQL recommends creating the function and changing privileges in one transaction to avoid a window of public exposure.<sup><a href="#r5">[5]</a></sup>
+</p>
+
+<h3>16.3 Security-definer procedures</h3>
+<p>
+Procedures can also be declared <code>SECURITY DEFINER</code>, but PostgreSQL does not allow transaction-control statements inside a security-definer procedure. A procedure with a <code>SET</code> clause attached to its definition is likewise restricted from transaction control.<sup><a href="#r3">[3]</a></sup>
+</p>
+</section>
+
+<section id="patterns">
+<h2>17. Practical programming patterns</h2>
+
+<h3>17.1 Encapsulate one atomic business operation</h3>
+<pre><code>CREATE FUNCTION app.transfer_credit(
+    p_from bigint,
+    p_to bigint,
+    p_amount numeric
+)
+RETURNS void
+LANGUAGE plpgsql
+VOLATILE
+AS $$
+DECLARE
+    v_from_balance numeric;
+BEGIN
+    IF p_amount &lt;= 0 THEN
+        RAISE EXCEPTION 'amount must be positive'
+            USING ERRCODE = '22023';
+    END IF;
+
+    SELECT balance
+    INTO STRICT v_from_balance
+    FROM app.account
+    WHERE account_id = p_from
+    FOR UPDATE;
+
+    IF v_from_balance &lt; p_amount THEN
+        RAISE EXCEPTION 'insufficient balance'
+            USING ERRCODE = '23514';
+    END IF;
+
+    UPDATE app.account
+    SET balance = balance - p_amount
+    WHERE account_id = p_from;
+
+    UPDATE app.account
+    SET balance = balance + p_amount
+    WHERE account_id = p_to;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'destination account does not exist';
+    END IF;
+END;
+$$;</code></pre>
+
+<p>
+The function executes inside the caller's transaction and is atomic with that transaction. It does not independently commit. Row locking through <code>FOR UPDATE</code> can serialize conflicting balance changes under PostgreSQL's normal transaction semantics.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>17.2 Use <code>RETURN QUERY</code> for sets</h3>
+<pre><code>CREATE FUNCTION app.orders_over(
+    p_min_total numeric
+)
+RETURNS TABLE (
+    order_id bigint,
+    customer_id bigint,
+    total numeric
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        o.order_id,
+        o.customer_id,
+        o.total
+    FROM app.orders AS o
+    WHERE o.total &gt; p_min_total;
+END;
+$$;</code></pre>
+
+<h3>17.3 Dynamic set-returning query</h3>
+<pre><code>CREATE FUNCTION admin.sample_table(
+    p_schema name,
+    p_table name,
+    p_limit integer
+)
+RETURNS SETOF jsonb
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY EXECUTE format(
+        'SELECT to_jsonb(t)
+         FROM %I.%I AS t
+         LIMIT $1',
+        p_schema,
+        p_table
+    )
+    USING p_limit;
+END;
+$$;</code></pre>
+
+<p>
+<code>RETURN QUERY EXECUTE</code> combines set-returning behavior with runtime-generated SQL and supports <code>USING</code> parameters.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>17.4 One-off maintenance with <code>DO</code></h3>
+<pre><code>DO $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN
+        SELECT schemaname, tablename
+        FROM pg_tables
+        WHERE schemaname = 'staging'
+    LOOP
+        RAISE NOTICE 'found %.%', r.schemaname, r.tablename;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;</code></pre>
+
+<p>
+<code>DO</code> executes an anonymous code block as though it were the body of a function returning <code>void</code>. It is useful for migrations and ad hoc administrative scripts that do not justify a permanent database routine.<sup><a href="#r24">[24]</a></sup>
+</p>
+</section>
+
+<section id="performance">
+<h2>18. Performance and query planning</h2>
+
+<h3>18.1 Static SQL can reuse plans</h3>
+<p>
+PL/pgSQL can cache plans for static SQL and expressions. PostgreSQL chooses between custom and generic cached plans according to its normal prepared-plan strategy. This reduces repeated parsing/planning overhead but means plan behavior can depend on parameter distributions and schema changes.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>18.2 Dynamic SQL forces replanning</h3>
+<p>
+<code>EXECUTE</code> is planned on every execution. This is necessary for varying identifiers and can also be useful when a query's optimal plan depends strongly on current parameter values, but it imposes planning overhead. Do not replace static SQL with dynamic SQL without a concrete reason.<sup><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>18.3 SQL functions may be easier for the optimizer</h3>
+<p>
+For simple relational expressions, an SQL-language function is often preferable to PL/pgSQL because it avoids unnecessary procedural machinery and may be eligible for optimizer transformations such as SQL-function inlining when PostgreSQL's documented conditions are satisfied. Procedural code should be introduced for actual procedural requirements rather than as a default abstraction mechanism.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>18.4 Avoid row-by-row work when one query suffices</h3>
+<pre><code>-- Procedural:
+FOR r IN SELECT order_id FROM app.orders WHERE status = 'pending'
+LOOP
+    UPDATE app.orders
+    SET status = 'expired'
+    WHERE order_id = r.order_id;
+END LOOP;
+
+-- Relational:
+UPDATE app.orders
+SET status = 'expired'
+WHERE status = 'pending';</code></pre>
+
+<h3>18.5 Inspect routine metadata</h3>
+<pre><code>SELECT
+    n.nspname AS schema_name,
+    p.proname,
+    pg_get_function_identity_arguments(p.oid) AS arguments,
+    l.lanname AS language,
+    p.provolatile,
+    p.proparallel,
+    p.prosecdef,
+    p.proisstrict,
+    p.procost,
+    p.prorows
+FROM pg_proc AS p
+JOIN pg_namespace AS n ON n.oid = p.pronamespace
+JOIN pg_language AS l ON l.oid = p.prolang
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY schema_name, p.proname;</code></pre>
+
+<p>
+The <code>pg_proc</code> catalog stores routine metadata including volatility, parallel-safety, strictness, security-definer status, estimated cost, and set-return row estimate. Periodic review can catch routines left with defaults that no longer reflect their implementation.<sup><a href="#r25">[25]</a></sup>
+</p>
+</section>
+
+<section id="testing">
+<h2>19. Testing, diagnostics, and observability</h2>
+
+<h3>19.1 Use deterministic test fixtures</h3>
+<p>
+Function tests should cover normal results, null behavior, empty result sets, duplicate rows under <code>INTO STRICT</code>, concurrency where rows are locked or modified, exception paths, privilege context, search-path behavior, and any volatility assumptions.
+</p>
+
+<h3>19.2 Development reload loop</h3>
+<pre><code>CREATE OR REPLACE FUNCTION app.example(...)
+RETURNS ...
+LANGUAGE plpgsql
+AS $$
+...
+$$;</code></pre>
+
+<pre><code>-- psql:
+\i functions.sql
+SELECT app.example(...);</code></pre>
+
+<p>
+PostgreSQL's PL/pgSQL development guidance recommends using <code>CREATE OR REPLACE FUNCTION</code> during iterative development and reloading function-definition files with psql or equivalent tooling.<sup><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>19.3 Compile/runtime checks</h3>
+<pre><code>SET plpgsql.extra_warnings = 'all';
+SET plpgsql.extra_errors = 'shadowed_variables';</code></pre>
+
+<p>
+PL/pgSQL provides additional compile-time checks for issues such as shadowed variables and other suspicious constructs. Enabling warnings in CI or development environments can catch errors that are syntactically legal but likely unintended.<sup><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>19.4 Instrument with messages carefully</h3>
+<pre><code>RAISE DEBUG
+    'processing customer %, batch %',
+    p_customer_id,
+    v_batch_id;</code></pre>
+
+<p>
+Message visibility is controlled by PostgreSQL's client and server logging thresholds. Avoid emitting secrets or high-cardinality sensitive values into logs from routines.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>19.5 Observe workload-level cost</h3>
+<p>
+A function can hide expensive SQL from application source code but not from PostgreSQL execution. Use <code>EXPLAIN</code>, <code>pg_stat_statements</code>, wait events, locks, and application traces to measure routines as part of the complete query path. When a routine contains several SQL statements, investigate the individual statements as well as the outer function call.
+</p>
+</section>
+
+<section id="guidelines">
+<h2>20. Production guidelines</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Concern</th><th>Recommended practice</th></tr></thead>
+<tbody>
+<tr><td>Simple relational logic</td><td>Prefer SQL functions over procedural code where possible.</td></tr>
+<tr><td>Volatility</td><td>Use the strictest valid category, never a more aggressive category for speed alone.</td></tr>
+<tr><td>Parallelism</td><td>Mark user-defined functions parallel safe/restricted only after auditing their behavior.</td></tr>
+<tr><td>Dynamic SQL</td><td>Use <code>USING</code> for values and <code>format('%I', ...)</code> for identifiers.</td></tr>
+<tr><td>Exceptions</td><td>Reserve exception blocks for exceptional paths; prefer SQL conflict handling when available.</td></tr>
+<tr><td>Loops</td><td>Prefer set-based SQL when one statement expresses the operation.</td></tr>
+<tr><td>Procedures</td><td>Use them when transaction control or procedure semantics are actually required.</td></tr>
+<tr><td>Security definer</td><td>Minimal owner, trusted <code>search_path</code>, revoke PUBLIC execute, grant narrowly.</td></tr>
+<tr><td>Ownership</td><td>Do not make application runtime roles owners of privileged routines.</td></tr>
+<tr><td>Schema changes</td><td>Version routine definitions alongside migrations and test dependent objects.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>20.1 Review checklist</h3>
+<ol class="checklist">
+<li><strong>Language:</strong> Is SQL sufficient, or is PL/pgSQL genuinely needed?</li>
+<li><strong>Return contract:</strong> Are scalar, composite, set, and output-parameter semantics explicit?</li>
+<li><strong>Null semantics:</strong> Should the function be <code>STRICT</code>?</li>
+<li><strong>Volatility:</strong> Does the category match database access, session settings, and side effects?</li>
+<li><strong>Snapshot behavior:</strong> Is the function expected to see changes made by the calling statement?</li>
+<li><strong>Parallel safety:</strong> Can it really run in a worker?</li>
+<li><strong>Plan behavior:</strong> Should SQL stay static and cacheable, or is runtime replanning required?</li>
+<li><strong>Dynamic SQL:</strong> Are identifiers quoted and values parameterized?</li>
+<li><strong>Exceptions:</strong> Are subtransaction semantics and performance understood?</li>
+<li><strong>Transactions:</strong> Is transaction control in the client/function/procedure layer where it belongs?</li>
+<li><strong>Security:</strong> Are owner, <code>search_path</code>, execute grants, and called objects trusted?</li>
+<li><strong>Performance:</strong> Is procedural row-by-row work replacing a simpler relational statement?</li>
+</ol>
+
+<div class="callout ok">
+<strong>Programming principle:</strong> treat a PostgreSQL routine as part of the query planner, transaction engine, and privilege model—not merely as stored application code. The best routine is usually the smallest routine whose semantics PostgreSQL can understand accurately.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. User-defined functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc.html">https://www.postgresql.org/docs/18/xfunc.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Query language (SQL) functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc-sql.html">https://www.postgresql.org/docs/18/xfunc-sql.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. CREATE PROCEDURE [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createprocedure.html">https://www.postgresql.org/docs/18/sql-createprocedure.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. PL/pgSQL — SQL procedural language [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql.html">https://www.postgresql.org/docs/18/plpgsql.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. CREATE FUNCTION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createfunction.html">https://www.postgresql.org/docs/18/sql-createfunction.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. ALTER FUNCTION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-alterfunction.html">https://www.postgresql.org/docs/18/sql-alterfunction.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Procedural languages [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xplang.html">https://www.postgresql.org/docs/18/xplang.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. CALL [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-call.html">https://www.postgresql.org/docs/18/sql-call.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. Function volatility categories [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc-volatility.html">https://www.postgresql.org/docs/18/xfunc-volatility.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Calling functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-syntax-calling-funcs.html">https://www.postgresql.org/docs/18/sql-syntax-calling-funcs.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Structure of PL/pgSQL [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-structure.html">https://www.postgresql.org/docs/18/plpgsql-structure.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. PL/pgSQL basic statements [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-statements.html">https://www.postgresql.org/docs/18/plpgsql-statements.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. PL/pgSQL under the hood [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-implementation.html">https://www.postgresql.org/docs/18/plpgsql-implementation.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. PL/pgSQL declarations [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-declarations.html">https://www.postgresql.org/docs/18/plpgsql-declarations.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. PL/pgSQL control structures [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-control-structures.html">https://www.postgresql.org/docs/18/plpgsql-control-structures.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. PL/pgSQL errors and messages [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-errors-and-messages.html">https://www.postgresql.org/docs/18/plpgsql-errors-and-messages.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. String functions and operators: format [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/functions-string.html">https://www.postgresql.org/docs/18/functions-string.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. PL/pgSQL cursors [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-cursors.html">https://www.postgresql.org/docs/18/plpgsql-cursors.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. PL/pgSQL transaction management [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-transactions.html">https://www.postgresql.org/docs/18/plpgsql-transactions.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. SQL procedures with output parameters [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc-sql.html">https://www.postgresql.org/docs/18/xfunc-sql.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. When can parallel query be used? [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/when-can-parallel-query-be-used.html">https://www.postgresql.org/docs/18/when-can-parallel-query-be-used.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. Function security [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/perm-functions.html">https://www.postgresql.org/docs/18/perm-functions.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. Explicit locking [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/explicit-locking.html">https://www.postgresql.org/docs/18/explicit-locking.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. DO [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-do.html">https://www.postgresql.org/docs/18/sql-do.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. pg_proc system catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-proc.html">https://www.postgresql.org/docs/18/catalog-pg-proc.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. Tips for developing in PL/pgSQL [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/plpgsql-development-tips.html">https://www.postgresql.org/docs/18/plpgsql-development-tips.html</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. PostgreSQL routine semantics interact with planning, MVCC snapshots, locking, privileges, parallel execution, prepared plans, procedural-language implementation details, and transaction boundaries. Validate volatility, security, and performance assumptions against the exact PostgreSQL version and production workload before deployment.
+</p>
+</footer>
+
+</body>
+</html>

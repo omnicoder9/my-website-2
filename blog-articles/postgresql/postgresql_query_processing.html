@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL query processing: parsing, query trees, rewriting, planning, cost estimation, statistics, execution plans, scans, joins, sorting, aggregation, materialization, EXPLAIN, and query optimization.">
+<title>PostgreSQL Query Processing</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}
+.dek{max-width:1040px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3} h4{margin-top:1.6em;font-size:1.08rem} p{margin:.92em 0} a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700} code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}
+pre code{color:inherit}.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:850px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.formula{background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:17px 19px;margin:18px 0;font-family:"SFMono-Regular",Consolas,monospace;overflow-x:auto}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{body{background:#fff}header{background:#fff;color:#000;padding:18px 0}header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}a{color:#000;text-decoration:none}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Query Processing</h1>
+<p class="dek">An expert guide to PostgreSQL’s complete query-processing pipeline: SQL parsing, raw parse trees, semantic analysis, query rewriting, planner paths and cost optimization, statistics and cardinality estimation, execution plans, the demand-pull executor, scan and join algorithms, sorting and aggregation, materialization, and evidence-driven optimization with <code>EXPLAIN</code>.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>PostgreSQL transforms SQL through several distinct internal representations before execution. The raw parser validates SQL syntax and constructs a parse tree; semantic transformation resolves database objects, operators, functions, aggregates, and types into a query tree; the rewrite system applies view and rule transformations; the planner/optimizer searches physically different ways to compute the same result; and the executor recursively runs the selected plan tree to produce rows.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup></p>
+<p>The optimizer is cost based. It does not follow simple rules such as “use an index whenever possible.” It estimates relation and intermediate cardinalities using statistics, generates candidate scan and join paths, estimates startup and total costs, tracks useful ordering and parameterization properties, and converts the cheapest suitable path into an executor plan. For join-heavy queries, exhaustive search itself can become expensive, so PostgreSQL can switch to the Genetic Query Optimizer (GEQO).<sup><a href="#r5">[5]</a>-<a href="#r8">[8]</a></sup></p>
+<p>The executor follows a demand-pull model: each plan node is repeatedly asked for its next row and requests input from child nodes as needed. Some nodes stream naturally, while blocking nodes perform substantial work before returning their first row. Understanding these runtime behaviors—together with cardinality estimates, memory limits, physical locality, MVCC visibility, and I/O—is central to reading plans correctly.<sup><a href="#r4">[4]</a><a href="#r9">[9]</a></sup></p>
+<p><code>EXPLAIN</code> exposes the optimizer’s estimates and chosen node tree. <code>EXPLAIN ANALYZE</code> executes the statement and adds actual row counts and runtime evidence. The most productive performance question is often not “Why did PostgreSQL choose a hash join?” but “Which estimate made that hash join look cheapest?”<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup></p>
+</section>
+
+<nav class="toc" aria-label="Table of contents"><h2>Contents</h2><ol>
+<li><a href="#pipeline">Query-processing pipeline</a></li><li><a href="#parsing">SQL parsing</a></li><li><a href="#parse-tree">Parse tree</a></li><li><a href="#analysis">Analysis/transformation</a></li>
+<li><a href="#query-tree">Query tree</a></li><li><a href="#rewrite">Query rewriting</a></li><li><a href="#views">Views and rules</a></li><li><a href="#planner">Planner/optimizer</a></li>
+<li><a href="#paths">Paths versus plans</a></li><li><a href="#join-search">Join-order search</a></li><li><a href="#statistics">Statistics/cardinality</a></li><li><a href="#cost">Cost estimation</a></li>
+<li><a href="#plan">Execution plans</a></li><li><a href="#executor">Executor</a></li><li><a href="#seqscan">Sequential scan</a></li><li><a href="#indexscan">Index scan</a></li>
+<li><a href="#indexonly">Index-only scan</a></li><li><a href="#bitmap">Bitmap scan</a></li><li><a href="#nestedloop">Nested-loop join</a></li><li><a href="#hashjoin">Hash join</a></li>
+<li><a href="#mergejoin">Merge join</a></li><li><a href="#sort">Sort</a></li><li><a href="#aggregate">Aggregate</a></li><li><a href="#hashaggregate">Hash aggregate</a></li>
+<li><a href="#materialize">Materialization</a></li><li><a href="#parallel">Parallel plans</a></li><li><a href="#explain">EXPLAIN</a></li><li><a href="#explain-analyze">EXPLAIN ANALYZE</a></li>
+<li><a href="#optimization">Optimization workflow</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#checklist">Production checklist</a></li><li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="pipeline"><h2>1. The query-processing pipeline</h2>
+<p>PostgreSQL documents a staged path from client SQL to result rows: parse the text, semantically transform it, rewrite query trees using rules, optimize the rewritten query into a physical plan, then recursively execute that plan.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup></p>
+<div class="diagram">client SQL text
+      |
+      v
+lexer + grammar parser
+      |
+      v
+raw parse tree
+      |
+      v
+semantic transformation / parse analysis
+      |
+      v
+Query tree
+      |
+      v
+query rewriter (views/rules)
+      |
+      v
+rewritten Query tree(s)
+      |
+      v
+planner / optimizer
+(paths, cardinalities, costs)
+      |
+      v
+Plan tree
+      |
+      v
+executor
+      |
+      v
+result rows</div>
+<p>These boundaries are diagnostically useful. A syntax error belongs to parsing; an unknown or ambiguous column is discovered during semantic analysis; a view changes the query through rewriting; scan/join choices are planner decisions; disk spills and repeated loops are execution behavior.</p>
+</section>
+
+<section id="parsing"><h2>2. SQL parsing and lexical analysis</h2>
+<p>The raw parser checks syntactic validity. PostgreSQL’s lexer recognizes identifiers, SQL keywords and other tokens; the grammar parser builds the raw parse tree. The internals documentation identifies <code>scan.l</code> and <code>gram.y</code> as the source definitions processed by flex and bison.<sup><a href="#r2">[2]</a></sup></p>
+<pre><code>SELECT
+    c.customer_id,
+    c.name,
+    sum(o.total_amount) AS revenue
+FROM app.customer AS c
+JOIN app.orders AS o
+  ON o.customer_id = c.customer_id
+WHERE o.created_at &gt;= date '2026-09-01'
+  AND o.status = 'paid'
+GROUP BY c.customer_id, c.name
+ORDER BY revenue DESC
+LIMIT 20;</code></pre>
+<p>At this stage PostgreSQL can recognize the grammatical structures. It has not yet completed the catalog-backed work needed to establish the actual relation OIDs, function/aggregate identities, operator implementations, expression data types, coercions, and column bindings.<sup><a href="#r2">[2]</a></sup></p>
+</section>
+
+<section id="parse-tree"><h2>3. Raw parse tree</h2>
+<p>The raw parse tree is syntax oriented. For example, syntax that resembles a function call is represented as such before semantic analysis decides whether it denotes an ordinary function, aggregate, window function, or another semantically specialized expression form.<sup><a href="#r2">[2]</a></sup></p>
+<div class="diagram">SELECT sum(total_amount)
+FROM app.orders
+WHERE status = 'paid';
+
+conceptual raw tree:
+
+SelectStmt
+├── targetList
+│   └── ResTarget
+│       └── FuncCall "sum"
+│           └── ColumnRef "total_amount"
+├── fromClause
+│   └── RangeVar app.orders
+└── whereClause
+    └── A_Expr "="
+        ├── ColumnRef "status"
+        └── String "paid"</div>
+<p>This representation describes what the user wrote, not yet the fully resolved meaning of the statement.</p>
+</section>
+
+<section id="analysis"><h2>4. Semantic analysis / transformation</h2>
+<p>The transformation phase performs semantic interpretation using system catalogs. It resolves relations and columns, looks up functions and operators, determines actual expression types, inserts required coercions, identifies aggregate references, establishes query namespaces, and creates the semantically rich <code>Query</code> representation.<sup><a href="#r2">[2]</a></sup></p>
+<div class="diagram">raw:
+FuncCall("sum", ColumnRef("total_amount"))
+
+transformation:
+  resolve app.orders
+  resolve total_amount -> numeric
+  resolve SUM(numeric)
+  mark aggregate semantics
+  determine result type
+
+query-tree expression:
+Aggref(resolved aggregate OID, typed Var ...)</div>
+<p>PostgreSQL’s documentation uses this exact class of distinction: a raw <code>FuncCall</code> can transform to <code>FuncExpr</code> or <code>Aggref</code> once catalog lookup determines what the referenced name means.<sup><a href="#r2">[2]</a></sup></p>
+<h3>4.1 Semantic errors can follow valid syntax</h3>
+<pre><code>SELECT nonexistent_column
+FROM app.orders;</code></pre>
+<p>The statement is grammatical, but semantic analysis cannot bind the referenced column.</p>
+</section>
+
+<section id="query-tree"><h2>5. Query tree</h2>
+<p>The transformed query tree is PostgreSQL’s semantic representation of a statement before cost-based planning. It contains command type, range-table entries, target expressions, qualifications, grouping and sorting information, subqueries, modification targets, and other analyzed details. Query rewrite rules are themselves represented in the catalogs as query trees.<sup><a href="#r3">[3]</a></sup></p>
+<pre><code># Developer diagnostics; use cautiously.
+debug_print_parse = on
+debug_print_rewritten = on
+debug_print_plan = on</code></pre>
+<p>PostgreSQL documents these developer settings as mechanisms for emitting internal trees to server logs. They are useful for backend development but <code>EXPLAIN</code> is the normal way to inspect optimizer output.<sup><a href="#r3">[3]</a><a href="#r11">[11]</a></sup></p>
+<div class="callout warn"><strong>Parse/query trees and plans are different artifacts.</strong> A query tree describes SQL semantics. A plan describes one selected physical program for realizing those semantics.</div>
+</section>
+
+<section id="rewrite"><h2>6. Query rewriting</h2>
+<p>The rewrite system sits between parse analysis and planning. It consumes query trees, applies rewrite rules stored in PostgreSQL catalogs, and emits zero or more query trees. Rewriting is a semantic transformation system, not the physical cost-based optimizer.<sup><a href="#r3">[3]</a><a href="#r12">[12]</a></sup></p>
+<div class="diagram">analyzed Query
+     |
+     v
+rewrite system
+     |
+     +-- view _RETURN rule expansion
+     +-- applicable INSERT/UPDATE/DELETE rules
+     |
+     v
+rewritten Query tree(s)
+     |
+     v
+planner</div>
+<p>It is possible for rules to generate additional statements or suppress a statement entirely. The planner sees the rewritten result rather than the original SQL text.<sup><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="views"><h2>7. Views and the rule system</h2>
+<p>Ordinary views are implemented through the rewrite system. A query against a view is rewritten to incorporate the view’s defining query. The planner can then flatten suitable subqueries and optimize the resulting base-table query much as if the underlying SQL had been written directly.<sup><a href="#r13">[13]</a></sup></p>
+<pre><code>CREATE VIEW app.paid_orders AS
+SELECT order_id, customer_id, total_amount, created_at
+FROM app.orders
+WHERE status = 'paid';
+
+EXPLAIN
+SELECT *
+FROM app.paid_orders
+WHERE customer_id = 42;</code></pre>
+<p>A materialized view differs: its result is physically stored and queried like a table; its defining query is used to populate or refresh that stored result rather than expanded on every read.<sup><a href="#r14">[14]</a></sup></p>
+</section>
+
+<section id="planner"><h2>8. Planner / optimizer</h2>
+<p>The planner/optimizer searches alternative execution strategies that are semantically equivalent. It considers access paths for individual relations, then joins, ordering requirements, aggregation, parallelism, and other operations. PostgreSQL seeks the plan expected to have the lowest cost according to its statistics and cost model.<sup><a href="#r5">[5]</a></sup></p>
+<div class="diagram">same relational result
+
+orders Seq Scan -----+
+                     +-- Hash Join -- HashAggregate -- Sort
+customer Seq Scan ---+
+
+customer Index Scan -+
+                     +-- Nested Loop -- GroupAggregate
+orders Index Scan ---+
+
+orders Sort ----------+
+                      +-- Merge Join -- Aggregate
+customer Sort --------+
+
+planner compares cardinalities, costs, ordering,
+parameterization, parallel safety and other properties.</div>
+<p>The optimizer must also limit its own search expense. When the number of joins becomes large enough that exhaustive join-order enumeration is impractical, PostgreSQL can use GEQO’s genetic search instead.<sup><a href="#r15">[15]</a></sup></p>
+</section>
+
+<section id="paths"><h2>9. Paths versus plans</h2>
+<p>PostgreSQL’s optimizer works primarily with <em>paths</em> while searching. Paths are compact candidate representations containing the properties needed to compare alternatives. Once the final path is chosen, PostgreSQL constructs the complete plan tree required by the executor.<sup><a href="#r5">[5]</a></sup></p>
+<div class="diagram">candidate paths
+  SeqScanPath
+  IndexPath
+  BitmapHeapPath
+  ParallelPath
+  ...
+       |
+       v
+cheapest paths + useful ordered paths
+       |
+       v
+join paths
+NestedLoopPath / HashPath / MergePath
+       |
+       v
+selected final Path
+       |
+       v
+executor Plan tree</div>
+<p>The cheapest unordered path is not always the only candidate worth preserving. A more expensive relation path that already produces useful order can eliminate a later sort or enable a merge join, making the complete query cheaper.<sup><a href="#r5">[5]</a><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="join-search"><h2>10. Join-order search and GEQO</h2>
+<p>The number of possible join orders grows rapidly with the number of joined relations, compounded by multiple join methods and access paths. PostgreSQL’s normal planner performs a broad dynamic search for manageable queries; GEQO provides a bounded genetic search for sufficiently large join problems.<sup><a href="#r15">[15]</a></sup></p>
+<pre><code>SHOW geqo;
+SHOW geqo_threshold;</code></pre>
+<p>Optimization time is itself latency. For large analytical join graphs, finding a very good plan quickly can be preferable to exhausting resources trying to prove the globally cheapest plan.</p>
+</section>
+
+<section id="statistics"><h2>11. Statistics and cardinality estimation</h2>
+<p>Row-count estimates are core optimizer inputs. PostgreSQL uses relation-level estimates such as <code>pg_class.reltuples</code>/<code>relpages</code>, single-column statistics collected by <code>ANALYZE</code>, and optionally extended multivariate statistics. Most-common values, histograms, null fractions, distinct-value estimates and physical correlation help estimate predicate selectivity and group cardinality.<sup><a href="#r7">[7]</a><a href="#r8">[8]</a></sup></p>
+<pre><code>SELECT reltuples, relpages
+FROM pg_class
+WHERE oid = 'app.orders'::regclass;
+
+SELECT
+    attname,
+    null_frac,
+    n_distinct,
+    most_common_vals,
+    most_common_freqs,
+    histogram_bounds,
+    correlation
+FROM pg_stats
+WHERE schemaname = 'app'
+  AND tablename = 'orders';</code></pre>
+<div class="formula">estimated output rows
+≈ estimated input rows × estimated selectivity</div>
+<p>A cardinality error at a leaf can cascade upward. If PostgreSQL expects 10 outer rows and actually gets 100,000, a nested loop’s repeated inner work can become thousands of times larger than costed.</p>
+</section>
+
+<section id="cost"><h2>12. Cost estimation</h2>
+<p>Planner costs are abstract comparative units, not elapsed milliseconds. A node has startup cost (work before first output) and total cost (work if consumed to completion), as well as estimated rows and row width. Upper-node costs include child costs. PostgreSQL conventionally sets <code>seq_page_cost=1.0</code> and expresses other I/O/CPU costs relative to it.<sup><a href="#r9">[9]</a><a href="#r16">[16]</a></sup></p>
+<pre><code>SHOW seq_page_cost;
+SHOW random_page_cost;
+SHOW cpu_tuple_cost;
+SHOW cpu_index_tuple_cost;
+SHOW cpu_operator_cost;
+SHOW effective_cache_size;</code></pre>
+<div class="table-wrap"><table><thead><tr><th>Property</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Startup cost</td><td>Cost incurred before the first output row can be produced.</td></tr>
+<tr><td>Total cost</td><td>Estimated cost if all output is consumed.</td></tr>
+<tr><td>Rows</td><td>Estimated output cardinality.</td></tr>
+<tr><td>Width</td><td>Estimated average output-row size in bytes.</td></tr>
+<tr><td>Ordering</td><td>Can satisfy ORDER BY/group/merge requirements without an extra sort.</td></tr>
+<tr><td>Parameterization</td><td>Can consume values supplied by an outer plan, e.g. nested-loop inner index probes.</td></tr>
+</tbody></table></div>
+<p>Memory-sensitive nodes use settings such as <code>work_mem</code>; hash-based operations derive their limit using <code>hash_mem_multiplier</code>. One query can contain several such operations and parallel workers can multiply resource use.<sup><a href="#r17">[17]</a></sup></p>
+</section>
+
+<section id="plan"><h2>13. Execution-plan structure</h2>
+<p>An execution plan is a tree of plan nodes. Leaf nodes obtain rows from tables, indexes, values lists, functions, or other sources. Internal nodes filter, join, sort, aggregate, cache, limit, or otherwise transform child output. Text <code>EXPLAIN</code> expresses tree structure with indentation.<sup><a href="#r9">[9]</a></sup></p>
+<pre><code>Limit
+  -&gt; Sort
+        Sort Key: (sum(o.total_amount)) DESC
+        -&gt; HashAggregate
+              Group Key: c.customer_id, c.name
+              -&gt; Hash Join
+                    Hash Cond: (o.customer_id = c.customer_id)
+                    -&gt; Bitmap Heap Scan on orders o
+                    -&gt; Hash
+                          -&gt; Seq Scan on customer c</code></pre>
+<p>Conditions appear at the plan node that can execute them. <code>Index Cond</code> limits index access; <code>Filter</code> rejects rows after retrieval; <code>Recheck Cond</code> verifies bitmap/index matches where required; join nodes expose <code>Hash Cond</code>, <code>Merge Cond</code>, or join filters. This distinction is often more important than the predicate text itself because early filtering reduces downstream work.<sup><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="executor"><h2>14. Executor architecture</h2>
+<p>The executor recursively evaluates the chosen plan using a demand-pull mechanism. A parent repeatedly asks a child for its next row. The child may request rows from its own children, producing a pipeline from leaf scans upward to the root.<sup><a href="#r4">[4]</a></sup></p>
+<div class="diagram">client consumes result
+        |
+        v
+root.next()
+        |
+        v
+parent node.next()
+        |
+        +--> child.next()
+               |
+               +--> grandchild.next()
+                       |
+                       v
+                  heap/index access</div>
+<p>Some nodes return rows incrementally. Others are blocking. A <code>Sort</code> consumes all of its child input before it can return the first correctly sorted row. A hash join must build its hash table before probing. A <code>Materialize</code> node stores child output so it can satisfy later rescans without re-running the child.<sup><a href="#r4">[4]</a><a href="#r9">[9]</a></sup></p>
+<h3>14.1 Data-modifying plans</h3>
+<p>The same executor infrastructure handles <code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, and <code>MERGE</code>. PostgreSQL uses a top-level <code>ModifyTable</code> node for data modifications. For update/delete processing, plans carry tuple identifiers and required values up to that node so the executor can modify the target rows.<sup><a href="#r4">[4]</a></sup></p>
+</section>
+
+<section id="seqscan"><h2>15. Sequential scan</h2>
+<p>A sequential scan reads the relation heap in physical order, checks MVCC visibility, evaluates filters, and emits qualifying tuples. It is often optimal when much of the relation must be examined, when no useful index exists, or when indexed random heap access would cost more than a linear scan.<sup><a href="#r9">[9]</a><a href="#r16">[16]</a></sup></p>
+<pre><code>EXPLAIN
+SELECT *
+FROM app.orders;</code></pre>
+<pre><code>Seq Scan on orders
+  (cost=0.00..125000.00 rows=5000000 width=128)</code></pre>
+<h3>15.1 Why an available index can lose</h3>
+<p>If a predicate matches a large fraction of a table, an index plan can require traversing the index plus many heap fetches, while a sequential scan touches heap pages in simple physical order. PostgreSQL chooses based on estimated complete cost rather than the existence of an index.<sup><a href="#r9">[9]</a></sup></p>
+<h3>15.2 Parallel sequential scan</h3>
+<p>In a parallel sequential scan, table block ranges are shared among cooperating processes. Parallel plans require special partial paths so workers collectively produce the required rows once rather than each executing the whole plan independently.<sup><a href="#r18">[18]</a></sup></p>
+</section>
+
+<section id="indexscan"><h2>16. Index scan</h2>
+<p>An ordinary index scan traverses an index to identify candidate heap tuple locations and then fetches heap tuples for visibility checking and requested values. PostgreSQL indexes are secondary structures stored separately from the heap, so an index scan generally combines index and table access.<sup><a href="#r19">[19]</a></sup></p>
+<pre><code>CREATE INDEX orders_customer_created_idx
+ON app.orders(customer_id, created_at DESC);
+
+EXPLAIN
+SELECT *
+FROM app.orders
+WHERE customer_id = 42
+ORDER BY created_at DESC
+LIMIT 20;</code></pre>
+<pre><code>Limit
+  -&gt; Index Scan using orders_customer_created_idx on orders
+        Index Cond: (customer_id = 42)</code></pre>
+<p>This plan can both find one customer's rows and produce them in descending timestamp order, avoiding a separate sort.</p>
+<h3>16.1 Parameterized index access</h3>
+<p>Nested-loop joins can feed values from the current outer row into the inner index scan. This is a key reason nested loops remain extremely competitive when the outer side is small and the inner relation has a selective index.<sup><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="indexonly"><h2>17. Index-only scan</h2>
+<p>An index-only scan can return values directly from an index if the index access method can supply the referenced data and all query columns are available in the index. PostgreSQL still must verify MVCC visibility. It uses the heap page's visibility-map all-visible bit to determine when the heap access can safely be skipped; if that bit is not set, a heap visit is still required.<sup><a href="#r19">[19]</a></sup></p>
+<pre><code>CREATE INDEX orders_customer_cover_idx
+ON app.orders(customer_id, created_at DESC)
+INCLUDE (order_id, total_amount, status);
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT order_id, created_at, total_amount, status
+FROM app.orders
+WHERE customer_id = 42
+ORDER BY created_at DESC
+LIMIT 20;</code></pre>
+<p>Actual <code>EXPLAIN</code> output can report <code>Heap Fetches</code>. A physically possible index-only scan is most beneficial when a large fraction of referenced heap pages are all-visible.<sup><a href="#r19">[19]</a></sup></p>
+<h3>17.1 Covering-index trade-off</h3>
+<p><code>INCLUDE</code> payload columns can make index-only scans possible without making the payload part of the search key, but they enlarge and duplicate data in the index. Wide covering indexes can increase storage and write cost, so PostgreSQL recommends conservative use.<sup><a href="#r19">[19]</a></sup></p>
+</section>
+
+<section id="bitmap"><h2>18. Bitmap scans</h2>
+<p>A bitmap strategy separates index lookup from heap retrieval. Bitmap index scans identify matching tuple locations and build bitmaps. Multiple bitmaps can be combined with <code>BitmapAnd</code> or <code>BitmapOr</code>. A <code>Bitmap Heap Scan</code> then visits matching heap blocks in physical order, reducing random access compared with fetching each index hit immediately.<sup><a href="#r9">[9]</a><a href="#r20">[20]</a></sup></p>
+<pre><code>CREATE INDEX orders_status_idx ON app.orders(status);
+CREATE INDEX orders_created_idx ON app.orders(created_at);
+
+EXPLAIN
+SELECT *
+FROM app.orders
+WHERE status = 'paid'
+  AND created_at &gt;= date '2026-09-01';</code></pre>
+<div class="diagram">Bitmap Index Scan(status) ----+
+                              +-- BitmapAnd -- Bitmap Heap Scan
+Bitmap Index Scan(date) ------+                 |
+                                                v
+                                      heap pages in physical order</div>
+<p>Bitmap combination can exploit separate indexes, but scanning more indexes has its own cost. The planner can choose one bitmap index plus a filter, combine several, use a multicolumn index, or use another scan type depending on selectivity and cost.<sup><a href="#r20">[20]</a></sup></p>
+<h3>18.1 Ordering is lost</h3>
+<p>Because the bitmap is consumed in physical heap order, the ordering of an underlying B-tree is not preserved. A query with <code>ORDER BY</code> can therefore require a separate sort.<sup><a href="#r20">[20]</a></sup></p>
+</section>
+
+<section id="nestedloop"><h2>19. Nested-loop join</h2>
+<p>A nested-loop join iterates over rows from its outer child and executes or rescans its inner child for each outer row. The inner scan can be parameterized with values from the current outer tuple. This algorithm is excellent for small outer inputs and cheap indexed probes, but repeated inner work can explode when the outer cardinality was underestimated.<sup><a href="#r9">[9]</a></sup></p>
+<div class="diagram">outer row A -> inner lookup(A) -> matches
+outer row B -> inner lookup(B) -> matches
+outer row C -> inner lookup(C) -> matches
+...</div>
+<div class="formula">approximate nested-loop cost
+≈ outer cost
+ + estimated outer rows × inner rescan cost
+ + CPU join cost</div>
+<pre><code>EXPLAIN
+SELECT c.customer_id, o.order_id
+FROM app.customer AS c
+JOIN app.orders AS o
+  ON o.customer_id = c.customer_id
+WHERE c.customer_id IN (42, 77, 101);</code></pre>
+<p>If PostgreSQL estimates three outer rows, a nested loop with inner index probes is natural. If the actual outer result is hundreds of thousands of rows, the multiplicative work can dominate runtime.</p>
+</section>
+
+<section id="hashjoin"><h2>20. Hash join</h2>
+<p>A hash join builds a hash table from one input, usually the smaller estimated side, then scans the other input and probes the hash table by equality join keys. PostgreSQL's EXPLAIN documentation describes this as a build <code>Hash</code> node feeding a <code>Hash Join</code> probe.<sup><a href="#r9">[9]</a></sup></p>
+<div class="diagram">build input
+    |
+    v
+Hash
+    |
+    v
++------------------+
+| key -> hash rows |
++------------------+
+         ^
+         |
+         | probes
+         |
+outer input scan</div>
+<pre><code>EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM app.orders AS o
+JOIN app.customer AS c
+  ON c.customer_id = o.customer_id
+WHERE o.created_at &gt;= current_date - 30;</code></pre>
+<h3>20.1 Memory and batches</h3>
+<p>Hash operations use a memory allowance based on <code>work_mem</code> and <code>hash_mem_multiplier</code>. If a hash table cannot fit in the usable memory, PostgreSQL can divide processing into batches involving temporary storage. <code>EXPLAIN ANALYZE</code> reports buckets, batches, and memory usage.<sup><a href="#r9">[9]</a><a href="#r17">[17]</a></sup></p>
+<h3>20.2 Parallel hash</h3>
+<p>Parallel hash joins allow cooperating processes to build a shared hash table. This differs from a non-parallel hash join inside a parallel plan, where each process can build its own hash state.<sup><a href="#r18">[18]</a></sup></p>
+</section>
+
+<section id="mergejoin"><h2>21. Merge join</h2>
+<p>A merge join requires compatible ordering on the join keys. It advances through the sorted inputs, comparing key values and emitting matching combinations. The required order can come from indexes or explicit sorts.<sup><a href="#r9">[9]</a></sup></p>
+<div class="diagram">left:   1  2  2  5  9 ...
+            ^
+right:  1  2  3  5  5 ...
+            ^
+
+equal -> emit matching combinations
+left lower -> advance left
+right lower -> advance right</div>
+<p>PostgreSQL notes that sequential scan plus sort can beat an ordered index scan for large inputs because the latter may require substantial nonsequential heap access. The optimizer compares complete input-generation costs, not just the merge operation itself.<sup><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="sort"><h2>22. Sort</h2>
+<p>A conventional <code>Sort</code> node is blocking. On first demand, it consumes its child input, performs the sort, stores the result, and then returns rows in requested order. That is why sorts have startup cost before producing their first tuple.<sup><a href="#r4">[4]</a></sup></p>
+<pre><code>EXPLAIN (ANALYZE, BUFFERS)
+SELECT *
+FROM app.orders
+WHERE created_at &gt;= date '2026-09-01'
+ORDER BY total_amount DESC;</code></pre>
+<p>Sorts use <code>work_mem</code> as their base memory limit. If the data does not fit, PostgreSQL can use external sorting and temporary files. <code>EXPLAIN ANALYZE</code> reports the sort method and memory/disk space used.<sup><a href="#r9">[9]</a><a href="#r17">[17]</a></sup></p>
+<h3>22.1 Avoiding sorts with order-preserving paths</h3>
+<p>B-tree indexes can deliver ordered rows. The optimizer weighs ordered index access against an unordered scan plus explicit sort. For many returned rows, sequential access plus sort can still be cheaper.<sup><a href="#r21">[21]</a></sup></p>
+<h3>22.2 Incremental sort</h3>
+<p>If the child is already ordered by a prefix of the desired key list, PostgreSQL can sometimes use <code>Incremental Sort</code>, sorting smaller groups on the remaining keys. This can reduce memory usage and allow earlier output, which is particularly useful with <code>LIMIT</code>.<sup><a href="#r9">[9]</a></sup></p>
+</section>
+
+<section id="aggregate"><h2>23. Aggregate</h2>
+<p>Aggregate nodes implement aggregate-function and grouping semantics. A query with no <code>GROUP BY</code> has one logical aggregate group. Grouped queries can use order-based aggregation or hashing depending on input order, group estimates, memory, aggregate capabilities, and complete path cost.<sup><a href="#r22">[22]</a></sup></p>
+<pre><code>EXPLAIN
+SELECT sum(total_amount)
+FROM app.orders
+WHERE customer_id = 42;</code></pre>
+<pre><code>Aggregate
+  -&gt; Index Scan using orders_customer_created_idx on orders
+        Index Cond: (customer_id = 42)</code></pre>
+<p>Some aggregates support Partial Mode, which allows parallel plans to compute partial transition states in workers and combine/finalize them higher in the plan.<sup><a href="#r22">[22]</a><a href="#r18">[18]</a></sup></p>
+</section>
+
+<section id="hashaggregate"><h2>24. Hash aggregate</h2>
+<p><code>HashAggregate</code> stores aggregate transition state in a hash table keyed by the grouping columns. This avoids sorting when hashing is suitable but makes memory requirements depend heavily on the number and size of groups. PostgreSQL can batch hash aggregation when required by memory pressure.<sup><a href="#r17">[17]</a><a href="#r10">[10]</a></sup></p>
+<pre><code>EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    customer_id,
+    count(*) AS order_count,
+    sum(total_amount) AS revenue
+FROM app.orders
+GROUP BY customer_id;</code></pre>
+<pre><code>HashAggregate
+  Group Key: customer_id
+  Batches: 1
+  Memory Usage: ...
+  -&gt; Seq Scan on orders</code></pre>
+<p>Bad group-cardinality estimates can make the planner underestimate hash memory requirements or miscompare hash and sorted aggregation. PostgreSQL's multivariate <code>ndistinct</code> statistics can improve estimates for correlated multicolumn group keys.<sup><a href="#r23">[23]</a></sup></p>
+</section>
+
+<section id="materialize"><h2>25. Materialization</h2>
+<p>A <code>Materialize</code> node saves the output of a child plan so repeated rescans can consume the stored result instead of executing the child again. PostgreSQL's EXPLAIN documentation demonstrates a nested-loop case in which an inner index scan is run once, materialized, then replayed for each outer tuple.<sup><a href="#r9">[9]</a></sup></p>
+<div class="diagram">Nested Loop
+  +-- outer scan
+  |
+  +-- Materialize
+        |
+        +-- child scan (performed once)
+             |
+             v
+           cache
+
+each rescan reads cached rows</div>
+<p>This is an executor-plan technique and should not be conflated with SQL CTE <code>MATERIALIZED</code>/<code>NOT MATERIALIZED</code>, which affects whether suitable common-table expressions are folded into the surrounding query during planning.<sup><a href="#r24">[24]</a></sup></p>
+</section>
+
+<section id="parallel"><h2>26. Parallel query plans</h2>
+<p>PostgreSQL constructs special parallel-aware partial plans rather than simply running an ordinary plan independently in every worker. <code>Gather</code> combines worker output without guaranteeing order; <code>Gather Merge</code> preserves a required sorted order while merging worker streams.<sup><a href="#r18">[18]</a><a href="#r25">[25]</a></sup></p>
+<div class="diagram">Finalize Aggregate
+        |
+      Gather
+   /     |     \
+worker worker worker
+   |      |      |
+Partial Aggregate
+   |
+Parallel Seq Scan</div>
+<p>Parallel workers are separate processes and can multiply CPU, memory, and I/O usage. Settings such as <code>work_mem</code> apply to operations in workers as well, so plan-level memory can substantially exceed one session's nominal setting.<sup><a href="#r17">[17]</a></sup></p>
+</section>
+
+<section id="explain"><h2>27. <code>EXPLAIN</code></h2>
+<p><code>EXPLAIN</code> shows the execution plan that PostgreSQL’s planner selected without running the statement unless the <code>ANALYZE</code> option is requested. PostgreSQL 18 supports text, JSON, XML, and YAML plan formats and options including <code>VERBOSE</code>, <code>SETTINGS</code>, <code>GENERIC_PLAN</code>, <code>MEMORY</code>, <code>BUFFERS</code>, <code>WAL</code>, and output serialization measurement in applicable modes.<sup><a href="#r10">[10]</a></sup></p>
+<pre><code>EXPLAIN (
+    VERBOSE,
+    SETTINGS,
+    MEMORY,
+    FORMAT TEXT
+)
+SELECT
+    c.customer_id,
+    count(*)
+FROM app.customer AS c
+JOIN app.orders AS o
+  ON o.customer_id = c.customer_id
+WHERE o.status = 'paid'
+GROUP BY c.customer_id;</code></pre>
+<h3>27.1 The four fundamental estimates</h3>
+<pre><code>Index Scan ...
+(cost=0.43..48.72 rows=16 width=64)
+      ^       ^       ^        ^
+      |       |       |        +-- average output row width
+      |       |       +----------- estimated output rows
+      |       +------------------- total cost
+      +--------------------------- startup cost</code></pre>
+<p>The first line—the root node—contains the estimated total cost of the selected complete plan. Do not sum every node’s total cost: parent cost already includes the cost of child nodes plus the parent’s own work.<sup><a href="#r9">[9]</a></sup></p>
+<h3>27.2 Startup cost matters when execution can stop early</h3>
+<p>For <code>LIMIT</code>, <code>EXISTS</code>, and other contexts where the parent might consume only a small prefix, a plan with higher full-run cost can still be preferred because its startup cost is lower. PostgreSQL interpolates expected consumption for <code>LIMIT</code> when comparing paths.<sup><a href="#r10">[10]</a><a href="#r9">[9]</a></sup></p>
+<h3>27.3 Machine-readable plans</h3>
+<pre><code>EXPLAIN (FORMAT JSON)
+SELECT *
+FROM app.orders
+WHERE order_id = 42;</code></pre>
+<p>Use JSON, XML, or YAML rather than parsing text output when implementing plan-analysis automation.<sup><a href="#r10">[10]</a></sup></p>
+</section>
+
+<section id="explain-analyze"><h2>28. <code>EXPLAIN ANALYZE</code></h2>
+<p><code>EXPLAIN ANALYZE</code> runs the command and adds actual execution statistics. This is how an engineer validates the planner’s assumptions rather than merely inspecting them. Compare estimated rows with actual rows, examine <code>loops</code>, buffer activity, sort/hash spill behavior, index searches, heap fetches, rows removed by filters/rechecks, planning time, and execution time.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup></p>
+<pre><code>EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    WAL,
+    SETTINGS,
+    TIMING OFF,
+    SUMMARY
+)
+SELECT
+    customer_id,
+    count(*)
+FROM app.orders
+WHERE status = 'paid'
+  AND created_at &gt;= current_date - 30
+GROUP BY customer_id;</code></pre>
+<h3>28.1 Find the earliest major estimation error</h3>
+<div class="formula">estimation factor = actual rows / estimated rows
+
+1.0       roughly exact
+10        10× underestimate
+0.1       10× overestimate</div>
+<p>An error at a scan node can propagate through every join and aggregate above it. Correcting the leaf predicate’s statistics, expression, or data model is usually more robust than forcing the final join algorithm.</p>
+<h3>28.2 Loops change interpretation</h3>
+<pre><code>Index Scan ... (actual rows=3 loops=10000)</code></pre>
+<p>Actual per-loop rows must be interpreted together with <code>loops</code>. A nested-loop inner path returning only three rows at a time may still produce 30,000 rows of work when called 10,000 times.</p>
+<h3>28.3 Profiling overhead</h3>
+<p>PostgreSQL documents that <code>EXPLAIN ANALYZE</code> can run slower than ordinary execution because of instrumentation. <code>TIMING OFF</code> avoids most per-node clock measurements while retaining actual row/loop information and total execution timing.<sup><a href="#r10">[10]</a></sup></p>
+<h3>28.4 Data-changing statements really execute</h3>
+<pre><code>BEGIN;
+
+EXPLAIN (
+    ANALYZE,
+    BUFFERS,
+    WAL
+)
+UPDATE app.orders
+SET status = 'archived'
+WHERE created_at &lt; date '2024-01-01';
+
+ROLLBACK;</code></pre>
+<p><code>ANALYZE</code> causes execution, so side effects occur. A transaction/rollback is useful for testing DML where appropriate, although external side effects of called functions are not necessarily undone merely because the SQL transaction rolls back.<sup><a href="#r10">[10]</a></sup></p>
+</section>
+
+<section id="optimization"><h2>29. Query optimization workflow</h2>
+<p>Query optimization is most reliable when it follows the dependency chain used by PostgreSQL itself: semantics → cardinality → access paths → costs → execution resources. Starting by forcing a join type or globally lowering a cost constant skips the evidence that explains why the current plan was chosen.</p>
+<div class="diagram">slow query
+    |
+    v
+capture SQL + parameter values + planning settings
+    |
+    v
+EXPLAIN (ANALYZE, BUFFERS, SETTINGS, TIMING OFF)
+    |
+    v
+find earliest material estimate/runtime problem
+    |
+    +------------------------------+
+    |                              |
+bad cardinality?               estimates good?
+    |                              |
+    v                              v
+ANALYZE                       inspect:
+statistics target             - missing/poor index path
+extended statistics           - memory spill
+predicate expression          - I/O/cache behavior
+parameter skew                - ordering/sort
+partition parent stats        - parallel overhead
+                               - cost-model assumptions
+    |                              |
+    +---------------+--------------+
+                    |
+                    v
+test alternative strategy experimentally
+                    |
+                    v
+deploy only measured, workload-safe changes</div>
+
+<h3>29.1 Reproduce the real parameter case</h3>
+<p>The same SQL text can need different plans for different constants. A highly skewed customer, tenant, date range, or status value may invalidate conclusions drawn from a “typical” value. Capture the parameters that made the production execution slow.</p>
+
+<h3>29.2 Ensure statistics are current</h3>
+<pre><code>ANALYZE app.orders;</code></pre>
+<p>PostgreSQL’s EXPLAIN documentation explicitly recommends current <code>pg_statistic</code> data before judging planner decisions. Autovacuum normally maintains statistics, but a recent bulk load or distribution-changing update can justify immediate manual analysis.<sup><a href="#r10">[10]</a></sup></p>
+
+<h3>29.3 Improve statistics selectively</h3>
+<pre><code>ALTER TABLE app.orders
+ALTER COLUMN customer_id
+SET STATISTICS 1000;
+
+CREATE STATISTICS app.orders_customer_status_stats
+    (dependencies, mcv)
+ON customer_id, status
+FROM app.orders;
+
+ANALYZE app.orders;</code></pre>
+<p>Cross-column correlation is a common cause of misestimation because ordinary statistics are mostly single-column. Extended statistics can capture selected dependencies and multivariate MCV distributions.<sup><a href="#r7">[7]</a><a href="#r23">[23]</a></sup></p>
+
+<h3>29.4 Inspect where filtering occurs</h3>
+<pre><code>Index Scan using orders_status_idx on orders
+  Index Cond: (status = 'paid')
+  Filter: (lower(source) = 'web'::text)
+  Rows Removed by Filter: 500000</code></pre>
+<p>If an access path retrieves huge numbers of tuples only to discard them in a filter, a better index might move that predicate into index qualification. Depending on the workload, possibilities include multicolumn, partial, or expression indexes—or accepting a sequential/bitmap plan when the result set is broad.</p>
+
+<h3>29.5 Use plan-method switches as experiments</h3>
+<pre><code>BEGIN;
+
+SET LOCAL enable_hashjoin = off;
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+SELECT ...;
+
+ROLLBACK;</code></pre>
+<p>PostgreSQL describes the <code>enable_*</code> parameters as crude planner controls. They are valuable for measuring an alternative plan, but a permanent fix should usually correct the statistics, index design, query form, resource settings, or cost assumptions that caused the wrong comparison.<sup><a href="#r16">[16]</a></sup></p>
+
+<h3>29.6 Distinguish execution from client time</h3>
+<p>The optimizer does not include every possible end-to-end cost in plan costs, such as all client transmission and result-formatting work. PostgreSQL 18’s <code>EXPLAIN</code> can optionally measure serialization cost, which helps distinguish server executor time from conversion of output values for delivery.<sup><a href="#r10">[10]</a></sup></p>
+</section>
+
+<section id="pitfalls"><h2>30. Common misconceptions and pitfalls</h2>
+
+<h3>30.1 “An index exists, so PostgreSQL should use it”</h3>
+<p>An index has lookup cost and often heap-fetch cost. For broad predicates, sequential access can be cheaper; for intermediate selectivity a bitmap scan can be better; an ordinary index scan often wins for selective predicates or useful ordering.<sup><a href="#r9">[9]</a><a href="#r20">[20]</a></sup></p>
+
+<h3>30.2 “The parser chooses the plan”</h3>
+<p>Parsing checks syntax. Semantic analysis resolves meaning. Rewriting transforms query trees. The planner chooses the physical strategy. Conflating these stages makes internal explanations and performance diagnoses confusing.<sup><a href="#r2">[2]</a><a href="#r3">[3]</a><a href="#r5">[5]</a></sup></p>
+
+<h3>30.3 “EXPLAIN cost is milliseconds”</h3>
+<p>Costs are relative units used to compare plans. Use <code>EXPLAIN ANALYZE</code> for measured runtime and remember that cache state and concurrent workload can make actual execution vary from one run to another.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>30.4 Adding every node’s cost</h3>
+<p>Upper-node cost already contains child costs. Summing the tree double-counts the work.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>30.5 “Hash join is faster than nested loop”</h3>
+<p>Algorithm quality depends on input cardinality, selectivity, indexes, memory, ordering, and data distribution. Nested loops with selective parameterized index probes can outperform hashing by orders of magnitude on small outer inputs; hash joins can dominate when large equality-join inputs must be matched.</p>
+
+<h3>30.6 “Index-only scan never reads the heap”</h3>
+<p>MVCC visibility may still require heap fetches when the visibility map cannot prove the page all-visible. <code>Heap Fetches</code> in actual plans reveals this behavior.<sup><a href="#r19">[19]</a></sup></p>
+
+<h3>30.7 Raising <code>work_mem</code> globally for one spill</h3>
+<p><code>work_mem</code> is generally per sort/hash operation, not a server-wide pool. Multiple nodes, sessions, and parallel workers can multiply memory consumption. Test targeted changes first.<sup><a href="#r17">[17]</a></sup></p>
+
+<h3>30.8 Permanently disabling sequential scans or join types</h3>
+<p>Planner method settings are diagnostic/influence controls, not substitutes for accurate statistics and cost models. A forced plan may fix one query/parameter case while harming others.<sup><a href="#r16">[16]</a></sup></p>
+
+<h3>30.9 Assuming an ordinary view is materialized</h3>
+<p>An ordinary view is query rewriting; a materialized view stores data. They have different runtime behavior.<sup><a href="#r13">[13]</a><a href="#r14">[14]</a></sup></p>
+
+<h3>30.10 Looking only at root execution time</h3>
+<p>The earliest large estimated-versus-actual row difference often explains the rest of the plan. Diagnose bottom-up rather than treating the final node as the root cause.</p>
+
+<h3>30.11 Ignoring PostgreSQL-version changes</h3>
+<p>Planner capabilities evolve. PostgreSQL 18, for example, added B-tree skip-scan improvements and substantial planner/runtime enhancements; even with identical schema and SQL, the chosen strategy can differ between releases.<sup><a href="#r26">[26]</a></sup></p>
+</section>
+
+<section id="checklist"><h2>31. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Think in pipeline stages.</strong> Parsing, semantic analysis, rewriting, planning, and execution solve different problems.</li>
+<li><strong>Keep statistics current.</strong> Cardinality estimates drive most cost comparisons.</li>
+<li><strong>Read the plan as a tree.</strong> Parent nodes pull from children and inherit their costs.</li>
+<li><strong>Understand condition placement.</strong> Index conditions, filters, rechecks, and join conditions execute at different stages.</li>
+<li><strong>Compare scan alternatives.</strong> Sequential, index, index-only, and bitmap scans each have a workload niche.</li>
+<li><strong>Watch nested-loop multiplication.</strong> Multiply inner work by actual outer loops.</li>
+<li><strong>Inspect hash batches and sort methods.</strong> They expose memory pressure and spilling.</li>
+<li><strong>Exploit useful ordering.</strong> It can avoid sorts and enable merge processing.</li>
+<li><strong>Use covering indexes selectively.</strong> Index-only potential must justify write/storage cost.</li>
+<li><strong>Use extended statistics for demonstrated cross-column estimation errors.</strong></li>
+<li><strong>Run <code>EXPLAIN ANALYZE</code> knowingly.</strong> It executes the query.</li>
+<li><strong>Use <code>TIMING OFF</code> when cardinality/buffer evidence is the main goal.</strong></li>
+<li><strong>Find the earliest significant estimate error.</strong> Later errors often inherit from it.</li>
+<li><strong>Use planner switches as experiments.</strong> Do not use them as the first permanent remedy.</li>
+<li><strong>Tune <code>work_mem</code> with total concurrency in mind.</strong></li>
+<li><strong>Use machine-readable EXPLAIN formats for automation.</strong></li>
+<li><strong>Test representative parameter values.</strong> Skew can make one SQL shape need different custom plans.</li>
+<li><strong>Retest after major upgrades.</strong> Optimizer behavior legitimately changes across PostgreSQL releases.</li>
+</ol>
+<div class="callout ok"><strong>Query-processing principle:</strong> SQL specifies a result, not an algorithm. PostgreSQL performance comes from translating that declarative request through increasingly semantic representations until the optimizer can select a concrete physical program; the most durable tuning improves the evidence and access paths that make that selection accurate.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. The Path of a Query [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/query-path.html">https://www.postgresql.org/docs/18/query-path.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. The Parser Stage [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/parser-stage.html">https://www.postgresql.org/docs/18/parser-stage.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. The Query Tree [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/querytree.html">https://www.postgresql.org/docs/18/querytree.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. Executor [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/executor.html">https://www.postgresql.org/docs/18/executor.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. Planner/Optimizer [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/planner-optimizer.html">https://www.postgresql.org/docs/18/planner-optimizer.html</a></li>
+<li id="r6">PostgreSQL Global Development Group. Overview of PostgreSQL Internals [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/overview.html">https://www.postgresql.org/docs/18/overview.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. Statistics Used by the Planner [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/planner-stats.html">https://www.postgresql.org/docs/18/planner-stats.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. Row Estimation Examples [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/row-estimation-examples.html">https://www.postgresql.org/docs/18/row-estimation-examples.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. Using EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. Developer Options [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-developer.html">https://www.postgresql.org/docs/18/runtime-config-developer.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. The Rule System [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rules.html">https://www.postgresql.org/docs/18/rules.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. Views and the Rule System [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rules-views.html">https://www.postgresql.org/docs/18/rules-views.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. Materialized Views [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rules-materializedviews.html">https://www.postgresql.org/docs/18/rules-materializedviews.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. Genetic Query Optimization: Query Handling as a Complex Optimization Problem [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/geqo-intro.html">https://www.postgresql.org/docs/18/geqo-intro.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. Query Planning Configuration [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-query.html">https://www.postgresql.org/docs/18/runtime-config-query.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. Resource Consumption: work_mem and hash_mem_multiplier [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+<li id="r18">PostgreSQL Global Development Group. Parallel Plans [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/parallel-plans.html">https://www.postgresql.org/docs/18/parallel-plans.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. Index-Only Scans and Covering Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-index-only-scans.html">https://www.postgresql.org/docs/18/indexes-index-only-scans.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. Combining Multiple Indexes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-bitmap-scans.html">https://www.postgresql.org/docs/18/indexes-bitmap-scans.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. Indexes and ORDER BY [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-ordering.html">https://www.postgresql.org/docs/18/indexes-ordering.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. Aggregate Functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-aggregate.html">https://www.postgresql.org/docs/18/functions-aggregate.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. Multivariate Statistics Examples [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/multivariate-statistics-examples.html">https://www.postgresql.org/docs/18/multivariate-statistics-examples.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. WITH Queries (Common Table Expressions) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-with.html">https://www.postgresql.org/docs/18/queries-with.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. How Parallel Query Works [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/how-parallel-query-works.html">https://www.postgresql.org/docs/18/how-parallel-query-works.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. PostgreSQL 18 Documentation; 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. Index Access Method Functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/index-functions.html">https://www.postgresql.org/docs/18/index-functions.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. Sorting Rows (ORDER BY) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/queries-order.html">https://www.postgresql.org/docs/18/queries-order.html</a></li>
+<li id="r29">PostgreSQL Global Development Group. pg_class [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-class.html">https://www.postgresql.org/docs/18/catalog-pg-class.html</a></li>
+<li id="r30">PostgreSQL Global Development Group. pg_stats [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-stats.html">https://www.postgresql.org/docs/18/view-pg-stats.html</a></li>
+<li id="r31">PostgreSQL Global Development Group. CREATE STATISTICS [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createstatistics.html">https://www.postgresql.org/docs/18/sql-createstatistics.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. Examining Index Usage [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes-examine.html">https://www.postgresql.org/docs/18/indexes-examine.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol></section>
+</main>
+
+<footer><p>This article is a technical reference. Query plans depend on PostgreSQL version, statistics freshness, parameter values, data distribution, indexes, relation size, memory, cache/storage performance, parallel resources, MVCC visibility, and concurrent workload. Validate optimization changes with representative production data and compare estimated versus actual rows rather than forcing plan nodes from general rules of thumb.</p></footer>
+</body>
+</html>

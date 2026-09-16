@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL scaling: vertical scaling, CPU, RAM, storage and IOPS, read replicas, routing, caching, write scaling, partitioning, sharding, Citus, YugabyteDB, CockroachDB, and distributed SQL concepts.">
+<title>PostgreSQL Scaling: From One Node to Distributed SQL</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--accent2:#173e75;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:960px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.small{font-size:.92rem;color:var(--muted)}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Scaling</h1>
+  <p class="dek">A technical guide to scaling PostgreSQL vertically and horizontally: CPU, RAM, storage and IOPS, read replicas, routing, caching, partitioning, application sharding, Citus, YugabyteDB, CockroachDB, and the distributed-systems concepts behind scale-out SQL.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+PostgreSQL scaling is best treated as a sequence of increasingly expensive architectural choices. A single PostgreSQL server can use many CPU cores across concurrent sessions and selected parallel plans, can use large amounts of memory for shared buffers and query workspaces, and can drive high-performance storage; read-heavy systems can add physical hot standbys; very large tables can be partitioned; and applications can shard data across independent PostgreSQL clusters. Beyond that point, systems such as Citus, YugabyteDB, and CockroachDB provide different forms of distributed SQL, but they make different architectural and compatibility tradeoffs.<sup><a href="#r1">[1]</a>-<a href="#r5">[5]</a></sup>
+</p>
+<p>
+The central engineering principle is to identify the constrained resource before adding architecture. CPU saturation, memory pressure, random I/O latency, WAL/checkpoint pressure, connection saturation, lock contention, a single hot key, replica lag, and total dataset size are different bottlenecks and require different remedies. Horizontal distribution introduces network communication, data-placement decisions, distributed failure modes, and cross-shard transaction costs that a single-node database avoids.<sup><a href="#r6">[6]</a><a href="#r25">[25]</a><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#model">The scaling ladder</a></li>
+<li><a href="#diagnosis">Measure the bottleneck first</a></li>
+<li><a href="#vertical">Vertical scaling</a></li>
+<li><a href="#cpu">CPU scaling</a></li>
+<li><a href="#ram">RAM scaling</a></li>
+<li><a href="#storage">Storage and IOPS</a></li>
+<li><a href="#read">Read scaling</a></li>
+<li><a href="#replicas">Read replicas</a></li>
+<li><a href="#routing">Connection routing</a></li>
+<li><a href="#caching">Caching</a></li>
+<li><a href="#write">Write scaling</a></li>
+<li><a href="#partitioning">Partitioning</a></li>
+<li><a href="#sharding">Application-level sharding</a></li>
+<li><a href="#distributed">Distributed SQL concepts</a></li>
+<li><a href="#citus">Citus</a></li>
+<li><a href="#yugabyte">YugabyteDB</a></li>
+<li><a href="#cockroach">CockroachDB</a></li>
+<li><a href="#comparison">Architecture comparison</a></li>
+<li><a href="#decision">Scaling decision framework</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="model">
+<h2>1. The PostgreSQL scaling ladder</h2>
+<p>
+Scaling should normally progress from the least distributed solution that meets the requirement to more distributed designs only when the measured workload demands them. Native PostgreSQL already supplies mechanisms for query optimization, parallel execution, large-memory operation, partitioning, physical and logical replication, and connection failover. None of those mechanisms requires converting the database into a horizontally sharded distributed transaction system.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a><a href="#r7">[7]</a><a href="#r8">[8]</a></sup>
+</p>
+
+<div class="diagram">             complexity / operational cost / distributed coordination
+                                      ↑
+                                      |
+        distributed SQL              | Citus / YugabyteDB / CockroachDB
+                                      |
+        application sharding         | multiple independent PostgreSQL shards
+                                      |
+        partitioning                 | one PostgreSQL cluster, many table partitions
+                                      |
+        read scaling                 | primary + physical/logical replicas
+                                      |
+        vertical scaling             | more CPU / RAM / faster storage
+                                      |
+        query/schema optimization    | indexes / plans / batching / fewer round trips
+                                      +----------------------------------------------→
+                                                        scale requirement</div>
+
+<p>
+This ladder is not a maturity ranking. A large single-node PostgreSQL system with replicas can be a better design than a distributed system when the workload fits on one writer, because local transactions and joins avoid distributed coordination. Conversely, a workload that requires write throughput or data volume beyond one machine, or low-latency writes in many regions, may justify a distributed architecture despite the additional complexity.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<section id="diagnosis">
+<h2>2. Measure the bottleneck first</h2>
+<p>
+PostgreSQL 18 exposes cumulative statistics for sessions, tables, indexes, WAL, replication, checkpoints, background writing, and I/O. <code>EXPLAIN (ANALYZE, BUFFERS)</code> adds plan-level runtime and buffer information, while <code>pg_stat_statements</code> can aggregate planning/execution behavior by normalized statement. These surfaces are more useful for scaling decisions than CPU percentage alone because they identify where time and resource consumption occur.<sup><a href="#r6">[6]</a><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>2.1 Baseline workload inventory</h3>
+<pre><code>-- Active sessions and wait classes.
+SELECT
+    pid,
+    application_name,
+    state,
+    wait_event_type,
+    wait_event,
+    now() - query_start AS query_age,
+    left(query, 180) AS query
+FROM pg_stat_activity
+WHERE state &lt;&gt; 'idle'
+ORDER BY query_start;
+
+-- Database-level workload.
+SELECT
+    datname,
+    numbackends,
+    xact_commit,
+    xact_rollback,
+    blks_read,
+    blks_hit,
+    temp_files,
+    pg_size_pretty(temp_bytes) AS temp_bytes,
+    deadlocks
+FROM pg_stat_database
+WHERE datname IS NOT NULL
+ORDER BY datname;</code></pre>
+
+<h3>2.2 Find expensive SQL</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+SELECT
+    calls,
+    total_exec_time,
+    mean_exec_time,
+    rows,
+    shared_blks_hit,
+    shared_blks_read,
+    temp_blks_written,
+    wal_bytes,
+    left(query, 220) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 30;</code></pre>
+
+<p>
+Before adding replicas or shards, optimize statements that consume a disproportionate share of total runtime, I/O, temporary space, or WAL. A missing index or poor cardinality estimate remains a bad query after scale-out; distribution can multiply the cost if the same inefficient operation is executed on every shard.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>2.3 Inspect one critical query</h3>
+<pre><code>EXPLAIN (ANALYZE, BUFFERS, WAL, VERBOSE)
+SELECT
+    customer_id,
+    sum(total)
+FROM orders
+WHERE created_at &gt;= now() - interval '30 days'
+GROUP BY customer_id
+ORDER BY sum(total) DESC
+LIMIT 100;</code></pre>
+
+<p>
+<code>EXPLAIN</code> with buffer reporting distinguishes shared-buffer hits from physical reads and can report I/O timing when timing collection is enabled. PostgreSQL's planner cost model historically expresses costs relative to page fetches; the actual bottleneck should be validated from runtime measurements rather than inferred from cost alone.<sup><a href="#r9">[9]</a><a href="#r11">[11]</a></sup>
+</p>
+</section>
+
+<section id="vertical">
+<h2>3. Vertical scaling</h2>
+<p>
+Vertical scaling means increasing the capacity of one PostgreSQL server: faster or more CPU cores, more RAM, faster storage, higher IOPS/throughput, or a platform with better network and memory bandwidth. This preserves the simplest data model and transaction topology because all rows remain under one PostgreSQL primary.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>3.1 What vertical scaling preserves</h3>
+<ul>
+<li>Local ACID transactions across all tables.</li>
+<li>Local joins without cross-node data movement.</li>
+<li>One authoritative write endpoint.</li>
+<li>Ordinary PostgreSQL extensions and server semantics.</li>
+<li>Simple uniqueness, foreign keys, sequences, and locking across the full dataset.</li>
+</ul>
+
+<p>
+The limit is that one primary eventually has finite CPU, memory bandwidth, storage bandwidth, WAL generation/flush capacity, and lock/concurrency capacity. Vertical scaling can also become economically inefficient at the largest machine sizes. The point at which this occurs is workload-specific and should be measured rather than assumed.<sup><a href="#r6">[6]</a><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="cpu">
+<h2>4. CPU scaling</h2>
+
+<h3>4.1 PostgreSQL can use multiple cores in two ways</h3>
+<p>
+First, separate PostgreSQL backend processes can execute concurrent sessions on separate CPU cores. Second, selected individual queries can use parallel plans containing <code>Gather</code> or <code>Gather Merge</code> and parallel workers. Parallel workers are limited by <code>max_worker_processes</code>, <code>max_parallel_workers</code>, and <code>max_parallel_workers_per_gather</code>; the workers requested by a plan are not guaranteed to be available at execution time.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<pre><code>SHOW max_worker_processes;
+SHOW max_parallel_workers;
+SHOW max_parallel_workers_per_gather;
+
+EXPLAIN (ANALYZE, VERBOSE)
+SELECT count(*)
+FROM events
+WHERE occurred_at &gt;= current_date - interval '30 days';</code></pre>
+
+<p>
+Parallel query is not available for every statement. PostgreSQL does not generate a parallel plan for queries that write data or lock rows, and functions marked <code>PARALLEL UNSAFE</code> prevent parallel execution. Parallel workers are separate processes and can multiply CPU, memory, and I/O consumption; PostgreSQL specifically notes that per-worker resource settings such as <code>work_mem</code> can make a parallel query consume substantially more total resources than a serial query.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>4.2 CPU-bound scaling checklist</h3>
+<ol class="checklist">
+<li>Use <code>pg_stat_statements</code> to identify statements consuming aggregate CPU time.</li>
+<li>Fix unnecessary work: poor joins, row-by-row queries, excessive parsing, functions, and avoidable sorting.</li>
+<li>Confirm indexes and planner row estimates.</li>
+<li>Measure whether critical analytical queries can use parallel plans.</li>
+<li>Increase cores only if the workload has enough independent or parallelizable work to consume them.</li>
+<li>Watch run-queue/load and database latency together; higher CPU utilization is acceptable until it degrades latency or throughput objectives.</li>
+</ol>
+</section>
+
+<section id="ram">
+<h2>5. RAM scaling</h2>
+<p>
+PostgreSQL uses both its shared buffer cache and the operating system's filesystem cache. The PostgreSQL 18 documentation gives roughly 25% of system memory as a reasonable initial value for <code>shared_buffers</code> on a dedicated server with at least 1 GB of RAM and notes that allocations beyond roughly 40% are unlikely to outperform a smaller value in many environments because the OS cache also matters.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>5.1 Memory is not one pool</h3>
+<p>
+<code>shared_buffers</code> is cluster-wide, while <code>work_mem</code> is a base limit applied to individual sort/hash operations. A complex query can use several such operations, many sessions can run concurrently, and parallel workers can each receive their own work-memory budget. Hash operations can use <code>work_mem × hash_mem_multiplier</code>. Therefore, raising <code>work_mem</code> globally based only on total RAM can create intermittent memory exhaustion under concurrency.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<pre><code>SHOW shared_buffers;
+SHOW work_mem;
+SHOW hash_mem_multiplier;
+SHOW maintenance_work_mem;
+
+-- Temp spill by database.
+SELECT
+    datname,
+    temp_files,
+    pg_size_pretty(temp_bytes) AS temp_bytes
+FROM pg_stat_database
+ORDER BY temp_bytes DESC;</code></pre>
+
+<h3>5.2 What additional RAM can improve</h3>
+<p>
+More RAM can increase the effective cache available to frequently accessed table/index pages and can permit larger query working sets before sorts and hashes spill to temporary storage. It can also support larger maintenance operations. The benefit depends on the working set and concurrency; once the hot working set is already cached, more memory may provide less benefit than faster CPU or storage.<sup><a href="#r6">[6]</a><a href="#r10">[10]</a></sup>
+</p>
+</section>
+
+<section id="storage">
+<h2>6. Storage, throughput, latency, and IOPS</h2>
+<p>
+PostgreSQL performance depends on both data-file I/O and WAL durability. Random table/index reads, temporary-file spills, checkpoints, vacuum, index creation, WAL generation, and WAL flushes can all compete for storage bandwidth or latency. PostgreSQL exposes I/O statistics in <code>pg_stat_io</code>, checkpoint statistics in <code>pg_stat_checkpointer</code>, WAL statistics in <code>pg_stat_wal</code>, and per-query block/I/O statistics through <code>EXPLAIN</code> and <code>pg_stat_statements</code>.<sup><a href="#r10">[10]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>6.1 Inspect server I/O</h3>
+<pre><code>SELECT
+    backend_type,
+    object,
+    context,
+    reads,
+    read_bytes,
+    read_time,
+    writes,
+    write_bytes,
+    write_time,
+    fsyncs,
+    fsync_time
+FROM pg_stat_io
+ORDER BY (read_time + write_time + fsync_time) DESC NULLS LAST;</code></pre>
+
+<h3>6.2 Inspect WAL and checkpoints</h3>
+<pre><code>SELECT
+    wal_records,
+    wal_fpi,
+    pg_size_pretty(wal_bytes) AS wal_bytes,
+    wal_buffers_full,
+    wal_write,
+    wal_sync,
+    wal_write_time,
+    wal_sync_time
+FROM pg_stat_wal;
+
+SELECT *
+FROM pg_stat_checkpointer;</code></pre>
+
+<p>
+Larger <code>shared_buffers</code> settings can require a larger <code>max_wal_size</code> so dirty-page writes are spread over a longer interval. This illustrates an important scaling principle: memory, WAL, checkpoints, and storage are coupled rather than independent knobs.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>6.3 IOPS versus throughput</h3>
+<p>
+“More IOPS” is not automatically the answer. Small random reads can be latency/IOPS sensitive, while sequential scans, base backups, checkpoint writeback, and bulk operations can be bandwidth-sensitive. Determine the dominant I/O context from PostgreSQL and operating-system/storage metrics, then test storage changes against application latency and throughput.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup>
+</p>
+
+<div class="callout">
+<strong>Scaling rule:</strong> do not buy storage characteristics from a generic PostgreSQL recipe. Measure read latency, write latency, WAL flush latency, queue depth, temporary I/O, cache-hit behavior, and the workload's block-access pattern.
+</div>
+</section>
+
+<section id="read">
+<h2>7. Read scaling</h2>
+<p>
+Read scaling removes read work from the primary by serving eligible queries elsewhere. PostgreSQL's native physical streaming replication produces standby servers that continuously receive and replay WAL. With hot standby enabled, those standbys can accept read-only queries while recovery continues.<sup><a href="#r2">[2]</a><a href="#r15">[15]</a></sup>
+</p>
+
+<div class="diagram">                           ┌───────────────┐
+writes / consistency reads ──►│    primary    │
+                           └───────┬───────┘
+                                   │ WAL streaming
+             ┌─────────────────────┼─────────────────────┐
+             v                     v                     v
+      ┌────────────┐        ┌────────────┐        ┌────────────┐
+      │ replica A  │        │ replica B  │        │ replica C  │
+      │ read-only  │        │ read-only  │        │ read-only  │
+      └────────────┘        └────────────┘        └────────────┘
+             ▲                     ▲                     ▲
+             └──── stale-tolerant/read-only traffic ───┘</div>
+
+<p>
+Read scaling is effective only when the workload contains enough reads that can tolerate replica semantics. Writes still converge on the primary in ordinary physical streaming replication, and reads that require immediate read-after-write consistency may need to stay on the writer because replication is asynchronous by default.<sup><a href="#r2">[2]</a><a href="#r15">[15]</a></sup>
+</p>
+</section>
+
+<section id="replicas">
+<h2>8. Read replicas</h2>
+
+<h3>8.1 Physical hot standby</h3>
+<p>
+A hot standby replays the primary's physical WAL stream and exposes a read-only database. There is measurable delay between primary and standby. Recovery can also conflict with queries running on the standby; PostgreSQL documents cases where standby queries may be canceled so WAL replay can continue, for example when replaying an <code>ACCESS EXCLUSIVE</code> lock or vacuum cleanup that conflicts with the standby snapshot.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>8.2 Monitor lag</h3>
+<pre><code>-- Primary.
+SELECT
+    application_name,
+    client_addr,
+    state,
+    sync_state,
+    sent_lsn,
+    write_lsn,
+    flush_lsn,
+    replay_lsn,
+    write_lag,
+    flush_lag,
+    replay_lag
+FROM pg_stat_replication
+ORDER BY application_name;
+
+-- Standby.
+SELECT
+    pg_is_in_recovery(),
+    pg_last_wal_receive_lsn(),
+    pg_last_wal_replay_lsn(),
+    now() - pg_last_xact_replay_timestamp() AS replay_delay;</code></pre>
+
+<h3>8.3 Application consistency policy</h3>
+<pre><code>function executeQuery(request):
+    if request.isWrite:
+        return writer.execute(request.sql)
+
+    if request.requiresReadYourWrites:
+        return writer.execute(request.sql)
+
+    if request.maxStalenessAllowsReplica:
+        return replicas.pickHealthy().execute(request.sql)
+
+    return writer.execute(request.sql)</code></pre>
+
+<p>
+Applications should classify queries by consistency requirement rather than route every <code>SELECT</code> to a replica. A query that reads an order immediately after the same request created it, for example, may require the writer; a dashboard aggregate that tolerates seconds of lag may be a good replica candidate.
+</p>
+
+<h3>8.4 Logical replicas</h3>
+<p>
+PostgreSQL logical replication can replicate a subset of tables or rows to a subscriber and can consolidate multiple databases or provide data to separate user groups. It works at logical row-change level rather than by making a byte-for-byte physical standby. Subscriber schemas must be managed separately, and writes to the same replicated data on the subscriber can create conflicts.<sup><a href="#r16">[16]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>-- Publisher
+CREATE PUBLICATION reporting_pub
+FOR TABLE orders, customers;
+
+-- Subscriber
+CREATE SUBSCRIPTION reporting_sub
+CONNECTION 'host=writer.internal dbname=appdb user=repuser'
+PUBLICATION reporting_pub;</code></pre>
+</section>
+
+<section id="routing">
+<h2>9. Connection routing</h2>
+<p>
+Routing can occur in the application, in a connection pool/proxy, through DNS/service discovery, or using client-library host selection. libpq supports multiple hosts in one connection string and <code>target_session_attrs</code> values such as <code>read-write</code>, <code>read-only</code>, <code>primary</code>, <code>standby</code>, and <code>prefer-standby</code>. PostgreSQL 18 also documents <code>load_balance_hosts=random</code>, which randomizes host/address trial order for new connections.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>9.1 Writer routing</h3>
+<pre><code>postgresql://db1,db2,db3/appdb\
+?target_session_attrs=read-write\
+&amp;connect_timeout=3</code></pre>
+
+<p>
+With <code>target_session_attrs=read-write</code>, libpq only accepts a session whose default transaction mode permits writes. When multiple hosts are listed, hosts are tried until an acceptable connection is found.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>9.2 Standby routing</h3>
+<pre><code>postgresql://replica1,replica2,primary/appdb\
+?target_session_attrs=prefer-standby\
+&amp;load_balance_hosts=random\
+&amp;connect_timeout=3</code></pre>
+
+<p>
+This can spread new connections among suitable hosts, but each established connection remains attached to one server; libpq does not route each SQL statement independently after connection establishment. Fine-grained read/write splitting therefore belongs in the application or a proxy/router that understands connection role and transaction state.<sup><a href="#r18">[18]</a></sup>
+</p>
+
+<div class="callout warn">
+<strong>Read routing is a consistency feature, not merely load balancing.</strong> A router needs a policy for replica lag, read-after-write behavior, transaction pinning, failover, and what happens when no sufficiently fresh replica exists.
+</div>
+</section>
+
+<section id="caching">
+<h2>10. Caching</h2>
+
+<h3>10.1 PostgreSQL already has multiple cache layers</h3>
+<p>
+PostgreSQL caches table and index pages in <code>shared_buffers</code> and also benefits from the operating system's filesystem cache. Application caching adds a separate semantic layer: it caches query results or domain objects and can avoid executing PostgreSQL work entirely. These layers solve different problems and should not be conflated.<sup><a href="#r6">[6]</a><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>10.2 Cache-aside pattern</h3>
+<pre><code>function getProduct(productId):
+    key = "product:" + productId
+
+    cached = cache.get(key)
+    if cached exists:
+        return decode(cached)
+
+    row = db.query(
+        "SELECT id, name, price, version FROM product WHERE id = $1",
+        productId
+    )
+
+    cache.set(key, encode(row), ttl = 60 seconds)
+    return row</code></pre>
+
+<h3>10.3 Invalidation matters more than lookup speed</h3>
+<p>
+A cache can reduce read load only if its consistency semantics are acceptable. TTL-based caching deliberately permits staleness until expiration. Write-through or explicit invalidation can improve freshness but creates a dual-system consistency problem: database commit and cache mutation are not ordinarily one atomic transaction. Designing cache keys, TTLs, version fields, and invalidation behavior is therefore part of data correctness, not just performance.
+</p>
+
+<h3>10.4 Good cache candidates</h3>
+<ul>
+<li>Reference data that changes rarely.</li>
+<li>Expensive aggregates whose freshness tolerance is known.</li>
+<li>Public objects with a high read-to-write ratio.</li>
+<li>Derived representations that can be recomputed.</li>
+</ul>
+
+<p>
+Do not cache merely because a query is slow. First determine whether the query should be indexed or rewritten. Caching an inefficient query may hide a capacity problem until cache misses, restarts, or invalidations create a sudden database load spike.
+</p>
+</section>
+
+<section id="write">
+<h2>11. Write scaling</h2>
+<p>
+Write scaling is harder than read scaling because concurrent writers must preserve database invariants. In ordinary PostgreSQL physical replication, the primary is the write authority and standbys replay its WAL, so adding replicas does not multiply write throughput. Logical replication can distribute selected change streams but does not turn a set of independent PostgreSQL publishers/subscribers into a transparent multi-writer distributed database.<sup><a href="#r2">[2]</a><a href="#r16">[16]</a></sup>
+</p>
+
+<h3>11.1 Scale the writer before distributing it</h3>
+<p>
+Before sharding, reduce avoidable write work: batch inserts, avoid unnecessary indexes, keep transactions short, remove redundant updates, tune autovacuum, and ensure storage can sustain WAL and data-file write volume. Native PostgreSQL can often handle much larger workloads after schema and query optimization than an application initially demonstrates.
+</p>
+
+<h3>11.2 Why horizontal write scale changes the data model</h3>
+<p>
+Once rows are split among independent writers, a unique constraint or transaction that spans shards can no longer be enforced by one local PostgreSQL lock manager and transaction manager. The system needs either an application-level protocol or a distributed database layer to locate data and coordinate cross-shard operations. This is the fundamental architectural difference between partitioning inside one PostgreSQL server and sharding across servers.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<section id="partitioning">
+<h2>12. PostgreSQL table partitioning</h2>
+<p>
+Declarative partitioning divides one logical PostgreSQL table into smaller physical tables according to a range, list, or hash partition key. The partitioned parent itself has no storage; rows are routed into child partitions. Partition pruning can remove irrelevant partitions during planning or execution, reducing scanned data when predicates constrain the partition key.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>12.1 Range partitioning example</h3>
+<pre><code>CREATE TABLE events (
+    id           bigint GENERATED ALWAYS AS IDENTITY,
+    tenant_id    bigint NOT NULL,
+    occurred_at  timestamptz NOT NULL,
+    payload      jsonb NOT NULL,
+    PRIMARY KEY (occurred_at, id)
+) PARTITION BY RANGE (occurred_at);
+
+CREATE TABLE events_2026_09
+PARTITION OF events
+FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
+
+CREATE TABLE events_2026_10
+PARTITION OF events
+FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');
+
+CREATE INDEX events_2026_09_tenant_time_idx
+ON events_2026_09 (tenant_id, occurred_at DESC);</code></pre>
+
+<h3>12.2 Hash partitioning example</h3>
+<pre><code>CREATE TABLE account_event (
+    account_id bigint NOT NULL,
+    event_id   uuid NOT NULL,
+    created_at timestamptz NOT NULL,
+    payload    jsonb NOT NULL,
+    PRIMARY KEY (account_id, event_id)
+) PARTITION BY HASH (account_id);
+
+CREATE TABLE account_event_p0 PARTITION OF account_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 0);
+
+CREATE TABLE account_event_p1 PARTITION OF account_event
+FOR VALUES WITH (MODULUS 8, REMAINDER 1);
+
+-- Repeat remainders 2..7.</code></pre>
+
+<h3>12.3 Partitioning is not horizontal server sharding</h3>
+<p>
+Native PostgreSQL partitions are ordinary PostgreSQL relations managed by the same cluster and, unless tablespaces/storage placement are deliberately changed, typically by the same server/storage system. Partitioning can improve pruning, maintenance, archival, and certain access patterns, but it does not create independent write nodes or distribute a transaction across a network. The PostgreSQL documentation also warns that excessive partition counts can increase planning time and per-session memory use; “more partitions” is not automatically better.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>12.4 Operational benefit: drop data instead of deleting it</h3>
+<pre><code>-- Retention for time-partitioned data can become metadata-oriented.
+ALTER TABLE events DETACH PARTITION events_2025_09;
+DROP TABLE events_2025_09;</code></pre>
+
+<p>
+For time-series retention, removing an old partition can be operationally much cheaper than issuing a massive row-by-row <code>DELETE</code> against a monolithic table. Partitioning can therefore be a scalability feature even when it does not add servers.<sup><a href="#r7">[7]</a></sup>
+</p>
+</section>
+
+<section id="sharding">
+<h2>13. Application-level sharding</h2>
+<p>
+Application sharding places subsets of rows on independent PostgreSQL clusters and makes the application responsible for mapping each request to the correct shard. This can scale writes because different shards have different PostgreSQL primaries, but it moves data-placement, cross-shard query, migration, rebalancing, and global-constraint responsibilities into the application/platform layer.
+</p>
+
+<h3>13.1 Simple hash router</h3>
+<pre><code>SHARDS = [
+    "postgresql://shard0/app",
+    "postgresql://shard1/app",
+    "postgresql://shard2/app",
+    "postgresql://shard3/app"
+]
+
+function shardForTenant(tenantId):
+    return stableHash(tenantId) mod length(SHARDS)
+
+function executeForTenant(tenantId, sql, params):
+    shard = shardForTenant(tenantId)
+    return pools[shard].execute(sql, params)</code></pre>
+
+<h3>13.2 Directory-based routing</h3>
+<p>
+A fixed hash is simple but awkward when adding/removing shards because many keys can remap. A directory service or shard map adds a level of indirection: <code>tenant_id → shard_id</code>. The application can migrate one tenant at a time and update the directory after data is synchronized, at the cost of maintaining a highly available routing metadata service.
+</p>
+
+<pre><code>CREATE TABLE shard_directory (
+    tenant_id bigint PRIMARY KEY,
+    shard_id  integer NOT NULL,
+    state     text NOT NULL CHECK (state IN ('active', 'moving'))
+);</code></pre>
+
+<h3>13.3 Choose a shard key from access patterns</h3>
+<p>
+A good shard key distributes storage and write load while keeping common transactions and joins inside one shard. Multi-tenant systems often use <code>tenant_id</code> because most operations naturally belong to one tenant; Citus documentation makes the same locality point for distribution columns, emphasizing that colocating related rows reduces distributed transaction and join cost.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>13.4 Problems the application must solve</h3>
+<ul>
+<li><strong>Global uniqueness:</strong> use UUIDs, shard-prefixed IDs, or a separate global service instead of a sequence local to one shard.</li>
+<li><strong>Cross-shard transactions:</strong> avoid them, redesign ownership, or implement a distributed coordination/saga protocol.</li>
+<li><strong>Cross-shard analytics:</strong> query all shards and merge results, replicate to an analytical store, or use a distributed query layer.</li>
+<li><strong>Rebalancing:</strong> copy a key range/tenant while handling ongoing writes and then switch routing safely.</li>
+<li><strong>Schema changes:</strong> apply migrations consistently to every shard and handle partial deployment failure.</li>
+<li><strong>Hot shards:</strong> a perfectly even tenant count does not guarantee even write or storage load.</li>
+</ul>
+
+<div class="callout warn">
+<strong>Sharding is a data-model commitment.</strong> The shard key becomes part of routing, operational tooling, data migration, and often primary/foreign key design. Changing it later can require moving a large fraction of the dataset.
+</div>
+</section>
+
+<section id="distributed">
+<h2>14. Distributed SQL concepts</h2>
+<p>
+Distributed SQL systems attempt to preserve a relational SQL interface and transactions while partitioning data across multiple nodes. The general problem combines database concerns—schemas, indexes, SQL planning, transactions—with distributed-systems concerns—sharding, replica placement, consensus, quorum, network partitions, clocks, rebalancing, and partial failures. Systems differ substantially in where they place these responsibilities.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a></sup>
+</p>
+
+<h3>14.1 Shards, tablets, and ranges</h3>
+<p>
+A distributed table is divided into independently placeable units. Citus calls the physical pieces of distributed tables <em>shards</em>; YugabyteDB calls them <em>tablets</em>; CockroachDB's distributed key-value layer divides the keyspace into <em>ranges</em>. These units let the system spread storage and work across nodes.<sup><a href="#r20">[20]</a><a href="#r23">[23]</a><a href="#r28">[28]</a></sup>
+</p>
+
+<h3>14.2 Replication and consensus</h3>
+<p>
+Horizontal partitioning increases capacity but does not itself provide high availability, so distributed databases commonly replicate each shard. Raft is a replicated-log consensus algorithm based on leader election, log replication, and majority agreement. YugabyteDB uses Raft groups for tablets; CockroachDB uses Raft for replicated ranges.<sup><a href="#r25">[25]</a><a href="#r27">[27]</a><a href="#r28">[28]</a></sup>
+</p>
+
+<div class="diagram">logical table
+    |
+    +---- shard A ---- replicas A1 A2 A3 ---- Raft / quorum
+    |
+    +---- shard B ---- replicas B1 B2 B3 ---- Raft / quorum
+    |
+    +---- shard C ---- replicas C1 C2 C3 ---- Raft / quorum
+
+A distributed transaction may need to coordinate operations that touch
+more than one independently replicated shard.</div>
+
+<h3>14.3 Local versus distributed transactions</h3>
+<p>
+A transaction whose rows all belong to one shard can often be processed with less network coordination than a transaction spanning several shards. This is why distribution keys and data locality matter so much. Citus explicitly encourages colocating related tenant data; YugabyteDB and CockroachDB distribute transactional work across tablet/range groups when a transaction touches multiple partitions.<sup><a href="#r20">[20]</a><a href="#r23">[23]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>14.4 Quorum has a latency cost</h3>
+<p>
+Strongly consistent replicated writes require communication among replicas. Raft commits replicated log entries based on majority agreement, so placing voting replicas across distant regions can put inter-region network latency on the write path. Multi-region distributed databases therefore expose data-locality and replication-placement controls so operators can trade write latency, read locality, and failure tolerance deliberately.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>14.5 Distributed SQL is not identical to PostgreSQL</h3>
+<p>
+PostgreSQL compatibility has layers: wire protocol, SQL syntax, types, functions, extensions, transaction semantics, catalog behavior, operational tools, and internals. Citus is a PostgreSQL extension and runs PostgreSQL on coordinator/worker nodes. YugabyteDB's YSQL reuses PostgreSQL query-layer code and is wire-format compatible with PostgreSQL while using a different distributed storage layer. CockroachDB implements a separate distributed database that speaks the PostgreSQL wire protocol and supports much PostgreSQL syntax, but it is not the PostgreSQL server implementation.<sup><a href="#r20">[20]</a><a href="#r22">[22]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>14.6 Spanner as a foundational distributed-SQL design</h3>
+<p>
+Google's Spanner paper describes a globally distributed, synchronously replicated, multi-version database supporting externally consistent distributed transactions and automatic data movement. Its architecture influenced later distributed SQL systems and formalized many of the design tensions around global replication, placement, time, consistency, and transaction coordination.<sup><a href="#r26">[26]</a></sup>
+</p>
+</section>
+
+<section id="citus">
+<h2>15. Citus</h2>
+<p>
+Citus is a PostgreSQL extension that turns multiple PostgreSQL servers into a distributed cluster. Current Citus documentation describes a coordinator node and worker nodes in a shared-nothing architecture. Applications normally connect to the coordinator, which uses distribution metadata to route a query to one worker or parallelize it across workers and combine the results.<sup><a href="#r20">[20]</a></sup>
+</p>
+
+<h3>15.1 Table types and distribution</h3>
+<p>
+Citus supports distributed tables, reference tables, and ordinary local PostgreSQL tables. Distributed table rows are assigned to shards based on a distribution column. Reference tables are useful for relatively small data that must be available alongside distributed data across workers. Related distributed tables can be colocated so rows with the same distribution-key value are stored on the same worker placement, reducing the need for network data movement during tenant-local joins and transactions.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>15.2 Multi-tenant Citus example</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS citus;
+
+CREATE TABLE tenant (
+    tenant_id bigint PRIMARY KEY,
+    name text NOT NULL
+);
+
+CREATE TABLE customer (
+    tenant_id bigint NOT NULL,
+    customer_id bigint NOT NULL,
+    name text NOT NULL,
+    PRIMARY KEY (tenant_id, customer_id)
+);
+
+CREATE TABLE orders (
+    tenant_id bigint NOT NULL,
+    order_id bigint NOT NULL,
+    customer_id bigint NOT NULL,
+    total numeric(12,2) NOT NULL,
+    PRIMARY KEY (tenant_id, order_id),
+    FOREIGN KEY (tenant_id, customer_id)
+      REFERENCES customer(tenant_id, customer_id)
+);
+
+SELECT create_reference_table('tenant');
+SELECT create_distributed_table('customer', 'tenant_id');
+SELECT create_distributed_table('orders', 'tenant_id');</code></pre>
+
+<p>
+The tenant ID is intentionally included in keys and common query predicates. Citus documentation recommends choosing distribution columns so related data is colocated and common operations can be executed on one worker; distributing on the wrong key can force cross-node repartitioning or reduce which constraints can be enforced efficiently.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>15.3 Query routing</h3>
+<pre><code>-- Tenant-local: typically targets one shard/worker.
+SELECT order_id, total
+FROM orders
+WHERE tenant_id = 1042
+ORDER BY order_id DESC
+LIMIT 50;
+
+-- Cross-tenant aggregation: can be parallelized across shards.
+SELECT tenant_id, sum(total)
+FROM orders
+GROUP BY tenant_id
+ORDER BY sum(total) DESC
+LIMIT 100;</code></pre>
+
+<h3>15.4 Scale out and rebalance</h3>
+<p>
+Adding workers increases the hardware pool, but existing shards may need to move so the new capacity receives data and work. Citus supplies rebalancing functions that plan and execute shard movement; current documentation exposes functions such as <code>citus_rebalance_start()</code> and planning helpers for reviewing moves before execution.<sup><a href="#r32">[32]</a></sup>
+</p>
+
+<h3>15.5 Where Citus fits</h3>
+<p>
+Citus is particularly attractive when retaining PostgreSQL itself is important and the workload has a strong distribution key such as tenant, customer, device, or another dimension that allows most transactions to remain colocated. Cross-shard joins and transactions are possible in many cases, but their cost and feature behavior differ from single-node PostgreSQL, so distribution-key design is the central architectural decision.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup>
+</p>
+</section>
+
+<section id="yugabyte">
+<h2>16. YugabyteDB</h2>
+<p>
+YugabyteDB is a distributed SQL database with a PostgreSQL-compatible YSQL API. The YSQL query layer reuses PostgreSQL query-layer code and is wire-format compatible with PostgreSQL, while the storage layer is YugabyteDB's DocDB rather than PostgreSQL heap/index storage. YugabyteDB divides tables into tablets and distributes those tablets across tablet servers.<sup><a href="#r22">[22]</a><a href="#r23">[23]</a></sup>
+</p>
+
+<h3>16.1 Architecture</h3>
+<p>
+YugabyteDB separates a query layer from a distributed storage layer. YB-TServers serve application data and host tablet peers; each tablet has replicas that form a Raft group. YugabyteDB supports hash and range sharding and automatically distributes tablets across nodes. Its master service manages cluster metadata and background orchestration.<sup><a href="#r22">[22]</a>-<a href="#r24">[24]</a></sup>
+</p>
+
+<div class="diagram">PostgreSQL clients / drivers
+          |
+          | YSQL / PostgreSQL wire format
+          v
+ +-----------------------------+
+ | YB-TServer query layer      |
+ | PostgreSQL-derived YSQL     |
+ +-----------------------------+
+          |
+          v
+ +-----------------------------+
+ | DocDB distributed storage   |
+ | table -> tablets            |
+ | tablet -> Raft replicas     |
+ +-----------------------------+
+      /          |          \
+   node A      node B      node C</div>
+
+<h3>16.2 Ordinary SQL, distributed storage</h3>
+<pre><code>CREATE TABLE account_event (
+    tenant_id   bigint NOT NULL,
+    account_id  bigint NOT NULL,
+    event_id    uuid NOT NULL,
+    created_at  timestamptz NOT NULL,
+    payload     jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, account_id, event_id)
+);
+
+CREATE INDEX account_event_time_idx
+ON account_event (tenant_id, account_id, created_at DESC);</code></pre>
+
+<p>
+From the application perspective, YSQL exposes familiar PostgreSQL-like tables and SQL while the storage layer maps rows into tablets. The product documentation emphasizes that applications interact with the table as one logical unit even though its rows can be distributed across multiple nodes.<sup><a href="#r23">[23]</a><a href="#r24">[24]</a></sup>
+</p>
+
+<h3>16.3 Horizontal write scale</h3>
+<p>
+Tablet leaders are spread across YB-TServers, allowing different shards to accept writes through different leaders. Replication factor determines the number of peers for each tablet; writes requiring strong consistency are replicated through the tablet's Raft group. As nodes are added, YugabyteDB can rebalance tablet leaders and replicas across the cluster.<sup><a href="#r24">[24]</a><a href="#r33">[33]</a></sup>
+</p>
+
+<h3>16.4 Compatibility boundary</h3>
+<p>
+Because YSQL is not backed by PostgreSQL's ordinary storage manager, compatibility should be evaluated at the application feature level. YugabyteDB documents broad PostgreSQL feature support together with limitations/deviations. Applications relying on unusual extensions, low-level PostgreSQL storage behavior, superuser operations, or exact planner/runtime behavior need explicit validation rather than assuming wire compatibility implies identical PostgreSQL semantics.<sup><a href="#r22">[22]</a><a href="#r34">[34]</a></sup>
+</p>
+</section>
+
+<section id="cockroach">
+<h2>17. CockroachDB</h2>
+<p>
+CockroachDB is a distributed SQL database that implements the PostgreSQL wire protocol and supports much PostgreSQL syntax and client tooling, but it is an independent database implementation. Every CockroachDB node can act as a SQL gateway; SQL operations are translated into operations over a distributed key-value layer whose keyspace is divided into replicated ranges.<sup><a href="#r29">[29]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>17.1 Ranges and Raft</h3>
+<p>
+CockroachDB splits key-value data into ranges and replicates ranges across nodes. Raft is used to keep range replicas consistent. Because many ranges exist across a cluster, work and storage can be distributed across nodes and rebalanced rather than requiring one PostgreSQL-style primary to own every write.<sup><a href="#r28">[28]</a><a href="#r29">[29]</a></sup>
+</p>
+
+<h3>17.2 Transaction behavior</h3>
+<p>
+CockroachDB's developer documentation states that <code>SERIALIZABLE</code> is the default isolation level. Under contention, some transactions can require retries; CockroachDB can retry certain cases internally, while other cases return a retry error to the client. This is an application-visible distributed database behavior that PostgreSQL-compatible clients must handle correctly.<sup><a href="#r31">[31]</a></sup>
+</p>
+
+<pre><code>function runTransactionWithRetry(work):
+    for attempt in 1..MAX_ATTEMPTS:
+        begin transaction
+        try:
+            result = work()
+            commit
+            return result
+        catch retryable_serialization_error:
+            rollback
+            sleep(backoffWithJitter(attempt))
+    throw "retry budget exhausted"</code></pre>
+
+<h3>17.3 Multi-region locality</h3>
+<p>
+CockroachDB provides multi-region table locality abstractions, including regional tables, regional-by-row tables, and global tables. For regional-by-row tables, rows are associated with a region and CockroachDB manages the underlying placement configuration. This lets application architects trade local access latency, write latency, and resilience through database-level locality settings rather than hand-managing independent PostgreSQL shards.<sup><a href="#r30">[30]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username STRING NOT NULL UNIQUE
+) LOCALITY REGIONAL BY ROW;</code></pre>
+
+<h3>17.4 PostgreSQL compatibility boundary</h3>
+<p>
+PostgreSQL drivers often connect successfully because of the wire-protocol compatibility, but CockroachDB documentation explicitly frames compatibility as support for the PostgreSQL wire protocol and most PostgreSQL syntax/features rather than identity with PostgreSQL. Transaction retry semantics, supported extensions, types/functions, operational tooling, and performance behavior should all be validated for the application.<sup><a href="#r31">[31]</a></sup>
+</p>
+</section>
+
+<section id="comparison">
+<h2>18. Architecture comparison</h2>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>PostgreSQL + replicas</th>
+<th>App-sharded PostgreSQL</th>
+<th>Citus</th>
+<th>YugabyteDB</th>
+<th>CockroachDB</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core implementation</td>
+<td>PostgreSQL</td>
+<td>Multiple independent PostgreSQL clusters</td>
+<td>PostgreSQL + Citus extension</td>
+<td>PostgreSQL-derived YSQL query layer + DocDB storage</td>
+<td>Independent distributed SQL implementation with PostgreSQL wire compatibility</td>
+</tr>
+<tr>
+<td>Horizontal read scale</td>
+<td>Yes, hot standbys/logical subscribers</td>
+<td>Yes, per-shard replicas</td>
+<td>Yes, worker/shard parallelism plus PostgreSQL HA options</td>
+<td>Yes, distributed tablets/replicas</td>
+<td>Yes, distributed ranges/replicas</td>
+</tr>
+<tr>
+<td>Horizontal write scale</td>
+<td>No single-primary write scale-out</td>
+<td>Yes, if writes distribute across shards</td>
+<td>Yes, across distributed-table shards/workers</td>
+<td>Yes, across tablet leaders</td>
+<td>Yes, across ranges</td>
+</tr>
+<tr>
+<td>Data placement key</td>
+<td>Not required for server distribution</td>
+<td>Application shard key</td>
+<td>Distribution column / distributed schema strategy</td>
+<td>Hash/range sharding into tablets</td>
+<td>Key ranges plus locality/placement policies</td>
+</tr>
+<tr>
+<td>Cross-partition transaction</td>
+<td>Local PostgreSQL transaction</td>
+<td>Application protocol required if shards differ</td>
+<td>Supported with distributed cost/constraints</td>
+<td>Distributed transaction layer</td>
+<td>Distributed transaction layer</td>
+</tr>
+<tr>
+<td>PostgreSQL extension compatibility</td>
+<td>Native</td>
+<td>Native on each shard</td>
+<td>PostgreSQL extension ecosystem subject to Citus/distribution constraints</td>
+<td>Compatibility varies; storage/internals differ</td>
+<td>Not PostgreSQL server extensions</td>
+</tr>
+<tr>
+<td>Main architectural burden</td>
+<td>Single writer ceiling / replica lag</td>
+<td>Application routing and shard lifecycle</td>
+<td>Distribution-key and colocation design</td>
+<td>Distributed-system placement/transaction behavior</td>
+<td>Distributed transaction retries/locality/compatibility differences</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>
+The table is intentionally architectural rather than a performance ranking. Throughput and latency depend on schema, access patterns, transaction locality, replication placement, hardware, network latency, data skew, indexes, and product configuration. The correct comparison is a production-shaped benchmark with the actual consistency and durability settings required by the application.<sup><a href="#r20">[20]</a><a href="#r22">[22]</a><a href="#r31">[31]</a></sup>
+</p>
+</section>
+
+<section id="decision">
+<h2>19. Scaling decision framework</h2>
+
+<h3>19.1 If CPU is the bottleneck</h3>
+<p>
+First optimize SQL and indexes, then use concurrency/parallelism effectively, then scale CPU. Add read replicas only if a meaningful fraction of CPU work is from reads that can move off the writer. Sharding is justified only when one writer's compute remains the limiting factor after simpler measures.<sup><a href="#r12">[12]</a><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>19.2 If memory is the bottleneck</h3>
+<p>
+Identify whether the problem is cache misses, query workspaces, connection count, or another process. Add RAM and tune <code>shared_buffers</code>/<code>work_mem</code> with concurrency in mind. A larger machine is normally less disruptive than distributing data merely to obtain more aggregate RAM.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>19.3 If storage/IOPS is the bottleneck</h3>
+<p>
+Measure <code>pg_stat_io</code>, <code>pg_stat_wal</code>, checkpoints, query buffer reads, and temporary I/O. Improve indexes/query shapes, cache effectiveness, storage latency/throughput, and checkpoint/WAL configuration before adding architectural layers. Replicas can absorb read I/O but not primary WAL generation.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>19.4 If reads dominate</h3>
+<p>
+Physical replicas are the native PostgreSQL scale-out mechanism. Define which reads tolerate lag, route them deliberately, monitor replay lag and conflicts, and keep strict read-after-write paths on the writer when required.<sup><a href="#r15">[15]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<h3>19.5 If one large table is operationally painful</h3>
+<p>
+Use native declarative partitioning if pruning, retention, archival, loading, or maintenance can be organized around a natural key such as time or tenant. Partitioning can be highly valuable without adding servers, but it should not be mistaken for distributed write scale-out.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>19.6 If writes exceed one primary</h3>
+<p>
+Choose among application sharding, Citus, or a distributed SQL database based on transaction locality and PostgreSQL-compatibility requirements. If nearly every transaction belongs to one tenant/account, a tenant shard key can keep operations local. If transactions frequently span arbitrary keys, distributed transaction cost becomes central and should be benchmarked directly.<sup><a href="#r20">[20]</a><a href="#r23">[23]</a><a href="#r31">[31]</a></sup>
+</p>
+
+<h3>19.7 If multi-region writes are required</h3>
+<p>
+The speed of light and quorum placement become application constraints. A strongly consistent write replicated across distant regions necessarily involves network communication. Distributed systems offer placement controls and locality strategies, but no topology can provide synchronous intercontinental replication without paying some inter-region latency on operations that require those remote replicas.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a><a href="#r30">[30]</a></sup>
+</p>
+
+<h3>19.8 Practical checklist</h3>
+<ol class="checklist">
+<li><strong>Profile first:</strong> identify CPU, memory, I/O, lock, connection, WAL, or dataset limits.</li>
+<li><strong>Optimize SQL/schema:</strong> bad work scales badly.</li>
+<li><strong>Scale up:</strong> preserve single-node semantics while they remain economical.</li>
+<li><strong>Add read replicas:</strong> only for reads with an explicit staleness policy.</li>
+<li><strong>Add caching:</strong> only with a defined freshness/invalidation contract.</li>
+<li><strong>Partition:</strong> for pruning, lifecycle, and maintenance—not as a substitute for sharding.</li>
+<li><strong>Choose a shard/distribution key carefully:</strong> optimize for transaction locality and even load.</li>
+<li><strong>Benchmark cross-shard work:</strong> joins, uniqueness, transactions, and fan-out aggregates.</li>
+<li><strong>Model skew:</strong> average load can hide one hot tenant/key.</li>
+<li><strong>Model failure:</strong> replica loss, node loss, region loss, network partition, rebalance, and retry behavior.</li>
+<li><strong>Validate PostgreSQL compatibility:</strong> test required extensions, SQL behavior, drivers, migrations, and tooling.</li>
+<li><strong>Measure end-to-end:</strong> distributed database scaling is constrained by application latency, not only database throughput.</li>
+</ol>
+
+<div class="callout ok">
+<strong>Scaling principle:</strong> use distribution to solve a measured distribution problem. A larger or better-tuned PostgreSQL primary is simpler than a distributed database; a distributed database becomes valuable when the workload genuinely requires resources, writes, or geographic placement that one primary cannot provide.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. PostgreSQL 18.6 documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Replication settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-replication.html">https://www.postgresql.org/docs/18/runtime-config-replication.html</a></li>
+
+<li id="r3">Citus Data. Concepts [Internet]. Citus 13.0 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.citusdata.com/en/stable/get_started/concepts.html">https://docs.citusdata.com/en/stable/get_started/concepts.html</a></li>
+
+<li id="r4">YugabyteDB. Architecture [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/architecture/">https://docs.yugabyte.com/stable/architecture/</a></li>
+
+<li id="r5">Cockroach Labs. Developer basics [Internet]. CockroachDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.cockroachlabs.com/docs/stable/developer-basics.html">https://www.cockroachlabs.com/docs/stable/developer-basics.html</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Resource consumption [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. Table partitioning [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-partitioning.html">https://www.postgresql.org/docs/18/ddl-partitioning.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Logical replication [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication.html">https://www.postgresql.org/docs/18/logical-replication.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. EXPLAIN [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-explain.html">https://www.postgresql.org/docs/18/sql-explain.html</a>; <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. Monitoring database activity [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/monitoring.html">https://www.postgresql.org/docs/18/monitoring.html</a></li>
+
+<li id="r11">PostgreSQL Global Development Group. Planner cost and EXPLAIN concepts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/using-explain.html">https://www.postgresql.org/docs/18/using-explain.html</a></li>
+
+<li id="r12">PostgreSQL Global Development Group. Parallel query [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/parallel-query.html">https://www.postgresql.org/docs/18/parallel-query.html</a>; <a href="https://www.postgresql.org/docs/18/when-can-parallel-query-be-used.html">https://www.postgresql.org/docs/18/when-can-parallel-query-be-used.html</a></li>
+
+<li id="r13">PostgreSQL Global Development Group. Worker-process resource settings [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. pg_stat_statements [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Hot standby and warm standby [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/hot-standby.html">https://www.postgresql.org/docs/18/hot-standby.html</a>; <a href="https://www.postgresql.org/docs/18/warm-standby.html">https://www.postgresql.org/docs/18/warm-standby.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. Logical replication architecture [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-architecture.html">https://www.postgresql.org/docs/18/logical-replication-architecture.html</a></li>
+
+<li id="r17">PostgreSQL Global Development Group. Logical replication publication and subscription [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-publication.html">https://www.postgresql.org/docs/18/logical-replication-publication.html</a>; <a href="https://www.postgresql.org/docs/18/logical-replication-subscription.html">https://www.postgresql.org/docs/18/logical-replication-subscription.html</a></li>
+
+<li id="r18">PostgreSQL Global Development Group. libpq database connection control functions: multiple hosts, target_session_attrs, load_balance_hosts [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/libpq-connect.html">https://www.postgresql.org/docs/18/libpq-connect.html</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. Logical replication quick setup [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-quick-setup.html">https://www.postgresql.org/docs/18/logical-replication-quick-setup.html</a></li>
+
+<li id="r20">Citus Data. Concepts: nodes, coordinator/workers, distributed tables and distribution columns [Internet]. Citus 13.0 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.citusdata.com/en/stable/get_started/concepts.html">https://docs.citusdata.com/en/stable/get_started/concepts.html</a></li>
+
+<li id="r21">Citus Data. Multi-tenant application design and distribution strategy [Internet]. Citus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.citusdata.com/en/stable/use_cases/multi_tenant.html">https://docs.citusdata.com/en/stable/use_cases/multi_tenant.html</a>; <a href="https://docs.citusdata.com/en/stable/develop/migration_mt_schema.html">https://docs.citusdata.com/en/stable/develop/migration_mt_schema.html</a></li>
+
+<li id="r22">YugabyteDB. Query layer and YSQL [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/architecture/query-layer/">https://docs.yugabyte.com/stable/architecture/query-layer/</a></li>
+
+<li id="r23">YugabyteDB. DocDB sharding layer [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/architecture/docdb-sharding/">https://docs.yugabyte.com/stable/architecture/docdb-sharding/</a></li>
+
+<li id="r24">YugabyteDB. YB-TServer service [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/architecture/yb-tserver/">https://docs.yugabyte.com/stable/architecture/yb-tserver/</a></li>
+
+<li id="r25">Ongaro D, Ousterhout J. In search of an understandable consensus algorithm. Proceedings of the 2014 USENIX Annual Technical Conference (USENIX ATC 14). Philadelphia: USENIX Association; 2014. p. 305-319. Available from: <a href="https://www.usenix.org/conference/atc14/technical-sessions/presentation/ongaro">https://www.usenix.org/conference/atc14/technical-sessions/presentation/ongaro</a></li>
+
+<li id="r26">Corbett JC, Dean J, Epstein M, Fikes A, Frost C, Furman JJ, et al. Spanner: Google's globally-distributed database. Proceedings of the 10th USENIX Symposium on Operating Systems Design and Implementation (OSDI 12). USENIX Association; 2012. Available from: <a href="https://research.google/pubs/spanner-googles-globally-distributed-database-2/">https://research.google/pubs/spanner-googles-globally-distributed-database-2/</a></li>
+
+<li id="r27">YugabyteDB. Architecture and replication [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/architecture/">https://docs.yugabyte.com/stable/architecture/</a></li>
+
+<li id="r28">Cockroach Labs. Distributed database and replication concepts [Internet]. Cockroach Labs; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.cockroachlabs.com/glossary/distributed-db/">https://www.cockroachlabs.com/glossary/distributed-db/</a>; <a href="https://www.cockroachlabs.com/glossary/distributed-db/replication-layer/">https://www.cockroachlabs.com/glossary/distributed-db/replication-layer/</a></li>
+
+<li id="r29">Cockroach Labs. CockroachDB architecture design [Internet]. CockroachDB source documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://github.com/cockroachdb/cockroach/blob/master/docs/design.md">https://github.com/cockroachdb/cockroach/blob/master/docs/design.md</a></li>
+
+<li id="r30">Cockroach Labs. Multi-region table locality and regional-by-row data placement [Internet]. CockroachDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.cockroachlabs.com/docs/stable/multiregion-overview.html">https://www.cockroachlabs.com/docs/stable/multiregion-overview.html</a></li>
+
+<li id="r31">Cockroach Labs. Developer basics: PostgreSQL compatibility, transactions, and retries [Internet]. CockroachDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.cockroachlabs.com/docs/stable/developer-basics.html">https://www.cockroachlabs.com/docs/stable/developer-basics.html</a></li>
+
+<li id="r32">Citus Data. Citus utility functions and shard rebalancing [Internet]. Citus Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.citusdata.com/en/stable/develop/api_udf.html">https://docs.citusdata.com/en/stable/develop/api_udf.html</a></li>
+
+<li id="r33">YugabyteDB. Scaling with YugabyteDB [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/develop/tutorials/build-and-learn/chapter2-scaling-with-yugabytedb/">https://docs.yugabyte.com/stable/develop/tutorials/build-and-learn/chapter2-scaling-with-yugabytedb/</a></li>
+
+<li id="r34">YugabyteDB. YSQL language features and PostgreSQL compatibility [Internet]. YugabyteDB Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.yugabyte.com/stable/explore/ysql-language-features/">https://docs.yugabyte.com/stable/explore/ysql-language-features/</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical scaling reference. Performance limits are workload-specific, and distributed systems change transaction, latency, failure, and compatibility characteristics. Benchmark the exact schema, query mix, durability settings, replication topology, network distances, driver behavior, and software versions intended for production.
+</p>
+</footer>
+
+</body>
+</html>

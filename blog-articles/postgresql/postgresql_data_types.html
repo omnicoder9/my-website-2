@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL data types: numeric, character, date/time, boolean, bytea, arrays, JSON/JSONB, XML, UUID, enum, ranges, multiranges, composite, domains, network, geometric and full-text-search types.">
+<title>PostgreSQL Data Types</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}.dek{max-width:1050px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+p{margin:.92em 0}a{color:var(--accent)}sup a{text-decoration:none;font-weight:700}code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:900px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Data Types</h1>
+<p class="dek">A technical guide to PostgreSQL's scalar and specialized type system: integers and exact/inexact numerics, strings, date/time, Boolean and binary data, arrays, JSON/JSONB, XML, UUID, enums, ranges and multiranges, composite and domain types, network and geometric types, and full-text-search types.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+<main>
+
+<section id="abstract"><h2>Abstract</h2>
+<p>PostgreSQL has a rich, extensible type system. Built-in scalar types cover exact and approximate numerics, strings, temporal values, Boolean values and raw bytes; specialized types represent UUIDs, network addresses, geometric objects, JSON/XML, arrays, ranges and full-text-search structures. PostgreSQL also lets users define enum, composite, range, domain and fully custom base types, and its operator/index infrastructure is strongly type-directed.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup></p>
+<p>Type choice is part of schema semantics. <code>numeric</code>/<code>decimal</code> provide exact decimal arithmetic where floating-point rounding would be inappropriate; <code>text</code> and unconstrained <code>varchar</code> avoid arbitrary string limits; <code>timestamptz</code> represents instants and is stored internally in UTC while displaying in the session time zone; <code>bytea</code> stores arbitrary octets; and network/range/full-text types supply validation and operators that plain strings cannot.<sup><a href="#r3">[3]</a>-<a href="#r7">[7]</a></sup></p>
+<p>Structured types are not interchangeable. <code>json</code> preserves the original JSON text, including whitespace and duplicate keys, whereas <code>jsonb</code> stores a decomposed representation, normalizes object representation, keeps only the last duplicate key, supports containment semantics and can be indexed effectively with GIN. Arrays are strongly typed homogeneous collections. Composite values are typed rows. Domains restrict an underlying type with reusable constraints. Range and multirange types encode contiguous and non-contiguous ordered intervals and integrate with GiST/SP-GiST and exclusion/temporal constraints.<sup><a href="#r8">[8]</a>-<a href="#r12">[12]</a></sup></p>
+</section>
+
+<nav class="toc"><h2>Contents</h2><ol>
+<li><a href="#system">PostgreSQL type system</a></li><li><a href="#numeric">Numeric types</a></li><li><a href="#integers">smallint/integer/bigint</a></li><li><a href="#decimal">numeric/decimal</a></li>
+<li><a href="#float">real/double precision</a></li><li><a href="#character">Character types</a></li><li><a href="#char">char/varchar/text</a></li><li><a href="#datetime">Date/time types</a></li>
+<li><a href="#date">date/time</a></li><li><a href="#timestamp">timestamp/timestamptz</a></li><li><a href="#interval">interval</a></li><li><a href="#boolean">boolean</a></li>
+<li><a href="#binary">bytea</a></li><li><a href="#arrays">Arrays</a></li><li><a href="#json">JSON and JSONB</a></li><li><a href="#xml">XML</a></li>
+<li><a href="#uuid">UUID</a></li><li><a href="#enum">ENUM</a></li><li><a href="#range">Range types</a></li><li><a href="#multirange">Multirange types</a></li>
+<li><a href="#composite">Composite types</a></li><li><a href="#domain">Domain types</a></li><li><a href="#network">Network types</a></li><li><a href="#geometric">Geometric types</a></li>
+<li><a href="#fts">Full-text-search types</a></li><li><a href="#casts">Casts/type resolution</a></li><li><a href="#storage">Storage and TOAST</a></li><li><a href="#design">Type-design guidance</a></li>
+<li><a href="#pitfalls">Common pitfalls</a></li><li><a href="#checklist">Production checklist</a></li><li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="system"><h2>1. PostgreSQL's type system</h2>
+<p>Every PostgreSQL value has a data type. Types determine valid input syntax, binary representation, comparison/arithmetic semantics, casts, operators, functions, statistics behavior and available index operator classes. Built-in and user-defined types are cataloged in <code>pg_type</code>; auxiliary catalogs such as <code>pg_range</code> add type-specific metadata.<sup><a href="#r1">[1]</a><a href="#r13">[13]</a><a href="#r14">[14]</a></sup></p>
+
+<pre><code>SELECT
+    n.nspname AS schema_name,
+    t.typname,
+    t.typtype,
+    t.typcategory,
+    t.typlen
+FROM pg_type AS t
+JOIN pg_namespace AS n
+  ON n.oid = t.typnamespace
+WHERE n.nspname IN ('pg_catalog', 'app')
+ORDER BY n.nspname, t.typname;</code></pre>
+
+<div class="table-wrap"><table><thead><tr><th>Family</th><th>Representative types</th><th>Core semantic purpose</th></tr></thead><tbody>
+<tr><td>Exact scalar</td><td><code>smallint</code>, <code>integer</code>, <code>bigint</code>, <code>numeric</code></td><td>Exact whole/decimal values</td></tr>
+<tr><td>Approximate scalar</td><td><code>real</code>, <code>double precision</code></td><td>Floating-point numeric computation</td></tr>
+<tr><td>String/binary</td><td><code>text</code>, <code>varchar</code>, <code>char</code>, <code>bytea</code></td><td>Encoded text versus arbitrary octets</td></tr>
+<tr><td>Temporal</td><td><code>date</code>, <code>time</code>, <code>timestamp</code>, <code>timestamptz</code>, <code>interval</code></td><td>Calendar/time/instant/duration values</td></tr>
+<tr><td>Semi-structured</td><td><code>json</code>, <code>jsonb</code>, <code>xml</code></td><td>Validated structured documents/content</td></tr>
+<tr><td>Collections/rows</td><td>arrays, composite types</td><td>Typed collections and row structures</td></tr>
+<tr><td>Specialized</td><td><code>uuid</code>, network, range, geometric, <code>tsvector</code>/<code>tsquery</code></td><td>Domain-specific validation/operators/indexing</td></tr>
+<tr><td>User-defined semantic</td><td>enum, domain, custom range/base type</td><td>Application-specific type contracts</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="numeric"><h2>2. Numeric types</h2>
+<p>PostgreSQL numeric types include two-, four- and eight-byte integers, exact arbitrary-precision <code>numeric</code>/<code>decimal</code>, and four-/eight-byte inexact floating-point types. Integer overflow raises an error rather than silently wrapping. <code>numeric</code> is recommended where exactness matters, while floating-point arithmetic trades exact decimal representation for hardware-friendly approximate computation.<sup><a href="#r3">[3]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Type</th><th>Storage</th><th>Range/precision</th><th>Typical use</th></tr></thead><tbody>
+<tr><td><code>smallint</code></td><td>2 bytes</td><td>-32,768 to 32,767</td><td>Compact bounded integers</td></tr>
+<tr><td><code>integer</code></td><td>4 bytes</td><td>-2,147,483,648 to 2,147,483,647</td><td>Default general-purpose integer</td></tr>
+<tr><td><code>bigint</code></td><td>8 bytes</td><td>Approx. ±9.22×10<sup>18</sup></td><td>Large identifiers/counters</td></tr>
+<tr><td><code>numeric</code>/<code>decimal</code></td><td>Variable</td><td>User-specified or very large precision</td><td>Money/measurements requiring exact decimal semantics</td></tr>
+<tr><td><code>real</code></td><td>4 bytes</td><td>Approx. 6 decimal digits precision</td><td>Approximate numeric values</td></tr>
+<tr><td><code>double precision</code></td><td>8 bytes</td><td>Approx. 15 decimal digits precision</td><td>Scientific/statistical computation</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="integers"><h2>3. <code>smallint</code>, <code>integer</code>, and <code>bigint</code></h2>
+<p>These types store signed whole numbers. PostgreSQL describes <code>integer</code> as the usual choice because it balances storage, range and performance; <code>smallint</code> saves two bytes where ranges are truly small, and <code>bigint</code> is required when a four-byte integer might overflow.<sup><a href="#r3">[3]</a></sup></p>
+
+<pre><code>CREATE TABLE metrics.counter (
+    shard_id smallint NOT NULL,
+    event_count bigint NOT NULL DEFAULT 0,
+    retry_count integer NOT NULL DEFAULT 0
+);</code></pre>
+
+<p>Choose integer width from maximum lifetime values, not current sample values. Changing a key type after billions of rows and foreign-key references exist is operationally much harder than choosing sufficient range initially.</p>
+</section>
+
+<section id="decimal"><h2>4. <code>numeric</code> and <code>decimal</code></h2>
+<p><code>numeric</code> and <code>decimal</code> are equivalent exact types. Declaring <code>numeric(p,s)</code> constrains precision and scale; unconstrained <code>numeric</code> can store values up to PostgreSQL's implementation limits. Exact arithmetic is especially appropriate for money, accounting, exact ratios and other domains where binary floating-point rounding is unacceptable.<sup><a href="#r3">[3]</a></sup></p>
+
+<pre><code>CREATE TABLE billing.invoice (
+    invoice_id bigint PRIMARY KEY,
+    subtotal numeric(14,2) NOT NULL,
+    tax      numeric(14,2) NOT NULL,
+    total    numeric(14,2) NOT NULL
+);</code></pre>
+
+<pre><code>SELECT
+    0.1::numeric + 0.2::numeric AS exact_decimal;</code></pre>
+
+<p>PostgreSQL <code>numeric</code> also supports special values such as <code>Infinity</code>, <code>-Infinity</code> and <code>NaN</code> in supported declarations; constrained application domains may still reject these through explicit checks when they are not meaningful.<sup><a href="#r3">[3]</a></sup></p>
+</section>
+
+<section id="float"><h2>5. <code>real</code> and <code>double precision</code></h2>
+<p><code>real</code> and <code>double precision</code> are inexact floating-point types based on the platform's IEEE 754 implementation. Many decimal fractions cannot be represented exactly in binary floating point, so direct equality expectations can be inappropriate after computation. Use them for measurements, simulation and numerical workloads where approximation is part of the domain rather than for exact currency arithmetic.<sup><a href="#r3">[3]</a></sup></p>
+
+<pre><code>CREATE TABLE telemetry.sensor_reading (
+    sensor_id bigint NOT NULL,
+    measured_at timestamptz NOT NULL,
+    temperature double precision NOT NULL
+);</code></pre>
+</section>
+
+<section id="character"><h2>6. Character types</h2>
+<p>PostgreSQL's general-purpose character types are fixed-length <code>character(n)</code>/<code>char(n)</code>, bounded variable-length <code>character varying(n)</code>/<code>varchar(n)</code>, unbounded <code>varchar</code>, and <code>text</code>. Length limits are measured in characters, not bytes. Character-set validity is enforced according to the database encoding, and the NUL code point cannot be stored in PostgreSQL character strings.<sup><a href="#r4">[4]</a></sup></p>
+</section>
+
+<section id="char"><h2>7. <code>char</code>, <code>varchar</code>, and <code>text</code></h2>
+<p><code>char(n)</code> blank-pads stored values to the declared length and treats trailing spaces as insignificant in ordinary comparisons. <code>varchar(n)</code> enforces a maximum character count without padding. <code>text</code> and unconstrained <code>varchar</code> accept arbitrary-length strings up to PostgreSQL's value-size limits. PostgreSQL documents no general performance advantage for <code>char(n)</code>; it is commonly slower/larger because of padding, so <code>text</code> or <code>varchar</code> are normally preferred.<sup><a href="#r4">[4]</a></sup></p>
+
+<pre><code>CREATE TABLE app.customer (
+    customer_id bigint PRIMARY KEY,
+    country_code char(2) NOT NULL,
+    display_name text NOT NULL,
+    external_label varchar(80)
+);</code></pre>
+
+<div class="callout warn"><strong>A length limit is a domain rule, not a storage optimization.</strong> Use <code>varchar(n)</code> when “at most n characters” is actually an invariant. Do not add arbitrary lengths merely because another DBMS historically required them.</div>
+</section>
+
+<section id="datetime"><h2>8. Date/time types</h2>
+<p>PostgreSQL supports <code>date</code>, time-of-day types, timestamp types and <code>interval</code>. The timestamp/time/interval types accept fractional-second precision from 0 through 6. PostgreSQL uses the proleptic Gregorian calendar for dates, including years before the calendar's historical adoption.<sup><a href="#r5">[5]</a></sup></p>
+</section>
+
+<section id="date"><h2>9. <code>date</code> and <code>time</code></h2>
+<p><code>date</code> represents a calendar date without time of day. <code>time without time zone</code> represents a time of day without a date. PostgreSQL also implements <code>time with time zone</code> for SQL compatibility, but its documentation discourages it for most applications because a fixed time-of-day plus offset lacks the date context needed to apply daylight-saving rules reliably.<sup><a href="#r5">[5]</a></sup></p>
+
+<pre><code>CREATE TABLE scheduling.office_hours (
+    weekday smallint NOT NULL CHECK (weekday BETWEEN 1 AND 7),
+    opens_at time NOT NULL,
+    closes_at time NOT NULL,
+    CHECK (opens_at &lt; closes_at)
+);</code></pre>
+</section>
+
+<section id="timestamp"><h2>10. <code>timestamp</code> and <code>timestamptz</code></h2>
+<p>SQL <code>timestamp</code> means <code>timestamp without time zone</code>. PostgreSQL's <code>timestamptz</code> abbreviation means <code>timestamp with time zone</code>. A <code>timestamptz</code> value represents an instant: PostgreSQL converts input to UTC internally and renders it in the current session <code>TimeZone</code> at output. The original zone name is not retained as part of the value.<sup><a href="#r5">[5]</a></sup></p>
+
+<pre><code>SET TIME ZONE 'America/New_York';
+
+SELECT
+    timestamptz '2026-09-16 09:00:00-04' AS instant,
+    timestamp   '2026-09-16 09:00:00'    AS local_wall_time;</code></pre>
+
+<div class="table-wrap"><table><thead><tr><th>Requirement</th><th>Recommended type</th></tr></thead><tbody>
+<tr><td>Absolute event instant</td><td><code>timestamptz</code></td></tr>
+<tr><td>Local wall-clock value whose zone is stored separately</td><td><code>timestamp</code> + explicit zone identifier</td></tr>
+<tr><td>Calendar date only</td><td><code>date</code></td></tr>
+<tr><td>Recurring local time-of-day</td><td><code>time</code> plus separate scheduling context</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="interval"><h2>11. <code>interval</code></h2>
+<p><code>interval</code> represents a span of time using separate month, day and microsecond components internally, preserving calendar-aware distinctions such as “1 month” versus a fixed number of seconds. Arithmetic involving months/days and <code>timestamptz</code> can therefore interact with month lengths and daylight-saving transitions differently from adding a fixed number of seconds.<sup><a href="#r5">[5]</a><a href="#r15">[15]</a></sup></p>
+
+<pre><code>SELECT
+    timestamptz '2026-03-07 12:00 America/New_York'
+      + interval '1 day'  AS next_calendar_day,
+    interval '2 years 3 months 4 days 05:06:07' AS duration;</code></pre>
+</section>
+
+<section id="boolean"><h2>12. <code>boolean</code></h2>
+<p>PostgreSQL implements the SQL <code>boolean</code> type. Logical values are <code>TRUE</code> and <code>FALSE</code>; SQL null represents an unknown/missing state rather than a third stored Boolean value. The type occupies one byte and accepts several textual input spellings, though SQL literals <code>TRUE</code>/<code>FALSE</code> are clearest in application SQL.<sup><a href="#r6">[6]</a></sup></p>
+
+<pre><code>CREATE TABLE feature.flag (
+    flag_name text PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false
+);
+
+SELECT *
+FROM feature.flag
+WHERE enabled;</code></pre>
+</section>
+
+<section id="binary"><h2>13. Binary data with <code>bytea</code></h2>
+<p><code>bytea</code> stores arbitrary variable-length binary strings. Unlike character types, it permits zero bytes and other non-printable octets and treats the value as raw bytes rather than encoded text. PostgreSQL supports hexadecimal and historical escape input/output forms; hex is the default output and the preferred modern representation.<sup><a href="#r7">[7]</a></sup></p>
+
+<pre><code>CREATE TABLE file.chunk (
+    chunk_id bigint PRIMARY KEY,
+    payload bytea NOT NULL,
+    sha256 bytea NOT NULL
+);
+
+INSERT INTO file.chunk(chunk_id, payload, sha256)
+VALUES (
+    1,
+    decode('48656c6c6f', 'hex'),
+    digest('Hello', 'sha256')
+);</code></pre>
+
+<p>Binary-string functions such as <code>encode</code>/<code>decode</code>, <code>get_byte</code>, <code>set_byte</code>, and SHA-2 hash functions operate directly on <code>bytea</code> values.<sup><a href="#r16">[16]</a></sup></p>
+</section>
+
+<section id="arrays"><h2>14. Arrays</h2>
+<p>PostgreSQL supports variable-length multidimensional arrays of built-in and user-defined base, enum, composite, range and domain element types. Array bounds are part of the value, and the declared dimensionality in ordinary table DDL is mainly documentation: PostgreSQL does not generally enforce a fixed declared dimension count/length.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code>CREATE TABLE app.article (
+    article_id bigint PRIMARY KEY,
+    tags text[] NOT NULL DEFAULT '{}',
+    quarterly_views integer[]
+);
+
+INSERT INTO app.article(article_id, tags, quarterly_views)
+VALUES (
+    1,
+    ARRAY['postgresql', 'database', 'sql'],
+    ARRAY[120, 180, 250, 300]
+);</code></pre>
+
+<h3>14.1 Access and search</h3>
+<pre><code>SELECT
+    tags[1],
+    quarterly_views[2:4]
+FROM app.article
+WHERE article_id = 1;
+
+SELECT *
+FROM app.article
+WHERE tags @&gt; ARRAY['postgresql'];</code></pre>
+
+<p>Arrays have containment/overlap operators and can be indexed with suitable GIN operator classes. They work well when a collection is genuinely one atomic row attribute; if elements have independent identities, constraints, relationships, or frequent per-element updates, a child relation is usually a better relational design.<sup><a href="#r17">[17]</a></sup></p>
+</section>
+
+<section id="json"><h2>15. <code>json</code> and <code>jsonb</code></h2>
+<p>Both types validate JSON syntax. <code>json</code> stores an exact copy of the input text, preserving insignificant whitespace, object-key order and duplicate object keys. <code>jsonb</code> stores a decomposed binary representation, discards whitespace and key ordering, and retains only the last value for duplicate keys. Processing is generally faster with <code>jsonb</code> because reparsing is unnecessary, and <code>jsonb</code> supports GIN indexing and containment/existence operations.<sup><a href="#r9">[9]</a></sup></p>
+
+<pre><code>CREATE TABLE app.event (
+    event_id bigint PRIMARY KEY,
+    payload jsonb NOT NULL
+);
+
+INSERT INTO app.event(event_id, payload)
+VALUES (
+    1,
+    '{"type":"purchase","amount":19.95,"tags":["web","promo"]}'
+);
+
+SELECT
+    payload->>'type' AS type,
+    (payload->>'amount')::numeric AS amount
+FROM app.event
+WHERE payload @&gt; '{"type":"purchase"}';</code></pre>
+
+<h3>15.1 Indexing JSONB</h3>
+<pre><code>CREATE INDEX event_payload_gin
+ON app.event
+USING gin(payload);
+
+CREATE INDEX event_payload_path_gin
+ON app.event
+USING gin(payload jsonb_path_ops);</code></pre>
+
+<p>The default <code>jsonb_ops</code> GIN class supports key-existence, containment and JSONPath operators. <code>jsonb_path_ops</code> supports a narrower operator set but can produce smaller/more specific containment-oriented indexes.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>15.2 SQL null versus JSON null</h3>
+<p>SQL <code>NULL</code> means absence/unknown at the SQL level. JSON <code>null</code> is a JSON value inside a non-null JSON document. They are not interchangeable and should be modeled deliberately.<sup><a href="#r9">[9]</a></sup></p>
+
+<div class="callout warn"><strong>JSON is not a schema-avoidance mechanism.</strong> PostgreSQL's documentation recommends keeping JSON document structure reasonably predictable even in flexible applications. Core keys and invariants are usually easier to constrain and join when represented as typed relational columns.</div>
+</section>
+
+<section id="xml"><h2>16. <code>xml</code></h2>
+<p>The <code>xml</code> type stores XML while validating input for XML well-formedness and enabling XML-specific functions/operators. It can store full XML documents or XML content fragments. PostgreSQL does not automatically validate values against DTDs or XML Schema, and XML support requires a PostgreSQL build with libxml support.<sup><a href="#r10">[10]</a><a href="#r18">[18]</a></sup></p>
+
+<pre><code>CREATE TABLE integration.message (
+    message_id bigint PRIMARY KEY,
+    document xml NOT NULL
+);
+
+INSERT INTO integration.message
+VALUES (
+    1,
+    XMLPARSE(
+        DOCUMENT
+        '&lt;order id="42"&gt;&lt;status&gt;paid&lt;/status&gt;&lt;/order&gt;'
+    )
+);</code></pre>
+
+<pre><code>SELECT xpath(
+    '/order/status/text()',
+    document
+)
+FROM integration.message;</code></pre>
+</section>
+
+<section id="uuid"><h2>17. <code>uuid</code></h2>
+<p>The <code>uuid</code> type stores 128-bit universally unique identifiers. PostgreSQL accepts standard and several alternative textual input forms and emits the canonical hyphenated form. PostgreSQL 18 natively provides UUIDv4 and timestamp-ordered UUIDv7 generation functions; the type itself can store UUIDs of any version.<sup><a href="#r11">[11]</a><a href="#r19">[19]</a></sup></p>
+
+<pre><code>CREATE TABLE app.object (
+    object_id uuid PRIMARY KEY DEFAULT uuidv7(),
+    created_at timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+
+<p>UUIDs are useful where identifiers must be generated independently across nodes or exposed externally without a centralized sequence. UUIDv7 additionally incorporates time ordering, which can improve locality relative to purely random UUIDv4 identifiers in some index/write patterns.<sup><a href="#r19">[19]</a></sup></p>
+</section>
+
+<section id="enum"><h2>18. Enumerated types (<code>ENUM</code>)</h2>
+<p>An enum type is a static, ordered set of labels. Values have the ordering declared at type creation, and each enum type is type-safe and distinct from every other enum type even if labels overlap. New enum values can be added with <code>ALTER TYPE</code>; removing/reordering existing enum labels is intentionally more restrictive because enum values become durable type semantics.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup></p>
+
+<pre><code>CREATE TYPE app.order_state AS ENUM (
+    'draft',
+    'submitted',
+    'paid',
+    'shipped',
+    'cancelled'
+);
+
+CREATE TABLE app.orders (
+    order_id bigint PRIMARY KEY,
+    state app.order_state NOT NULL
+);</code></pre>
+
+<pre><code>SELECT enum_range(NULL::app.order_state);</code></pre>
+
+<h3>18.1 Enum versus lookup table/domain</h3>
+<p>Enums fit small, stable, strongly typed vocabularies whose ordering is part of the type. Use a lookup/reference table when labels need rich metadata, independent lifecycle, localization, frequent changes or foreign-key relationships from many systems. A domain plus a check can be useful when the value should retain the underlying type's broader operator behavior.</p>
+</section>
+
+<section id="range"><h2>19. Range types</h2>
+<p>A range type represents a contiguous interval over an ordered subtype. PostgreSQL supplies <code>int4range</code>, <code>int8range</code>, <code>numrange</code>, <code>tsrange</code>, <code>tstzrange</code> and <code>daterange</code>. Bounds can be inclusive/exclusive and independently unbounded; empty ranges are first-class values. Specialized operators express containment, overlap, adjacency and relative position.<sup><a href="#r12">[12]</a><a href="#r22">[22]</a></sup></p>
+
+<pre><code>CREATE TABLE booking.reservation (
+    reservation_id bigint PRIMARY KEY,
+    room_id bigint NOT NULL,
+    during tstzrange NOT NULL
+);
+
+SELECT *
+FROM booking.reservation
+WHERE during &amp;&amp;
+      tstzrange(
+        timestamptz '2026-09-16 13:00Z',
+        timestamptz '2026-09-16 15:00Z',
+        '[)'
+      );</code></pre>
+
+<h3>19.1 Range constraints</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+ALTER TABLE booking.reservation
+ADD CONSTRAINT room_no_overlap
+EXCLUDE USING gist (
+    room_id WITH =,
+    during WITH &amp;&amp;
+);</code></pre>
+
+<p>Range semantics integrate naturally with GiST/SP-GiST indexing, exclusion constraints and PostgreSQL 18 temporal <code>WITHOUT OVERLAPS</code>/<code>PERIOD</code> constraints.<sup><a href="#r12">[12]</a><a href="#r23">[23]</a></sup></p>
+</section>
+
+<section id="multirange"><h2>20. Multirange types</h2>
+<p>Every PostgreSQL range type has a corresponding multirange type. A multirange is an ordered list of non-null, nonempty, non-overlapping/non-adjacent ranges that represents a set of disjoint intervals. Built-in examples include <code>int4multirange</code>, <code>nummultirange</code>, <code>tsmultirange</code>, <code>tstzmultirange</code>, and <code>datemultirange</code>.<sup><a href="#r12">[12]</a></sup></p>
+
+<pre><code>SELECT datemultirange(
+    daterange(date '2026-01-01', date '2026-01-10', '[)'),
+    daterange(date '2026-02-01', date '2026-02-05', '[)')
+);</code></pre>
+
+<p>Multiranges are useful for availability calendars, non-contiguous validity windows and compact set-of-interval representations where arrays of ranges would lack canonical multirange semantics and specialized operators.</p>
+</section>
+
+<section id="composite"><h2>21. Composite types</h2>
+<p>A composite type is a typed row structure: a named list of fields and their data types. Every table automatically has an associated composite row type, and standalone composites can be created with <code>CREATE TYPE ... AS (...)</code>. They can be used as function arguments/results, table columns, arrays and nested structured values.<sup><a href="#r24">[24]</a><a href="#r2">[2]</a></sup></p>
+
+<pre><code>CREATE TYPE app.money_amount AS (
+    amount numeric(18,2),
+    currency char(3)
+);
+
+CREATE TABLE app.payment (
+    payment_id bigint PRIMARY KEY,
+    charged app.money_amount NOT NULL
+);
+
+INSERT INTO app.payment
+VALUES (
+    1,
+    ROW(19.95, 'USD')::app.money_amount
+);
+
+SELECT
+    (charged).amount,
+    (charged).currency
+FROM app.payment;</code></pre>
+
+<p>Constraints attached to a table do not automatically become constraints of its standalone composite row type when that type is used elsewhere. If invariant enforcement must travel with the value, consider a domain or dedicated validation design.<sup><a href="#r24">[24]</a></sup></p>
+</section>
+
+<section id="domain"><h2>22. Domain types</h2>
+<p>A domain is a user-defined type layered over another type with optional constraints/default/nullability semantics. Operators/functions of the underlying type normally apply to domain values after implicit down-casting; assignment into the domain checks the domain's constraints. Domains are useful for reusable scalar/structured value contracts.<sup><a href="#r25">[25]</a><a href="#r26">[26]</a></sup></p>
+
+<pre><code>CREATE DOMAIN app.positive_amount
+AS numeric(18,2)
+CHECK (VALUE &gt; 0);
+
+CREATE DOMAIN app.email_address
+AS text
+CHECK (
+    VALUE = lower(VALUE)
+    AND position('@' IN VALUE) &gt; 1
+);
+
+CREATE TABLE app.invoice (
+    invoice_id bigint PRIMARY KEY,
+    amount app.positive_amount NOT NULL,
+    customer_email app.email_address NOT NULL
+);</code></pre>
+
+<p>Domain checks should depend only on the value and stable/immutable semantics. Cross-column and cross-row invariants belong in table constraints, exclusion constraints, triggers or transaction logic rather than a domain.</p>
+</section>
+
+<section id="network"><h2>23. Network address types</h2>
+<p>PostgreSQL provides <code>inet</code> and <code>cidr</code> for IPv4/IPv6 data plus <code>macaddr</code> and <code>macaddr8</code> for hardware addresses. The documentation recommends these specialized types instead of plain text because they validate input and provide network-aware containment, masking, arithmetic and formatting operations.<sup><a href="#r27">[27]</a><a href="#r28">[28]</a></sup></p>
+
+<h3>23.1 <code>inet</code></h3>
+<p><code>inet</code> stores a host address plus an optional network prefix. Host bits to the right of the prefix can remain nonzero, so values such as <code>192.168.1.42/24</code> are valid.<sup><a href="#r27">[27]</a></sup></p>
+
+<pre><code>CREATE TABLE security.login_event (
+    event_id bigint PRIMARY KEY,
+    remote_addr inet NOT NULL,
+    occurred_at timestamptz NOT NULL
+);
+
+SELECT *
+FROM security.login_event
+WHERE remote_addr &lt;&lt;= inet '10.0.0.0/8';</code></pre>
+
+<h3>23.2 <code>cidr</code></h3>
+<p><code>cidr</code> represents network specifications rather than arbitrary host-with-prefix combinations. Host bits to the right of the mask must be zero. Use it when the stored value semantically denotes a subnet/network block.<sup><a href="#r27">[27]</a></sup></p>
+
+<pre><code>CREATE TABLE network.allowed_network (
+    network cidr PRIMARY KEY,
+    description text
+);</code></pre>
+
+<h3>23.3 <code>macaddr</code> and <code>macaddr8</code></h3>
+<p><code>macaddr</code> stores six-byte MAC addresses, while <code>macaddr8</code> stores eight-byte EUI-64-style addresses. PostgreSQL accepts several common textual input formats and emits a standardized representation.<sup><a href="#r27">[27]</a></sup></p>
+</section>
+
+<section id="geometric"><h2>24. Geometric types</h2>
+<p>PostgreSQL includes built-in two-dimensional geometric types: <code>point</code>, <code>line</code>, <code>lseg</code>, <code>box</code>, <code>path</code>, <code>polygon</code>, and <code>circle</code>. Specialized operators/functions implement containment, intersection, distance, translation and other geometry operations; suitable GiST/SP-GiST operator classes can index several geometric searches.<sup><a href="#r29">[29]</a><a href="#r30">[30]</a></sup></p>
+
+<pre><code>CREATE TABLE map.marker (
+    marker_id bigint PRIMARY KEY,
+    location point NOT NULL
+);
+
+SELECT
+    marker_id,
+    location &lt;-&gt; point(-78.6382, 35.7796) AS distance
+FROM map.marker
+ORDER BY location &lt;-&gt; point(-78.6382, 35.7796)
+LIMIT 10;</code></pre>
+
+<p>The built-in geometry model is a two-dimensional Cartesian plane. Applications requiring geographic coordinates, coordinate-reference systems, sophisticated topology, or GIS standards commonly use an extension such as PostGIS rather than assuming built-in <code>point</code>/<code>polygon</code> have geodetic semantics.</p>
+</section>
+
+<section id="fts"><h2>25. Full-text-search types: <code>tsvector</code> and <code>tsquery</code></h2>
+<p>PostgreSQL provides two native types for full-text search. <code>tsvector</code> represents a document as a sorted set of normalized lexemes, optionally with positions and weights. <code>tsquery</code> represents a Boolean/proximity query over lexemes. Text search configuration determines parsing, stop-word handling, dictionaries and stemming before ordinary text is converted into these types.<sup><a href="#r31">[31]</a><a href="#r32">[32]</a></sup></p>
+
+<pre><code>CREATE TABLE content.article (
+    article_id bigint PRIMARY KEY,
+    title text NOT NULL,
+    body text NOT NULL,
+    search_vector tsvector
+        GENERATED ALWAYS AS (
+            setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(body,  '')), 'D')
+        ) STORED
+);
+
+CREATE INDEX article_search_gin
+ON content.article
+USING gin(search_vector);
+
+SELECT
+    article_id,
+    title,
+    ts_rank(
+        search_vector,
+        websearch_to_tsquery('english', 'postgres indexing')
+    ) AS rank
+FROM content.article
+WHERE search_vector @@
+      websearch_to_tsquery('english', 'postgres indexing')
+ORDER BY rank DESC;</code></pre>
+
+<p>Do not build a production <code>tsvector</code> by simply casting arbitrary prose to <code>tsvector</code>; the type itself assumes lexemes are already normalized. Use <code>to_tsvector</code> with the correct text-search configuration to parse and normalize source text.<sup><a href="#r31">[31]</a><a href="#r32">[32]</a></sup></p>
+
+<h3>25.1 <code>tsquery</code> constructors</h3>
+<pre><code>SELECT plainto_tsquery('english', 'database systems');
+SELECT phraseto_tsquery('english', 'database systems');
+SELECT websearch_to_tsquery(
+    'english',
+    '"database systems" -oracle'
+);</code></pre>
+
+<p>GIN is generally the preferred full-text-search index type for static/search-heavy workloads, while GiST provides an alternative with different lossy/index-size/update characteristics.<sup><a href="#r33">[33]</a></sup></p>
+</section>
+
+<section id="casts"><h2>26. Casts, literals, and type resolution</h2>
+<p>PostgreSQL can resolve many mixed-type expressions through implicit casts, preferred type categories, operator/function overload resolution and context. Explicit casts use either <code>CAST(value AS type)</code> or PostgreSQL's <code>value::type</code> syntax. Because implicit conversion can change operator selection and semantics, important boundaries should be typed explicitly rather than relying on ambiguous unknown string literals or accidental casts.<sup><a href="#r34">[34]</a><a href="#r35">[35]</a></sup></p>
+
+<pre><code>SELECT
+    '42'::integer,
+    CAST('19.95' AS numeric(10,2)),
+    '2026-09-16T15:30:00Z'::timestamptz,
+    '{"active":true}'::jsonb;</code></pre>
+
+<h3>26.1 Parameter typing matters</h3>
+<p>Client libraries should bind native typed parameters rather than building SQL by string interpolation. Besides security, typed binding avoids unnecessary text conversions and helps PostgreSQL select the intended function/operator overload and plan behavior.</p>
+
+<h3>26.2 Domains and casts</h3>
+<p>When an underlying-type value is assigned to a domain, PostgreSQL checks the domain constraints. When a domain value is passed to an operator/function defined for the underlying type, the domain can be treated as the underlying type; the resulting expression normally has the underlying type unless explicitly cast back to the domain.<sup><a href="#r25">[25]</a></sup></p>
+</section>
+
+<section id="storage"><h2>27. Storage, variable-length values, and TOAST</h2>
+<p>Fixed-width types such as integers and timestamps have compact inline representations. Many variable-length types—including <code>text</code>, <code>bytea</code>, arrays, JSONB, XML and composites containing wide fields—use PostgreSQL's varlena infrastructure and can participate in TOAST. PostgreSQL pages are normally 8 KiB and tuples cannot span pages, so large values can be compressed and/or moved into an associated TOAST relation transparently.<sup><a href="#r36">[36]</a></sup></p>
+
+<div class="diagram">heap row
++-------------------------------------+
+| id | small columns | TOAST pointer  |
++--------------------------+----------+
+                           |
+                           v
+                    TOAST relation
+                +-------------------+
+                | chunk 0           |
+                | chunk 1           |
+                | chunk 2           |
+                +-------------------+</div>
+
+<p>TOAST normally starts trying to shrink rows around a roughly 2 KiB threshold. Unchanged out-of-line fields are normally preserved across an update, so changing a small column does not necessarily rewrite a large TOASTed value. Column storage strategies can choose compression/out-of-line behavior for advanced workloads.<sup><a href="#r36">[36]</a></sup></p>
+
+<h3>27.1 Inspect per-column storage attributes</h3>
+<pre><code>SELECT
+    attname,
+    atttypid::regtype AS type,
+    attstorage,
+    attcompression
+FROM pg_attribute
+WHERE attrelid = 'app.event'::regclass
+  AND attnum &gt; 0
+  AND NOT attisdropped
+ORDER BY attnum;</code></pre>
+</section>
+
+<section id="design"><h2>28. Type-selection guidelines</h2>
+
+<div class="table-wrap"><table><thead><tr><th>Requirement</th><th>Strong default</th><th>Avoid when</th></tr></thead><tbody>
+<tr><td>Ordinary whole number</td><td><code>integer</code></td><td>Lifetime range can exceed 32-bit</td></tr>
+<tr><td>Large generated/key counter</td><td><code>bigint</code></td><td>A globally generated ID is required across systems</td></tr>
+<tr><td>Exact decimal value</td><td><code>numeric(p,s)</code></td><td>Approximate scientific computation is intended</td></tr>
+<tr><td>Approximate measurement</td><td><code>double precision</code></td><td>Exact decimal equality/accounting is required</td></tr>
+<tr><td>General string</td><td><code>text</code></td><td>A maximum length is an actual domain rule</td></tr>
+<tr><td>Bounded business string</td><td><code>varchar(n)</code></td><td>n is arbitrary rather than semantic</td></tr>
+<tr><td>Absolute timestamped event</td><td><code>timestamptz</code></td><td>The value is intentionally a zone-free wall time</td></tr>
+<tr><td>Local recurring wall time</td><td><code>time</code> + zone/calendar context</td><td>You need a single absolute instant</td></tr>
+<tr><td>Raw bytes</td><td><code>bytea</code></td><td>The value is actually encoded text</td></tr>
+<tr><td>Flexible document with queries/indexing</td><td><code>jsonb</code></td><td>Exact original JSON textual representation matters</td></tr>
+<tr><td>Opaque/original JSON text</td><td><code>json</code></td><td>Containment/index-heavy queries dominate</td></tr>
+<tr><td>IP host/network</td><td><code>inet</code>/<code>cidr</code></td><td>Never use text merely for convenience</td></tr>
+<tr><td>Contiguous interval</td><td>Range type</td><td>Endpoints are unrelated scalar values</td></tr>
+<tr><td>Disjoint interval set</td><td>Multirange</td><td>Each interval has independent metadata/identity</td></tr>
+<tr><td>Stable finite vocabulary</td><td>Enum</td><td>Values change often or carry rich metadata</td></tr>
+<tr><td>Reusable validated value</td><td>Domain</td><td>Rule depends on other columns/rows</td></tr>
+<tr><td>Natural-language search representation</td><td><code>tsvector</code>/<code>tsquery</code></td><td>You only need substring/regex matching</td></tr>
+</tbody></table></div>
+
+<h3>28.1 Model semantics before storage size</h3>
+<p>The smallest physical type is not automatically the best type. A two-byte integer can save space, but an overflow migration can be far more expensive. Conversely, <code>numeric</code> should not replace every integer/float merely because its range is large; exact arbitrary-precision arithmetic consumes more CPU/storage than fixed-width types.</p>
+
+<h3>28.2 Prefer semantic types over encoded text</h3>
+<p>Use <code>date</code> instead of <code>'YYYY-MM-DD'</code> text, <code>inet</code> instead of IP strings, <code>uuid</code> instead of UUID-shaped text, and ranges instead of hand-parsed <code>"start-end"</code> strings. Native types validate input and expose correct comparison/operator/index semantics.</p>
+
+<h3>28.3 Separate identifier representation from generation</h3>
+<p><code>bigint</code> and <code>uuid</code> describe value representation; identity/sequence/UUID generation functions describe how values are created. Do not conflate the type with the generation policy.</p>
+</section>
+
+<section id="pitfalls"><h2>29. Common data-type pitfalls</h2>
+
+<h3>29.1 Using floating point for exact money</h3>
+<p>Binary floating-point is intentionally inexact. Use <code>numeric</code> when exact decimal arithmetic is a requirement.<sup><a href="#r3">[3]</a></sup></p>
+
+<h3>29.2 Choosing <code>char(n)</code> for performance</h3>
+<p>PostgreSQL documents no performance advantage over <code>text</code>/<code>varchar</code>; blank padding can increase storage and CPU work.<sup><a href="#r4">[4]</a></sup></p>
+
+<h3>29.3 Storing instants in <code>timestamp</code> without a zone model</h3>
+<p>A zone-free timestamp does not identify an absolute instant. Use <code>timestamptz</code> for events on a global timeline; if the original named zone is semantically required, store that zone identifier separately.<sup><a href="#r5">[5]</a></sup></p>
+
+<h3>29.4 Treating <code>timestamptz</code> as “timestamp plus stored zone name”</h3>
+<p>PostgreSQL stores the instant internally in UTC and displays it using the current session time zone; the original zone label is not preserved.<sup><a href="#r5">[5]</a></sup></p>
+
+<h3>29.5 Storing binary data in text</h3>
+<p>Text must obey the database encoding and cannot contain zero octets. <code>bytea</code> exists for arbitrary bytes.<sup><a href="#r7">[7]</a></sup></p>
+
+<h3>29.6 Defaulting every flexible attribute to JSONB</h3>
+<p>JSONB is powerful but moves some structure away from ordinary SQL constraints and can make whole-document updates contend on one row. Keep stable relational keys/invariants as typed columns where practical.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>29.7 Expecting JSON to equal JSONB behavior</h3>
+<p><code>json</code> preserves textual details and lacks the same containment/indexing facilities; <code>jsonb</code> normalizes representation. Choose deliberately.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>29.8 Arrays as replacement for relationships</h3>
+<p>An array is one value in one row. If elements need foreign keys, per-element attributes, joins, independent updates or relational cardinality, use a child/association table.</p>
+
+<h3>29.9 Comparing unrelated enum types</h3>
+<p>Enums are type-safe; two enum types with the same label text are still distinct types and cannot be directly compared without an explicit conversion/operator.<sup><a href="#r20">[20]</a></sup></p>
+
+<h3>29.10 Using <code>inet</code> when only canonical networks are valid</h3>
+<p><code>inet</code> permits host bits after the netmask; <code>cidr</code> rejects them. Use the type that matches the domain rule.<sup><a href="#r27">[27]</a></sup></p>
+
+<h3>29.11 Persisting <code>ctid</code> or other implementation identifiers as business IDs</h3>
+<p>Physical/system identifiers are not substitutes for modeled identifiers. Use application primary-key types such as <code>bigint</code>/<code>uuid</code> and keep physical tuple identity internal.</p>
+
+<h3>29.12 Assuming <code>tsvector</code> itself normalizes text</h3>
+<p>Direct input to <code>tsvector</code> is treated as already-normalized lexemes. Use <code>to_tsvector</code> to apply parser/dictionary normalization to ordinary documents.<sup><a href="#r31">[31]</a></sup></p>
+</section>
+
+<section id="checklist"><h2>30. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Choose types from domain semantics first, storage/performance second.</strong></li>
+<li><strong>Use integer widths with lifetime growth in mind.</strong></li>
+<li><strong>Use numeric/decimal for exact decimal arithmetic.</strong></li>
+<li><strong>Use real/double precision only when approximation is acceptable.</strong></li>
+<li><strong>Prefer text or unconstrained varchar for ordinary strings.</strong></li>
+<li><strong>Use varchar(n) only when n is a real business rule.</strong></li>
+<li><strong>Avoid char(n) unless blank-padding semantics are actually desired.</strong></li>
+<li><strong>Use date for calendar dates and timestamptz for absolute event instants.</strong></li>
+<li><strong>Store a named time zone separately when the original/local scheduling zone matters.</strong></li>
+<li><strong>Use interval for semantic calendar/time durations, not ad hoc seconds strings.</strong></li>
+<li><strong>Use boolean rather than text/integer flags.</strong></li>
+<li><strong>Use bytea for arbitrary binary data.</strong></li>
+<li><strong>Use arrays for truly atomic typed collections, not relational relationships.</strong></li>
+<li><strong>Prefer jsonb for query/index-heavy JSON; use json when preserving original representation matters.</strong></li>
+<li><strong>Distinguish SQL NULL from JSON null.</strong></li>
+<li><strong>Use uuid as a native 128-bit type rather than varchar.</strong></li>
+<li><strong>Use enums for small stable vocabularies; lookup tables for rich/evolving vocabularies.</strong></li>
+<li><strong>Use ranges/multiranges when interval algebra is part of the domain.</strong></li>
+<li><strong>Use composite types for typed row structures, not as a substitute for independent entities.</strong></li>
+<li><strong>Use domains for reusable value-level constraints.</strong></li>
+<li><strong>Use inet/cidr/macaddr types for network data.</strong></li>
+<li><strong>Use tsvector/tsquery and a text-search configuration for full-text search.</strong></li>
+<li><strong>Use explicit casts at ambiguous API/type boundaries.</strong></li>
+<li><strong>Account for TOAST and wide-value update/read patterns when storing large JSON, text, XML, arrays, or bytea.</strong></li>
+<li><strong>Verify index operator-class support for specialized types before assuming an operator is indexable.</strong></li>
+</ol>
+
+<div class="callout ok"><strong>Type-design principle:</strong> a data type is executable domain semantics. It defines which values are valid, how they compare, what operators mean, how values are represented, and which indexes/functions PostgreSQL can use. Prefer the most specific native or user-defined type that faithfully represents the data rather than encoding semantics into generic text.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. Chapter 8: Data Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype.html">https://www.postgresql.org/docs/18/datatype.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. CREATE TYPE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtype.html">https://www.postgresql.org/docs/18/sql-createtype.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. Numeric Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-numeric.html">https://www.postgresql.org/docs/18/datatype-numeric.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. Character Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-character.html">https://www.postgresql.org/docs/18/datatype-character.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. Date/Time Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-datetime.html">https://www.postgresql.org/docs/18/datatype-datetime.html</a></li>
+<li id="r6">PostgreSQL Global Development Group. Boolean Type [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-boolean.html">https://www.postgresql.org/docs/18/datatype-boolean.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. Binary Data Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-binary.html">https://www.postgresql.org/docs/18/datatype-binary.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. Arrays [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/arrays.html">https://www.postgresql.org/docs/18/arrays.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. JSON Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-json.html">https://www.postgresql.org/docs/18/datatype-json.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. XML Type [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-xml.html">https://www.postgresql.org/docs/18/datatype-xml.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. UUID Type [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-uuid.html">https://www.postgresql.org/docs/18/datatype-uuid.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. Range Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rangetypes.html">https://www.postgresql.org/docs/18/rangetypes.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. pg_type [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-type.html">https://www.postgresql.org/docs/18/catalog-pg-type.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. pg_range [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-range.html">https://www.postgresql.org/docs/18/catalog-pg-range.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. Date/Time Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-datetime.html">https://www.postgresql.org/docs/18/functions-datetime.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. Binary String Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-binarystring.html">https://www.postgresql.org/docs/18/functions-binarystring.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. Array Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-array.html">https://www.postgresql.org/docs/18/functions-array.html</a></li>
+<li id="r18">PostgreSQL Global Development Group. XML Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-xml.html">https://www.postgresql.org/docs/18/functions-xml.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. UUID Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-uuid.html">https://www.postgresql.org/docs/18/functions-uuid.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. Enumerated Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-enum.html">https://www.postgresql.org/docs/18/datatype-enum.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. ALTER TYPE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-altertype.html">https://www.postgresql.org/docs/18/sql-altertype.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. Range/Multirange Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-range.html">https://www.postgresql.org/docs/18/functions-range.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. Constraints [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-constraints.html">https://www.postgresql.org/docs/18/ddl-constraints.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. Composite Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rowtypes.html">https://www.postgresql.org/docs/18/rowtypes.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. Domain Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/domains.html">https://www.postgresql.org/docs/18/domains.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. CREATE DOMAIN [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createdomain.html">https://www.postgresql.org/docs/18/sql-createdomain.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. Network Address Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-net-types.html">https://www.postgresql.org/docs/18/datatype-net-types.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. Network Address Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-net.html">https://www.postgresql.org/docs/18/functions-net.html</a></li>
+<li id="r29">PostgreSQL Global Development Group. Geometric Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-geometric.html">https://www.postgresql.org/docs/18/datatype-geometric.html</a></li>
+<li id="r30">PostgreSQL Global Development Group. Geometric Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-geometry.html">https://www.postgresql.org/docs/18/functions-geometry.html</a></li>
+<li id="r31">PostgreSQL Global Development Group. Text Search Types [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-textsearch.html">https://www.postgresql.org/docs/18/datatype-textsearch.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. Full Text Search [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch.html">https://www.postgresql.org/docs/18/textsearch.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. Preferred Index Types for Text Search [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-indexes.html">https://www.postgresql.org/docs/18/textsearch-indexes.html</a></li>
+<li id="r34">PostgreSQL Global Development Group. Type Conversion [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/typeconv.html">https://www.postgresql.org/docs/18/typeconv.html</a></li>
+<li id="r35">PostgreSQL Global Development Group. Value Expressions / Type Casts [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-expressions.html">https://www.postgresql.org/docs/18/sql-expressions.html</a></li>
+<li id="r36">PostgreSQL Global Development Group. TOAST [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/storage-toast.html">https://www.postgresql.org/docs/18/storage-toast.html</a></li>
+<li id="r37">PostgreSQL Global Development Group. JSON Functions and Operators [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-json.html">https://www.postgresql.org/docs/18/functions-json.html</a></li>
+<li id="r38">PostgreSQL Global Development Group. Enum Support Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-enum.html">https://www.postgresql.org/docs/18/functions-enum.html</a></li>
+<li id="r39">PostgreSQL Global Development Group. PostgreSQL 18 Release Notes [Internet]. 2025-2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+<li id="r40">PostgreSQL Global Development Group. XML Limits and SQL/XML Conformance [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xml-limits-conformance.html">https://www.postgresql.org/docs/18/xml-limits-conformance.html</a></li>
+<li id="r41">PostgreSQL Global Development Group. Full Text Search Limitations [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/textsearch-limitations.html">https://www.postgresql.org/docs/18/textsearch-limitations.html</a></li>
+<li id="r42">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol></section>
+
+</main>
+<footer><p>This article is a technical reference. Data-type behavior can depend on PostgreSQL version, database encoding/collation, time-zone configuration, extension/operator-class availability, precision modifiers and application semantics. Prefer native typed parameters and schema constraints, and test boundary values, nulls, time-zone transitions, large/toasted values and index behavior with representative workloads.</p></footer>
+</body>
+</html>

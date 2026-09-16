@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL installation and administration: Linux, Windows, macOS, containers, cloud, configuration files, service control, initdb, roles, tablespaces, environment variables, psql and core administrative utilities.">
+<title>PostgreSQL Installation &amp; Administration</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}
+.dek{max-width:1080px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}a{color:var(--accent)}sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}pre code{color:inherit}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:900px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{body{background:#fff}header{background:#fff;color:#000;padding:18px 0}header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}a{color:#000;text-decoration:none}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Installation &amp; Administration</h1>
+<p class="dek">A production-oriented guide to installing and operating PostgreSQL on Linux, Windows, macOS, containers, and managed cloud platforms; initializing clusters; controlling services; configuring postgresql.conf, pg_hba.conf, and pg_ident.conf; managing roles and tablespaces; using psql and libpq environment variables; and operating the core PostgreSQL administrative utilities.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>PostgreSQL administration has two layers that should be kept distinct. PostgreSQL itself defines the cluster layout, <code>initdb</code>, the <code>postgres</code> server process, configuration files, SQL role model, tablespaces, client protocol and command-line utilities. Operating-system packages and managed services add a second layer that decides binary locations, service-unit names, data-directory conventions, automatic initialization, patching workflows, backups and which server settings are exposed. A reliable runbook separates those layers rather than treating one distribution's paths or service names as universal PostgreSQL behavior.<sup><a href="#r1">[1]</a>-<a href="#r5">[5]</a></sup></p>
+
+<p>A self-managed PostgreSQL instance begins with binaries plus a database cluster. <code>initdb</code> creates the cluster directory, shared catalogs, the <code>postgres</code> database and template databases, as well as default <code>postgresql.conf</code>, <code>pg_hba.conf</code> and related state. The server is then started either through an OS service manager such as systemd/Windows Services or directly through <code>pg_ctl</code>/<code>postgres</code>. PostgreSQL configuration settings differ in when they take effect: some reload on SIGHUP, some can change per session, and others—including <code>listen_addresses</code>, <code>port</code>, <code>max_connections</code>, <code>shared_buffers</code> and <code>logging_collector</code>—require server start/restart.<sup><a href="#r6">[6]</a>-<a href="#r10">[10]</a></sup></p>
+
+<p>Client authentication is separate from SQL privileges. <code>pg_hba.conf</code> determines whether a connection attempt is permitted and which authentication method applies; database roles determine what an authenticated session may own or access. <code>pg_ident.conf</code> is an optional mapping layer for external identities such as operating-system/GSSAPI names that differ from PostgreSQL role names. Roles exist cluster-wide, can own objects, and can have attributes such as <code>LOGIN</code>, <code>CREATEDB</code>, <code>CREATEROLE</code>, <code>REPLICATION</code> and <code>BYPASSRLS</code>.<sup><a href="#r11">[11]</a>-<a href="#r15">[15]</a></sup></p>
+
+<p>Operational utilities cover different failure and maintenance domains. <code>pg_dump</code>/<code>pg_restore</code> perform logical, database/object-level backup and restore; <code>pg_basebackup</code> takes a physical base backup of an entire running cluster for recovery/replication; <code>vacuumdb</code> wraps SQL <code>VACUUM</code>/<code>ANALYZE</code>; and <code>reindexdb</code> wraps SQL <code>REINDEX</code>. These tools are complementary rather than interchangeable and should be tied to tested restore, maintenance and disaster-recovery procedures.<sup><a href="#r16">[16]</a>-<a href="#r21">[21]</a></sup></p>
+</section>
+
+<nav class="toc"><h2>Contents</h2><ol>
+<li><a href="#installation-model">Installation model</a></li>
+<li><a href="#linux">Linux installation</a></li>
+<li><a href="#windows">Windows installation</a></li>
+<li><a href="#macos">macOS installation</a></li>
+<li><a href="#containers">Containers</a></li>
+<li><a href="#cloud">Managed cloud PostgreSQL</a></li>
+<li><a href="#initdb">Database initialization</a></li>
+<li><a href="#layout">Cluster/data layout</a></li>
+<li><a href="#server-control">Starting and stopping</a></li>
+<li><a href="#systemctl">systemctl</a></li>
+<li><a href="#pgctl">pg_ctl</a></li>
+<li><a href="#postgresqlconf">postgresql.conf</a></li>
+<li><a href="#setting-context">Reload vs restart</a></li>
+<li><a href="#hba">pg_hba.conf</a></li>
+<li><a href="#ident">pg_ident.conf</a></li>
+<li><a href="#network">Network configuration</a></li>
+<li><a href="#roles">Users and roles</a></li>
+<li><a href="#tablespaces">Tablespaces</a></li>
+<li><a href="#env">Environment variables</a></li>
+<li><a href="#psql">psql</a></li>
+<li><a href="#createdb">createdb</a></li>
+<li><a href="#createuser">createuser</a></li>
+<li><a href="#pgdump">pg_dump</a></li>
+<li><a href="#pgrestore">pg_restore</a></li>
+<li><a href="#pgbasebackup">pg_basebackup</a></li>
+<li><a href="#vacuumdb">vacuumdb</a></li>
+<li><a href="#reindexdb">reindexdb</a></li>
+<li><a href="#admin-patterns">Administration patterns</a></li>
+<li><a href="#security">Security baseline</a></li>
+<li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="installation-model">
+<h2>1. Installation model: binaries, cluster, service</h2>
+<p>Installing PostgreSQL binaries does not necessarily create or start a database cluster. PostgreSQL's upstream model separates executable installation from <code>initdb</code>, which creates a cluster. OS packages may automate some or all of initialization and service registration, while other packages intentionally leave those steps to the administrator.<sup><a href="#r1">[1]</a><a href="#r6">[6]</a></sup></p>
+
+<div class="diagram">install PostgreSQL software
+        |
+        v
+postgres / psql / initdb / pg_ctl / utilities
+        |
+        v
+initialize cluster (initdb)
+        |
+        +--> data directory
+        +--> shared catalogs
+        +--> postgres + template databases
+        +--> postgresql.conf
+        +--> pg_hba.conf
+        +--> pg_ident.conf
+        |
+        v
+start server
+(systemd / Windows service / pg_ctl / container runtime)
+        |
+        v
+connect and administer with psql/libpq</div>
+
+<p>PostgreSQL's download site recommends using integrated package management on Linux when available because packaging supplies OS integration and update management. PostgreSQL also publishes links to Windows/macOS installers and source code for custom builds.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup></p>
+</section>
+
+<section id="linux">
+<h2>2. Linux installation</h2>
+<p>Linux distributions commonly ship PostgreSQL through their native package repositories, while the PostgreSQL project also maintains the PGDG package repositories for several major distributions. Package names, data directories, service units, initialization commands and supported versions are packaging decisions; always consult the repository page for the distribution being deployed.<sup><a href="#r2">[2]</a>-<a href="#r4">[4]</a></sup></p>
+
+<h3>2.1 Debian/Ubuntu using the PGDG repository</h3>
+<p>The official PostgreSQL Debian/Ubuntu repository documentation provides an automated repository-configuration helper and versioned packages. A PostgreSQL 18 installation can be performed with the versioned server package after configuring the repository.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup></p>
+
+<pre><code>sudo apt install -y postgresql-common
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+
+sudo apt update
+sudo apt install postgresql-18</code></pre>
+
+<div class="callout warn"><strong>Packaging-specific behavior:</strong> Debian-family packages use their own multi-cluster tooling and directory/service conventions. Do not infer those paths from upstream <code>initdb</code> examples or copy them onto RHEL-family systems.</div>
+
+<h3>2.2 RHEL/Rocky/AlmaLinux/Fedora family</h3>
+<p>The PostgreSQL download page for Red Hat-family systems notes that some packages do not initialize or automatically enable PostgreSQL after installation. Its post-installation example uses a setup utility followed by systemd service enable/start operations.<sup><a href="#r5">[5]</a></sup></p>
+
+<pre><code>postgresql-setup --initdb
+systemctl enable postgresql.service
+systemctl start postgresql.service</code></pre>
+
+<p>The exact service/package name varies by repository and version. Use <code>systemctl list-unit-files | grep -i postgres</code>, package documentation, or the repository's supplied instructions rather than assuming one universal unit name.</p>
+
+<h3>2.3 Verify binaries and server</h3>
+<pre><code>psql --version
+postgres --version
+pg_config --version
+
+psql -d postgres -c 'SELECT version();'</code></pre>
+</section>
+
+<section id="windows">
+<h2>3. Windows installation</h2>
+<p>The PostgreSQL project links to an EDB interactive installer for Windows. The installer includes the PostgreSQL server and pgAdmin and can run in graphical or silent modes. Windows can run PostgreSQL as a system service; upstream <code>pg_ctl</code> also supports <code>register</code> and <code>unregister</code> service operations.<sup><a href="#r22">[22]</a><a href="#r7">[7]</a></sup></p>
+
+<h3>3.1 Service registration with pg_ctl</h3>
+<pre><code>pg_ctl register ^
+  -N PostgreSQL18 ^
+  -D "C:\PostgreSQL\18\data" ^
+  -S auto
+
+pg_ctl unregister -N PostgreSQL18</code></pre>
+
+<p>On Windows, PostgreSQL also supports the <code>eventlog</code> logging destination. Changes to <code>pg_hba.conf</code> are applied to subsequent new connections immediately on Windows, unlike Unix-like systems where an HBA reload is normally required.<sup><a href="#r7">[7]</a><a href="#r11">[11]</a><a href="#r23">[23]</a></sup></p>
+
+<h3>3.2 PowerShell client example</h3>
+<pre><code>$env:PGHOST = "localhost"
+$env:PGPORT = "5432"
+$env:PGUSER = "postgres"
+$env:PGDATABASE = "postgres"
+
+psql -c "SELECT version();"</code></pre>
+</section>
+
+<section id="macos">
+<h2>4. macOS installation</h2>
+<p>The PostgreSQL project lists several macOS distribution options: the EDB installer, Postgres.app, Homebrew, MacPorts and Fink. The EDB installer bundles the server, pgAdmin and StackBuilder; Postgres.app provides a self-contained app; Homebrew and other package managers integrate PostgreSQL with their own package/service conventions.<sup><a href="#r24">[24]</a></sup></p>
+
+<h3>4.1 Homebrew-style workflow</h3>
+<pre><code># Exact formula version depends on what Homebrew currently ships.
+brew search postgresql
+brew install postgresql@18
+
+# Package-manager service control is Homebrew-specific.
+brew services list</code></pre>
+
+<p>For source builds on macOS, upstream PostgreSQL documents installing Apple's command-line developer tools with <code>xcode-select --install</code>. Source-build/extension ABI details depend on the SDK/sysroot used to build PostgreSQL.<sup><a href="#r25">[25]</a></sup></p>
+</section>
+
+<section id="containers">
+<h2>5. Containers</h2>
+<p>The Docker Official Image for PostgreSQL provides versioned images including PostgreSQL 18.6. The image entrypoint initializes PostgreSQL when the configured data directory is empty, using environment variables such as <code>POSTGRES_PASSWORD</code>, <code>POSTGRES_USER</code>, <code>POSTGRES_DB</code> and <code>POSTGRES_INITDB_ARGS</code>. Those initialization variables do not retroactively reconfigure an already initialized persistent volume.<sup><a href="#r26">[26]</a></sup></p>
+
+<h3>5.1 Minimal Docker run</h3>
+<pre><code>docker volume create pg18-data
+
+docker run -d \
+  --name pg18 \
+  -e POSTGRES_PASSWORD='change-me' \
+  -p 5432:5432 \
+  -v pg18-data:/var/lib/postgresql \
+  postgres:18.6</code></pre>
+
+<p>The official image changed its volume/data layout for PostgreSQL 18 and later: the image-level volume is <code>/var/lib/postgresql</code>, while the default version-specific <code>PGDATA</code> resides below it. This differs from PostgreSQL 17-and-earlier Docker-image conventions, so volume mounts should follow the image documentation for the selected major version.<sup><a href="#r26">[26]</a></sup></p>
+
+<h3>5.2 Compose example</h3>
+<pre><code>services:
+  db:
+    image: postgres:18.6
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: app_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: appdb
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    secrets:
+      - postgres_password
+    volumes:
+      - pg18-data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:5432:5432"
+
+secrets:
+  postgres_password:
+    file: ./postgres_password.txt
+
+volumes:
+  pg18-data:</code></pre>
+
+<h3>5.3 Initialization scripts</h3>
+<p>The official image executes <code>*.sql</code>, <code>*.sql.gz</code> and shell initialization files in <code>/docker-entrypoint-initdb.d</code> after initial <code>initdb</code>, but only when the database directory is empty. Treat these as first-boot/bootstrap scripts, not as a migration system for existing databases.<sup><a href="#r26">[26]</a></sup></p>
+
+<pre><code># docker-entrypoint-initdb.d/10-app.sql
+CREATE ROLE app_runtime LOGIN;
+CREATE DATABASE appdb OWNER app_runtime;</code></pre>
+
+<h3>5.4 Containers do not remove database administration</h3>
+<p>A container image packages processes and files; it does not make the database stateless. Persistent storage, backup/restore, major-version upgrade, resource limits, shared memory, replication, WAL retention, monitoring and security still require deliberate design.</p>
+</section>
+
+<section id="cloud">
+<h2>6. Managed cloud PostgreSQL</h2>
+<p>Managed PostgreSQL services replace some host-level administration with provider APIs. Amazon RDS for PostgreSQL, Azure Database for PostgreSQL Flexible Server, and Google Cloud SQL for PostgreSQL manage the underlying VM/service lifecycle and provide platform-integrated backup, networking, monitoring and availability features, but they expose only a controlled subset of PostgreSQL/OS capabilities.<sup><a href="#r27">[27]</a>-<a href="#r29">[29]</a></sup></p>
+
+<div class="table-wrap"><table><thead><tr><th>Self-managed</th><th>Managed cloud</th></tr></thead><tbody>
+<tr><td>Root/administrator access to host</td><td>Usually no host access</td></tr>
+<tr><td>Edit <code>postgresql.conf</code> directly</td><td>Provider parameter/flag interface</td></tr>
+<tr><td>Superuser role under your control</td><td>Provider-managed elevated role; full superuser often unavailable</td></tr>
+<tr><td>Choose filesystem/tablespace paths</td><td>Storage exposed through provider abstractions</td></tr>
+<tr><td>Run pg_ctl/systemctl</td><td>Start/stop/restart via provider control plane</td></tr>
+<tr><td>Design backups manually</td><td>Automated backups/PITR often integrated, but restore testing remains your responsibility</td></tr>
+</tbody></table></div>
+
+<p>Azure documents that its managed superuser role remains controlled by the service and that only a subset of PostgreSQL parameters can be configured through the service. Cloud SQL likewise documents itself as fully managed PostgreSQL. RDS exposes PostgreSQL through RDS controls rather than host-level administration.<sup><a href="#r27">[27]</a>-<a href="#r30">[30]</a></sup></p>
+
+<div class="callout warn"><strong>Cloud administration changes responsibility, not correctness requirements.</strong> You still need role design, connection security, query/index tuning, restore testing, schema migrations, capacity planning and monitoring. Provider backups are not a substitute for proving your RTO/RPO through restores.</div>
+</section>
+
+<section id="initdb">
+<h2>7. Database initialization with <code>initdb</code></h2>
+<p><code>initdb</code> creates a new PostgreSQL database cluster: the data-directory structure, shared catalog tables, <code>postgres</code>, <code>template1</code> and <code>template0</code> databases, and initial configuration/authentication files. The cluster must be initialized by the operating-system account that will own/run the server, not by root.<sup><a href="#r6">[6]</a></sup></p>
+
+<pre><code>install -d -m 0700 -o postgres -g postgres /srv/postgresql/18/data
+
+sudo -u postgres initdb \
+  -D /srv/postgresql/18/data \
+  --encoding=UTF8 \
+  --locale=C.UTF-8 \
+  --auth-host=scram-sha-256 \
+  --auth-local=peer \
+  --data-checksums</code></pre>
+
+<p><code>initdb</code> can select locale/provider/encoding, configure initial HBA authentication, enable data checksums, choose WAL segment size, and place WAL in another directory. These choices are not all equally easy to change later; initialization should therefore be part of the infrastructure specification, not an improvised first boot.<sup><a href="#r6">[6]</a></sup></p>
+
+<div class="callout warn"><strong>Do not use <code>trust</code> casually.</strong> Upstream <code>initdb</code> permits trust authentication for convenience, but explicitly warns against it unless all users with access to the relevant host/network are trusted.<sup><a href="#r6">[6]</a></sup></div>
+</section>
+
+<section id="layout">
+<h2>8. Cluster and configuration layout</h2>
+<p>By default, upstream PostgreSQL expects configuration files in the data directory referenced by <code>-D</code>/<code>PGDATA</code>. PostgreSQL can separate the physical data directory from configuration files by setting <code>data_directory</code> and can independently point to <code>hba_file</code> and <code>ident_file</code>. Linux packages often use this flexibility to place configuration under <code>/etc</code> while storing database files elsewhere.<sup><a href="#r31">[31]</a></sup></p>
+
+<pre><code>SHOW data_directory;
+SHOW config_file;
+SHOW hba_file;
+SHOW ident_file;</code></pre>
+
+<p>Use SQL to ask a running server where its files are rather than guessing package paths.</p>
+</section>
+
+<section id="server-control">
+<h2>9. Starting and stopping PostgreSQL</h2>
+<p>The server can be started by an OS service manager, <code>pg_ctl</code>, or the <code>postgres</code> executable directly. Production package installs normally use the platform service manager because it provides boot integration, process supervision and centralized logs; <code>pg_ctl</code> remains the portable PostgreSQL-level control utility.<sup><a href="#r7">[7]</a></sup></p>
+
+<div class="diagram">service manager                         direct PostgreSQL control
+systemd / Windows Services             pg_ctl
+        |                                  |
+        +-------------> postgres <----------+
+                          |
+                       cluster
+                          |
+                  shared memory / files</div>
+</section>
+
+<section id="systemctl">
+<h2>10. <code>systemctl</code> on Linux</h2>
+<p>systemd is not a PostgreSQL feature, but many Linux packages install PostgreSQL service units. Unit names vary by package family/version, so inspect the installed units instead of hard-coding a name from another distribution.</p>
+
+<pre><code>systemctl list-unit-files | grep -i postgres
+systemctl list-units --type=service | grep -i postgres
+
+sudo systemctl status postgresql.service
+sudo systemctl start postgresql.service
+sudo systemctl stop postgresql.service
+sudo systemctl restart postgresql.service
+sudo systemctl reload postgresql.service
+sudo systemctl enable postgresql.service</code></pre>
+
+<p>The Red Hat-family PostgreSQL download instructions explicitly show enabling and starting a <code>postgresql.service</code> after initialization for the referenced package setup, while Debian-derived packaging can expose cluster-specific units/tooling. Treat those service names as package contracts, not upstream PostgreSQL constants.<sup><a href="#r5">[5]</a></sup></p>
+
+<h3>10.1 Logs with journald</h3>
+<pre><code>journalctl -u postgresql.service
+journalctl -u postgresql.service -f</code></pre>
+
+<p>Whether server logs appear in journald, PostgreSQL log files, syslog or several destinations depends on the service wrapper and PostgreSQL <code>log_destination</code>/<code>logging_collector</code> configuration.<sup><a href="#r23">[23]</a></sup></p>
+</section>
+
+<section id="pgctl">
+<h2>11. <code>pg_ctl</code></h2>
+<p><code>pg_ctl</code> initializes, starts, stops, restarts, reloads, promotes and reports the status of a PostgreSQL server. On Windows it also registers/unregisters a service. It uses <code>-D</code> or <code>PGDATA</code> to find the cluster configuration.<sup><a href="#r7">[7]</a></sup></p>
+
+<pre><code>export PGDATA=/srv/postgresql/18/data
+
+pg_ctl status
+pg_ctl start -l /var/log/postgresql/pg18.log
+pg_ctl reload
+pg_ctl restart
+pg_ctl stop</code></pre>
+
+<h3>11.1 Shutdown modes</h3>
+<div class="table-wrap"><table><thead><tr><th>Mode</th><th>Behavior</th><th>Use</th></tr></thead><tbody>
+<tr><td><code>smart</code></td><td>Rejects new connections and waits for existing clients to disconnect.</td><td>Gentlest planned shutdown when waiting is acceptable.</td></tr>
+<tr><td><code>fast</code></td><td>Default; disconnects clients, rolls back active transactions, performs clean shutdown.</td><td>Normal operational shutdown/restart.</td></tr>
+<tr><td><code>immediate</code></td><td>Aborts server processes without clean shutdown; next start performs crash recovery.</td><td>Emergency only.</td></tr>
+</tbody></table></div>
+<p>Upstream <code>pg_ctl stop</code> defaults to fast mode. Immediate mode deliberately creates crash-recovery work and should not be a routine service-control choice.<sup><a href="#r7">[7]</a></sup></p>
+</section>
+
+<section id="postgresqlconf">
+<h2>12. <code>postgresql.conf</code></h2>
+<p><code>postgresql.conf</code> is the main server-parameter configuration file. It is generated during initialization. Each parameter is generally specified as <code>name = value</code>; comments start with <code>#</code>, and when the same parameter occurs repeatedly the last active value wins. Settings can also come from command-line <code>-c</code>, <code>ALTER SYSTEM</code>, per-database/role settings and session <code>SET</code>, with precedence defined by PostgreSQL's configuration system.<sup><a href="#r8">[8]</a></sup></p>
+
+<pre><code># postgresql.conf — illustrative, not universal tuning values
+
+listen_addresses = '127.0.0.1,10.20.0.15'
+port = 5432
+max_connections = 200
+
+shared_buffers = '8GB'
+work_mem = '16MB'
+maintenance_work_mem = '1GB'
+
+wal_level = 'replica'
+max_wal_size = '8GB'
+
+log_destination = 'stderr,jsonlog'
+logging_collector = on
+log_min_duration_statement = '500ms'
+log_checkpoints = on</code></pre>
+
+<h3>12.1 Inspect effective settings</h3>
+<pre><code>SHOW shared_buffers;
+SHOW work_mem;
+
+SELECT
+    name,
+    setting,
+    unit,
+    context,
+    source,
+    sourcefile,
+    sourceline,
+    pending_restart
+FROM pg_settings
+WHERE name IN (
+    'listen_addresses',
+    'port',
+    'max_connections',
+    'shared_buffers',
+    'work_mem',
+    'maintenance_work_mem'
+)
+ORDER BY name;</code></pre>
+
+<h3>12.2 <code>ALTER SYSTEM</code></h3>
+<pre><code>ALTER SYSTEM SET log_min_duration_statement = '500ms';
+SELECT pg_reload_conf();</code></pre>
+
+<p><code>ALTER SYSTEM</code> writes settings to <code>postgresql.auto.conf</code>, which PostgreSQL reads in addition to the main configuration. It is useful for automation, but teams should avoid splitting configuration ownership across manual files, configuration management and ad hoc <code>ALTER SYSTEM</code> without a defined source of truth.<sup><a href="#r8">[8]</a></sup></p>
+</section>
+
+<section id="setting-context">
+<h2>13. Reload versus restart</h2>
+<p>Every setting has a context that determines when and by whom it can change. A configuration reload causes the server to reread reloadable files/settings, while postmaster-context parameters require a complete server restart. Examples that require server start include <code>listen_addresses</code>, <code>port</code>, <code>max_connections</code>, <code>shared_buffers</code> and <code>logging_collector</code>.<sup><a href="#r9">[9]</a><a href="#r23">[23]</a><a href="#r32">[32]</a></sup></p>
+
+<pre><code>SELECT
+    name,
+    context,
+    pending_restart
+FROM pg_settings
+WHERE pending_restart
+ORDER BY name;</code></pre>
+
+<pre><code>SELECT pg_reload_conf();</code></pre>
+
+<div class="callout ok"><strong>Admin rule:</strong> let <code>pg_settings.context</code> and <code>pending_restart</code> answer “reload or restart?” rather than memorizing every parameter.</div>
+</section>
+
+<section id="hba">
+<h2>14. <code>pg_hba.conf</code>: client authentication policy</h2>
+<p><code>pg_hba.conf</code> controls client authentication. Rules are evaluated in order; PostgreSQL uses the first matching record, and there is no fallback to later records if authentication fails. Rules match connection type, database, user and client address, then select an authentication method/options.<sup><a href="#r11">[11]</a></sup></p>
+
+<pre><code># TYPE  DATABASE   USER          ADDRESS          METHOD
+
+local   all        postgres                       peer
+local   all        all                            scram-sha-256
+
+host    appdb      app_runtime   10.20.0.0/16     scram-sha-256
+hostssl appdb      reporting     10.30.4.0/24     scram-sha-256
+host    replication repl_user    10.40.0.0/24     scram-sha-256</code></pre>
+
+<h3>14.1 Reload and validate</h3>
+<pre><code>SELECT *
+FROM pg_hba_file_rules
+WHERE error IS NOT NULL;</code></pre>
+
+<pre><code>SELECT pg_reload_conf();</code></pre>
+
+<p>On Unix-like systems, PostgreSQL rereads HBA rules at start and SIGHUP/reload. On Windows, edits are applied to subsequent new connections immediately. The <code>pg_hba_file_rules</code> view is useful for syntax/interpretation checks before relying on a change.<sup><a href="#r11">[11]</a></sup></p>
+
+<h3>14.2 Authentication is not authorization</h3>
+<p>A successful HBA/authentication check establishes a PostgreSQL role identity. Object privileges, role membership, row-level security and ownership then determine what that session can do. Do not use HBA rules as a replacement for SQL privilege design.<sup><a href="#r12">[12]</a><a href="#r14">[14]</a></sup></p>
+</section>
+
+<section id="ident">
+<h2>15. <code>pg_ident.conf</code>: user-name mapping</h2>
+<p><code>pg_ident.conf</code> maps external authenticated user names to PostgreSQL role names. It is used when an authentication mechanism supplies an external identity—such as Ident, peer/GSSAPI/SSPI scenarios—and the requested database role name differs from that identity. The selected mapping is referenced with <code>map=...</code> in the matching <code>pg_hba.conf</code> record.<sup><a href="#r13">[13]</a></sup></p>
+
+<pre><code># pg_ident.conf
+# MAPNAME       SYSTEM-USERNAME              PG-USERNAME
+
+corp            alice@EXAMPLE.COM            alice_db
+corp            bob@EXAMPLE.COM              reporting_user</code></pre>
+
+<pre><code># pg_hba.conf
+hostgssenc appdb all 10.0.0.0/8 gss map=corp</code></pre>
+
+<h3>15.1 Validate mappings</h3>
+<pre><code>SELECT *
+FROM pg_ident_file_mappings
+WHERE error IS NOT NULL;</code></pre>
+
+<p><code>pg_ident.conf</code> supports repeated map names, include directives and regular-expression mapping. It reloads on SIGHUP on Unix-like systems and can be moved by setting <code>ident_file</code>.<sup><a href="#r13">[13]</a><a href="#r33">[33]</a></sup></p>
+</section>
+
+<section id="network">
+<h2>16. Network configuration</h2>
+<p><code>listen_addresses</code> decides which network interfaces accept TCP connection attempts. Its default is <code>localhost</code>, so an upstream server normally does not accept remote TCP connections until configured. <code>port</code> defaults to 5432. Authentication/network firewall rules are separate controls: widening <code>listen_addresses</code> does not by itself authorize a user, and adding HBA access does not help if the server is not listening on the relevant interface.<sup><a href="#r9">[9]</a></sup></p>
+
+<pre><code># postgresql.conf
+listen_addresses = '10.20.0.15'
+port = 5432</code></pre>
+
+<pre><code># pg_hba.conf
+hostssl appdb app_runtime 10.20.50.0/24 scram-sha-256</code></pre>
+
+<div class="diagram">client
+  |
+  v
+network/firewall permits traffic?
+  |
+  v
+PostgreSQL listening on interface/port?
+  |
+  v
+pg_hba.conf first matching rule?
+  |
+  v
+authentication succeeds?
+  |
+  v
+role privileges permit SQL operation?</div>
+</section>
+
+<section id="roles">
+<h2>17. Users and roles</h2>
+<p>PostgreSQL uses one unified role model: roles can own objects, receive privileges, be members of other roles and optionally have <code>LOGIN</code>. <code>CREATE USER</code> is effectively <code>CREATE ROLE ... LOGIN</code>, while a role without LOGIN is commonly used as a permission group. Roles exist across the entire cluster rather than separately in each database.<sup><a href="#r14">[14]</a><a href="#r15">[15]</a></sup></p>
+
+<h3>17.1 Separate ownership, runtime and human access</h3>
+<pre><code>CREATE ROLE app_owner NOLOGIN;
+
+CREATE ROLE app_runtime
+    LOGIN
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    PASSWORD 'replace-via-secure-secret-flow';
+
+GRANT CONNECT ON DATABASE appdb TO app_runtime;
+GRANT USAGE ON SCHEMA app TO app_runtime;
+
+ALTER SCHEMA app OWNER TO app_owner;</code></pre>
+
+<h3>17.2 Role attributes</h3>
+<div class="table-wrap"><table><thead><tr><th>Attribute</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>LOGIN</code></td><td>Role can be used as initial session user.</td></tr>
+<tr><td><code>SUPERUSER</code></td><td>Bypasses nearly all database permission checks; reserve tightly.</td></tr>
+<tr><td><code>CREATEDB</code></td><td>Can create databases.</td></tr>
+<tr><td><code>CREATEROLE</code></td><td>Can create/manage roles within documented limits.</td></tr>
+<tr><td><code>REPLICATION</code></td><td>Allows replication protocol operations where authentication permits.</td></tr>
+<tr><td><code>BYPASSRLS</code></td><td>Bypasses row-level security policies.</td></tr>
+<tr><td><code>CONNECTION LIMIT</code></td><td>Limits simultaneous connections for the role.</td></tr>
+</tbody></table></div>
+
+<p>PostgreSQL explicitly warns that superuser is dangerous and should not be used for normal work. Prefer least privilege and purpose-specific login/group/owner roles.<sup><a href="#r15">[15]</a></sup></p>
+</section>
+
+<section id="tablespaces">
+<h2>18. Tablespaces</h2>
+<p>A tablespace registers another filesystem location in which PostgreSQL can place relation files. Tablespaces are cluster-wide objects and can be selected for databases, tables, indexes and some constraints. The target directory must already exist, be owned by the PostgreSQL OS account and be usable by the server.<sup><a href="#r34">[34]</a><a href="#r35">[35]</a></sup></p>
+
+<pre><code># As root/administrator:
+mkdir -p /mnt/fastssd/pg_ts_fast
+chown postgres:postgres /mnt/fastssd/pg_ts_fast
+chmod 700 /mnt/fastssd/pg_ts_fast</code></pre>
+
+<pre><code>CREATE TABLESPACE fastssd
+OWNER app_owner
+LOCATION '/mnt/fastssd/pg_ts_fast';
+
+CREATE INDEX orders_created_idx
+ON app.orders(created_at)
+TABLESPACE fastssd;</code></pre>
+
+<div class="callout warn"><strong>Tablespaces are not portable independent disks.</strong> A tablespace belongs to one PostgreSQL cluster; filesystem backups/restores and cluster moves must preserve the cluster's tablespace relationships.<sup><a href="#r34">[34]</a></sup></div>
+</section>
+
+<section id="env">
+<h2>19. Environment variables</h2>
+<p>libpq-based clients and most PostgreSQL utilities accept environment variables that provide default connection parameters. Core variables include <code>PGHOST</code>, <code>PGPORT</code>, <code>PGDATABASE</code>, <code>PGUSER</code>, <code>PGSERVICE</code>, <code>PGPASSFILE</code> and many SSL/authentication options. Server-side administration also commonly uses <code>PGDATA</code> for the cluster directory.<sup><a href="#r36">[36]</a><a href="#r7">[7]</a></sup></p>
+
+<pre><code>export PGHOST=db.internal.example
+export PGPORT=5432
+export PGDATABASE=appdb
+export PGUSER=app_admin
+
+psql</code></pre>
+
+<h3>19.1 Avoid <code>PGPASSWORD</code> in routine environments</h3>
+<p>Although <code>PGPASSWORD</code> exists, PostgreSQL's documentation discourages using it for security reasons on systems where process environments can be inspected. Prefer a protected password file, a secrets mechanism or stronger authentication.<sup><a href="#r36">[36]</a></sup></p>
+
+<h3>19.2 Password file</h3>
+<pre><code># ~/.pgpass
+db.internal.example:5432:appdb:app_admin:secret</code></pre>
+
+<pre><code>chmod 600 ~/.pgpass</code></pre>
+
+<p>On Unix, an overly permissive <code>.pgpass</code> is ignored. On Windows, the conventional file is under <code>%APPDATA%\postgresql\pgpass.conf</code>. <code>PGPASSFILE</code> can point to another password file.<sup><a href="#r37">[37]</a></sup></p>
+
+<h3>19.3 Connection service files</h3>
+<pre><code># ~/.pg_service.conf
+[prod-app]
+host=db.internal.example
+port=5432
+dbname=appdb
+user=app_admin
+sslmode=verify-full</code></pre>
+
+<pre><code>PGSERVICE=prod-app psql</code></pre>
+
+<p>Service files make connection endpoints centrally configurable and are especially useful for scripts and utilities. A direct connection-string parameter overrides the corresponding service-file value.<sup><a href="#r38">[38]</a></sup></p>
+</section>
+
+<section id="psql">
+<h2>20. <code>psql</code></h2>
+<p><code>psql</code> is PostgreSQL's interactive terminal and scripting client. It can execute SQL from standard input/files, expose metadata through backslash meta-commands, format output, manage variables and connect using standard libpq connection parameters.<sup><a href="#r39">[39]</a></sup></p>
+
+<pre><code>psql -h db.internal.example -p 5432 -U app_admin -d appdb</code></pre>
+
+<h3>20.1 Essential meta-commands</h3>
+<pre><code>\conninfo
+\l
+\dn
+\dt app.*
+\d+ app.orders
+\du
+\dx
+\x auto
+\timing on
+\watch 5</code></pre>
+
+<h3>20.2 Safer scripting</h3>
+<pre><code>psql \
+  -X \
+  -v ON_ERROR_STOP=1 \
+  -d appdb \
+  -f migration.sql</code></pre>
+
+<p><code>-X</code> avoids loading a user's <code>psqlrc</code>, helping make automation deterministic, while <code>ON_ERROR_STOP</code> causes psql scripts to stop on errors instead of silently continuing. For transactionally safe migrations, combine these client behaviors with explicit transaction handling where the involved DDL permits it.</p>
+
+<h3>20.3 Connection URI</h3>
+<pre><code>psql \
+  'postgresql://app_admin@db.internal.example:5432/appdb?sslmode=verify-full'</code></pre>
+</section>
+
+<section id="createdb">
+<h2>21. <code>createdb</code></h2>
+<p><code>createdb</code> is a shell wrapper around SQL <code>CREATE DATABASE</code>; there is no semantic difference between creating a database through the utility and issuing the SQL command with equivalent options. The executing role normally becomes owner unless another owner is specified and the caller has sufficient privilege.<sup><a href="#r40">[40]</a></sup></p>
+
+<pre><code>createdb \
+  -h localhost \
+  -U postgres \
+  -O app_owner \
+  appdb</code></pre>
+
+<pre><code># SQL equivalent:
+CREATE DATABASE appdb OWNER app_owner;</code></pre>
+</section>
+
+<section id="createuser">
+<h2>22. <code>createuser</code></h2>
+<p><code>createuser</code> is a wrapper around <code>CREATE ROLE</code> and creates a role with login by default. The caller needs appropriate role-management privilege; creating superuser, replication or bypass-RLS roles requires superuser authority according to PostgreSQL's role rules.<sup><a href="#r41">[41]</a></sup></p>
+
+<pre><code>createuser \
+  --login \
+  --no-superuser \
+  --no-createdb \
+  --no-createrole \
+  --pwprompt \
+  app_runtime</code></pre>
+
+<p>For infrastructure-as-code and repeatable privilege design, SQL <code>CREATE ROLE</code>/<code>ALTER ROLE</code> is often clearer because the resulting desired state lives beside other schema/security DDL.</p>
+</section>
+
+<section id="pgdump">
+<h2>23. <code>pg_dump</code>: logical backup</h2>
+<p><code>pg_dump</code> creates a consistent logical export of one PostgreSQL database. It can dump plain SQL or archive formats. Custom (<code>-Fc</code>) and directory (<code>-Fd</code>) formats are intended for <code>pg_restore</code> and allow selective/parallel restore capabilities that a plain SQL script does not.<sup><a href="#r16">[16]</a></sup></p>
+
+<h3>23.1 Custom-format database backup</h3>
+<pre><code>pg_dump \
+  -h db.internal.example \
+  -U backup_user \
+  -Fc \
+  -f appdb_2026-09-16.dump \
+  appdb</code></pre>
+
+<h3>23.2 Directory format with parallel dump</h3>
+<pre><code>pg_dump \
+  -Fd \
+  -j 8 \
+  -f appdb_dir \
+  appdb</code></pre>
+
+<h3>23.3 Schema/data selection</h3>
+<pre><code>pg_dump --schema=app --format=custom appdb &gt; app.dump
+
+pg_dump --table='app.orders*' --data-only appdb &gt; orders.sql</code></pre>
+
+<p>A logical dump is not a physical image of the cluster. It is excellent for object-level restore, migration and version-flexible logical backups, but it does not by itself capture cluster-wide roles/tablespaces; use <code>pg_dumpall --globals-only</code> or separately managed role/tablespace DDL for global objects.<sup><a href="#r16">[16]</a><a href="#r42">[42]</a></sup></p>
+</section>
+
+<section id="pgrestore">
+<h2>24. <code>pg_restore</code></h2>
+<p><code>pg_restore</code> restores archive files produced by non-plain <code>pg_dump</code> formats. It can list/select archive contents, remap ownership behavior, clean existing objects, create a target database and perform parallel restore for supported archive formats.<sup><a href="#r17">[17]</a></sup></p>
+
+<pre><code>createdb -O app_owner appdb_restore
+
+pg_restore \
+  -d appdb_restore \
+  --no-owner \
+  --exit-on-error \
+  -j 8 \
+  appdb_2026-09-16.dump</code></pre>
+
+<h3>24.1 Inspect archive contents</h3>
+<pre><code>pg_restore --list appdb_2026-09-16.dump &gt; restore.list</code></pre>
+
+<p>Restore testing should be automated. A backup that has never been restored and validated is evidence that files exist, not evidence that recovery objectives can be met.</p>
+</section>
+
+<section id="pgbasebackup">
+<h2>25. <code>pg_basebackup</code>: physical base backup</h2>
+<p><code>pg_basebackup</code> takes a physical base backup of a running PostgreSQL cluster through the replication protocol. The result contains cluster-level physical files suitable for point-in-time recovery, standby creation and other physical recovery workflows. It backs up the entire cluster, not selected databases/tables.<sup><a href="#r18">[18]</a></sup></p>
+
+<pre><code>pg_basebackup \
+  -h primary.internal.example \
+  -U repl_backup \
+  -D /backups/base/2026-09-16 \
+  -Fp \
+  -Xs \
+  -P</code></pre>
+
+<h3>25.1 Standby bootstrap</h3>
+<pre><code>pg_basebackup \
+  -h primary.internal.example \
+  -U repl_user \
+  -D /srv/postgresql/18/data \
+  -R \
+  -Xs \
+  -P</code></pre>
+
+<p><code>-R</code> writes standby connection/recovery configuration for convenient replica setup. The server must permit a replication connection and the connecting role must have the required replication/base-backup privileges.<sup><a href="#r18">[18]</a></sup></p>
+
+<h3>25.2 Logical versus physical</h3>
+<div class="table-wrap"><table><thead><tr><th>Property</th><th>pg_dump</th><th>pg_basebackup</th></tr></thead><tbody>
+<tr><td>Granularity</td><td>One database / selected logical objects</td><td>Entire physical cluster</td></tr>
+<tr><td>Output</td><td>SQL/logical archive</td><td>PostgreSQL physical files</td></tr>
+<tr><td>Selective restore</td><td>Yes, archive formats</td><td>No object-level selectivity</td></tr>
+<tr><td>PITR foundation</td><td>No, not by itself</td><td>Yes, with WAL archive/retention</td></tr>
+<tr><td>Cross-major logical migration</td><td>Common use</td><td>Physical compatibility constraints apply</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="vacuumdb">
+<h2>26. <code>vacuumdb</code></h2>
+<p><code>vacuumdb</code> is a command-line wrapper around SQL <code>VACUUM</code> and <code>ANALYZE</code>. It is useful for scripts, post-restore statistics refresh, maintenance jobs and operating across databases without embedding SQL directly.<sup><a href="#r19">[19]</a></sup></p>
+
+<pre><code>vacuumdb --analyze appdb
+
+vacuumdb \
+  --all \
+  --analyze \
+  --jobs=4</code></pre>
+
+<h3>26.1 After a large logical restore</h3>
+<pre><code>vacuumdb \
+  --dbname=appdb_restore \
+  --analyze-in-stages \
+  --jobs=8</code></pre>
+
+<p>Autovacuum remains the normal ongoing maintenance mechanism. <code>vacuumdb</code> is not a replacement for correctly configured autovacuum; it is an explicit/manual/scheduled interface to the same maintenance commands.</p>
+</section>
+
+<section id="reindexdb">
+<h2>27. <code>reindexdb</code></h2>
+<p><code>reindexdb</code> is a wrapper around SQL <code>REINDEX</code>. It rebuilds indexes when corruption, collation changes or measured bloat/structural inefficiency justifies a rebuild. It can operate on individual indexes/tables/schemas/databases and supports concurrent reindexing where PostgreSQL supports <code>REINDEX CONCURRENTLY</code>.<sup><a href="#r20">[20]</a><a href="#r21">[21]</a></sup></p>
+
+<pre><code>reindexdb --table=app.orders appdb
+
+reindexdb \
+  --index=app.orders_created_idx \
+  --concurrently \
+  appdb</code></pre>
+
+<p>Do not schedule blanket reindexing merely because indexes exist. Rebuilds consume I/O, WAL, disk space and lock/concurrent-maintenance resources; trigger them from actual corruption/upgrade/collation/performance evidence.</p>
+</section>
+
+<section id="admin-patterns">
+<h2>28. Administrative operating patterns</h2>
+
+<h3>28.1 Find the real configuration source</h3>
+<pre><code>SELECT name, setting, source, sourcefile, sourceline
+FROM pg_settings
+WHERE name IN (
+  'data_directory',
+  'hba_file',
+  'ident_file',
+  'listen_addresses',
+  'port'
+);</code></pre>
+
+<h3>28.2 Validate auth/config before disconnecting yourself</h3>
+<pre><code>SELECT * FROM pg_hba_file_rules WHERE error IS NOT NULL;
+SELECT * FROM pg_ident_file_mappings WHERE error IS NOT NULL;
+
+SELECT pg_reload_conf();</code></pre>
+
+<h3>28.3 Keep an emergency administrative path</h3>
+<p>Reserve a controlled way to connect when ordinary application connection pools exhaust the server. PostgreSQL supports reserved/superuser connection slots, and production systems should avoid consuming every available connection with application pools.<sup><a href="#r9">[9]</a></sup></p>
+
+<h3>28.4 Prefer role separation</h3>
+<div class="diagram">NOLOGIN owner role
+      |
+      +-- owns schemas/tables/functions
+
+runtime login role
+      |
+      +-- receives only app privileges
+
+migration/deployer role
+      |
+      +-- elevated DDL rights
+
+backup/replication role
+      |
+      +-- minimum required backup/replication privileges
+
+human DBA login
+      |
+      +-- uses SET ROLE / approved elevation</div>
+
+<h3>28.5 Treat restart-required settings as change events</h3>
+<p>Changes to <code>shared_buffers</code>, <code>max_connections</code>, network listeners and other postmaster-context settings should go through normal change-control/HA procedures because a restart affects availability. Use replicas/failover or maintenance windows according to the deployment architecture.</p>
+
+<h3>28.6 Test restores, not only backups</h3>
+<p>For logical backups, restore into a clean database and run integrity/application checks. For physical backups, test recovery—including the required WAL and recovery target logic—in an isolated environment. Backup success logs alone do not validate recoverability.</p>
+</section>
+
+<section id="security">
+<h2>29. Security baseline</h2>
+
+<h3>29.1 Do not expose PostgreSQL directly unless required</h3>
+<p>Keep <code>listen_addresses</code>, host firewalls/security groups and HBA networks as narrow as the architecture permits. Exposing port 5432 on all interfaces plus a broad HBA rule significantly increases attack surface even when passwords are strong.</p>
+
+<h3>29.2 Prefer SCRAM for password authentication</h3>
+<p>PostgreSQL supports SCRAM-SHA-256 and other authentication methods. New deployments using password authentication should use SCRAM rather than legacy password approaches where client compatibility permits.<sup><a href="#r12">[12]</a><a href="#r43">[43]</a></sup></p>
+
+<h3>29.3 Protect secrets</h3>
+<p>Do not commit database passwords to source repositories, container images or world-readable shell scripts. Prefer secret stores, protected password files, workload identities/Kerberos/certificates where appropriate, and short-lived credentials.</p>
+
+<h3>29.4 Minimize superuser</h3>
+<p>Superuser bypasses almost all database permission checks. Routine applications should never connect as superuser, and DBA workflows should prefer controlled elevation over permanently broad login roles.<sup><a href="#r15">[15]</a></sup></p>
+
+<h3>29.5 TLS is separate from authentication</h3>
+<p>Encrypted transport and identity authentication solve different problems. Configure <code>ssl</code>/<code>hostssl</code> and client verification as needed, while still selecting an appropriate user authentication method and SQL privilege model.<sup><a href="#r9">[9]</a><a href="#r12">[12]</a></sup></p>
+</section>
+
+<section id="checklist">
+<h2>30. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Use a supported PostgreSQL major/minor release and a documented package source.</strong></li>
+<li><strong>Separate package-specific paths/service units from upstream PostgreSQL behavior.</strong></li>
+<li><strong>Record initdb decisions</strong>: locale/provider, encoding, checksums, authentication, WAL/data locations.</li>
+<li><strong>Run the server as a dedicated non-root OS account.</strong></li>
+<li><strong>Ask the server for <code>data_directory</code>, <code>config_file</code>, <code>hba_file</code> and <code>ident_file</code>; do not guess.</strong></li>
+<li><strong>Keep configuration under one controlled source of truth.</strong></li>
+<li><strong>Use <code>pg_settings</code> to inspect effective values, source and pending restart.</strong></li>
+<li><strong>Keep <code>listen_addresses</code> and network/firewall scope narrow.</strong></li>
+<li><strong>Order <code>pg_hba.conf</code> rules intentionally; first match wins.</strong></li>
+<li><strong>Validate HBA and ident files through their system views before relying on changes.</strong></li>
+<li><strong>Prefer SCRAM-SHA-256 for password authentication on modern deployments.</strong></li>
+<li><strong>Separate authentication from authorization/role privileges.</strong></li>
+<li><strong>Use owner, runtime, migration, backup and human roles separately where practical.</strong></li>
+<li><strong>Avoid application superusers.</strong></li>
+<li><strong>Use tablespaces only for a clear storage-placement reason and include them in backup/DR planning.</strong></li>
+<li><strong>Use service files or protected password files instead of hard-coded credentials.</strong></li>
+<li><strong>Use deterministic psql scripting</strong> such as <code>-X</code> and <code>ON_ERROR_STOP</code>.</li>
+<li><strong>Use <code>pg_dump</code>/<code>pg_restore</code> for logical/object-level backup and migration.</strong></li>
+<li><strong>Capture cluster-global roles/tablespaces separately from single-database pg_dump.</strong></li>
+<li><strong>Use <code>pg_basebackup</code> plus required WAL for physical recovery/standby workflows.</strong></li>
+<li><strong>Automate restore tests.</strong></li>
+<li><strong>Keep autovacuum healthy; use vacuumdb for explicit maintenance, not as a substitute.</strong></li>
+<li><strong>Reindex from evidence, not on an arbitrary calendar.</strong></li>
+<li><strong>In containers, persist the documented PostgreSQL 18 volume path and do not confuse initialization variables with runtime reconfiguration.</strong></li>
+<li><strong>In managed cloud, understand which PostgreSQL privileges/settings are provider-controlled.</strong></li>
+<li><strong>Patch minor releases and rehearse major upgrades.</strong></li>
+<li><strong>Monitor disk/WAL growth, connections, locks, replication, autovacuum, checkpoints and backups.</strong></li>
+</ol>
+
+<div class="callout ok"><strong>Administration principle:</strong> keep PostgreSQL state explicit. Know which binary version is running, which cluster it owns, where configuration comes from, which identity is authenticating, which role owns data, how the service is supervised, and exactly how a backup becomes a tested restore.</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. PostgreSQL Downloads [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/">https://www.postgresql.org/download/</a></li>
+<li id="r2">PostgreSQL Global Development Group. Linux Downloads [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/linux/">https://www.postgresql.org/download/linux/</a></li>
+<li id="r3">PostgreSQL Global Development Group. Debian Packages [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/linux/debian/">https://www.postgresql.org/download/linux/debian/</a></li>
+<li id="r4">PostgreSQL Global Development Group. Ubuntu Packages [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/linux/ubuntu/">https://www.postgresql.org/download/linux/ubuntu/</a></li>
+<li id="r5">PostgreSQL Global Development Group. Red Hat/Rocky/AlmaLinux Packages [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/linux/redhat/">https://www.postgresql.org/download/linux/redhat/</a></li>
+<li id="r6">PostgreSQL Global Development Group. initdb [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-initdb.html">https://www.postgresql.org/docs/18/app-initdb.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. pg_ctl [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-pg-ctl.html">https://www.postgresql.org/docs/18/app-pg-ctl.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. Setting Parameters [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/config-setting.html">https://www.postgresql.org/docs/18/config-setting.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. Connections and Authentication Configuration [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-connection.html">https://www.postgresql.org/docs/18/runtime-config-connection.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. Resource Consumption [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-resource.html">https://www.postgresql.org/docs/18/runtime-config-resource.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. The pg_hba.conf File [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/auth-pg-hba-conf.html">https://www.postgresql.org/docs/18/auth-pg-hba-conf.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. Client Authentication [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/client-authentication.html">https://www.postgresql.org/docs/18/client-authentication.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. User Name Maps / pg_ident.conf [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/auth-username-maps.html">https://www.postgresql.org/docs/18/auth-username-maps.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. Database Roles [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/database-roles.html">https://www.postgresql.org/docs/18/database-roles.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. Role Attributes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/role-attributes.html">https://www.postgresql.org/docs/18/role-attributes.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. pg_dump [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgdump.html">https://www.postgresql.org/docs/18/app-pgdump.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. pg_restore [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgrestore.html">https://www.postgresql.org/docs/18/app-pgrestore.html</a></li>
+<li id="r18">PostgreSQL Global Development Group. pg_basebackup [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-pgbasebackup.html">https://www.postgresql.org/docs/18/app-pgbasebackup.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. vacuumdb [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-vacuumdb.html">https://www.postgresql.org/docs/18/app-vacuumdb.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. reindexdb [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-reindexdb.html">https://www.postgresql.org/docs/18/app-reindexdb.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. REINDEX [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-reindex.html">https://www.postgresql.org/docs/18/sql-reindex.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. Windows Installers [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/windows/">https://www.postgresql.org/download/windows/</a></li>
+<li id="r23">PostgreSQL Global Development Group. Error Reporting and Logging [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-logging.html">https://www.postgresql.org/docs/18/runtime-config-logging.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. macOS Packages [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/download/macosx/">https://www.postgresql.org/download/macosx/</a></li>
+<li id="r25">PostgreSQL Global Development Group. Platform-Specific Notes: macOS [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/installation-platform-notes.html">https://www.postgresql.org/docs/18/installation-platform-notes.html</a></li>
+<li id="r26">Docker. postgres Docker Official Image [Internet]. Docker Hub; 2026 [cited 2026 Sep 16]. Available from: <a href="https://hub.docker.com/_/postgres">https://hub.docker.com/_/postgres</a></li>
+<li id="r27">Amazon Web Services. Amazon RDS for PostgreSQL [Internet]. AWS Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_PostgreSQL.html">https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_PostgreSQL.html</a></li>
+<li id="r28">Microsoft. Azure Database for PostgreSQL Flexible Server: Server Concepts [Internet]. Microsoft Learn; 2026 [cited 2026 Sep 16]. Available from: <a href="https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-servers">https://learn.microsoft.com/en-us/azure/postgresql/configure-maintain/concepts-servers</a></li>
+<li id="r29">Google. Cloud SQL for PostgreSQL Documentation [Internet]. Google Cloud; 2026 [cited 2026 Sep 16]. Available from: <a href="https://cloud.google.com/sql/docs/postgres">https://cloud.google.com/sql/docs/postgres</a></li>
+<li id="r30">Microsoft. Parameters in Azure Database for PostgreSQL Flexible Server [Internet]. Microsoft Learn; 2026 [cited 2026 Sep 16]. Available from: <a href="https://learn.microsoft.com/en-us/azure/postgresql/server-parameters/concepts-server-parameters">https://learn.microsoft.com/en-us/azure/postgresql/server-parameters/concepts-server-parameters</a></li>
+<li id="r31">PostgreSQL Global Development Group. File Locations [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-file-locations.html">https://www.postgresql.org/docs/18/runtime-config-file-locations.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. Server Configuration [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config.html">https://www.postgresql.org/docs/18/runtime-config.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. pg_ident_file_mappings [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-ident-file-mappings.html">https://www.postgresql.org/docs/18/view-pg-ident-file-mappings.html</a></li>
+<li id="r34">PostgreSQL Global Development Group. CREATE TABLESPACE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtablespace.html">https://www.postgresql.org/docs/18/sql-createtablespace.html</a></li>
+<li id="r35">PostgreSQL Global Development Group. Tablespaces [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/manage-ag-tablespaces.html">https://www.postgresql.org/docs/18/manage-ag-tablespaces.html</a></li>
+<li id="r36">PostgreSQL Global Development Group. libpq Environment Variables [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/libpq-envars.html">https://www.postgresql.org/docs/18/libpq-envars.html</a></li>
+<li id="r37">PostgreSQL Global Development Group. Password File [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/libpq-pgpass.html">https://www.postgresql.org/docs/18/libpq-pgpass.html</a></li>
+<li id="r38">PostgreSQL Global Development Group. Connection Service File [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/libpq-pgservice.html">https://www.postgresql.org/docs/18/libpq-pgservice.html</a></li>
+<li id="r39">PostgreSQL Global Development Group. psql [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-psql.html">https://www.postgresql.org/docs/18/app-psql.html</a></li>
+<li id="r40">PostgreSQL Global Development Group. createdb [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-createdb.html">https://www.postgresql.org/docs/18/app-createdb.html</a></li>
+<li id="r41">PostgreSQL Global Development Group. createuser [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-createuser.html">https://www.postgresql.org/docs/18/app-createuser.html</a></li>
+<li id="r42">PostgreSQL Global Development Group. pg_dumpall [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/app-pg-dumpall.html">https://www.postgresql.org/docs/18/app-pg-dumpall.html</a></li>
+<li id="r43">PostgreSQL Global Development Group. Password Authentication [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/auth-password.html">https://www.postgresql.org/docs/18/auth-password.html</a></li>
+<li id="r44">PostgreSQL Global Development Group. pg_hba_file_rules [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-hba-file-rules.html">https://www.postgresql.org/docs/18/view-pg-hba-file-rules.html</a></li>
+<li id="r45">PostgreSQL Global Development Group. CREATE ROLE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createrole.html">https://www.postgresql.org/docs/18/sql-createrole.html</a></li>
+<li id="r46">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol>
+</section>
+
+</main>
+<footer><p>This article is a technical reference. Installation paths, service units, package names, cloud capabilities and defaults vary by operating system, package repository and provider. Confirm the exact PostgreSQL major/minor version and platform documentation before applying commands to production, and always validate backups with restores.</p></footer>
+</body>
+</html>

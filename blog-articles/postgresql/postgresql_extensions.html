@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL extensions: extension architecture, CREATE EXTENSION, PostGIS, pgvector, pg_stat_statements, FDWs, TimescaleDB, pg_trgm, hstore, citext, uuid-ossp, and custom extension development.">
+<title>PostgreSQL Extensions: Architecture, Ecosystem, and Custom Development</title>
+<style>
+:root{
+  --bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;
+  --accent:#315da8;--code:#101827;--codeink:#e8eef8;
+  --note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1;--danger:#fff0f0;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px;line-height:1.7
+}
+header{
+  color:#fff;background:linear-gradient(135deg,#14213d,#315da8);
+  padding:60px 22px 50px
+}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{
+  margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);
+  line-height:1.08;letter-spacing:-.04em
+}
+.dek{max-width:980px;margin:0;color:#dce7ff;font-size:1.13rem}
+.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{
+  background:var(--paper);margin-top:28px;margin-bottom:30px;
+  border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 8px 30px rgba(25,39,68,.08);
+  padding:46px clamp(20px,5vw,68px)
+}
+h2{
+  margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);
+  font-size:1.84rem;line-height:1.25;letter-spacing:-.02em
+}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}
+h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}
+a{color:var(--accent)}
+sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{
+  background:var(--code);color:var(--codeink);
+  border:1px solid #243047;border-radius:10px;padding:18px;
+  overflow-x:auto;line-height:1.5;font-size:.88rem
+}
+pre code{color:inherit}
+.toc{
+  background:#f9fbff;border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;margin:27px 0 36px
+}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}
+.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}
+.toc li{break-inside:avoid;margin:5px 0}
+.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:.94rem}
+th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}
+th{background:#f1f4f9}
+.callout{
+  border-left:4px solid var(--accent);background:var(--note);
+  border-radius:8px;padding:14px 18px;margin:18px 0
+}
+.callout.warn{background:var(--warn);border-left-color:#b26a00}
+.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.callout.danger{background:var(--danger);border-left-color:#a93333}
+.diagram{
+  font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  white-space:pre;overflow-x:auto;line-height:1.48;
+  background:#f7f8fb;border:1px solid var(--line);border-radius:10px;
+  padding:18px;color:#243047
+}
+.small{font-size:.92rem;color:var(--muted)}
+.refs{font-size:.94rem;word-break:break-word}
+.refs li{margin-bottom:.82em}
+.checklist li{margin:.48em 0}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{
+ body{background:#fff}header{background:#fff;color:#000;padding:18px 0}
+ header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}
+ a{color:#000;text-decoration:none}pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+  <h1>PostgreSQL Extensions</h1>
+  <p class="dek">How PostgreSQL turns database features into installable packages: extension architecture, lifecycle and security, PostGIS, pgvector, pg_stat_statements, foreign-data wrappers, TimescaleDB, pg_trgm, hstore, citext, uuid-ossp, and custom C extension development.</p>
+  <p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 15 September 2026 • Vancouver-style references</p>
+</div>
+</header>
+
+<main>
+
+<section id="abstract">
+<h2>Abstract</h2>
+<p>
+One of PostgreSQL's defining strengths is that the server is designed to be extended. Its behavior is catalog-driven: PostgreSQL stores metadata not only about tables and columns but also about data types, functions, operators, access methods, casts, aggregates, operator classes, and other programmable database objects. User-defined SQL objects and dynamically loaded native code can therefore add capabilities that participate in PostgreSQL's parser, type system, planner, executor, indexes, transactions, and storage-facing APIs without maintaining a private fork of the PostgreSQL server.<sup><a href="#r1">[1]</a><a href="#r2">[2]</a></sup>
+</p>
+<p>
+The extension mechanism packages a related set of objects under one versioned database object. <code>CREATE EXTENSION</code> executes an extension's installation script and records which objects belong to that extension, enabling coordinated ownership, upgrades, dumps, and removal. The ecosystem ranges from small supplied modules such as <code>pg_trgm</code> and <code>citext</code>, through observability extensions such as <code>pg_stat_statements</code>, to substantial systems such as PostGIS, pgvector, TimescaleDB, and foreign-data wrappers.<sup><a href="#r3">[3]</a>-<a href="#r5">[5]</a></sup>
+</p>
+</section>
+
+<nav class="toc" aria-label="Table of contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#architecture">Extension architecture</a></li>
+<li><a href="#lifecycle">CREATE EXTENSION and lifecycle</a></li>
+<li><a href="#security">Security and trust</a></li>
+<li><a href="#inventory">Inventory and version management</a></li>
+<li><a href="#postgis">PostGIS</a></li>
+<li><a href="#pgvector">pgvector</a></li>
+<li><a href="#statstatements">pg_stat_statements</a></li>
+<li><a href="#fdw">Foreign-data wrappers</a></li>
+<li><a href="#timescale">TimescaleDB</a></li>
+<li><a href="#trgm">pg_trgm</a></li>
+<li><a href="#hstore">hstore</a></li>
+<li><a href="#citext">citext</a></li>
+<li><a href="#uuid">uuid-ossp</a></li>
+<li><a href="#custom">Custom extensions</a></li>
+<li><a href="#capi">PostgreSQL C API</a></li>
+<li><a href="#upgrades">Extension upgrades</a></li>
+<li><a href="#testing">Testing extensions</a></li>
+<li><a href="#operations">Production operations</a></li>
+<li><a href="#selection">Selecting extensions</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+
+<section id="architecture">
+<h2>1. Extension architecture</h2>
+
+<h3>1.1 PostgreSQL is catalog-driven</h3>
+<p>
+PostgreSQL's extensibility begins with its system catalogs. The server stores definitions for types, functions, operators, casts, access methods, operator classes, aggregates, and many other objects in catalogs that the parser, planner, executor, and type system consult at runtime. This allows a newly installed object to participate in ordinary SQL resolution and planning rather than existing as an isolated plugin API outside the database language.<sup><a href="#r1">[1]</a></sup>
+</p>
+
+<div class="diagram">SQL statement
+    |
+    v
+parser / analyzer
+    |
+    +---- system catalogs -----------------------------+
+    |                                                  |
+    | types   functions   operators   casts            |
+    | access methods   operator classes   aggregates   |
+    +--------------------------------------------------+
+    |
+    v
+planner / optimizer
+    |
+    v
+executor
+    |
+    +--> built-in implementation
+    |
+    +--> extension SQL / PL function
+    |
+    +--> dynamically loaded C shared library
+    |
+    +--> extension index/operator/access-method APIs</div>
+
+<p>
+PostgreSQL's server-programming interfaces go far beyond scalar functions. The official “Extending SQL” documentation covers user-defined functions, procedures, aggregates, types, operators, optimizer information, index operator classes, and packaging; later internals chapters define APIs for foreign-data wrappers, custom scans, table access methods, index access methods, WAL integration, and other deeper facilities.<sup><a href="#r2">[2]</a></sup>
+</p>
+
+<h3>1.2 An extension is a package, not a separate process</h3>
+<p>
+A PostgreSQL extension is principally a package of database objects with lifecycle metadata. A pure-SQL extension may contain only a control file and SQL scripts. A native extension commonly adds a shared library containing C/C++ code. <code>CREATE EXTENSION</code> executes the installation SQL while marking created objects as members of the extension so PostgreSQL understands that they belong together.<sup><a href="#r3">[3]</a><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>1.3 Typical extension files</h3>
+<pre><code>my_extension/
+├── Makefile
+├── my_extension.control
+├── my_extension--1.0.sql
+├── my_extension--1.0--1.1.sql    # optional upgrade path
+├── my_extension.c                # optional native code
+├── sql/                           # optional regression-test SQL
+└── expected/                      # optional expected test output</code></pre>
+
+<p>
+PostgreSQL's packaging convention uses a primary <code>.control</code> file and versioned installation scripts named <code>extension--version.sql</code>. Update scripts use names such as <code>extension--1.0--1.1.sql</code>. Native extensions normally install a dynamically loadable shared library as well.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="lifecycle">
+<h2>2. <code>CREATE EXTENSION</code> and extension lifecycle</h2>
+
+<h3>2.1 Installation has two levels</h3>
+<p>
+An extension must first be installed at the PostgreSQL software/server level so its control, SQL, and any library files are available to the server. <code>CREATE EXTENSION</code> then installs that extension into one specific database. Consequently, a package can exist on the host while not being enabled in a particular database, and an extension normally needs to be created separately in each database where its objects are required.<sup><a href="#r3">[3]</a><a href="#r4">[4]</a></sup>
+</p>
+
+<pre><code>-- What the server could install:
+SELECT
+    name,
+    default_version,
+    installed_version,
+    comment
+FROM pg_available_extensions
+ORDER BY name;
+
+-- Enable one extension in the current database:
+CREATE EXTENSION pg_trgm;</code></pre>
+
+<h3>2.2 Syntax</h3>
+<pre><code>CREATE EXTENSION [ IF NOT EXISTS ] extension_name
+    [ WITH ]
+    [ SCHEMA schema_name ]
+    [ VERSION version ]
+    [ CASCADE ];</code></pre>
+
+<p>
+The <code>SCHEMA</code> option controls the target schema when the extension supports relocation or otherwise permits schema choice. <code>VERSION</code> chooses a non-default install version. <code>CASCADE</code> recursively installs missing prerequisite extensions. PostgreSQL records extension membership so <code>DROP EXTENSION</code> can remove the package's member objects as a unit.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<h3>2.3 Extension catalog</h3>
+<pre><code>SELECT
+    e.extname,
+    e.extversion,
+    n.nspname AS extension_schema,
+    e.extrelocatable,
+    pg_get_userbyid(e.extowner) AS owner
+FROM pg_extension AS e
+JOIN pg_namespace AS n
+  ON n.oid = e.extnamespace
+ORDER BY e.extname;</code></pre>
+
+<p>
+The <code>pg_extension</code> catalog stores each installed extension's name, owner, schema, relocatability flag, version, and optional configuration-table metadata. Extension names themselves are not schema-qualified; the extension schema identifies where most or all schema-qualifiable member objects reside.<sup><a href="#r7">[7]</a></sup>
+</p>
+
+<h3>2.4 PostgreSQL 18: <code>extension_control_path</code></h3>
+<p>
+PostgreSQL 18 added <code>extension_control_path</code>, allowing administrators to configure where PostgreSQL searches for extension control files. The default <code>$system</code> location resolves to the compiled-in PostgreSQL shared-data directory. Nonstandard library paths may also require corresponding <code>dynamic_library_path</code> configuration.<sup><a href="#r8">[8]</a></sup>
+</p>
+
+<pre><code># postgresql.conf
+extension_control_path =
+    '/opt/company/postgresql/share:/usr/local/share/postgresql:$system'
+
+dynamic_library_path =
+    '/opt/company/postgresql/lib:/usr/local/lib/postgresql:$libdir'</code></pre>
+</section>
+
+<section id="security">
+<h2>3. Extension security and trust</h2>
+
+<h3>3.1 Native extensions execute inside the server</h3>
+<p>
+C extension code is dynamically loaded into the PostgreSQL server process. It is therefore trusted native code from the database server's perspective: memory-safety bugs, unsafe signal behavior, or malicious code can crash a backend, disclose process-accessible data, or compromise database integrity. Extension installation should be treated like installation of server software, not like importing an ordinary application library.<sup><a href="#r1">[1]</a><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>3.2 Trusted extensions</h3>
+<p>
+By default, installing an extension requires the privileges needed to create all objects in its script, often including superuser-only operations. PostgreSQL also supports extensions marked <code>trusted</code> in their control file. A trusted extension can be installed by a non-superuser that has <code>CREATE</code> privilege on the current database. PostgreSQL's supplied trusted extensions include <code>citext</code>, <code>hstore</code>, <code>pg_trgm</code>, and <code>uuid-ossp</code>.<sup><a href="#r4">[4]</a></sup>
+</p>
+
+<h3>3.3 Search-path attacks during installation</h3>
+<p>
+The <code>CREATE EXTENSION</code> documentation warns that extension installation scripts can become vulnerable to Trojan-horse objects if untrusted users can create objects in schemas searched during installation. For extensions whose scripts have not been thoroughly audited, PostgreSQL recommends installing into schemas in which untrusted users do not have <code>CREATE</code> privilege, and applying the same care to prerequisite extensions.<sup><a href="#r3">[3]</a></sup>
+</p>
+
+<pre><code>CREATE SCHEMA extensions AUTHORIZATION postgres;
+
+REVOKE CREATE ON SCHEMA extensions FROM PUBLIC;
+
+CREATE EXTENSION hstore SCHEMA extensions;</code></pre>
+
+<div class="callout danger">
+<strong>Extension governance matters.</strong> Before production deployment, review the extension's source/provenance, PostgreSQL-version support, update path, backup/restore behavior, replication behavior, privileges, native-code surface, and operational requirements.
+</div>
+</section>
+
+<section id="inventory">
+<h2>4. Extension inventory and version management</h2>
+
+<h3>4.1 Installed extensions</h3>
+<pre><code>SELECT
+    extname,
+    extversion
+FROM pg_extension
+ORDER BY extname;</code></pre>
+
+<h3>4.2 Available versions and upgrade candidates</h3>
+<pre><code>SELECT
+    name,
+    version,
+    installed,
+    superuser,
+    trusted,
+    relocatable,
+    schema,
+    requires,
+    comment
+FROM pg_available_extension_versions
+ORDER BY name, version;</code></pre>
+
+<p>
+<code>pg_available_extension_versions</code> reports versions discoverable from installed control/script files together with privilege, trust, schema, relocatability, and prerequisite metadata. It is useful for detecting whether a newly installed extension package has exposed an upgrade path to a database.<sup><a href="#r10">[10]</a></sup>
+</p>
+
+<h3>4.3 Updating</h3>
+<pre><code>ALTER EXTENSION vector UPDATE;
+ALTER EXTENSION postgis UPDATE;
+ALTER EXTENSION my_extension UPDATE TO '1.2';</code></pre>
+
+<p>
+An extension can be updated only through update paths supplied by its installed extension files. PostgreSQL runs the selected update scripts and automatically adds new objects created by those scripts to the extension's membership.<sup><a href="#r6">[6]</a></sup>
+</p>
+</section>
+
+<section id="postgis">
+<h2>5. PostGIS</h2>
+<p>
+PostGIS extends PostgreSQL with spatial data types, spatial functions, coordinate-system support, and spatial index integration. The core PostGIS extension includes <code>geometry</code>, <code>geography</code>, the spatial reference system catalog, and a large set of spatial functions; raster and topology facilities are packaged separately.<sup><a href="#r11">[11]</a></sup>
+</p>
+
+<h3>5.1 Installation</h3>
+<pre><code>CREATE EXTENSION postgis;
+
+-- Optional modules when installed on the host:
+CREATE EXTENSION postgis_raster;
+CREATE EXTENSION postgis_topology;</code></pre>
+
+<h3>5.2 Geometry versus geography</h3>
+<p>
+PostGIS <code>geometry</code> values use coordinates in the geometry's spatial reference system; distance units therefore depend on that SRID. The <code>geography</code> type represents geodetic coordinates and provides distance operations in meters for functions such as <code>ST_DWithin</code>.<sup><a href="#r11">[11]</a><a href="#r12">[12]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE store (
+    store_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name text NOT NULL,
+    location geography(Point, 4326) NOT NULL
+);
+
+INSERT INTO store(name, location)
+VALUES (
+    'Downtown',
+    ST_SetSRID(ST_MakePoint(-78.6382, 35.7796), 4326)::geography
+);</code></pre>
+
+<h3>5.3 Spatial indexes</h3>
+<pre><code>CREATE INDEX store_location_gix
+ON store
+USING GIST (location);</code></pre>
+
+<p>
+PostGIS documents GiST as the standard spatial indexing mechanism for geometry/geography workloads and also supports other spatial indexing strategies for relevant types. Spatial indexes implement bounding-box-aware access paths so predicates such as <code>ST_DWithin</code> can use index-assisted filtering.<sup><a href="#r11">[11]</a><a href="#r12">[12]</a></sup>
+</p>
+
+<h3>5.4 Radius query</h3>
+<pre><code>SELECT
+    store_id,
+    name
+FROM store
+WHERE ST_DWithin(
+    location,
+    ST_SetSRID(ST_MakePoint(-78.64, 35.78), 4326)::geography,
+    5000
+);</code></pre>
+
+<p>
+For <code>geography</code>, the distance parameter to <code>ST_DWithin</code> is expressed in meters and the function performs an index-aware bounding-box comparison when suitable indexes exist.<sup><a href="#r12">[12]</a></sup>
+</p>
+</section>
+
+<section id="pgvector">
+<h2>6. pgvector</h2>
+<p>
+pgvector adds vector data types and vector similarity operators to PostgreSQL. The project supports exact nearest-neighbor search and approximate search through HNSW and IVFFlat indexes. Its primary dense <code>vector</code> type supports single-precision vectors; the extension also provides half-precision, binary, and sparse representations.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>6.1 Installation and exact search</h3>
+<pre><code>CREATE EXTENSION vector;
+
+CREATE TABLE document_embedding (
+    document_id bigint PRIMARY KEY,
+    embedding vector(3) NOT NULL
+);
+
+INSERT INTO document_embedding(document_id, embedding)
+VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[1,1,1]');
+
+-- L2 nearest neighbors:
+SELECT
+    document_id,
+    embedding &lt;-&gt; '[3,1,2]' AS distance
+FROM document_embedding
+ORDER BY embedding &lt;-&gt; '[3,1,2]'
+LIMIT 5;</code></pre>
+
+<p>
+pgvector defines operators for L2 distance (<code>&lt;-&gt;</code>), negative inner product (<code>&lt;#&gt;</code>), cosine distance (<code>&lt;=&gt;</code>), L1 distance, and binary-vector distances. Without an approximate index, nearest-neighbor queries are exact.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>6.2 HNSW</h3>
+<pre><code>CREATE INDEX document_embedding_hnsw_cosine
+ON document_embedding
+USING hnsw (embedding vector_cosine_ops);
+
+BEGIN;
+SET LOCAL hnsw.ef_search = 100;
+
+SELECT
+    document_id,
+    1 - (embedding &lt;=&gt; '[3,1,2]') AS cosine_similarity
+FROM document_embedding
+ORDER BY embedding &lt;=&gt; '[3,1,2]'
+LIMIT 10;
+
+COMMIT;</code></pre>
+
+<p>
+HNSW builds a multilayer graph. pgvector documents HNSW as generally providing a stronger speed/recall tradeoff than IVFFlat, at the cost of slower builds and greater memory use. <code>hnsw.ef_search</code> controls the candidate list used during search; increasing it can improve recall while increasing query cost.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>6.3 IVFFlat</h3>
+<pre><code>CREATE INDEX document_embedding_ivf_l2
+ON document_embedding
+USING ivfflat (embedding vector_l2_ops)
+WITH (lists = 100);
+
+BEGIN;
+SET LOCAL ivfflat.probes = 10;
+
+SELECT document_id
+FROM document_embedding
+ORDER BY embedding &lt;-&gt; '[3,1,2]'
+LIMIT 10;
+
+COMMIT;</code></pre>
+
+<p>
+IVFFlat partitions vectors into lists and searches selected lists. It requires data for its clustering/training step, and its recall depends materially on list and probe configuration. Approximate indexes deliberately trade perfect recall for lower query cost; production evaluation should therefore measure recall against exact search as well as latency.<sup><a href="#r13">[13]</a></sup>
+</p>
+
+<h3>6.4 Versioning</h3>
+<pre><code>SELECT extversion
+FROM pg_extension
+WHERE extname = 'vector';
+
+ALTER EXTENSION vector UPDATE;</code></pre>
+
+<p>
+The official pgvector project documents PostgreSQL 13+ support for its current 0.8.x line and instructs database users to update installed metadata with <code>ALTER EXTENSION vector UPDATE</code> after installing a newer extension package.<sup><a href="#r13">[13]</a></sup>
+</p>
+</section>
+
+<section id="statstatements">
+<h2>7. <code>pg_stat_statements</code></h2>
+<p>
+<code>pg_stat_statements</code> is a PostgreSQL-supplied extension that records planning and execution statistics for normalized SQL statements. It tracks across all databases at the shared-memory level, but its views and management functions are installed separately into each database where they need to be queried.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>7.1 Preload requirement</h3>
+<pre><code># postgresql.conf
+shared_preload_libraries = 'pg_stat_statements'
+compute_query_id = auto</code></pre>
+
+<pre><code>-- After server restart:
+CREATE EXTENSION pg_stat_statements;</code></pre>
+
+<p>
+The extension must be included in <code>shared_preload_libraries</code> because it requires shared memory allocated at server startup. Query identifiers must also be enabled; <code>compute_query_id=auto</code> activates query-ID generation when the module needs it.<sup><a href="#r14">[14]</a></sup>
+</p>
+
+<h3>7.2 Performance analysis</h3>
+<pre><code>SELECT
+    queryid,
+    calls,
+    total_exec_time,
+    mean_exec_time,
+    rows,
+    shared_blks_hit,
+    shared_blks_read,
+    temp_blks_written,
+    wal_bytes,
+    left(query, 220) AS query
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 25;</code></pre>
+
+<p>
+Because statements are normalized and aggregated, <code>pg_stat_statements</code> is well suited to workload-level performance analysis: it identifies query classes that consume large amounts of time, I/O, temporary space, or WAL without requiring every execution to be logged individually.<sup><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="fdw">
+<h2>8. Foreign-data wrappers</h2>
+<p>
+The SQL/MED-inspired foreign-data-wrapper architecture lets PostgreSQL represent external data as foreign tables. A wrapper supplies planner and executor callbacks that PostgreSQL uses to estimate remote relations, create foreign paths/plans, begin scans, fetch rows, push operations to the remote source where supported, and optionally implement modification, import, join, aggregate, asynchronous, and parallel behaviors.<sup><a href="#r15">[15]</a></sup>
+</p>
+
+<h3>8.1 <code>postgres_fdw</code></h3>
+<p>
+PostgreSQL ships <code>postgres_fdw</code> for accessing tables on external PostgreSQL servers. The documented setup consists of installing the extension, defining a foreign server, creating per-user mappings, and defining or importing foreign tables.<sup><a href="#r16">[16]</a></sup>
+</p>
+
+<pre><code>CREATE EXTENSION postgres_fdw;
+
+CREATE SERVER analytics_cluster
+FOREIGN DATA WRAPPER postgres_fdw
+OPTIONS (
+    host 'analytics.internal',
+    port '5432',
+    dbname 'warehouse'
+);
+
+CREATE USER MAPPING FOR app_user
+SERVER analytics_cluster
+OPTIONS (
+    user 'remote_reader',
+    password 'managed-secret'
+);
+
+CREATE SCHEMA foreign_analytics;
+
+IMPORT FOREIGN SCHEMA public
+LIMIT TO (daily_sales, customer_rollup)
+FROM SERVER analytics_cluster
+INTO foreign_analytics;</code></pre>
+
+<h3>8.2 Querying a foreign table</h3>
+<pre><code>EXPLAIN (VERBOSE)
+SELECT
+    region,
+    sum(revenue)
+FROM foreign_analytics.daily_sales
+WHERE day &gt;= current_date - 30
+GROUP BY region;</code></pre>
+
+<p>
+A capable FDW can push filters, joins, aggregation, or ordering to the remote source, reducing transferred data. Pushdown capability is wrapper-specific and should be verified from <code>EXPLAIN VERBOSE</code> and runtime measurements rather than assumed.<sup><a href="#r15">[15]</a><a href="#r16">[16]</a></sup>
+</p>
+</section>
+
+<section id="timescale">
+<h2>9. TimescaleDB</h2>
+<p>
+TimescaleDB is a PostgreSQL extension focused on time-series and analytical workloads. Its central abstraction is the <em>hypertable</em>, a PostgreSQL-visible table whose data is automatically partitioned into chunks according to a time-oriented dimension. SQL issued against the hypertable is routed to the relevant chunks by the extension's planner/executor integration.<sup><a href="#r17">[17]</a></sup>
+</p>
+
+<h3>9.1 Enable the extension</h3>
+<pre><code>CREATE EXTENSION IF NOT EXISTS timescaledb;</code></pre>
+
+<h3>9.2 Current hypertable creation syntax</h3>
+<p>
+Current TimescaleDB documentation (v2.20+) supports creating a hypertable directly through an extended <code>CREATE TABLE</code> syntax. Older/self-hosted deployments and conversions of existing ordinary tables can use <code>create_hypertable()</code>.<sup><a href="#r18">[18]</a><a href="#r17">[17]</a></sup>
+</p>
+
+<pre><code>CREATE TABLE metric (
+    time timestamptz NOT NULL,
+    device_id text NOT NULL,
+    value double precision
+)
+WITH (
+    tsdb.hypertable,
+    tsdb.partition_column = 'time',
+    tsdb.chunk_interval = '1 day'
+);</code></pre>
+
+<h3>9.3 Convert an existing table</h3>
+<pre><code>CREATE TABLE sensor_reading (
+    time timestamptz NOT NULL,
+    sensor_id bigint NOT NULL,
+    temperature double precision
+);
+
+SELECT create_hypertable(
+    'sensor_reading',
+    by_range('time', INTERVAL '1 day')
+);</code></pre>
+
+<p>
+TimescaleDB documents hypertables as PostgreSQL tables automatically partitioned by time. The extension keeps standard SQL operations such as <code>SELECT</code> and <code>ALTER TABLE</code> available on the logical table while managing the underlying chunks.<sup><a href="#r17">[17]</a><a href="#r18">[18]</a></sup>
+</p>
+
+<div class="callout">
+<strong>Compatibility note:</strong> TimescaleDB is a substantial extension with its own version compatibility, planner hooks, background jobs, storage features, and upgrade procedures. Treat PostgreSQL major upgrades and TimescaleDB upgrades as a coordinated lifecycle rather than upgrading the server binaries independently.
+</div>
+</section>
+
+<section id="trgm">
+<h2>10. <code>pg_trgm</code></h2>
+<p>
+<code>pg_trgm</code> supplies trigram-based text-similarity functions, operators, and GiST/GIN operator classes. A trigram is a sequence of three consecutive characters; similarity is derived from the trigrams shared by strings. This makes the extension useful for fuzzy matching and index-assisted <code>LIKE</code>/<code>ILIKE</code>-style search patterns.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>10.1 Similarity search</h3>
+<pre><code>CREATE EXTENSION pg_trgm;
+
+SELECT
+    similarity('PostgreSQL', 'Postgres') AS score;
+
+SELECT
+    name,
+    similarity(name, 'postgress') AS score
+FROM product
+WHERE name % 'postgress'
+ORDER BY score DESC
+LIMIT 20;</code></pre>
+
+<h3>10.2 GIN trigram index</h3>
+<pre><code>CREATE INDEX product_name_trgm_gin
+ON product
+USING GIN (name gin_trgm_ops);
+
+SELECT *
+FROM product
+WHERE name ILIKE '%postgres%';</code></pre>
+
+<p>
+The extension's trigram operator classes allow GiST and GIN indexes to accelerate supported similarity and pattern-matching operations. This can provide indexed substring-like searches that ordinary B-tree indexes generally cannot support for patterns beginning with an unrestricted wildcard.<sup><a href="#r19">[19]</a></sup>
+</p>
+
+<h3>10.3 Upgrade note for PostgreSQL 18</h3>
+<p>
+PostgreSQL 18 changed some collation/lowercasing behavior, and its release notes recommend reindexing <code>pg_trgm</code>-related indexes after <code>pg_upgrade</code> when relevant collation-provider behavior differs from the prior cluster. This is an example of why extension-specific release notes belong in every major-version upgrade plan.<sup><a href="#r20">[20]</a></sup>
+</p>
+</section>
+
+<section id="hstore">
+<h2>11. <code>hstore</code></h2>
+<p>
+<code>hstore</code> adds a key/value type in which keys and values are text strings. It is useful for semi-structured attributes when a row may contain many optional textual properties. PostgreSQL's supplied <code>hstore</code> extension includes operators, functions, GiST/GIN indexing support, and language transforms for selected procedural languages.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<pre><code>CREATE EXTENSION hstore;
+
+CREATE TABLE asset (
+    asset_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    attributes hstore NOT NULL DEFAULT ''::hstore
+);
+
+INSERT INTO asset(attributes)
+VALUES ('manufacturer=&gt;Acme, color=&gt;blue, voltage=&gt;240');
+
+SELECT
+    asset_id,
+    attributes -&gt; 'manufacturer' AS manufacturer
+FROM asset
+WHERE attributes @&gt; 'color=&gt;blue';</code></pre>
+
+<h3>11.1 GIN indexing</h3>
+<pre><code>CREATE INDEX asset_attributes_gin
+ON asset
+USING GIN (attributes);
+
+SELECT *
+FROM asset
+WHERE attributes ? 'voltage';
+
+SELECT *
+FROM asset
+WHERE attributes @&gt; 'manufacturer=&gt;Acme';</code></pre>
+
+<p>
+<code>hstore</code> supports GiST and GIN indexes for containment and key-existence operators. It also supports B-tree/hash equality indexes, although ordering of key/value collections is usually less useful than containment/search indexes.<sup><a href="#r21">[21]</a></sup>
+</p>
+
+<h3>11.2 hstore versus JSONB</h3>
+<p>
+<code>hstore</code> is deliberately limited to text key/value pairs. JSONB supports nested JSON structures and typed JSON scalar values, so it is generally the richer representation when nested documents are required. <code>hstore</code> remains useful when its simpler flat text-map model is exactly the desired schema.
+</p>
+</section>
+
+<section id="citext">
+<h2>12. <code>citext</code></h2>
+<p>
+<code>citext</code> defines a case-insensitive character-string type. Comparisons behave broadly as though values were lowercased before comparison, allowing case-insensitive equality and uniqueness without writing <code>lower()</code> in every query. The extension is trusted.<sup><a href="#r22">[22]</a></sup>
+</p>
+
+<pre><code>CREATE EXTENSION citext;
+
+CREATE TABLE app_user (
+    user_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email citext NOT NULL UNIQUE
+);
+
+INSERT INTO app_user(email)
+VALUES ('Alice@example.com');
+
+-- Matches:
+SELECT *
+FROM app_user
+WHERE email = 'alice@EXAMPLE.COM';
+
+-- Fails because uniqueness is case-insensitive:
+INSERT INTO app_user(email)
+VALUES ('ALICE@example.com');</code></pre>
+
+<h3>12.1 Modern collation alternative</h3>
+<p>
+PostgreSQL 18's <code>citext</code> documentation explicitly recommends considering nondeterministic collations instead. They can support combinations such as case-insensitive and accent-insensitive comparison and handle more Unicode special cases than the extension's lowercasing approach. <code>citext</code> remains useful, but its locale and Unicode limitations should be evaluated for international text.<sup><a href="#r22">[22]</a></sup>
+</p>
+</section>
+
+<section id="uuid">
+<h2>13. <code>uuid-ossp</code></h2>
+<p>
+<code>uuid-ossp</code> provides functions implementing several standard UUID generation algorithms, historically including UUID versions 1, 3, 4, and 5, plus namespace constants. It is a trusted extension.<sup><a href="#r23">[23]</a></sup>
+</p>
+
+<pre><code>CREATE EXTENSION "uuid-ossp";
+
+SELECT uuid_generate_v4();
+
+SELECT uuid_generate_v5(
+    uuid_ns_url(),
+    'https://example.com/customer/42'
+);</code></pre>
+
+<h3>13.1 PostgreSQL 18 often does not need it</h3>
+<p>
+PostgreSQL 18 provides native generation for UUIDv4 and UUIDv7. The PostgreSQL documentation therefore states that <code>uuid-ossp</code> is needed only for special requirements beyond core UUID facilities. For a new application that simply needs random UUIDv4 or time-ordered UUIDv7 values, prefer the built-in functions and avoid an unnecessary extension dependency.<sup><a href="#r23">[23]</a><a href="#r24">[24]</a></sup>
+</p>
+
+<pre><code>-- Built into PostgreSQL 18:
+SELECT uuidv4();
+SELECT uuidv7();</code></pre>
+</section>
+
+<section id="custom">
+<h2>14. Building a custom extension</h2>
+<p>
+PostgreSQL's PGXS build infrastructure automates common build/install rules for extensions against an already installed PostgreSQL development environment. PGXS is especially useful for C extensions but can also package pure-SQL extensions. The extension package typically installs a control file and SQL scripts into PostgreSQL's extension directory and native shared libraries into the server library directory.<sup><a href="#r25">[25]</a></sup>
+</p>
+
+<h3>14.1 Complete minimal C extension: <code>pg_clamp</code></h3>
+
+<h4>Directory</h4>
+<pre><code>pg_clamp/
+├── Makefile
+├── pg_clamp.control
+├── pg_clamp--1.0.sql
+└── pg_clamp.c</code></pre>
+
+<h4><code>pg_clamp.c</code></h4>
+<pre><code>#include "postgres.h"
+#include "fmgr.h"
+#include "utils/errcodes.h"
+
+PG_MODULE_MAGIC;
+
+PG_FUNCTION_INFO_V1(clamp_int4);
+
+Datum
+clamp_int4(PG_FUNCTION_ARGS)
+{
+    int32 value = PG_GETARG_INT32(0);
+    int32 minimum = PG_GETARG_INT32(1);
+    int32 maximum = PG_GETARG_INT32(2);
+
+    if (minimum &gt; maximum)
+        ereport(ERROR,
+                (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("minimum must not exceed maximum")));
+
+    if (value &lt; minimum)
+        PG_RETURN_INT32(minimum);
+
+    if (value &gt; maximum)
+        PG_RETURN_INT32(maximum);
+
+    PG_RETURN_INT32(value);
+}</code></pre>
+
+<h4><code>pg_clamp.control</code></h4>
+<pre><code>comment = 'Small example extension providing integer clamping'
+default_version = '1.0'
+module_pathname = '$libdir/pg_clamp'
+relocatable = true</code></pre>
+
+<h4><code>pg_clamp--1.0.sql</code></h4>
+<pre><code>CREATE FUNCTION clamp_int4(integer, integer, integer)
+RETURNS integer
+AS 'MODULE_PATHNAME', 'clamp_int4'
+LANGUAGE C
+IMMUTABLE
+STRICT
+PARALLEL SAFE;
+
+COMMENT ON FUNCTION clamp_int4(integer, integer, integer)
+IS 'Clamp a 32-bit integer to an inclusive minimum/maximum range';</code></pre>
+
+<h4><code>Makefile</code></h4>
+<pre><code>EXTENSION = pg_clamp
+MODULES = pg_clamp
+DATA = pg_clamp--1.0.sql
+
+PG_CONFIG = pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
+include $(PGXS)</code></pre>
+
+<h4>Build and install</h4>
+<pre><code>make
+sudo make install
+
+psql -d appdb -c "CREATE EXTENSION pg_clamp"
+psql -d appdb -c "SELECT clamp_int4(150, 0, 100)"</code></pre>
+
+<p>
+PGXS obtains PostgreSQL-specific build flags and installation directories through <code>pg_config --pgxs</code>. The <code>EXTENSION</code>, <code>MODULES</code>, and <code>DATA</code> variables identify the extension, shared-library module, and extension scripts respectively.<sup><a href="#r25">[25]</a></sup>
+</p>
+</section>
+
+<section id="capi">
+<h2>15. PostgreSQL C APIs used by extensions</h2>
+
+<h3>15.1 Function manager</h3>
+<p>
+SQL-callable C functions use PostgreSQL's version-1 function-manager convention. The function has a C signature based on <code>Datum</code>, declares metadata with <code>PG_FUNCTION_INFO_V1()</code>, retrieves arguments through <code>PG_GETARG_*</code>, and returns values through <code>PG_RETURN_*</code>. <code>PG_MODULE_MAGIC</code> embeds compatibility information used when loading the shared library.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<pre><code>PG_MODULE_MAGIC;
+PG_FUNCTION_INFO_V1(example);
+
+Datum
+example(PG_FUNCTION_ARGS)
+{
+    int32 x = PG_GETARG_INT32(0);
+    PG_RETURN_INT32(x + 1);
+}</code></pre>
+
+<h3>15.2 PostgreSQL memory management</h3>
+<p>
+Server extension code normally allocates memory with PostgreSQL memory-context APIs such as <code>palloc()</code> rather than ordinary application-lifetime assumptions. Errors raised through PostgreSQL's error machinery can unwind execution non-locally; using PostgreSQL resource ownership and memory contexts is essential for safe cleanup.<sup><a href="#r9">[9]</a></sup>
+</p>
+
+<h3>15.3 Server Programming Interface (SPI)</h3>
+<p>
+Extensions that need to issue SQL from server-side C code can use the Server Programming Interface (SPI). SPI connects a C function to PostgreSQL's parser, planner, executor, and tuple-table facilities, allowing the extension to prepare and execute SQL inside the server.<sup><a href="#r26">[26]</a></sup>
+</p>
+
+<pre><code>#include "executor/spi.h"
+
+if (SPI_connect() != SPI_OK_CONNECT)
+    elog(ERROR, "SPI_connect failed");
+
+int rc = SPI_execute(
+    "SELECT count(*) FROM pg_catalog.pg_class",
+    true,
+    1
+);
+
+if (rc != SPI_OK_SELECT)
+    elog(ERROR, "SPI_execute failed");
+
+SPI_finish();</code></pre>
+</section>
+
+<section id="upgrades">
+<h2>16. Custom extension upgrades</h2>
+<p>
+The extension mechanism tracks a version name. Extension authors can provide update scripts named <code>extension--old--new.sql</code>, after which <code>ALTER EXTENSION ... UPDATE</code> applies the path. Updates run in the extension installation environment, and newly created objects are automatically associated with the extension.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>16.1 Example 1.0 → 1.1 update</h3>
+<pre><code>-- pg_clamp--1.0--1.1.sql
+
+CREATE FUNCTION clamp_numeric(numeric, numeric, numeric)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+PARALLEL SAFE
+RETURN greatest($2, least($1, $3));
+
+COMMENT ON FUNCTION clamp_numeric(numeric, numeric, numeric)
+IS 'Clamp a numeric value to an inclusive minimum/maximum range';</code></pre>
+
+<pre><code>ALTER EXTENSION pg_clamp UPDATE TO '1.1';
+
+SELECT extversion
+FROM pg_extension
+WHERE extname = 'pg_clamp';</code></pre>
+
+<h3>16.2 Do not edit extension-owned objects casually</h3>
+<p>
+Extension upgrade scripts expect the extension's object graph to be in a known state. Manual changes to extension-owned functions, types, operators, or tables can make upgrades fail or silently invalidate vendor assumptions. Put local wrappers and application-specific objects outside the vendor extension whenever possible.
+</p>
+</section>
+
+<section id="testing">
+<h2>17. Testing extensions</h2>
+<p>
+PostgreSQL's supplied and third-party extensions commonly use the PostgreSQL regression-test infrastructure. PGXS supports regression tests through makefile variables, while the PostgreSQL <code>contrib</code> tree uses commands such as <code>make check</code> before installation and <code>make installcheck</code> against a running server. The pgvector project likewise documents <code>make installcheck</code> and TAP tests for its development workflow.<sup><a href="#r4">[4]</a><a href="#r13">[13]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<h3>17.1 PGXS regression test</h3>
+<pre><code># Makefile
+EXTENSION = pg_clamp
+MODULES = pg_clamp
+DATA = pg_clamp--1.0.sql
+REGRESS = clamp
+
+PG_CONFIG = pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
+include $(PGXS)</code></pre>
+
+<pre><code>-- sql/clamp.sql
+SELECT clamp_int4(5, 0, 10);
+SELECT clamp_int4(-5, 0, 10);
+SELECT clamp_int4(15, 0, 10);</code></pre>
+
+<pre><code># Run against installed extension/server environment.
+make install
+make installcheck</code></pre>
+
+<h3>17.2 Test upgrade paths too</h3>
+<p>
+An extension that supports multiple deployed versions should test fresh installation and every supported upgrade path. Tests should also cover dump/restore, PostgreSQL major upgrades, replica behavior, failure/recovery behavior for persistent extension state, and concurrent use when the extension participates in planner or background-worker hooks.
+</p>
+</section>
+
+<section id="operations">
+<h2>18. Extensions in production</h2>
+
+<h3>18.1 Extension state belongs in infrastructure inventory</h3>
+<pre><code>SELECT
+    current_database() AS database_name,
+    extname,
+    extversion
+FROM pg_extension
+ORDER BY extname;</code></pre>
+
+<p>
+Record installed extension versions alongside the PostgreSQL server version. PostgreSQL package upgrades can place newer extension binaries/scripts on disk without automatically updating every database's extension catalog; an explicit <code>ALTER EXTENSION UPDATE</code> may still be required according to the extension's documentation.
+</p>
+
+<h3>18.2 Backups</h3>
+<p>
+Extension objects are represented in PostgreSQL catalogs and are handled by logical dump mechanisms according to extension membership and extension configuration-table declarations. Physical backups include the database's physical state but a restore environment must also provide compatible extension binaries and supporting libraries before PostgreSQL can successfully use native extension objects.<sup><a href="#r6">[6]</a></sup>
+</p>
+
+<h3>18.3 PostgreSQL major upgrades</h3>
+<p>
+A major PostgreSQL upgrade should include an extension compatibility matrix. Native modules are compiled against PostgreSQL server headers and frequently require target-major-version packages or recompilation. Extension release notes can also require post-upgrade actions, as demonstrated by PostgreSQL 18's <code>pg_trgm</code> reindex guidance for affected collation changes.<sup><a href="#r20">[20]</a><a href="#r25">[25]</a></sup>
+</p>
+
+<h3>18.4 Managed PostgreSQL</h3>
+<p>
+Hosted PostgreSQL platforms typically expose an allowlist rather than arbitrary native-library installation because server extensions execute privileged code inside the database process. Availability and versions therefore vary by provider. An application that depends on a nonstandard extension should treat extension availability as a portability requirement before selecting a managed platform.
+</p>
+
+<h3>18.5 Preload libraries</h3>
+<p>
+Some extensions need startup-time hooks or shared memory and must be placed in <code>shared_preload_libraries</code>. <code>pg_stat_statements</code> is a canonical example. Changing this parameter requires a server restart, which means adding or removing such an extension has infrastructure-level deployment implications rather than being a pure database migration.<sup><a href="#r14">[14]</a></sup>
+</p>
+</section>
+
+<section id="selection">
+<h2>19. Selecting the right extension</h2>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Extension / mechanism</th>
+<th>Key capability</th>
+<th>Important caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spatial/GIS</td>
+<td>PostGIS</td>
+<td>Geometry, geography, spatial predicates and indexes</td>
+<td>Coordinate systems and spatial-index semantics must be understood.</td>
+</tr>
+<tr>
+<td>Vector similarity / embeddings</td>
+<td>pgvector</td>
+<td>Exact search, HNSW, IVFFlat, multiple vector representations</td>
+<td>Approximate indexes trade recall for speed.</td>
+</tr>
+<tr>
+<td>SQL workload profiling</td>
+<td>pg_stat_statements</td>
+<td>Normalized query performance statistics</td>
+<td>Requires <code>shared_preload_libraries</code> and restart to enable initially.</td>
+</tr>
+<tr>
+<td>Remote/external data</td>
+<td>FDW / postgres_fdw</td>
+<td>Foreign tables integrated with PostgreSQL planner/executor</td>
+<td>Pushdown and transaction semantics vary by wrapper/source.</td>
+</tr>
+<tr>
+<td>Time-series data</td>
+<td>TimescaleDB</td>
+<td>Hypertables/chunks and time-series features</td>
+<td>Substantial PostgreSQL-version and extension-version lifecycle.</td>
+</tr>
+<tr>
+<td>Fuzzy text</td>
+<td>pg_trgm</td>
+<td>Trigram similarity and GIN/GiST search</td>
+<td>Index size and similarity thresholds need workload tuning.</td>
+</tr>
+<tr>
+<td>Flat key/value attributes</td>
+<td>hstore</td>
+<td>Text key/value map with GIN/GiST support</td>
+<td>JSONB is richer for nested or typed JSON data.</td>
+</tr>
+<tr>
+<td>Case-insensitive string type</td>
+<td>citext</td>
+<td>Case-insensitive comparison/uniqueness</td>
+<td>Nondeterministic collations may be better for Unicode/collation needs.</td>
+</tr>
+<tr>
+<td>Special UUID algorithms</td>
+<td>uuid-ossp</td>
+<td>UUID v1/v3/v4/v5 generation and namespaces</td>
+<td>Core PostgreSQL 18 already supplies UUIDv4 and UUIDv7.</td>
+</tr>
+<tr>
+<td>Domain-specific server behavior</td>
+<td>Custom extension</td>
+<td>Functions, types, operators, access methods, hooks, workers, etc.</td>
+<td>Native code becomes part of the trusted database server.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>19.1 Evaluation checklist</h3>
+<ol class="checklist">
+<li><strong>Necessity:</strong> is the feature already present in core PostgreSQL?</li>
+<li><strong>Maintenance:</strong> is the extension actively maintained and compatible with your PostgreSQL major version?</li>
+<li><strong>Upgrade path:</strong> are tested extension update scripts available?</li>
+<li><strong>Security:</strong> does it execute native code, contact external systems, or require superuser/preload access?</li>
+<li><strong>Replication:</strong> how does it behave on physical and logical replicas?</li>
+<li><strong>Backup/restore:</strong> what must be installed before restoration?</li>
+<li><strong>Portability:</strong> is it available on every environment and managed provider you require?</li>
+<li><strong>Planner impact:</strong> does it add hooks, operators, custom scans, or access methods that alter plans?</li>
+<li><strong>Operational state:</strong> does it create background workers, jobs, internal schemas, or persistent metadata?</li>
+<li><strong>Observability:</strong> what views, logs, and metrics expose extension health?</li>
+</ol>
+
+<div class="callout ok">
+<strong>Architectural principle:</strong> extensions are powerful because PostgreSQL lets them participate deeply in database semantics. That same depth means an extension should be managed as part of the database platform's software supply chain, version lifecycle, security model, and recovery plan—not merely as an optional SQL package.
+</div>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<ol class="refs">
+
+<li id="r1">PostgreSQL Global Development Group. How extensibility works [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/extend-how.html">https://www.postgresql.org/docs/18/extend-how.html</a></li>
+
+<li id="r2">PostgreSQL Global Development Group. Extending SQL [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/extend.html">https://www.postgresql.org/docs/18/extend.html</a></li>
+
+<li id="r3">PostgreSQL Global Development Group. CREATE EXTENSION [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createextension.html">https://www.postgresql.org/docs/18/sql-createextension.html</a></li>
+
+<li id="r4">PostgreSQL Global Development Group. Additional supplied modules and extensions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/contrib.html">https://www.postgresql.org/docs/18/contrib.html</a></li>
+
+<li id="r5">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+
+<li id="r6">PostgreSQL Global Development Group. Packaging related objects into an extension [Internet]. PostgreSQL Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/extend-extensions.html">https://www.postgresql.org/docs/18/extend-extensions.html</a></li>
+
+<li id="r7">PostgreSQL Global Development Group. pg_extension system catalog [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-extension.html">https://www.postgresql.org/docs/18/catalog-pg-extension.html</a></li>
+
+<li id="r8">PostgreSQL Global Development Group. Client connection defaults: extension_control_path [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/runtime-config-client.html">https://www.postgresql.org/docs/18/runtime-config-client.html</a></li>
+
+<li id="r9">PostgreSQL Global Development Group. C-language functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc-c.html">https://www.postgresql.org/docs/18/xfunc-c.html</a></li>
+
+<li id="r10">PostgreSQL Global Development Group. pg_available_extension_versions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/view-pg-available-extension-versions.html">https://www.postgresql.org/docs/18/view-pg-available-extension-versions.html</a></li>
+
+<li id="r11">PostGIS Project Steering Committee. PostGIS Manual: installation, geometry/geography, spatial indexes [Internet]. PostGIS; 2026 [cited 2026 Sep 15]. Available from: <a href="https://postgis.net/docs/postgis-en.html">https://postgis.net/docs/postgis-en.html</a></li>
+
+<li id="r12">PostGIS Project Steering Committee. ST_DWithin [Internet]. PostGIS Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://postgis.net/docs/ST_DWithin.html">https://postgis.net/docs/ST_DWithin.html</a></li>
+
+<li id="r13">pgvector contributors. pgvector: open-source vector similarity search for PostgreSQL [Internet]. GitHub; 2026 [cited 2026 Sep 15]. Available from: <a href="https://github.com/pgvector/pgvector">https://github.com/pgvector/pgvector</a></li>
+
+<li id="r14">PostgreSQL Global Development Group. pg_stat_statements — track statistics of SQL planning and execution [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgstatstatements.html">https://www.postgresql.org/docs/18/pgstatstatements.html</a></li>
+
+<li id="r15">PostgreSQL Global Development Group. Writing a foreign data wrapper [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/fdwhandler.html">https://www.postgresql.org/docs/18/fdwhandler.html</a></li>
+
+<li id="r16">PostgreSQL Global Development Group. postgres_fdw — access data stored in external PostgreSQL servers [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/postgres-fdw.html">https://www.postgresql.org/docs/18/postgres-fdw.html</a></li>
+
+<li id="r17">Timescale, Inc. create_hypertable() [Internet]. Timescale Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.timescale.com/api/latest/hypertable/create_hypertable/">https://docs.timescale.com/api/latest/hypertable/create_hypertable/</a></li>
+
+<li id="r18">Timescale, Inc. CREATE TABLE: create a TimescaleDB hypertable [Internet]. Timescale Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://docs.timescale.com/api/latest/hypertable/create_table/">https://docs.timescale.com/api/latest/hypertable/create_table/</a></li>
+
+<li id="r19">PostgreSQL Global Development Group. pg_trgm — support for similarity of text using trigram matching [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/pgtrgm.html">https://www.postgresql.org/docs/18/pgtrgm.html</a></li>
+
+<li id="r20">PostgreSQL Global Development Group. PostgreSQL 18 release notes [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/release-18.html">https://www.postgresql.org/docs/18/release-18.html</a></li>
+
+<li id="r21">PostgreSQL Global Development Group. hstore — hstore key/value datatype [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/hstore.html">https://www.postgresql.org/docs/18/hstore.html</a></li>
+
+<li id="r22">PostgreSQL Global Development Group. citext — a case-insensitive character string type [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/citext.html">https://www.postgresql.org/docs/18/citext.html</a></li>
+
+<li id="r23">PostgreSQL Global Development Group. uuid-ossp — a UUID generator [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/uuid-ossp.html">https://www.postgresql.org/docs/18/uuid-ossp.html</a></li>
+
+<li id="r24">PostgreSQL Global Development Group. UUID type and UUID functions [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/datatype-uuid.html">https://www.postgresql.org/docs/18/datatype-uuid.html</a>; <a href="https://www.postgresql.org/docs/18/functions-uuid.html">https://www.postgresql.org/docs/18/functions-uuid.html</a></li>
+
+<li id="r25">PostgreSQL Global Development Group. Extension building infrastructure (PGXS) [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/extend-pgxs.html">https://www.postgresql.org/docs/18/extend-pgxs.html</a></li>
+
+<li id="r26">PostgreSQL Global Development Group. Server Programming Interface [Internet]. PostgreSQL 18 Documentation; 2026 [cited 2026 Sep 15]. Available from: <a href="https://www.postgresql.org/docs/18/spi.html">https://www.postgresql.org/docs/18/spi.html</a></li>
+
+</ol>
+</section>
+
+</main>
+
+<footer>
+<p>
+This article is a technical reference. Extension APIs, PostgreSQL compatibility, third-party extension versions, packaging, licensing, managed-service availability, and upgrade requirements can change. Validate each extension against the exact PostgreSQL major/minor version and deployment platform used in production.
+</p>
+</footer>
+
+</body>
+</html>

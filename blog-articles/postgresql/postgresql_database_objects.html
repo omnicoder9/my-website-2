@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Technical article on PostgreSQL database objects: tables, views, materialized views, indexes, sequences, schemas, functions, procedures, triggers, types, domains, operators, aggregates, collations, extensions, foreign-data wrappers, publications and subscriptions.">
+<title>PostgreSQL Database Objects</title>
+<style>
+:root{--bg:#f5f7fb;--paper:#fff;--ink:#172033;--muted:#5d6879;--line:#dce3ed;--accent:#315da8;--code:#101827;--codeink:#e8eef8;--note:#eef5ff;--warn:#fff6e7;--ok:#edf9f1}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.72}
+header{color:#fff;background:linear-gradient(135deg,#14213d,#315da8);padding:60px 22px 50px}
+.wrap,main{max-width:1160px;margin:0 auto}
+h1{margin:0 0 15px;font-size:clamp(2.1rem,4.8vw,3.65rem);line-height:1.08;letter-spacing:-.04em}
+.dek{max-width:1050px;margin:0;color:#dce7ff;font-size:1.13rem}.meta{color:#c6d6f4;font-size:.93rem;margin-top:18px}
+main{background:var(--paper);margin-top:28px;margin-bottom:30px;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(25,39,68,.08);padding:46px clamp(20px,5vw,68px)}
+h2{margin:2.6em 0 .65em;padding-bottom:.43em;border-bottom:1px solid var(--line);font-size:1.84rem;line-height:1.25;letter-spacing:-.02em}
+h3{margin-top:1.95em;font-size:1.31rem;line-height:1.3}h4{margin-top:1.6em;font-size:1.08rem}
+p{margin:.92em 0}a{color:var(--accent)}sup a{text-decoration:none;font-weight:700}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:.91em}
+pre{background:var(--code);color:var(--codeink);border:1px solid #243047;border-radius:10px;padding:18px;overflow-x:auto;line-height:1.5;font-size:.88rem}pre code{color:inherit}
+.toc{background:#f9fbff;border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:27px 0 36px}
+.toc h2{margin:0 0 10px;padding:0;border:0;font-size:1.2rem}.toc ol{columns:2;column-gap:38px;margin:0;padding-left:22px}.toc li{break-inside:avoid;margin:5px 0}.toc a{text-decoration:none}
+.table-wrap{overflow-x:auto;margin:18px 0 28px}table{border-collapse:collapse;width:100%;min-width:860px;font-size:.94rem}th,td{border:1px solid var(--line);padding:11px 12px;vertical-align:top;text-align:left}th{background:#f1f4f9}
+.callout{border-left:4px solid var(--accent);background:var(--note);border-radius:8px;padding:14px 18px;margin:18px 0}.callout.warn{background:var(--warn);border-left-color:#b26a00}.callout.ok{background:var(--ok);border-left-color:#2b754a}
+.diagram{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;white-space:pre;overflow-x:auto;line-height:1.48;background:#f7f8fb;border:1px solid var(--line);border-radius:10px;padding:18px;color:#243047}
+.refs{font-size:.94rem;word-break:break-word}.refs li{margin-bottom:.82em}.checklist li{margin:.48em 0}.small{font-size:.92rem;color:var(--muted)}
+footer{max-width:1160px;margin:0 auto 38px;padding:0 20px;color:var(--muted);font-size:.9rem}
+@media(max-width:780px){.toc ol{columns:1}main{margin:0;border-left:0;border-right:0;border-radius:0}}
+@media print{body{background:#fff}header{background:#fff;color:#000;padding:18px 0}header .dek,header .meta{color:#444}main{border:0;box-shadow:none;margin:0;padding:0}a{color:#000;text-decoration:none}pre{white-space:pre-wrap}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>PostgreSQL Database Objects</h1>
+<p class="dek">A technical guide to PostgreSQL’s object model: tables, views, materialized views, indexes, sequences, schemas, functions, procedures, triggers, types, domains, operators, aggregates, collations, extensions, foreign-data wrappers, publications and subscriptions—with catalogs, dependencies, ownership, namespaces, and practical DDL examples.</p>
+<p class="meta">Technical article • PostgreSQL 18.6 baseline • Updated 16 September 2026 • Vancouver-style references</p>
+</div></header>
+
+<main>
+<section id="abstract">
+<h2>Abstract</h2>
+<p>PostgreSQL is more than a collection of tables. A database contains a graph of named objects—relations, executable routines, type-system objects, operators, collations, extensions, foreign-data wrappers and replication definitions—linked through ownership, schema namespaces, privileges and dependency metadata. Understanding those object boundaries is essential for safe schema evolution, privilege design, extension packaging and automated deployment.<sup><a href="#r1">[1]</a>-<a href="#r4">[4]</a></sup></p>
+<p>Several object kinds are relation-like and share one schema namespace: tables, sequences, indexes, views, materialized views and foreign tables cannot reuse the same name within a schema. Functions and procedures are represented in <code>pg_proc</code> and can be overloaded by argument signature; types and domains are represented in <code>pg_type</code>; schemas themselves live in <code>pg_namespace</code>. PostgreSQL's system catalogs make this object model inspectable through ordinary SQL.<sup><a href="#r2">[2]</a><a href="#r5">[5]</a>-<a href="#r8">[8]</a></sup></p>
+<p>Many higher-level objects are definitions over other objects rather than standalone storage. A normal view stores a query definition and is rewritten into underlying relations at planning time; a materialized view stores query results and can be refreshed; an index stores an auxiliary access structure; a sequence stores independent state for number generation; a trigger binds event timing to a trigger function; an aggregate composes transition/combine/final functions; and an extension packages multiple dependent objects as one installable/upgradable unit.<sup><a href="#r9">[9]</a>-<a href="#r15">[15]</a></sup></p>
+<p>PostgreSQL also treats data federation and logical replication as database objects. A foreign-data wrapper defines the API implementation for an external source, servers and user mappings supply endpoint/credential metadata, and foreign tables expose remote objects through SQL. Publications define sets of table changes to emit; subscriptions define downstream connections to one or more publications and normally create replication-slot state on the publisher.<sup><a href="#r16">[16]</a>-<a href="#r21">[21]</a></sup></p>
+</section>
+
+<nav class="toc" aria-label="Table of contents"><h2>Contents</h2><ol>
+<li><a href="#object-model">The PostgreSQL object model</a></li><li><a href="#namespaces">Namespaces and naming</a></li><li><a href="#dependencies">Dependency tracking</a></li><li><a href="#ownership">Ownership and privileges</a></li>
+<li><a href="#tables">Tables</a></li><li><a href="#views">Views</a></li><li><a href="#matviews">Materialized views</a></li><li><a href="#indexes">Indexes</a></li>
+<li><a href="#sequences">Sequences</a></li><li><a href="#schemas">Schemas</a></li><li><a href="#functions">Functions</a></li><li><a href="#procedures">Procedures</a></li>
+<li><a href="#triggers">Triggers</a></li><li><a href="#types">Types</a></li><li><a href="#domains">Domains</a></li><li><a href="#operators">Operators</a></li>
+<li><a href="#aggregates">Aggregates</a></li><li><a href="#collations">Collations</a></li><li><a href="#extensions">Extensions</a></li><li><a href="#fdw">Foreign-data wrappers</a></li>
+<li><a href="#foreign-objects">Servers, mappings and foreign tables</a></li><li><a href="#publications">Publications</a></li><li><a href="#subscriptions">Subscriptions</a></li><li><a href="#catalogs">Inspecting objects in catalogs</a></li>
+<li><a href="#lifecycle">Object lifecycle and DDL</a></li><li><a href="#design">Design guidelines</a></li><li><a href="#pitfalls">Common pitfalls</a></li><li><a href="#checklist">Production checklist</a></li>
+<li><a href="#references">References</a></li>
+</ol></nav>
+
+<section id="object-model"><h2>1. The PostgreSQL object model</h2>
+<p>PostgreSQL stores object definitions in system catalogs and connects those definitions through OIDs and dependency records. Most DDL is catalog manipulation plus any necessary physical work: <code>CREATE TABLE</code> creates relation/type metadata and storage; <code>CREATE VIEW</code> creates relation metadata plus a rewrite rule; <code>CREATE FUNCTION</code> creates a <code>pg_proc</code> entry and associated dependencies; <code>CREATE EXTENSION</code> records an extension object and associates its member objects with it.<sup><a href="#r4">[4]</a><a href="#r5">[5]</a><a href="#r22">[22]</a></sup></p>
+
+<div class="diagram">database
+  |
+  +-- schemas (pg_namespace)
+       |
+       +-- relation namespace
+       |    tables / indexes / sequences / views /
+       |    materialized views / foreign tables
+       |
+       +-- routines
+       |    functions / procedures
+       |
+       +-- type system
+       |    base/composite/enum/range types / domains
+       |
+       +-- executable semantics
+       |    operators / aggregates / triggers
+       |
+       +-- locale semantics
+       |    collations
+       |
+       +-- extensibility
+       |    extensions / FDWs / servers / user mappings
+       |
+       +-- logical replication
+            publications / subscriptions</div>
+
+<p>Some objects are database-local while a few object types such as roles are cluster-wide. A client connection operates inside one database, and schemas organize names within that database rather than crossing database boundaries.<sup><a href="#r2">[2]</a></sup></p>
+</section>
+
+<section id="namespaces"><h2>2. Schemas, namespaces and naming rules</h2>
+<p>A schema is PostgreSQL's principal namespace container. The same name can exist in different schemas, and qualified names such as <code>billing.invoice</code> remove ambiguity. Schemas cannot be nested.<sup><a href="#r2">[2]</a></sup></p>
+
+<pre><code>CREATE SCHEMA billing;
+
+CREATE TABLE billing.invoice (...);
+CREATE TABLE archive.invoice (...);</code></pre>
+
+<p>PostgreSQL has multiple logical namespaces inside each schema. Tables, sequences, indexes, views, materialized views and foreign tables share the relation namespace and therefore cannot collide by name. Types have another namespace; routines can be overloaded; operators are distinguished by name and operand types.<sup><a href="#r2">[2]</a><a href="#r23">[23]</a></sup></p>
+
+<h3>2.1 search_path</h3>
+<pre><code>SHOW search_path;
+
+SET search_path = app, shared, pg_catalog;</code></pre>
+
+<p>When an object name is not schema-qualified, PostgreSQL searches schemas according to <code>search_path</code>. The first existing schema in the effective path where the user has appropriate privilege is also the default creation location for many unqualified objects. Because adding a schema to <code>search_path</code> implicitly trusts users who can create objects there, secure environments should control <code>CREATE</code> privileges carefully.<sup><a href="#r2">[2]</a></sup></p>
+</section>
+
+<section id="dependencies"><h2>3. Dependency tracking</h2>
+<p>PostgreSQL records dependencies so that objects cannot normally be dropped while dependent objects still require them. The default drop behavior is effectively <code>RESTRICT</code>; <code>CASCADE</code> recursively removes dependent objects or dependent subobjects such as constraints.<sup><a href="#r3">[3]</a></sup></p>
+
+<pre><code>DROP TABLE products;
+-- ERROR: cannot drop table because other objects depend on it
+
+DROP TABLE products CASCADE;</code></pre>
+
+<h3>3.1 Function-body dependency nuance</h3>
+<p>Dependency discovery depends on how an SQL routine body is defined. If an SQL-language function/procedure body is supplied as a string literal, PostgreSQL tracks dependencies visible from the routine signature and other catalog-level properties but cannot necessarily discover table references hidden inside the string. SQL-standard <code>BEGIN ATOMIC</code> bodies are parsed when the routine is defined, allowing parser-visible dependencies to be recorded.<sup><a href="#r3">[3]</a></sup></p>
+
+<pre><code>CREATE FUNCTION app.lookup_note(app.color)
+RETURNS text
+LANGUAGE SQL
+BEGIN ATOMIC
+    SELECT note
+    FROM app.color_note
+    WHERE color = $1;
+END;</code></pre>
+
+<div class="callout warn"><strong>Schema refactoring implication:</strong> do not assume every routine dependency is tracked if routine bodies are stored as opaque strings. For strongly managed schemas, parsed SQL-standard bodies can provide better dependency metadata.</div>
+</section>
+
+<section id="ownership"><h2>4. Ownership and privileges</h2>
+<p>Most PostgreSQL objects have an owner. The creating role generally becomes owner unless DDL allows or specifies another owner. Ownership conveys implicit authority to alter/drop the object and grant privileges, while object-specific privileges determine what other roles can do. Schema <code>USAGE</code> controls name lookup/access and schema <code>CREATE</code> controls creation in that namespace.<sup><a href="#r2">[2]</a><a href="#r24">[24]</a></sup></p>
+
+<pre><code>ALTER TABLE app.orders OWNER TO app_owner;
+
+GRANT SELECT, INSERT, UPDATE
+ON app.orders
+TO app_runtime;</code></pre>
+
+<p>Extensions complicate ownership slightly because an extension object owns membership of its contained objects from PostgreSQL's dependency perspective, while the contained objects still have their ordinary SQL owners. Dropping an extension normally drops its member objects as an extension-level operation.<sup><a href="#r14">[14]</a><a href="#r22">[22]</a></sup></p>
+</section>
+
+<section id="tables"><h2>5. Tables</h2>
+<p>A table is PostgreSQL's primary persistent row-storage object. <code>CREATE TABLE</code> defines columns, data types, defaults/generated expressions, constraints, optional partitioning, storage method, tablespace and persistence class. Ordinary, temporary and unlogged tables have different durability/lifetime semantics.<sup><a href="#r25">[25]</a></sup></p>
+
+<pre><code>CREATE TABLE app.orders (
+    order_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_id bigint NOT NULL
+        REFERENCES app.customer(customer_id),
+    status text NOT NULL
+        CHECK (status IN ('open','paid','cancelled')),
+    total_amount numeric(14,2) NOT NULL
+        CHECK (total_amount &gt;= 0),
+    created_at timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+
+<h3>5.1 Table creates a composite type</h3>
+<p>Creating a table also creates a composite row type with the same name in the type namespace. That row type can be used as a routine argument/result or as a field type in other constructs, which is one reason the table and type namespaces interact even though they are not the same namespace.<sup><a href="#r25">[25]</a></sup></p>
+
+<pre><code>CREATE FUNCTION app.order_total(o app.orders)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+RETURN o.total_amount;</code></pre>
+
+<h3>5.2 Temporary and unlogged tables</h3>
+<p>Temporary tables live in a session-specific temporary schema and are automatically dropped at session end (or earlier according to <code>ON COMMIT</code>). Unlogged tables bypass normal WAL logging for table data, making them faster for some workloads but not crash-safe and not replicated to physical standbys in the same way as ordinary logged relations.<sup><a href="#r25">[25]</a></sup></p>
+</section>
+
+<section id="views"><h2>6. Views</h2>
+<p>A normal view stores a query definition rather than materialized rows. PostgreSQL implements views through the rewrite system: a query referencing the view is transformed so the underlying relations and predicates can be planned together with the outer query.<sup><a href="#r9">[9]</a><a href="#r26">[26]</a></sup></p>
+
+<pre><code>CREATE VIEW reporting.open_orders AS
+SELECT
+    o.order_id,
+    o.customer_id,
+    o.total_amount,
+    o.created_at
+FROM app.orders AS o
+WHERE o.status = 'open';</code></pre>
+
+<pre><code>SELECT *
+FROM reporting.open_orders
+WHERE customer_id = 42;</code></pre>
+
+<h3>6.1 Security and API boundary</h3>
+<p>Views are frequently used to expose stable interfaces over underlying tables, hide columns, encapsulate joins, or apply security boundaries. PostgreSQL supports options such as <code>security_barrier</code> and <code>security_invoker</code> for cases where evaluation order or invoker privileges matter.<sup><a href="#r27">[27]</a></sup></p>
+
+<h3>6.2 Updatable views</h3>
+<p>Simple views can be automatically updatable when PostgreSQL can map modifications unambiguously to one base relation. More complex view-write behavior can be implemented with rules or <code>INSTEAD OF</code> triggers.<sup><a href="#r27">[27]</a></sup></p>
+</section>
+
+<section id="matviews"><h2>7. Materialized views</h2>
+<p>A materialized view stores the result of a query in table-like physical storage while retaining the defining query so the contents can be regenerated with <code>REFRESH MATERIALIZED VIEW</code>. Unlike a normal view, querying a materialized view reads its stored rows directly rather than rerunning the defining query.<sup><a href="#r10">[10]</a><a href="#r28">[28]</a></sup></p>
+
+<pre><code>CREATE MATERIALIZED VIEW reporting.daily_sales AS
+SELECT
+    date_trunc('day', created_at) AS sales_day,
+    count(*) AS orders,
+    sum(total_amount) AS revenue
+FROM app.orders
+WHERE status = 'paid'
+GROUP BY 1
+WITH DATA;</code></pre>
+
+<pre><code>CREATE UNIQUE INDEX daily_sales_day_uq
+ON reporting.daily_sales(sales_day);
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY
+reporting.daily_sales;</code></pre>
+
+<p><code>REFRESH ... CONCURRENTLY</code> permits concurrent reads during refresh but requires a qualifying unique index over ordinary columns and has additional restrictions. Materialized views are useful when recomputation cost is high and some staleness is acceptable.<sup><a href="#r29">[29]</a></sup></p>
+</section>
+
+<section id="indexes"><h2>8. Indexes</h2>
+<p>An index is a relation-like object that stores an auxiliary access structure for a table or materialized view. PostgreSQL supports B-tree, Hash, GiST, SP-GiST, GIN and BRIN built-in access methods. Indexes can also enforce uniqueness, implement exclusion constraints, provide ordered access and support index-only scans.<sup><a href="#r30">[30]</a><a href="#r31">[31]</a></sup></p>
+
+<pre><code>CREATE INDEX orders_customer_created_idx
+ON app.orders(customer_id, created_at DESC)
+INCLUDE(order_id, total_amount)
+WHERE status = 'open';</code></pre>
+
+<p>Indexes share the relation namespace with tables/views/sequences and are represented in <code>pg_class</code> with relation kind <code>i</code> (ordinary index) or <code>I</code> (partitioned index), while index-specific metadata is in <code>pg_index</code>.<sup><a href="#r5">[5]</a><a href="#r32">[32]</a></sup></p>
+</section>
+
+<section id="sequences"><h2>9. Sequences</h2>
+<p>A sequence is a special single-row relation that generates numeric values independently of ordinary transactional rollback semantics. <code>CREATE SEQUENCE</code> controls start, increment, minimum/maximum, cycling, cache and data type. Sequence state is commonly consumed through <code>nextval</code>, <code>currval</code>, and <code>setval</code>.<sup><a href="#r11">[11]</a><a href="#r33">[33]</a></sup></p>
+
+<pre><code>CREATE SEQUENCE app.invoice_no_seq
+    AS bigint
+    START WITH 100000
+    INCREMENT BY 1
+    CACHE 100;
+
+SELECT nextval('app.invoice_no_seq');</code></pre>
+
+<h3>9.1 Identity columns</h3>
+<p><code>GENERATED ... AS IDENTITY</code> is normally preferable to manually wiring a sequence when the requirement is “this table column receives generated numeric identities,” because PostgreSQL creates/manages the associated sequence relationship as part of the column definition.<sup><a href="#r25">[25]</a></sup></p>
+
+<h3>9.2 Gaps are normal</h3>
+<p>Sequence values are designed for concurrent number allocation, not gapless transactional numbering. Values consumed by transactions that later abort are not automatically returned to the sequence; cached values and crashes can also create gaps. Do not use a normal sequence as an audit requirement for gapless legal numbering without a separate concurrency design.<sup><a href="#r33">[33]</a></sup></p>
+</section>
+
+<section id="schemas"><h2>10. Schemas</h2>
+<p>A schema is a named namespace inside one database. Schemas organize objects, separate third-party/application namespaces and provide privilege boundaries. The same object name can exist in different schemas, and the <code>search_path</code> controls resolution of unqualified names.<sup><a href="#r2">[2]</a><a href="#r34">[34]</a></sup></p>
+
+<pre><code>CREATE SCHEMA app AUTHORIZATION app_owner;
+
+GRANT USAGE ON SCHEMA app TO app_runtime;
+GRANT CREATE ON SCHEMA app TO app_deployer;</code></pre>
+
+<p>The <code>public</code> schema exists by default in new databases unless template/customization changes that. Modern privilege defaults and deployment policies should still be reviewed explicitly rather than assuming every role should be able to create objects in shared namespaces.<sup><a href="#r2">[2]</a></sup></p>
+
+<h3>10.1 Schema-qualified DDL</h3>
+<pre><code>CREATE TABLE app.customer (...);
+CREATE VIEW reporting.customer_summary AS ...;
+CREATE FUNCTION app.normalize_email(text) RETURNS text ...;</code></pre>
+
+<p>Schema qualification improves migration determinism and security by reducing dependence on session-specific <code>search_path</code> configuration.</p>
+</section>
+
+<section id="functions"><h2>11. Functions</h2>
+<p>A PostgreSQL function is a routine invoked in expressions, queries, defaults, indexes, constraints and other SQL contexts. Functions can return scalar, composite, set or table-shaped results, and can be implemented in SQL, PL/pgSQL, C, trusted/untrusted procedural languages and extension-provided languages.<sup><a href="#r12">[12]</a><a href="#r35">[35]</a></sup></p>
+
+<pre><code>CREATE FUNCTION app.net_amount(
+    gross numeric,
+    discount numeric
+)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+STRICT
+RETURN gross - discount;</code></pre>
+
+<h3>11.1 Volatility</h3>
+<p>Function volatility categories—<code>IMMUTABLE</code>, <code>STABLE</code> and <code>VOLATILE</code>—tell the optimizer what assumptions it may make about repeated calls. Volatility is a semantic promise and must be declared correctly; expression indexes require immutable functions because stored index keys must remain valid.<sup><a href="#r35">[35]</a><a href="#r36">[36]</a></sup></p>
+
+<h3>11.2 Security definer</h3>
+<pre><code>CREATE FUNCTION admin.rotate_api_key(p_user_id bigint)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, admin, pg_temp
+AS $$
+BEGIN
+    UPDATE admin.api_key
+    SET revoked_at = clock_timestamp()
+    WHERE user_id = p_user_id
+      AND revoked_at IS NULL;
+END
+$$;</code></pre>
+
+<p><code>SECURITY DEFINER</code> functions execute with the function owner's privileges rather than the caller's. PostgreSQL documents the need to secure <code>search_path</code> and privileges carefully because malicious objects placed in writable schemas can otherwise alter name resolution.<sup><a href="#r35">[35]</a></sup></p>
+
+<h3>11.3 Overloading</h3>
+<p>Functions can share a name when argument signatures differ. PostgreSQL resolves a call by schema search, argument count/types, implicit casts and type-resolution rules. This is powerful but can make ambiguous calls or unsafe search-path exposure more likely when overloaded APIs are designed carelessly.<sup><a href="#r37">[37]</a></sup></p>
+</section>
+
+<section id="procedures"><h2>12. Procedures</h2>
+<p>Procedures resemble functions but are invoked with <code>CALL</code> rather than used as expression values. A key distinction is transaction control: procedures invoked by <code>CALL</code> in the appropriate top-level context can execute <code>COMMIT</code> and <code>ROLLBACK</code>; ordinary functions cannot end the surrounding transaction.<sup><a href="#r13">[13]</a><a href="#r38">[38]</a></sup></p>
+
+<pre><code>CREATE PROCEDURE maintenance.archive_old_orders(
+    cutoff timestamptz
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO archive.orders
+    SELECT *
+    FROM app.orders
+    WHERE created_at &lt; cutoff;
+
+    DELETE FROM app.orders
+    WHERE created_at &lt; cutoff;
+END
+$$;
+
+CALL maintenance.archive_old_orders(
+    now() - interval '2 years'
+);</code></pre>
+
+<p>Choose a function when the routine naturally behaves like a value-producing SQL operation and must compose in queries. Choose a procedure when command-style invocation and, where appropriate, internal transaction control better match the API.</p>
+</section>
+
+<section id="triggers"><h2>13. Triggers</h2>
+<p>A trigger binds a trigger function to table/view events such as <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code> or <code>TRUNCATE</code>. PostgreSQL supports <code>BEFORE</code>, <code>AFTER</code> and view-only <code>INSTEAD OF</code> triggers, at row or statement granularity where applicable. Constraint triggers provide deferrable timing semantics for specialized integrity checks.<sup><a href="#r14">[14]</a><a href="#r39">[39]</a></sup></p>
+
+<pre><code>CREATE FUNCTION audit.capture_order_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO audit.order_event(
+        operation,
+        order_id,
+        changed_at
+    )
+    VALUES (
+        TG_OP,
+        COALESCE(NEW.order_id, OLD.order_id),
+        clock_timestamp()
+    );
+
+    RETURN COALESCE(NEW, OLD);
+END
+$$;
+
+CREATE TRIGGER orders_audit_trg
+AFTER INSERT OR UPDATE OR DELETE
+ON app.orders
+FOR EACH ROW
+EXECUTE FUNCTION audit.capture_order_change();</code></pre>
+
+<h3>13.1 Transition tables</h3>
+<p>Statement-level triggers can use transition relations through <code>REFERENCING OLD TABLE</code>/<code>NEW TABLE</code> in supported cases, allowing one trigger invocation to inspect all rows affected by a statement instead of firing row-by-row logic.<sup><a href="#r14">[14]</a></sup></p>
+
+<div class="callout warn"><strong>Trigger design principle:</strong> triggers are powerful for invariants/auditing close to the data, but hidden side effects make write behavior less obvious. Keep them small, deterministic and documented, and avoid synchronous remote calls from trigger execution paths.</div>
+</section>
+
+<section id="types"><h2>14. User-defined types</h2>
+<p><code>CREATE TYPE</code> supports several type families: composite types, enumerated types, range types, multirange-related definitions and fully custom base types implemented with input/output functions. PostgreSQL's extensible type system is central to its ability to add operators, index operator classes and domain-specific semantics.<sup><a href="#r15">[15]</a><a href="#r40">[40]</a></sup></p>
+
+<h3>14.1 Enum</h3>
+<pre><code>CREATE TYPE app.order_state AS ENUM (
+    'open',
+    'paid',
+    'cancelled'
+);</code></pre>
+
+<h3>14.2 Composite type</h3>
+<pre><code>CREATE TYPE app.money_amount AS (
+    amount numeric(18,2),
+    currency char(3)
+);</code></pre>
+
+<h3>14.3 Range type</h3>
+<pre><code>CREATE TYPE scheduling.float8range_custom AS RANGE (
+    subtype = float8,
+    subtype_diff = float8mi
+);</code></pre>
+
+<p>Table row types are automatically generated composite types, while standalone composite types define structure without creating storage of their own.<sup><a href="#r15">[15]</a><a href="#r25">[25]</a></sup></p>
+</section>
+
+<section id="domains"><h2>15. Domains</h2>
+<p>A domain creates a distinct named type based on an existing underlying type plus optional default, <code>NOT NULL</code> and <code>CHECK</code> constraints. Domains are useful when the same scalar validation rule should be reused across many columns and routine signatures.<sup><a href="#r16">[16]</a></sup></p>
+
+<pre><code>CREATE DOMAIN app.email_address AS text
+CHECK (
+    VALUE = lower(VALUE)
+    AND position('@' in VALUE) &gt; 1
+);</code></pre>
+
+<pre><code>CREATE TABLE app.contact (
+    contact_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email app.email_address NOT NULL
+);</code></pre>
+
+<h3>15.1 Domain versus table constraint</h3>
+<p>A domain constraint applies wherever a domain value is formed, while a table constraint applies in the context of one table row. Cross-column rules therefore belong on tables rather than domains. Domain checks should depend only on the input value and immutable behavior so existing stored values do not silently become invalid after external state changes.<sup><a href="#r16">[16]</a></sup></p>
+</section>
+
+<section id="operators"><h2>16. Operators</h2>
+<p>PostgreSQL operators are named syntactic objects backed by functions. <code>CREATE OPERATOR</code> associates an operator token with argument/result types, an implementation procedure and optional optimizer metadata such as commutator, negator and selectivity functions. Operators are a major extension point used by custom types and index operator classes.<sup><a href="#r17">[17]</a><a href="#r41">[41]</a></sup></p>
+
+<pre><code>CREATE FUNCTION app.int_distance(integer, integer)
+RETURNS integer
+LANGUAGE SQL
+IMMUTABLE STRICT
+RETURN abs($1 - $2);
+
+CREATE OPERATOR app.&lt;-&gt; (
+    LEFTARG = integer,
+    RIGHTARG = integer,
+    FUNCTION = app.int_distance
+);</code></pre>
+
+<p>Creating an operator does not automatically make it indexable. Index use requires an appropriate operator class/family that tells a particular access method how the operator fits its strategy/support-function semantics.<sup><a href="#r41">[41]</a></sup></p>
+</section>
+
+<section id="aggregates"><h2>17. Aggregates</h2>
+<p>An aggregate is a routine-like object that reduces many input rows to one result per group. PostgreSQL implements aggregates from component functions: a transition function maintains state, an optional final function converts state to output, and optional combine/serialization/deserialization functions enable partial and parallel aggregation. Ordered-set and hypothetical-set aggregates have additional direct/ordered argument semantics.<sup><a href="#r18">[18]</a><a href="#r42">[42]</a></sup></p>
+
+<pre><code>CREATE FUNCTION app.sum_squares_sfunc(
+    state numeric,
+    value numeric
+)
+RETURNS numeric
+LANGUAGE SQL
+IMMUTABLE
+RETURN state + value * value;
+
+CREATE AGGREGATE app.sum_squares(numeric) (
+    SFUNC = app.sum_squares_sfunc,
+    STYPE = numeric,
+    INITCOND = '0'
+);</code></pre>
+
+<pre><code>SELECT customer_id,
+       app.sum_squares(total_amount)
+FROM app.orders
+GROUP BY customer_id;</code></pre>
+
+<p>Aggregate definitions live in <code>pg_proc</code> as routine objects plus aggregate-specific rows in <code>pg_aggregate</code> that reference transition/final/combine functions and state types.<sup><a href="#r6">[6]</a><a href="#r43">[43]</a></sup></p>
+</section>
+
+<section id="collations"><h2>18. Collations</h2>
+<p>A collation defines locale-dependent ordering and character-classification/comparison behavior for collatable data types. PostgreSQL can use libc and ICU providers (depending on build/platform), plus built-in collations. Collation choice affects comparisons, sorting and indexes over collatable strings, so changing collation semantics can require index rebuilds.<sup><a href="#r19">[19]</a><a href="#r44">[44]</a></sup></p>
+
+<pre><code>CREATE COLLATION app.en_ci (
+    provider = icu,
+    locale = 'en-u-ks-level2',
+    deterministic = false
+);</code></pre>
+
+<pre><code>CREATE TABLE app.person (
+    display_name text COLLATE app.en_ci
+);</code></pre>
+
+<h3>18.1 Deterministic versus nondeterministic</h3>
+<p>Deterministic collations require byte-identical strings for equality after provider comparison, while nondeterministic ICU collations can support comparison semantics such as case- or accent-insensitivity. Nondeterministic collations have restrictions/behavioral tradeoffs and should be chosen intentionally for the application's equality semantics.<sup><a href="#r44">[44]</a></sup></p>
+</section>
+
+<section id="extensions"><h2>19. Extensions</h2>
+<p>An extension packages a set of SQL objects so PostgreSQL can install, version, update and remove them as one logical unit. <code>CREATE EXTENSION</code> executes the extension's installation script and records membership/version/schema metadata in <code>pg_extension</code>. Extensions can contain SQL objects, C functions, custom types, operators, access methods and many other object kinds.<sup><a href="#r20">[20]</a><a href="#r22">[22]</a><a href="#r45">[45]</a></sup></p>
+
+<pre><code>CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+SELECT extname, extversion, extnamespace::regnamespace
+FROM pg_extension
+ORDER BY extname;</code></pre>
+
+<h3>19.1 Upgrade path</h3>
+<pre><code>ALTER EXTENSION my_extension
+UPDATE TO '2.0';</code></pre>
+
+<p>Extension authors provide control files and update scripts describing valid version transitions. Member objects should generally be managed through the extension rather than individually dropped or altered in ways that break extension expectations.<sup><a href="#r45">[45]</a></sup></p>
+
+<h3>19.2 Trusted extensions</h3>
+<p>Extensions can be marked trusted by their control metadata, allowing non-superusers with appropriate database privileges to install them under PostgreSQL's trusted-extension rules. Whether an extension is safe to trust is a packaging/security decision, not merely a SQL syntax property.<sup><a href="#r20">[20]</a></sup></p>
+</section>
+
+<section id="fdw"><h2>20. Foreign-data wrappers</h2>
+<p>A foreign-data wrapper (FDW) is a database object representing code that knows how PostgreSQL should access an external data source. The SQL/MED object model then layers foreign servers, user mappings and foreign tables on top of the wrapper. PostgreSQL ships <code>postgres_fdw</code> as an extension for accessing remote PostgreSQL databases.<sup><a href="#r21">[21]</a><a href="#r46">[46]</a></sup></p>
+
+<pre><code>CREATE EXTENSION postgres_fdw;
+
+CREATE SERVER reporting_remote
+FOREIGN DATA WRAPPER postgres_fdw
+OPTIONS (
+    host 'db.internal',
+    port '5432',
+    dbname 'reporting'
+);</code></pre>
+
+<p>The FDW object itself names handler/validator functions that implement the wrapper. Server options describe a remote endpoint, and user mappings associate local PostgreSQL roles with remote authentication options.<sup><a href="#r21">[21]</a><a href="#r47">[47]</a></sup></p>
+</section>
+
+<section id="foreign-objects"><h2>21. Servers, user mappings and foreign tables</h2>
+
+<h3>21.1 User mapping</h3>
+<pre><code>CREATE USER MAPPING FOR app_runtime
+SERVER reporting_remote
+OPTIONS (
+    user 'report_reader',
+    password 'secret'
+);</code></pre>
+
+<h3>21.2 Foreign table</h3>
+<pre><code>CREATE FOREIGN TABLE integration.remote_customer (
+    customer_id bigint NOT NULL,
+    name text,
+    created_at timestamptz
+)
+SERVER reporting_remote
+OPTIONS (
+    schema_name 'public',
+    table_name 'customer'
+);</code></pre>
+
+<p>A foreign table has local PostgreSQL column/type metadata but no local heap storage for its remote rows. The FDW decides how scans, joins, filters, aggregates and writes can be pushed down or executed remotely. With <code>postgres_fdw</code>, matching local/remote data types and collations is strongly recommended to avoid semantic differences in remotely evaluated expressions.<sup><a href="#r46">[46]</a><a href="#r48">[48]</a></sup></p>
+
+<h3>21.3 Import foreign schema</h3>
+<pre><code>IMPORT FOREIGN SCHEMA public
+LIMIT TO (customer, invoice)
+FROM SERVER reporting_remote
+INTO integration;</code></pre>
+
+<p><code>IMPORT FOREIGN SCHEMA</code> lets an FDW generate local foreign-table definitions from a remote schema when the wrapper supports it.<sup><a href="#r49">[49]</a></sup></p>
+</section>
+
+<section id="publications"><h2>22. Publications</h2>
+<p>A publication is a logical-replication object in one database that defines a set of table changes intended for subscribers. A publication can include named tables, all tables in named schemas, or all tables in the database. It can publish selected operation types—<code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, and <code>TRUNCATE</code>—and PostgreSQL 18 supports row filters and column lists for eligible publication definitions.<sup><a href="#r50">[50]</a><a href="#r52">[52]</a></sup></p>
+
+<pre><code>CREATE PUBLICATION sales_pub
+FOR TABLE app.orders (
+    order_id,
+    customer_id,
+    status,
+    total_amount,
+    created_at
+)
+WHERE (status IN ('open', 'paid'))
+WITH (
+    publish = 'insert,update,delete'
+);</code></pre>
+
+<p>Creating a publication does not start data movement. It defines what changes a future subscriber can request. A table can participate in multiple publications, and publications are not schemas—they do not change normal query visibility or table access.<sup><a href="#r50">[50]</a></sup></p>
+
+<h3>22.1 Replica identity</h3>
+<p>For published <code>UPDATE</code> and <code>DELETE</code>, PostgreSQL needs a replica identity that lets the subscriber identify the target row. A primary key is the default replica identity when present; tables without an appropriate identity may need <code>REPLICA IDENTITY USING INDEX</code> or <code>FULL</code>, with different overhead/semantic tradeoffs.<sup><a href="#r50">[50]</a></sup></p>
+
+<pre><code>ALTER TABLE app.orders
+REPLICA IDENTITY USING INDEX orders_pkey;</code></pre>
+
+<h3>22.2 Publication scope restrictions</h3>
+<p>Publications contain persistent base tables and partitioned tables, not ordinary views, materialized views, foreign tables, temporary tables, or unlogged tables. Schema-level publications dynamically include eligible existing and future tables in the schema.<sup><a href="#r52">[52]</a></sup></p>
+</section>
+
+<section id="subscriptions"><h2>23. Subscriptions</h2>
+<p>A subscription is the downstream logical-replication object. It specifies a connection to a publisher and one or more publication names. Creating a subscription normally creates a replication slot on the publisher and, when committed, starts logical-replication worker activity unless the subscription is disabled.<sup><a href="#r51">[51]</a><a href="#r53">[53]</a></sup></p>
+
+<pre><code>CREATE SUBSCRIPTION sales_sub
+CONNECTION 'host=publisher.internal port=5432 dbname=sales user=repl'
+PUBLICATION sales_pub
+WITH (
+    copy_data = true,
+    create_slot = true,
+    enabled = true
+);</code></pre>
+
+<p>Subscriptions are database-local and stored in <code>pg_subscription</code>; connection information can contain sensitive credentials and catalog visibility is restricted accordingly. One subscriber database can have multiple subscriptions and can itself publish data onward.<sup><a href="#r51">[51]</a><a href="#r55">[55]</a></sup></p>
+
+<h3>23.1 Schema is not replicated automatically</h3>
+<p>Built-in logical replication primarily replicates table data changes, not arbitrary DDL. Subscriber tables must normally exist with compatible schemas before data synchronization/apply. Production logical-replication designs therefore require a separate schema-migration discipline.<sup><a href="#r51">[51]</a></sup></p>
+
+<h3>23.2 Operational object lifecycle</h3>
+<pre><code>ALTER SUBSCRIPTION sales_sub DISABLE;
+
+ALTER SUBSCRIPTION sales_sub
+REFRESH PUBLICATION;
+
+DROP SUBSCRIPTION sales_sub;</code></pre>
+
+<p>Dropping or disabling subscriptions has replication-slot implications. Operators should understand slot ownership and cleanup so abandoned subscriptions do not retain WAL indefinitely on publishers.</p>
+</section>
+
+<section id="catalogs"><h2>24. Inspecting database objects through system catalogs</h2>
+<p>PostgreSQL's system catalogs make the object model queryable. While <code>information_schema</code> offers standards-oriented views, PostgreSQL-specific catalogs expose richer implementation metadata needed for administration, extensions, dependency analysis and replication inspection.<sup><a href="#r4">[4]</a></sup></p>
+
+<h3>24.1 Relation-like objects</h3>
+<pre><code>SELECT
+    n.nspname AS schema_name,
+    c.relname,
+    c.relkind,
+    c.relpersistence,
+    c.relowner::regrole AS owner,
+    c.relpages,
+    c.reltuples
+FROM pg_class AS c
+JOIN pg_namespace AS n
+  ON n.oid = c.relnamespace
+WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY n.nspname, c.relkind, c.relname;</code></pre>
+
+<div class="table-wrap"><table><thead><tr><th><code>pg_class.relkind</code></th><th>Representative object</th></tr></thead><tbody>
+<tr><td><code>r</code></td><td>ordinary table</td></tr>
+<tr><td><code>p</code></td><td>partitioned table</td></tr>
+<tr><td><code>i</code></td><td>index</td></tr>
+<tr><td><code>I</code></td><td>partitioned index</td></tr>
+<tr><td><code>S</code></td><td>sequence</td></tr>
+<tr><td><code>v</code></td><td>view</td></tr>
+<tr><td><code>m</code></td><td>materialized view</td></tr>
+<tr><td><code>f</code></td><td>foreign table</td></tr>
+</tbody></table></div>
+<p><code>pg_class</code> covers relation-like object kinds, which is why several apparently different SQL objects share relation naming and many relation-oriented system functions.<sup><a href="#r5">[5]</a></sup></p>
+
+<h3>24.2 Functions, procedures and aggregates</h3>
+<pre><code>SELECT
+    n.nspname,
+    p.proname,
+    p.prokind,
+    pg_get_function_identity_arguments(p.oid) AS identity_args,
+    pg_get_function_result(p.oid) AS result,
+    p.provolatile,
+    p.proparallel,
+    p.prosecdef
+FROM pg_proc AS p
+JOIN pg_namespace AS n
+  ON n.oid = p.pronamespace
+WHERE n.nspname = 'app'
+ORDER BY p.proname, identity_args;</code></pre>
+
+<p><code>pg_proc.prokind</code> distinguishes ordinary functions, procedures, aggregates and window functions, demonstrating that these SQL-level object families share core routine catalog infrastructure.<sup><a href="#r6">[6]</a></sup></p>
+
+<h3>24.3 Types and domains</h3>
+<pre><code>SELECT
+    n.nspname,
+    t.typname,
+    t.typtype,
+    t.typcategory,
+    t.typbasetype::regtype AS base_type
+FROM pg_type AS t
+JOIN pg_namespace AS n
+  ON n.oid = t.typnamespace
+WHERE n.nspname = 'app'
+ORDER BY t.typname;</code></pre>
+
+<p><code>pg_type.typtype</code> distinguishes base, composite, domain, enum, pseudo and range-related type categories, while domains reference their underlying type in <code>typbasetype</code>.<sup><a href="#r7">[7]</a></sup></p>
+
+<h3>24.4 Extensions</h3>
+<pre><code>SELECT
+    extname,
+    extversion,
+    extnamespace::regnamespace AS schema,
+    extowner::regrole AS owner
+FROM pg_extension
+ORDER BY extname;</code></pre>
+
+<h3>24.5 Publications and subscriptions</h3>
+<pre><code>SELECT
+    pubname,
+    pubowner::regrole,
+    puballtables,
+    pubinsert,
+    pubupdate,
+    pubdelete,
+    pubtruncate
+FROM pg_publication
+ORDER BY pubname;
+
+SELECT
+    subname,
+    subowner::regrole,
+    subenabled,
+    subslotname,
+    subpublications
+FROM pg_subscription
+ORDER BY subname;</code></pre>
+
+<h3>24.6 Dependency graph</h3>
+<pre><code>SELECT
+    d.classid::regclass AS dependent_catalog,
+    d.objid,
+    d.refclassid::regclass AS referenced_catalog,
+    d.refobjid,
+    d.deptype
+FROM pg_depend AS d
+WHERE d.objid = 'reporting.open_orders'::regclass;</code></pre>
+
+<p><code>pg_depend</code> records many inter-object dependencies used by DDL to enforce <code>RESTRICT</code>/<code>CASCADE</code> behavior and automatic dependency rules. Extension membership is also represented through dependency machinery.<sup><a href="#r3">[3]</a><a href="#r56">[56]</a></sup></p>
+</section>
+
+<section id="lifecycle"><h2>25. Object lifecycle: create, alter, rename, move, drop</h2>
+<p>Most PostgreSQL object types follow a common lifecycle: <code>CREATE</code>, object-specific <code>ALTER</code>, optional rename/schema/owner changes, privilege grants/revokes, and <code>DROP</code>. Dependency tracking ensures operations that would invalidate dependent objects are either rejected or made explicit with <code>CASCADE</code>.<sup><a href="#r3">[3]</a></sup></p>
+
+<h3>25.1 Move an object between schemas</h3>
+<pre><code>ALTER TABLE public.orders
+SET SCHEMA app;</code></pre>
+
+<h3>25.2 Rename without breaking OID dependencies</h3>
+<pre><code>ALTER TABLE app.orders
+RENAME TO customer_order;</code></pre>
+
+<p>Many dependencies are recorded by internal object identity rather than textual name, so rename operations preserve dependency links. Application SQL that hard-codes old names still needs to be migrated.</p>
+
+<h3>25.3 RESTRICT before CASCADE</h3>
+<pre><code>DROP TYPE app.order_state;
+-- inspect DETAIL
+
+-- only after reviewing consequences:
+DROP TYPE app.order_state CASCADE;</code></pre>
+
+<p>A useful operational practice is to attempt destructive DDL without <code>CASCADE</code> first and inspect PostgreSQL's dependency details before deciding whether cascading removal is actually intended.<sup><a href="#r3">[3]</a></sup></p>
+
+<h3>25.4 Transactional DDL</h3>
+<p>Most PostgreSQL catalog DDL participates in transactions, enabling groups of schema changes to commit or roll back atomically. Some commands—particularly certain concurrent index and replication operations—have transaction-block restrictions and need dedicated migration handling.</p>
+</section>
+
+<section id="design"><h2>26. Object-design guidelines</h2>
+
+<h3>26.1 Use schemas as stable module boundaries</h3>
+<p>Organize application, reporting, integration and extension namespaces intentionally. Prefer schema-qualified references in deployment/security-sensitive code and avoid granting arbitrary users <code>CREATE</code> in schemas that appear on privileged roles' <code>search_path</code>.<sup><a href="#r2">[2]</a></sup></p>
+
+<h3>26.2 Put invariants at the lowest appropriate object layer</h3>
+<p>Use table constraints for row/cross-column integrity, domains for reusable scalar constraints, unique/exclusion indexes for set-level uniqueness/exclusion, and triggers only when declarative constraints cannot express the rule cleanly.</p>
+
+<h3>26.3 Separate logical interfaces from physical optimizations</h3>
+<p>Views/functions can present stable APIs while indexes/materialized views provide physical performance strategies beneath them. This separation allows physical redesign without forcing every application to know storage details.</p>
+
+<h3>26.4 Make routine semantics explicit</h3>
+<p>Declare function volatility, strictness, parallel safety and security mode accurately. Routine attributes are optimizer/security contracts, not documentation comments.<sup><a href="#r35">[35]</a></sup></p>
+
+<h3>26.5 Package reusable infrastructure as extensions</h3>
+<p>If a feature consists of many related functions, types, operators, casts and views that must be installed/upgraded together, an extension can provide versioning and membership boundaries that ad hoc migration snippets cannot.<sup><a href="#r45">[45]</a></sup></p>
+
+<h3>26.6 Treat replication objects as configuration in schema management</h3>
+<p>Publication filters/column lists and subscription settings are part of data architecture. Track them in infrastructure/migration workflows alongside tables and indexes rather than managing them only through manual operational commands.</p>
+</section>
+
+<section id="pitfalls"><h2>27. Common pitfalls</h2>
+
+<h3>27.1 Treating every object as if it had independent naming</h3>
+<p>Tables, indexes, sequences, views, materialized views and foreign tables share the relation namespace. An index named <code>customer</code> prevents a table/view/sequence of the same name in that schema.<sup><a href="#r2">[2]</a></sup></p>
+
+<h3>27.2 Relying on mutable <code>search_path</code> in privileged code</h3>
+<p>Unqualified names can resolve to attacker-controlled objects if writable schemas precede trusted schemas. Security-definer functions should set a safe path explicitly and application migrations should prefer qualified names.<sup><a href="#r2">[2]</a><a href="#r35">[35]</a></sup></p>
+
+<h3>27.3 Assuming views store results</h3>
+<p>Ordinary views store query definitions. Materialized views store results. Their freshness, storage and performance characteristics are fundamentally different.<sup><a href="#r9">[9]</a><a href="#r10">[10]</a></sup></p>
+
+<h3>27.4 Assuming sequences are transactional counters</h3>
+<p>Sequence allocation intentionally does not promise gaplessness after rollbacks/crashes/caching. Use a separate locked transactional numbering mechanism when legal/business rules require gapless issuance.<sup><a href="#r33">[33]</a></sup></p>
+
+<h3>27.5 Using domains for cross-column rules</h3>
+<p>Domains validate one value. Rules involving multiple columns or rows belong in table constraints, exclusion/unique structures, triggers or transactional logic.</p>
+
+<h3>27.6 Creating custom operators without planner/index semantics</h3>
+<p>A user-defined operator works as syntax around a function, but index acceleration requires an operator class/family and correct planner semantics. Creating the token alone does not make it searchable by an index.<sup><a href="#r41">[41]</a></sup></p>
+
+<h3>27.7 Hiding large business workflows in triggers</h3>
+<p>Triggers run inside the modifying transaction, so expensive or remote work increases lock/transaction duration and makes failure behavior harder to reason about. Prefer triggers for tight data-local behavior and move external effects to explicit application/outbox workflows.</p>
+
+<h3>27.8 Installing extension member objects manually</h3>
+<p>Manually recreating objects that should belong to an extension can break upgrade/membership assumptions. Use <code>CREATE EXTENSION</code>/<code>ALTER EXTENSION</code> and the extension's supported scripts.<sup><a href="#r20">[20]</a><a href="#r45">[45]</a></sup></p>
+
+<h3>27.9 Assuming a foreign table is a cached copy</h3>
+<p>A foreign table is local metadata for external data access. Unless the FDW specifically implements caching, querying it invokes wrapper-defined remote/external access semantics.<sup><a href="#r48">[48]</a></sup></p>
+
+<h3>27.10 Assuming logical replication sends DDL</h3>
+<p>Publications/subscriptions replicate eligible data changes, not general schema migrations. Keep publisher/subscriber schemas compatible through a separate migration process.<sup><a href="#r50">[50]</a><a href="#r51">[51]</a></sup></p>
+
+<h3>27.11 Using <code>CASCADE</code> reflexively</h3>
+<p><code>CASCADE</code> can remove an entire dependency tree. Use it only after examining the dependent objects that PostgreSQL reports under the default restrictive behavior.<sup><a href="#r3">[3]</a></sup></p>
+</section>
+
+<section id="checklist"><h2>28. Production checklist</h2>
+<ol class="checklist">
+<li><strong>Use schemas deliberately</strong> as namespace, security and module boundaries.</li>
+<li><strong>Schema-qualify deployment and security-sensitive references.</strong></li>
+<li><strong>Remember the shared relation namespace</strong> for tables, indexes, sequences, views, materialized views and foreign tables.</li>
+<li><strong>Use tables for durable row storage and constraints for declarative integrity.</strong></li>
+<li><strong>Use views as logical interfaces, not as caches.</strong></li>
+<li><strong>Use materialized views when persisted derived results and controlled staleness are acceptable.</strong></li>
+<li><strong>Use indexes as workload-driven physical access structures.</strong></li>
+<li><strong>Use identity columns for table-local generated identities unless independent sequence semantics are specifically needed.</strong></li>
+<li><strong>Never assume normal sequences are gapless.</strong></li>
+<li><strong>Choose functions versus procedures based on SQL composability and transaction-control needs.</strong></li>
+<li><strong>Declare routine volatility/security/search_path correctly.</strong></li>
+<li><strong>Keep triggers small and data-local.</strong></li>
+<li><strong>Use domains for reusable scalar constraints; table constraints for row/cross-column rules.</strong></li>
+<li><strong>Treat custom types/operators/aggregates as an integrated extensibility system.</strong></li>
+<li><strong>Choose collations intentionally and plan for reindexing when collation semantics/version changes require it.</strong></li>
+<li><strong>Package multi-object reusable features as extensions.</strong></li>
+<li><strong>Model FDW deployments as wrapper → server → mapping → foreign table.</strong></li>
+<li><strong>Keep FDW local/remote types and collations semantically compatible.</strong></li>
+<li><strong>Track publication/subscription definitions in deployment configuration.</strong></li>
+<li><strong>Ensure replica identity supports published UPDATE/DELETE.</strong></li>
+<li><strong>Manage logical-replication schema changes separately from data replication.</strong></li>
+<li><strong>Inspect <code>pg_class</code>, <code>pg_proc</code>, <code>pg_type</code> and object-specific catalogs when debugging.</strong></li>
+<li><strong>Review dependencies before destructive DDL.</strong></li>
+<li><strong>Prefer RESTRICT-first thinking; use CASCADE intentionally.</strong></li>
+</ol>
+
+<div class="callout ok"><strong>Object-model principle:</strong> PostgreSQL's power comes from composing many small first-class objects—storage, names, types, executable semantics, access methods, federation and replication—through cataloged dependencies. Good database architecture chooses the object whose semantics match the requirement instead of forcing every concern into tables and application code.</div>
+</section>
+
+<section id="references"><h2>References</h2><ol class="refs">
+<li id="r1">PostgreSQL Global Development Group. Data Definition [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl.html">https://www.postgresql.org/docs/18/ddl.html</a></li>
+<li id="r2">PostgreSQL Global Development Group. Schemas [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-schemas.html">https://www.postgresql.org/docs/18/ddl-schemas.html</a></li>
+<li id="r3">PostgreSQL Global Development Group. Dependency Tracking [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-depend.html">https://www.postgresql.org/docs/18/ddl-depend.html</a></li>
+<li id="r4">PostgreSQL Global Development Group. System Catalogs Overview [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalogs-overview.html">https://www.postgresql.org/docs/18/catalogs-overview.html</a></li>
+<li id="r5">PostgreSQL Global Development Group. pg_class [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-class.html">https://www.postgresql.org/docs/18/catalog-pg-class.html</a></li>
+<li id="r6">PostgreSQL Global Development Group. pg_proc [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-proc.html">https://www.postgresql.org/docs/18/catalog-pg-proc.html</a></li>
+<li id="r7">PostgreSQL Global Development Group. pg_type [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-type.html">https://www.postgresql.org/docs/18/catalog-pg-type.html</a></li>
+<li id="r8">PostgreSQL Global Development Group. pg_namespace [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-namespace.html">https://www.postgresql.org/docs/18/catalog-pg-namespace.html</a></li>
+<li id="r9">PostgreSQL Global Development Group. Views [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/tutorial-views.html">https://www.postgresql.org/docs/18/tutorial-views.html</a></li>
+<li id="r10">PostgreSQL Global Development Group. Materialized Views [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rules-materializedviews.html">https://www.postgresql.org/docs/18/rules-materializedviews.html</a></li>
+<li id="r11">PostgreSQL Global Development Group. CREATE SEQUENCE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createsequence.html">https://www.postgresql.org/docs/18/sql-createsequence.html</a></li>
+<li id="r12">PostgreSQL Global Development Group. CREATE FUNCTION [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createfunction.html">https://www.postgresql.org/docs/18/sql-createfunction.html</a></li>
+<li id="r13">PostgreSQL Global Development Group. CREATE PROCEDURE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createprocedure.html">https://www.postgresql.org/docs/18/sql-createprocedure.html</a></li>
+<li id="r14">PostgreSQL Global Development Group. CREATE TRIGGER [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtrigger.html">https://www.postgresql.org/docs/18/sql-createtrigger.html</a></li>
+<li id="r15">PostgreSQL Global Development Group. CREATE TYPE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtype.html">https://www.postgresql.org/docs/18/sql-createtype.html</a></li>
+<li id="r16">PostgreSQL Global Development Group. CREATE DOMAIN [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createdomain.html">https://www.postgresql.org/docs/18/sql-createdomain.html</a></li>
+<li id="r17">PostgreSQL Global Development Group. CREATE OPERATOR [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createoperator.html">https://www.postgresql.org/docs/18/sql-createoperator.html</a></li>
+<li id="r18">PostgreSQL Global Development Group. CREATE AGGREGATE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createaggregate.html">https://www.postgresql.org/docs/18/sql-createaggregate.html</a></li>
+<li id="r19">PostgreSQL Global Development Group. CREATE COLLATION [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createcollation.html">https://www.postgresql.org/docs/18/sql-createcollation.html</a></li>
+<li id="r20">PostgreSQL Global Development Group. CREATE EXTENSION [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createextension.html">https://www.postgresql.org/docs/18/sql-createextension.html</a></li>
+<li id="r21">PostgreSQL Global Development Group. CREATE FOREIGN DATA WRAPPER [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createforeigndatawrapper.html">https://www.postgresql.org/docs/18/sql-createforeigndatawrapper.html</a></li>
+<li id="r22">PostgreSQL Global Development Group. pg_extension [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-extension.html">https://www.postgresql.org/docs/18/catalog-pg-extension.html</a></li>
+<li id="r23">PostgreSQL Global Development Group. CREATE SCHEMA [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createschema.html">https://www.postgresql.org/docs/18/sql-createschema.html</a></li>
+<li id="r24">PostgreSQL Global Development Group. Privileges [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/ddl-priv.html">https://www.postgresql.org/docs/18/ddl-priv.html</a></li>
+<li id="r25">PostgreSQL Global Development Group. CREATE TABLE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createtable.html">https://www.postgresql.org/docs/18/sql-createtable.html</a></li>
+<li id="r26">PostgreSQL Global Development Group. Views and the Rule System [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/rules-views.html">https://www.postgresql.org/docs/18/rules-views.html</a></li>
+<li id="r27">PostgreSQL Global Development Group. CREATE VIEW [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createview.html">https://www.postgresql.org/docs/18/sql-createview.html</a></li>
+<li id="r28">PostgreSQL Global Development Group. CREATE MATERIALIZED VIEW [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-creatematerializedview.html">https://www.postgresql.org/docs/18/sql-creatematerializedview.html</a></li>
+<li id="r29">PostgreSQL Global Development Group. REFRESH MATERIALIZED VIEW [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-refreshmaterializedview.html">https://www.postgresql.org/docs/18/sql-refreshmaterializedview.html</a></li>
+<li id="r30">PostgreSQL Global Development Group. Indexes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/indexes.html">https://www.postgresql.org/docs/18/indexes.html</a></li>
+<li id="r31">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createindex.html">https://www.postgresql.org/docs/18/sql-createindex.html</a></li>
+<li id="r32">PostgreSQL Global Development Group. pg_index [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-index.html">https://www.postgresql.org/docs/18/catalog-pg-index.html</a></li>
+<li id="r33">PostgreSQL Global Development Group. Sequence Manipulation Functions [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/functions-sequence.html">https://www.postgresql.org/docs/18/functions-sequence.html</a></li>
+<li id="r34">PostgreSQL Global Development Group. CREATE SCHEMA [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createschema.html">https://www.postgresql.org/docs/18/sql-createschema.html</a></li>
+<li id="r35">PostgreSQL Global Development Group. User-Defined Functions / Function Attributes [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc.html">https://www.postgresql.org/docs/18/xfunc.html</a></li>
+<li id="r36">PostgreSQL Global Development Group. Function Volatility Categories [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xfunc-volatility.html">https://www.postgresql.org/docs/18/xfunc-volatility.html</a></li>
+<li id="r37">PostgreSQL Global Development Group. Function Type Resolution [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/typeconv-func.html">https://www.postgresql.org/docs/18/typeconv-func.html</a></li>
+<li id="r38">PostgreSQL Global Development Group. CALL [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-call.html">https://www.postgresql.org/docs/18/sql-call.html</a></li>
+<li id="r39">PostgreSQL Global Development Group. Trigger Definition [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/trigger-definition.html">https://www.postgresql.org/docs/18/trigger-definition.html</a></li>
+<li id="r40">PostgreSQL Global Development Group. Extending the Type System [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/extend-type-system.html">https://www.postgresql.org/docs/18/extend-type-system.html</a></li>
+<li id="r41">PostgreSQL Global Development Group. Operator Optimization Information [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xoper-optimization.html">https://www.postgresql.org/docs/18/xoper-optimization.html</a></li>
+<li id="r42">PostgreSQL Global Development Group. User-Defined Aggregates [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/xaggr.html">https://www.postgresql.org/docs/18/xaggr.html</a></li>
+<li id="r43">PostgreSQL Global Development Group. pg_aggregate [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-aggregate.html">https://www.postgresql.org/docs/18/catalog-pg-aggregate.html</a></li>
+<li id="r44">PostgreSQL Global Development Group. Collation Support [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/collation.html">https://www.postgresql.org/docs/18/collation.html</a></li>
+<li id="r45">PostgreSQL Global Development Group. Packaging Related Objects into an Extension [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/extend-extensions.html">https://www.postgresql.org/docs/18/extend-extensions.html</a></li>
+<li id="r46">PostgreSQL Global Development Group. postgres_fdw [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/postgres-fdw.html">https://www.postgresql.org/docs/18/postgres-fdw.html</a></li>
+<li id="r47">PostgreSQL Global Development Group. CREATE SERVER [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createserver.html">https://www.postgresql.org/docs/18/sql-createserver.html</a></li>
+<li id="r48">PostgreSQL Global Development Group. CREATE FOREIGN TABLE [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createforeigntable.html">https://www.postgresql.org/docs/18/sql-createforeigntable.html</a></li>
+<li id="r49">PostgreSQL Global Development Group. IMPORT FOREIGN SCHEMA [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-importforeignschema.html">https://www.postgresql.org/docs/18/sql-importforeignschema.html</a></li>
+<li id="r50">PostgreSQL Global Development Group. Logical Replication: Publication [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-publication.html">https://www.postgresql.org/docs/18/logical-replication-publication.html</a></li>
+<li id="r51">PostgreSQL Global Development Group. Logical Replication: Subscription [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/logical-replication-subscription.html">https://www.postgresql.org/docs/18/logical-replication-subscription.html</a></li>
+<li id="r52">PostgreSQL Global Development Group. CREATE PUBLICATION [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createpublication.html">https://www.postgresql.org/docs/18/sql-createpublication.html</a></li>
+<li id="r53">PostgreSQL Global Development Group. CREATE SUBSCRIPTION [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/sql-createsubscription.html">https://www.postgresql.org/docs/18/sql-createsubscription.html</a></li>
+<li id="r54">PostgreSQL Global Development Group. pg_publication [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-publication.html">https://www.postgresql.org/docs/18/catalog-pg-publication.html</a></li>
+<li id="r55">PostgreSQL Global Development Group. pg_subscription [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-subscription.html">https://www.postgresql.org/docs/18/catalog-pg-subscription.html</a></li>
+<li id="r56">PostgreSQL Global Development Group. pg_depend [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-depend.html">https://www.postgresql.org/docs/18/catalog-pg-depend.html</a></li>
+<li id="r57">PostgreSQL Global Development Group. pg_trigger [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-trigger.html">https://www.postgresql.org/docs/18/catalog-pg-trigger.html</a></li>
+<li id="r58">PostgreSQL Global Development Group. pg_collation [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-collation.html">https://www.postgresql.org/docs/18/catalog-pg-collation.html</a></li>
+<li id="r59">PostgreSQL Global Development Group. pg_foreign_data_wrapper [Internet]. PostgreSQL 18.6 Documentation; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/catalog-pg-foreign-data-wrapper.html">https://www.postgresql.org/docs/18/catalog-pg-foreign-data-wrapper.html</a></li>
+<li id="r60">PostgreSQL Global Development Group. PostgreSQL 18.6 Documentation [Internet]. PostgreSQL.org; 2026 [cited 2026 Sep 16]. Available from: <a href="https://www.postgresql.org/docs/18/">https://www.postgresql.org/docs/18/</a></li>
+</ol></section>
+
+</main>
+<footer><p>This article is a technical reference. Object syntax, catalogs, privileges, dependency behavior and replication capabilities can evolve between PostgreSQL releases. Prefer supported DDL and catalog interfaces over direct catalog mutation, schema-qualify security-sensitive code, and test migrations against realistic dependency graphs before production deployment.</p></footer>
+</body>
+</html>

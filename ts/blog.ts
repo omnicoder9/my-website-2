@@ -55,6 +55,7 @@ const blogCategoryLabels = [
   "Physics",
   "Philosophy",
   "Privacy",
+  "PostgreSQL",
   "Programming & Software",
   "Programming Languages",
   "Python",
@@ -129,6 +130,174 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/postgresql/postgresql_installation_administration.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL installation and administration: Linux, Windows, macOS, containers, cloud, configuration files, service control, initdb, roles, tablespaces, environment variables, psql and core administrative utilities.",
+    title: "PostgreSQL Installation & Administration"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_database_objects.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL database objects: tables, views, materialized views, indexes, sequences, schemas, functions, procedures, triggers, types, domains, operators, aggregates, collations, extensions, foreign-data wrappers, publications and subscriptions.",
+    title: "PostgreSQL Database Objects"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_data_types.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL data types: numeric, character, date/time, boolean, bytea, arrays, JSON/JSONB, XML, UUID, enum, ranges, multiranges, composite, domains, network, geometric and full-text-search types.",
+    title: "PostgreSQL Data Types"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_schema_design_modeling.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL schema design and modeling: relational modeling, keys, normalization, constraints, generated and identity columns, sequences, denormalization and partitioning strategy.",
+    title: "PostgreSQL Schema Design & Modeling"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_querying.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL SQL and querying: SELECT, INSERT, UPDATE, DELETE, MERGE, filtering, sorting, limiting, aggregation, joins, subqueries, CTEs, recursive CTEs, window functions, set operations, LATERAL, VALUES, RETURNING, and DISTINCT ON.",
+    title: "PostgreSQL SQL & Querying"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_query_processing.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL query processing: parsing, query trees, rewriting, planning, cost estimation, statistics, execution plans, scans, joins, sorting, aggregation, materialization, EXPLAIN, and query optimization.",
+    title: "PostgreSQL Query Processing"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_indexing.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL indexing: B-tree, Hash, GiST, SP-GiST, GIN, BRIN, multicolumn, unique, partial, expression and covering indexes, operator classes, design, selectivity, maintenance and query-driven indexing.",
+    title: "PostgreSQL Indexing"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_transactions_concurrency.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL transactions and concurrency: ACID, transaction control, savepoints, isolation levels, MVCC, snapshots, transaction IDs, tuple visibility, locks, deadlocks, serialization failures, advisory locks, and two-phase commit.",
+    title: "PostgreSQL Transactions & Concurrency"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-internals-process-architecture-storage-layout.html",
+    publishedAt: "2026-09-16",
+    summary: "Technical article on PostgreSQL internals: process architecture, shared memory, buffers, memory contexts, physical relation files, heap pages, tuple layout, TOAST, visibility/free-space maps, system catalogs, OIDs, and storage layout.",
+    title: "PostgreSQL Internals: Process Architecture and Storage Layout"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-statistics-o10n.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL statistics and optimization: table and column statistics, histograms, MCVs, correlation, selectivity and cardinality estimation, extended statistics, ANALYZE, planner costs, and query-plan instability.",
+    title: "PostgreSQL Statistics & Optimization"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_mvcc_vacuum_bloat.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL MVCC, VACUUM, autovacuum, freezing, transaction ID wraparound, HOT updates, visibility maps, free-space maps, and table/index bloat.",
+    title: "PostgreSQL MVCC, VACUUM & Bloat"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_write_ahead_logging.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL write-ahead logging: WAL concepts, records, segments, buffers, durability, crash recovery, checkpoints, full-page writes, archiving, wal_level, fsync, synchronous_commit, retention, and replication slots.",
+    title: "PostgreSQL Write-Ahead Logging (WAL)"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_backup_recovery.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL backup and recovery: logical dumps, pg_dump, pg_dumpall, physical and incremental base backups, pg_basebackup, pg_restore, WAL archiving, PITR, recovery targets, disaster recovery, verification, and restore testing.",
+    title: "PostgreSQL Backup & Recovery"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_partitioning.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL partitioning: declarative range, list and hash partitioning, multi-level partitioning, pruning, partition-wise joins, maintenance, time-series design, partitioned indexes, and partitioning vs sharding.",
+    title: "PostgreSQL Partitioning: Design, Pruning, Maintenance, and Scale"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_performance_engineering.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL performance engineering: query and index optimization, connections, memory, CPU, I/O, WAL, checkpoints, autovacuum, parallel query, JIT, partitioning, PgBouncer, caching, benchmarking, and load testing.",
+    title: "PostgreSQL Performance Engineering"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-m8g-o11y.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL monitoring and observability: statistics views, pg_stat_statements, locks, long-running queries, replication lag, WAL, connections, cache hit ratio, disk usage, logs, Prometheus, Grafana, and OpenTelemetry.",
+    title: "PostgreSQL Monitoring and Observability"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-production.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on running PostgreSQL in production: provisioning, configuration management, schema migrations, deployment, backups, HA, disaster recovery, monitoring, capacity planning, connection management, security, upgrades, compatibility, and operational runbooks.",
+    title: "PostgreSQL in Production: Engineering, Operations, and Reliability"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_replication_high_availability.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL replication and high availability: physical and streaming replication, WAL sender/receiver, slots, synchronous replication, logical replication and decoding, failover, read replicas, Patroni, etcd/Consul, HAProxy, routing, and load balancing.",
+    title: "PostgreSQL Replication & High Availability"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-scaling.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL scaling: vertical scaling, CPU, RAM, storage and IOPS, read replicas, routing, caching, write scaling, partitioning, sharding, Citus, YugabyteDB, CockroachDB, and distributed SQL concepts.",
+    title: "PostgreSQL Scaling: From One Node to Distributed SQL"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-cloud.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL in the cloud: Amazon RDS for PostgreSQL, Amazon Aurora PostgreSQL, Azure Database for PostgreSQL, Google Cloud SQL for PostgreSQL, backups, replicas, storage, networking, IAM, encryption, monitoring, and cost optimization.",
+    title: "PostgreSQL in the Cloud: Architecture, Operations, Security, and Cost"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_security.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL security: authentication, authorization, roles, inheritance, privileges, row-level security, TLS, pg_hba.conf, SCRAM, LDAP, Kerberos/GSSAPI, certificates, auditing, SECURITY DEFINER, and SQL injection prevention.",
+    title: "PostgreSQL Security: Authentication, Authorization, Encryption, Auditing, and Secure SQL"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_extensions.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL extensions: extension architecture, CREATE EXTENSION, PostGIS, pgvector, pg_stat_statements, FDWs, TimescaleDB, pg_trgm, hstore, citext, uuid-ossp, and custom extension development.",
+    title: "PostgreSQL Extensions: Architecture, Ecosystem, and Custom Development"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-functions-procedural.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL functions and procedural programming: SQL functions, PL/pgSQL, procedures, variables, control flow, loops, exceptions, dynamic SQL, cursors, function volatility, and SECURITY DEFINER functions.",
+    title: "PostgreSQL Functions and Procedural Programming"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_triggers.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL triggers: BEFORE, AFTER, INSTEAD OF, row-level, statement-level, transition tables, event triggers, auditing, automatic data maintenance, and constraint triggers.",
+    title: "PostgreSQL Triggers: Timing, Granularity, Auditing, Maintenance, and Constraints"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql_json_semi_structured_data.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL JSON and semi-structured data: json, jsonb, operators, SQL/JSON path, nested documents, GIN indexes, containment, hybrid modeling, and normalization trade-offs.",
+    title: "PostgreSQL JSON & Semi-Structured Data"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-full-text-search.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL full-text search: tsvector, tsquery, text-search configurations, dictionaries, stemming, ranking, highlighting, GIN/GiST indexes, and production search applications.",
+    title: "PostgreSQL Full-Text Search: From Lexemes to Production Search Applications"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-application-integration.html",
+    publishedAt: "2026-09-15",
+    summary: "Technical article on PostgreSQL application integration: JDBC, Python/Psycopg, SQLAlchemy, Node.js, Go, .NET, Rust, PHP, ORMs, Hibernate/JPA, Django, Prisma, connection pools, prepared statements, transactions, Flyway, and Liquibase.",
+    title: "PostgreSQL Application Integration: Drivers, ORMs, Pools, Transactions, and Migrations"
+  },
+  {
+    path: "blog-articles/postgresql/postgresql-internals-query-engine-runtime-extension-apis.html",
+    publishedAt: "2026-09-15",
+    summary: "A technical article on PostgreSQL internals: query processing, planner and executor runtime, WAL, locks, transactions, memory contexts, background workers, parallel execution, logical decoding, access methods, FDWs, extension development, and PostgreSQL C APIs.",
+    title: "PostgreSQL Internals: Query Engine, Runtime, and Extension APIs"
+  },
   {
     path: "blog-articles/firearms/functional-architecture-of-firearms.html",
     publishedAt: "2026-09-13",
@@ -2784,6 +2953,34 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/postgresql/postgresql_installation_administration.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_database_objects.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_data_types.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_schema_design_modeling.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_querying.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_query_processing.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_indexing.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_transactions_concurrency.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-internals-process-architecture-storage-layout.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-statistics-o10n.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_mvcc_vacuum_bloat.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_write_ahead_logging.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_backup_recovery.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_partitioning.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_performance_engineering.html": ["PostgreSQL", "Dev(Sec)Ops", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-m8g-o11y.html": ["PostgreSQL", "Dev(Sec)Ops", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-production.html": ["PostgreSQL", "Dev(Sec)Ops", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_replication_high_availability.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-scaling.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-cloud.html": ["PostgreSQL", "Cloud", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_security.html": ["PostgreSQL", "Security", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_extensions.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-functions-procedural.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_triggers.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql_json_semi_structured_data.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-full-text-search.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
+  "blog-articles/postgresql/postgresql-application-integration.html": ["PostgreSQL", "Programming & Software", "Data Engineering"],
+  "blog-articles/postgresql/postgresql-internals-query-engine-runtime-extension-apis.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
   "blog-articles/firearms/functional-architecture-of-firearms.html": ["Firearms Engineering", "Engineering", "Hardware", "Physics"],
   "blog-articles/law/emerging-issues-in-law.html": ["Law", "Society & Civics", "Society & Technology", "Artificial Intelligence"],
   "blog-articles/operating-systems/how-do-you-know-thats-still-true.html": ["Operating Systems", "Networks", "Security"],
