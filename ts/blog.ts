@@ -143,6 +143,12 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "What Does the JVM Still Vouch For? Java for AI and machine learning"
   },
   {
+    path: "blog-articles/java/jvm-languages.html",
+    publishedAt: "2026-09-23",
+    summary: "A comparison of Java, Kotlin, Scala, Groovy, and Clojure through the guarantees enforced by the JVM, emitted bytecode, language runtime, compiler tooling, or source language alone.",
+    title: "Who Keeps the Promise Once It Is Bytecode? Java, Kotlin, Scala, Groovy and Clojure compared"
+  },
+  {
     path: "blog-articles/spring/spring-core-container.html",
     publishedAt: "2026-09-23",
     summary: "An expert guide to the Spring Core Container: IoC, BeanFactory, ApplicationContext, lifecycle, scopes, configuration, dependency injection, bean wiring, profiles, and conditional beans.",
@@ -3045,6 +3051,7 @@ const blogPosts: BlogDirectoryPost[] = [
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring/spring-boot.html": ["Java", "Spring", "Programming & Software", "Cloud", "Dev(Sec)Ops"],
   "blog-articles/java/java-ai-ml.html": ["Java", "Machine Learning", "Artificial Intelligence", "Programming & Software"],
+  "blog-articles/java/jvm-languages.html": ["Java", "Programming Languages", "Programming & Software"],
   "blog-articles/spring/spring-core-container.html": ["Java", "Spring", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/spring/spring-ecosystem.html": ["Java", "Spring", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/spring/spring-expression-language.html": ["Java", "Spring", "Programming & Software"],
