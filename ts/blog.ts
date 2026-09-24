@@ -131,6 +131,96 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/spring/spring-boot.html",
+    publishedAt: "2026-09-24",
+    summary: "A technical guide to Spring Boot fundamentals, auto-configuration, externalized configuration, profiles, application startup, production diagnostics, and Actuator.",
+    title: "Who Decided That? Spring Boot fundamentals, configuration and Actuator"
+  },
+  {
+    path: "blog-articles/java/java-ai-ml.html",
+    publishedAt: "2026-09-23",
+    summary: "Java for AI and machine learning, from Weka to Spring AI and LangChain4j, organized by where the arithmetic runs and which JVM guarantees survive.",
+    title: "What Does the JVM Still Vouch For? Java for AI and machine learning"
+  },
+  {
+    path: "blog-articles/spring/spring-core-container.html",
+    publishedAt: "2026-09-23",
+    summary: "An expert guide to the Spring Core Container: IoC, BeanFactory, ApplicationContext, lifecycle, scopes, configuration, dependency injection, bean wiring, profiles, and conditional beans.",
+    title: "Spring Core Container: IoC, Bean Configuration, Dependency Injection, and Wiring"
+  },
+  {
+    path: "blog-articles/spring/spring-ecosystem.html",
+    publishedAt: "2026-09-23",
+    summary: "A survey of seventeen Spring projects by what you write, what Spring infers, and who checks it, with eleven reproducible experiments and Vancouver references.",
+    title: "Who Writes the Rest? The Spring ecosystem, plate by plate"
+  },
+  {
+    path: "blog-articles/spring/spring-expression-language.html",
+    publishedAt: "2026-09-23",
+    summary: "An expert guide to Spring Expression Language, including syntax, operators, property access, method invocation, collections, conditionals, templates, evaluation contexts, compilation, and security.",
+    title: "Spring Expression Language (SpEL): Syntax, Operators, Collections, Templates, and Evaluation"
+  },
+  {
+    path: "blog-articles/java/cloud-native-java.html",
+    publishedAt: "2026-09-22",
+    summary: "Cloud-native Java across container images, Kubernetes, configuration, service meshes, health checks, observability, deployment, and serverless computing.",
+    title: "Who Decides, and When? Cloud-native Java"
+  },
+  {
+    path: "blog-articles/java/java-testing.html",
+    publishedAt: "2026-09-22",
+    summary: "Unit testing with JUnit 6 and assertions, mocking with Mockito 5, integration testing, and test coverage with JaCoCo, measured against 24 seeded faults.",
+    title: "What Would Make This Test Fail? Testing in Java with JUnit, Mockito, integration tests and coverage"
+  },
+  {
+    path: "blog-articles/robotics/service-robotics.html",
+    publishedAt: "2026-09-22",
+    summary: "A census of thirty-eight fielded service-robot functions, coded by what had to change around them, with a ten-experiment computational laboratory.",
+    title: "What Had to Change Around It? — service robotics and the price of a space"
+  },
+  {
+    path: "blog-articles/math/linear_algebra/vectors.html",
+    publishedAt: "2026-09-21",
+    summary: "A rigorous, example-driven introduction to vectors in linear algebra, including operations, geometry, dot products, projections, cross products, triple products, and applications.",
+    title: "Vectors in Linear Algebra: A Rigorous Introduction"
+  },
+  {
+    path: "blog-articles/robotics/industrial-robotics.html",
+    publishedAt: "2026-09-21",
+    summary: "A census of forty industrial-robot mechanisms, organized by what their position is referred to and placed on one logarithmic scale of length.",
+    title: "Where does the millimetre come from? A census of industrial robotics"
+  },
+  {
+    path: "blog-articles/firearms/external-and-terminal-ballistics.html",
+    publishedAt: "2026-09-20",
+    summary: "A technical treatment of external and terminal ballistics: drag, ballistic coefficient, trajectory, wind, gyroscopic stability, transonic behavior, group statistics, error budgets, penetration, and forensic reconstruction.",
+    title: "How Long Does It Have to Be Wrong? External and terminal ballistics"
+  },
+  {
+    path: "blog-articles/robotics/robot-mechanisms.html",
+    publishedAt: "2026-09-20",
+    summary: "Forty robot mechanisms read as constraint devices, from the revolute pair to the jamming gripper, with a computational lab that measures what is actually in the load path.",
+    title: "What Holds the Direction You Want to Move? — robot mechanisms as constraint devices"
+  },
+  {
+    path: "blog-articles/firearms/internal-ballistics.html",
+    publishedAt: "2026-09-18",
+    summary: "A technical study of internal ballistics through pressure-travel curves, propellant geometry, projectile acceleration, barrel dynamics, recoil, and constrained optimization.",
+    title: "What Does the Peak Buy You? — the internal ballistics of firearms"
+  },
+  {
+    path: "blog-articles/construction/construction-emerging-trends.html",
+    publishedAt: "2026-09-16",
+    summary: "An audit of forty construction practices against one question: a learning curve needs something to repeat, and in construction, where does the repetition come from?",
+    title: "Where does the repetition come from? — emerging trends in construction"
+  },
+  {
+    path: "blog-articles/swe/software-ontology.html",
+    publishedAt: "2026-09-16",
+    summary: "An examination of technology-independent software ontologies and the challenge of deriving requirements, architecture, tests, and code from a shared semantic model.",
+    title: "Where Was the Word Bound? — An ontology of software systems, and the problem it would actually have to solve"
+  },
+  {
     path: "blog-articles/postgresql/postgresql_installation_administration.html",
     publishedAt: "2026-09-16",
     summary: "Technical article on PostgreSQL installation and administration: Linux, Windows, macOS, containers, cloud, configuration files, service control, initdb, roles, tablespaces, environment variables, psql and core administrative utilities.",
@@ -2953,6 +3043,21 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/spring/spring-boot.html": ["Java", "Spring", "Programming & Software", "Cloud", "Dev(Sec)Ops"],
+  "blog-articles/java/java-ai-ml.html": ["Java", "Machine Learning", "Artificial Intelligence", "Programming & Software"],
+  "blog-articles/spring/spring-core-container.html": ["Java", "Spring", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/spring/spring-ecosystem.html": ["Java", "Spring", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/spring/spring-expression-language.html": ["Java", "Spring", "Programming & Software"],
+  "blog-articles/java/cloud-native-java.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Docker", "Kubernetes"],
+  "blog-articles/java/java-testing.html": ["Java", "Programming & Software", "SDLC"],
+  "blog-articles/robotics/service-robotics.html": ["Robotics", "Engineering", "Cyber-Physical Systems"],
+  "blog-articles/math/linear_algebra/vectors.html": ["Math"],
+  "blog-articles/robotics/industrial-robotics.html": ["Robotics", "Engineering", "ICS/OT", "Cyber-Physical Systems", "Control Theory & Engineering"],
+  "blog-articles/firearms/external-and-terminal-ballistics.html": ["Firearms Engineering", "Engineering", "Physics"],
+  "blog-articles/robotics/robot-mechanisms.html": ["Robotics", "Engineering", "Kinematics"],
+  "blog-articles/firearms/internal-ballistics.html": ["Firearms Engineering", "Engineering", "Physics", "Hardware"],
+  "blog-articles/construction/construction-emerging-trends.html": ["Construction", "Engineering", "Society & Technology"],
+  "blog-articles/swe/software-ontology.html": ["Programming & Software", "Software Design & Architecture", "Engineering", "Philosophy"],
   "blog-articles/postgresql/postgresql_installation_administration.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
   "blog-articles/postgresql/postgresql_database_objects.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
   "blog-articles/postgresql/postgresql_data_types.html": ["PostgreSQL", "Data Engineering", "Programming & Software"],
