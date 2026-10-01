@@ -8,6 +8,7 @@ const blogCategoryLabels = [
   "ASP.NET",
   "Android",
   "Angular",
+  "Appliances",
   "Architecture",
   "Automotive Engineering",
   "AWS",
@@ -66,6 +67,7 @@ const blogCategoryLabels = [
   "Society & Civics",
   "Society & Technology",
   "Software Design & Architecture",
+  "Software Design Patterns",
   "Software Security",
   "Spring",
   "Stylometry",
@@ -130,6 +132,108 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/kubernetes/kubernetes-scheduling.html",
+    publishedAt: "2026-10-01",
+    summary: "Kubernetes scheduling examined one rule at a time: what each decision must see across the cluster, what it costs to schedule one Pod against one snapshot, and whether anything checks the decision again.",
+    title: "What Does One Pod at a Time Cost? Kubernetes scheduling, rule by rule"
+  },
+  {
+    path: "blog-articles/appliances/refrigerator-freezer-engineering.html",
+    publishedAt: "2026-09-30",
+    summary: "How refrigerators and freezers are engineered, from the vapour-compression cycle and cabinet heat leaks to frost, compressors, commercial systems, refrigerants, and food safety.",
+    title: "Where does the heat get in? The engineering and design of refrigerators and freezers"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/behavioral-patterns.html",
+    publishedAt: "2026-09-30",
+    summary: "Behavioral design patterns from Strategy to Observer, read as ways to move a decision out of a conditional and defer who decides what runs.",
+    title: "When is it decided what runs? Behavioral design patterns, from Strategy to Observer"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/structural-patterns.html",
+    publishedAt: "2026-09-30",
+    summary: "Adapter, Facade, Bridge, Composite, Decorator, Proxy, and Flyweight, read as contracts about what a client is allowed not to know.",
+    title: "What Is the Client Allowed Not to Know? Structural design patterns"
+  },
+  {
+    path: "blog-articles/kubernetes/kubernetes-workload-resources.html",
+    publishedAt: "2026-09-30",
+    summary: "ReplicaSets, Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs, read through one question: when a controller replaces a Pod, what survives?",
+    title: "Workload resources: what survives the replacement?"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/application-architecture-patterns.html",
+    publishedAt: "2026-09-29",
+    summary: "Layered, hexagonal, onion, and clean architecture, read as rules about import direction and tested against eight reference graphs.",
+    title: "What Is the Core Allowed to Know? Application architecture as a rule about imports"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/creational-design-patterns.html",
+    publishedAt: "2026-09-28",
+    summary: "Singleton, Factory Method, Abstract Factory, Builder, Prototype, dependency injection, and containers, organized by where concrete classes are named and who controls object creation.",
+    title: "Who Gets to Say new? Object-oriented creational design patterns"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/data-patterns.html",
+    publishedAt: "2026-09-28",
+    summary: "Cache-aside, read-through, write-behind, materialized views, the outbox, and polyglot persistence, organized by what carries changes between copies and what remains when it fails.",
+    title: "Who Writes the Second Copy? Data design patterns by carrier and residue"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/deployment-patterns.html",
+    publishedAt: "2026-09-28",
+    summary: "Blue-green, canary, shadow traffic, rings, feature flags, and related deployment patterns, read as ways of buying production evidence with production exposure.",
+    title: "Whose requests pay for the evidence? Deployment and operational design patterns"
+  },
+  {
+    path: "blog-articles/appliances/dishwasher-engineering.html",
+    publishedAt: "2026-09-27",
+    summary: "How chemistry, heat, mechanical action, and time are traded against each other in household and commercial dishwashers, from early patents to eco programmes and flight-type conveyors.",
+    title: "What Is Paying for Clean? The engineering of the dishwasher"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/api-gateway-patterns.html",
+    publishedAt: "2026-09-27",
+    summary: "API gateways, gateway routing, gateway aggregation, and related service communication patterns, priced by how deeply the edge reads a request and what it must remember.",
+    title: "How Deep Does the Edge Read? API gateway and service communication patterns"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/messaging-event-driven-patterns.html",
+    publishedAt: "2026-09-27",
+    summary: "Messaging and event-driven design patterns, from channels and routing to delivery and event collaboration, read as a ledger of what the sender is permitted not to know.",
+    title: "What Is the Sender Allowed Not to Know? Messaging and event-driven design patterns"
+  },
+  {
+    path: "blog-articles/web-ui/who-knows-what-changed.html",
+    publishedAt: "2026-09-26",
+    summary: "A comparative history of front-end technologies, from the DOM and jQuery through AngularJS, React, and Vue to signals, compilers, and the return of the server.",
+    title: "Who Knows What Changed? A comparative history of front-end technologies"
+  },
+  {
+    path: "blog-articles/kubernetes/kubernetes-objects-and-manifests.html",
+    publishedAt: "2026-09-25",
+    summary: "Kubernetes objects, YAML, declarative configuration, labels, selectors, and namespaces, examined as shared documents whose fields have many writers.",
+    title: "Whose Field Is It? Kubernetes objects and manifests, read as shared documents with many writers"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/distributed-transaction-patterns.html",
+    publishedAt: "2026-09-25",
+    summary: "Distributed transaction patterns from two-phase commit to sagas, compensation, and the transactional outbox, organized around who holds uncertainty about the outcome.",
+    title: "Where Does the Doubt Go? Distributed transaction design patterns"
+  },
+  {
+    path: "blog-articles/swe/design_patterns/resilience_patterns.html",
+    publishedAt: "2026-09-25",
+    summary: "Retry, timeout, circuit breaker, bulkhead, and related resilience patterns, read as decisions about where demand goes when a system cannot serve it immediately.",
+    title: "Where Does the Load Go? Resilience and fault-tolerance design patterns"
+  },
+  {
+    path: "blog-articles/kubernetes/kubernetes-architecture.html",
+    publishedAt: "2026-09-24",
+    summary: "A component-by-component tour of the Kubernetes control plane, nodes, supporting infrastructure, API, and etcd, organized by what keeps running while the API server is unreachable.",
+    title: "What Keeps Running When the Control Plane Stops? Kubernetes architecture, component by component"
+  },
   {
     path: "blog-articles/spring/spring-boot.html",
     publishedAt: "2026-09-24",
@@ -3049,6 +3153,23 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/appliances/refrigerator-freezer-engineering.html": ["Appliances", "Engineering"],
+  "blog-articles/appliances/dishwasher-engineering.html": ["Appliances", "Engineering"],
+  "blog-articles/kubernetes/kubernetes-architecture.html": ["Kubernetes", "Cloud", "Dev(Sec)Ops", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/kubernetes/kubernetes-objects-and-manifests.html": ["Kubernetes", "Cloud", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/kubernetes/kubernetes-scheduling.html": ["Kubernetes", "Cloud", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/kubernetes/kubernetes-workload-resources.html": ["Kubernetes", "Cloud", "Dev(Sec)Ops", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/web-ui/who-knows-what-changed.html": ["Web & UI", "JavaScript", "Angular", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/swe/design_patterns/api-gateway-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Networks", "Cloud"],
+  "blog-articles/swe/design_patterns/application-architecture-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Architecture"],
+  "blog-articles/swe/design_patterns/behavioral-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software"],
+  "blog-articles/swe/design_patterns/creational-design-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software"],
+  "blog-articles/swe/design_patterns/data-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Data Engineering"],
+  "blog-articles/swe/design_patterns/deployment-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/swe/design_patterns/distributed-transaction-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Data Engineering"],
+  "blog-articles/swe/design_patterns/messaging-event-driven-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Networks"],
+  "blog-articles/swe/design_patterns/resilience_patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Engineering"],
+  "blog-articles/swe/design_patterns/structural-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software"],
   "blog-articles/spring/spring-boot.html": ["Java", "Spring", "Programming & Software", "Cloud", "Dev(Sec)Ops"],
   "blog-articles/java/java-ai-ml.html": ["Java", "Machine Learning", "Artificial Intelligence", "Programming & Software"],
   "blog-articles/java/jvm-languages.html": ["Java", "Programming Languages", "Programming & Software"],
