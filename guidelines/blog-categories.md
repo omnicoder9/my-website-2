@@ -12,6 +12,7 @@ When an article has multiple categories, list the most specific category first. 
 - **AI Security**: Security issues specific to AI and machine-learning systems, including model abuse, adversarial attacks, agent risk, governance controls, and defensive architecture around AI deployments.
 - **AI Strategy**: Organizational, operational, and governance questions around adopting AI in products, teams, or enterprises.
 - **Artificial Intelligence**: Broad artificial intelligence topics, including symbolic AI, search, planning, reasoning systems, machine intelligence concepts, and AI work that is not limited to model training or generative systems.
+- **Apache Kafka**: Apache Kafka event streaming, brokers, topics, partitions, producers, consumers, delivery semantics, Java and Spring integration, and event-driven system patterns built around Kafka.
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
@@ -20,6 +21,7 @@ When an article has multiple categories, list the most specific category first. 
 - **AWS**: Amazon Web Services topics, including AWS architecture, IAM, serverless services, managed infrastructure, cloud security, and provider-specific operational practice.
 - **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
+- **Chemistry**: Atomic and molecular structure, chemical bonding, intermolecular forces, periodic behavior, electronic structure, reactions, and the physical principles that govern matter at chemical scales.
 - **Cloud**: Cloud computing architecture, service models, cloud-native operations, managed infrastructure, serverless systems, hyperscaler platforms, and cloud security.
 - **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
 - **Computer Vision**: Image understanding, visual perception, object detection, SLAM, visual sensor fusion, and AI systems that interpret pixels or camera-derived signals.
@@ -38,10 +40,13 @@ When an article has multiple categories, list the most specific category first. 
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
 - **Firearms Engineering**: Firearms as engineered systems, including mechanisms, materials, ballistics, reliability, safety constraints, manufacturing, and design tradeoffs.
+- **FinTech**: Financial technology products, platforms, architecture, regulation, payments, ledgers, consumer finance, enterprise finance, and emerging technology in financial services.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
 - **Fluid Mechanics**: Fluid flow, turbulence, hydraulics, Reynolds effects, open-channel behavior, and mathematical or engineering analysis of liquids and gases in motion.
+- **Futurism**: Evidence-based analysis of future technologies, computing trajectories, long-range engineering trends, and the constraints that shape plausible technological change.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Generative AI**: Systems that generate text, code, images, media, plans, or structured outputs, including RAG, conversational AI, foundation-model applications, and production GenAI workflows.
+- **Git**: Git version control, branching, repository security, history rewriting, troubleshooting, collaboration workflows, and GitHub-specific repository practices.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
 - **High-Performance Computing**: Accelerated, parallel, throughput-oriented, or low-level performance work involving CPUs, GPUs, memory hierarchy, numerical workloads, and performance-focused programming systems.
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
@@ -52,6 +57,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
 - **Law**: Legal systems, rights, regulation, legal institutions, compliance, and the interaction between law, technology, policy, and civic life.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
+- **Logic**: Formal and informal reasoning, propositional and first-order logic, semantics, inference, proof systems, validity, and argumentation.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.
 - **Mobile App Development**: Cross-cutting mobile engineering topics beyond one platform, including architecture, security, testing, and deployment.
 - **Networks**: Computer networking concepts, protocols, observability, troubleshooting, performance, and networked system design.
@@ -59,6 +65,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Nmap**: Nmap-specific reconnaissance, scanning methods, workflows, and environment-specific usage.
 - **Operating Systems**: OS internals, isolation, process boundaries, system behavior, and platform-level computing abstractions.
 - **Pentesting**: Offensive security assessment methods, attack surface analysis, exploitation workflows, and environment-specific penetration testing practice.
+- **Physical AI**: Embodied intelligent systems that perceive and act in the physical world, including robotics, autonomous vehicles, learned control, sim-to-real transfer, and intelligent machines.
 - **Physics**: Physical theory and scientific topics involving mechanics, electromagnetism, thermodynamics, quantum phenomena, cosmology, and related conceptual debates.
 - **Philosophy**: Conceptual, epistemic, metaphysical, or philosophical analysis not primarily framed as ethics.
 - **Privacy**: Digital privacy, anonymity, surveillance resistance, exposure reduction, and operational privacy practices.
@@ -66,6 +73,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Programming & Software**: General programming-language, software-development, or software-industry topics that are not tied to one framework or language category.
 - **Programming Languages**: Articles centered on one specific programming language as a language, such as its design, ecosystem, runtime model, tradeoffs, and historical role.
 - **Python**: Python language internals, concurrency, ecosystem, idioms, and Python-specific engineering topics beyond Django alone.
+- **Redis**: Redis data structures, caching, persistence, messaging, coordination, architecture patterns, operational behavior, and application-framework integration.
 - **Robotics**: Robots, autonomy, sensing, actuation, motion, control, and embodied intelligent systems.
 - **Security**: Defensive security topics that are not narrowly pentesting, side-channel, privacy, or sector-specific attack content.
 - **SDLC**: Software development life cycle topics such as planning, requirements, delivery stages, validation, release flow, and lifecycle discipline.

@@ -53,6 +53,19 @@ test("sortBlogCategoriesMostSpecificFirst moves narrow categories before catch-a
     sortBlogCategoriesMostSpecificFirst(["Security", "Society & Civics", "Pentesting", "Networks"]),
     ["Pentesting", "Networks", "Security", "Society & Civics"]
   );
+
+  assert.deepEqual(
+    sortBlogCategoriesMostSpecificFirst([
+      "Finance",
+      "FinTech",
+      "Business",
+      "Git",
+      "Programming & Software",
+      "Apache Kafka",
+      "Redis"
+    ]),
+    ["FinTech", "Git", "Apache Kafka", "Redis", "Finance", "Business", "Programming & Software"]
+  );
 });
 
 test("normalizeBlogSearchTerm preserves spaces, strips control characters, and enforces the length cap", () => {

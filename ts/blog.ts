@@ -5,6 +5,7 @@ const blogCategoryLabels = [
   "AI Security",
   "AI Strategy",
   "Artificial Intelligence",
+  "Apache Kafka",
   "ASP.NET",
   "Android",
   "Angular",
@@ -14,6 +15,7 @@ const blogCategoryLabels = [
   "AWS",
   "Azure",
   "Business",
+  "Chemistry",
   "Cloud",
   "Computer Graphics",
   "Computer Vision",
@@ -32,10 +34,13 @@ const blogCategoryLabels = [
   "Engineering",
   "Ethics",
   "Firearms Engineering",
+  "FinTech",
   "Finance",
   "Fluid Mechanics",
+  "Futurism",
   "GCP",
   "Generative AI",
+  "Git",
   "Hardware",
   "High-Performance Computing",
   "ICS/OT",
@@ -46,6 +51,7 @@ const blogCategoryLabels = [
   "Kubernetes",
   "Law",
   "Learning",
+  "Logic",
   "Math",
   "Mobile App Development",
   "Networks",
@@ -53,6 +59,7 @@ const blogCategoryLabels = [
   "Nmap",
   "Operating Systems",
   "Pentesting",
+  "Physical AI",
   "Physics",
   "Philosophy",
   "Privacy",
@@ -60,6 +67,7 @@ const blogCategoryLabels = [
   "Programming & Software",
   "Programming Languages",
   "Python",
+  "Redis",
   "Robotics",
   "Security",
   "SDLC",
@@ -132,6 +140,168 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/firearms/operating-mechanisms-firearms.html",
+    publishedAt: "2026-10-11",
+    summary: "Every firearm operating mechanism answers the same question: what may open the breech after the shot, when it may open, and how the design balances delay, recoil, fouling, and reliability.",
+    title: "Who Decides When the Breech Opens?"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/sensors-sensory-modalities.html",
+    publishedAt: "2026-10-11",
+    summary: "How robots and embodied AI systems measure the world, from cameras, lidar, radar, and acoustic sensors to inertial, tactile, thermal, and chemical sensing.",
+    title: "Sensors for Physical AI"
+  },
+  {
+    path: "blog-articles/kafka/kafka-in-microservices.html",
+    publishedAt: "2026-10-11",
+    summary: "Apache Kafka in microservices, read through the one atomic write behind event-driven architecture, outbox, CDC, idempotent consumers, event sourcing, CQRS, sagas, and workflows.",
+    title: "Where Is the Commit? Apache Kafka in microservices"
+  },
+  {
+    path: "blog-articles/redis/redis-architecture-patterns.html",
+    publishedAt: "2026-10-03",
+    summary: "Architecture and design patterns for Redis as a cache, database, message broker, and coordinator, and alongside Kafka, PostgreSQL, Elasticsearch, Spring Boot, and Kubernetes.",
+    title: "What May Redis Forget? Redis architecture and design patterns"
+  },
+  {
+    path: "blog-articles/kafka/kafka-java-spring.html",
+    publishedAt: "2026-10-01",
+    summary: "Apache Kafka with Java and Spring, examined through the client, the framework, and the six places a record can be declared finished.",
+    title: "When Is a Record Done? Apache Kafka with Java and Spring"
+  },
+  {
+    path: "blog-articles/futurism/computation-futurism.html",
+    publishedAt: "2026-10-08",
+    summary: "Thirty trajectories in computing's future, examined through the boundaries that integration removes, relocates, and must replace with new forms of isolation and control.",
+    title: "What Keeps the Parts Apart?"
+  },
+  {
+    path: "blog-articles/git/git-branch-management.html",
+    publishedAt: "2026-10-08",
+    summary: "A rigorous, referenced guide to Git branch management on GitHub: branch lifetimes, branch protection, keeping branches current, and cleaning up branches.",
+    title: "Git Branch Management"
+  },
+  {
+    path: "blog-articles/git/git-security.html",
+    publishedAt: "2026-10-07",
+    summary: "A rigorous, referenced guide to Git security on GitHub: secrets, prevention, remediation, repository controls, and supply-chain security.",
+    title: "Git Security Guide"
+  },
+  {
+    path: "blog-articles/git/git-troubleshooting.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced guide to recovering from detached HEAD, accidental resets, commits and pushes, merge and rebase problems, and diverged branches, with GitHub examples.",
+    title: "Git Troubleshooting"
+  },
+  {
+    path: "blog-articles/logic/arguments-and-inference.html",
+    publishedAt: "2026-10-06",
+    summary: "A rigorous introduction to argument structure and deductive, inductive, and abductive reasoning.",
+    title: "Arguments and Inference"
+  },
+  {
+    path: "blog-articles/logic/classical-propositional-logic.html",
+    publishedAt: "2026-10-06",
+    summary: "A rigorous guide to classical propositional logic: propositions, connectives, syntax, semantics, logical properties, equivalences, and normal forms.",
+    title: "Classical Propositional Logic"
+  },
+  {
+    path: "blog-articles/logic/first-order-logic.html",
+    publishedAt: "2026-10-06",
+    summary: "A rigorous guide to first-order logic, including predicates, relations, functions, quantifiers, scope, binding, translation, quantifier laws, and identity.",
+    title: "First-Order Logic"
+  },
+  {
+    path: "blog-articles/logic/first-order-semantics.html",
+    publishedAt: "2026-10-06",
+    summary: "A rigorous guide to first-order semantics: structures, domains, interpretation functions, variable assignments, satisfaction, models, validity, and consequence.",
+    title: "First-Order Semantics"
+  },
+  {
+    path: "blog-articles/logic/informal-logic.html",
+    publishedAt: "2026-10-06",
+    summary: "A rigorous guide to natural-language arguments, definitions, ambiguity, vagueness, informal fallacies, and argumentation theory.",
+    title: "Informal Logic"
+  },
+  {
+    path: "blog-articles/logic/proof-systems-propositional-logic.html",
+    publishedAt: "2026-10-06",
+    summary: "A rigorous guide to proof systems for classical propositional logic, including natural deduction, Hilbert systems, sequent calculus, tableaux, and resolution.",
+    title: "Proof Systems for Propositional Logic"
+  },
+  {
+    path: "blog-articles/chemistry/atomic-theory-and-structure.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced technical article on the development of atomic theory, subatomic particles, and atomic mass.",
+    title: "Atomic Theory and Atomic Structure"
+  },
+  {
+    path: "blog-articles/chemistry/chemical-bonding.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced technical article on ionic, covalent, and metallic bonding, Lewis theory, electronegativity, and bond polarity.",
+    title: "Chemical Bonding"
+  },
+  {
+    path: "blog-articles/chemistry/intermolecular-forces.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced technical article on intermolecular forces and their relationship to boiling point, melting point, vapour pressure, viscosity, surface tension, and solubility.",
+    title: "Intermolecular Forces"
+  },
+  {
+    path: "blog-articles/chemistry/molecular-structure.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced technical article on molecular structure, VSEPR theory, common molecular geometries, valence bond theory, hybridization, and molecular orbital theory.",
+    title: "Molecular Structure"
+  },
+  {
+    path: "blog-articles/chemistry/periodic-table-and-periodic-trends.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced technical article on the structure of the periodic table, the major element families, and periodic trends in atomic properties.",
+    title: "The Periodic Table and Periodic Trends"
+  },
+  {
+    path: "blog-articles/chemistry/quantum-chemistry-and-electronic-structure.html",
+    publishedAt: "2026-10-06",
+    summary: "A referenced technical article on quantum foundations, quantum mechanics, atomic orbitals, and electron configurations.",
+    title: "Quantum Chemistry and Electronic Structure"
+  },
+  {
+    path: "blog-articles/industries/fintech/consumer-fintech.html",
+    publishedAt: "2026-10-05",
+    summary: "Consumer fintech as a machine for moving friction in time, from budgeting and savings to digital banking, wallets, lending, remittances, and financial wellness.",
+    title: "Which Side of Today Does the Cost Fall On? Consumer fintech on a ladder of value dates"
+  },
+  {
+    path: "blog-articles/industries/fintech/emerging-fintech.html",
+    publishedAt: "2026-10-05",
+    summary: "Thirteen emerging areas of fintech, read as relocations of a bank's functions and examined through the question of who pays when they break.",
+    title: "Whose Balance Sheet Is It On? Emerging areas in fintech"
+  },
+  {
+    path: "blog-articles/industries/fintech/enterprise-fintech.html",
+    publishedAt: "2026-10-05",
+    summary: "Enterprise fintech across treasury, payments, payables, receivables, expenses, payroll, cash, planning, lending, and embedded finance, read as one problem.",
+    title: "Who Carries the Gap? Enterprise fintech and the interval between owing and paying"
+  },
+  {
+    path: "blog-articles/industries/fintech/fintech-architecture.html",
+    publishedAt: "2026-10-05",
+    summary: "Financial system architecture as the management of disagreement between records, from transactions and ledgers to reconciliation, settlement, recovery, scale, and audit.",
+    title: "Which Record Is the Money? Financial system architecture"
+  },
+  {
+    path: "blog-articles/industries/fintech/fintech-regulation.html",
+    publishedAt: "2026-10-05",
+    summary: "A technical survey of fintech regulation and law, tracing where licensing, compliance, consumer protection, privacy, and financial obligations attach.",
+    title: "Where Does the Obligation Land? Regulation and Law in Fintech"
+  },
+  {
+    path: "blog-articles/industries/fintech/fintech-stack-ledger.html",
+    publishedAt: "2026-10-05",
+    summary: "Fifteen layers of the modern fintech stack, read through how long each copy may disagree with the ledger and who detects the divergence.",
+    title: "What Has to Agree With the Ledger, and How Soon? The fintech technology stack"
+  },
   {
     path: "blog-articles/kubernetes/kubernetes-scheduling.html",
     publishedAt: "2026-10-01",
@@ -3153,6 +3323,33 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/firearms/operating-mechanisms-firearms.html": ["Firearms Engineering", "Engineering", "Physics", "Hardware"],
+  "blog-articles/ai/physical_ai/sensors-sensory-modalities.html": ["Physical AI", "Robotics", "Computer Vision", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/kafka/kafka-in-microservices.html": ["Apache Kafka", "Software Design & Architecture", "Programming & Software", "Data Engineering", "Dev(Sec)Ops"],
+  "blog-articles/kafka/kafka-java-spring.html": ["Apache Kafka", "Java", "Spring", "Programming & Software", "Data Engineering"],
+  "blog-articles/redis/redis-architecture-patterns.html": ["Redis", "Software Design & Architecture", "Programming & Software", "Data Engineering", "Dev(Sec)Ops"],
+  "blog-articles/futurism/computation-futurism.html": ["Futurism", "Society & Technology", "Engineering"],
+  "blog-articles/git/git-branch-management.html": ["Git", "Dev(Sec)Ops", "Programming & Software", "SDLC"],
+  "blog-articles/git/git-security.html": ["Git", "Software Security", "Security", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/git/git-troubleshooting.html": ["Git", "Dev(Sec)Ops", "Programming & Software"],
+  "blog-articles/logic/arguments-and-inference.html": ["Logic", "Math", "Philosophy"],
+  "blog-articles/logic/classical-propositional-logic.html": ["Logic", "Math", "Philosophy"],
+  "blog-articles/logic/first-order-logic.html": ["Logic", "Math", "Philosophy"],
+  "blog-articles/logic/first-order-semantics.html": ["Logic", "Math", "Philosophy"],
+  "blog-articles/logic/informal-logic.html": ["Logic", "Philosophy"],
+  "blog-articles/logic/proof-systems-propositional-logic.html": ["Logic", "Math", "Philosophy"],
+  "blog-articles/chemistry/atomic-theory-and-structure.html": ["Chemistry", "Physics"],
+  "blog-articles/chemistry/chemical-bonding.html": ["Chemistry", "Physics"],
+  "blog-articles/chemistry/intermolecular-forces.html": ["Chemistry", "Physics"],
+  "blog-articles/chemistry/molecular-structure.html": ["Chemistry", "Physics"],
+  "blog-articles/chemistry/periodic-table-and-periodic-trends.html": ["Chemistry", "Physics"],
+  "blog-articles/chemistry/quantum-chemistry-and-electronic-structure.html": ["Chemistry", "Physics"],
+  "blog-articles/industries/fintech/consumer-fintech.html": ["FinTech", "Finance", "Business", "Society & Technology"],
+  "blog-articles/industries/fintech/emerging-fintech.html": ["FinTech", "Finance", "Business", "Society & Technology"],
+  "blog-articles/industries/fintech/enterprise-fintech.html": ["FinTech", "Finance", "Business", "Society & Technology"],
+  "blog-articles/industries/fintech/fintech-architecture.html": ["FinTech", "Finance", "Software Design & Architecture", "Data Engineering"],
+  "blog-articles/industries/fintech/fintech-regulation.html": ["FinTech", "Finance", "Law", "Society & Civics"],
+  "blog-articles/industries/fintech/fintech-stack-ledger.html": ["FinTech", "Finance", "Software Design & Architecture", "Data Engineering"],
   "blog-articles/appliances/refrigerator-freezer-engineering.html": ["Appliances", "Engineering"],
   "blog-articles/appliances/dishwasher-engineering.html": ["Appliances", "Engineering"],
   "blog-articles/kubernetes/kubernetes-architecture.html": ["Kubernetes", "Cloud", "Dev(Sec)Ops", "Programming & Software", "Software Design & Architecture"],
@@ -3178,7 +3375,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring/spring-expression-language.html": ["Java", "Spring", "Programming & Software"],
   "blog-articles/java/cloud-native-java.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Docker", "Kubernetes"],
   "blog-articles/java/java-testing.html": ["Java", "Programming & Software", "SDLC"],
-  "blog-articles/robotics/service-robotics.html": ["Robotics", "Engineering", "Cyber-Physical Systems"],
+  "blog-articles/robotics/service-robotics.html": ["Physical AI", "Robotics", "Engineering", "Cyber-Physical Systems"],
   "blog-articles/math/linear_algebra/vectors.html": ["Math"],
   "blog-articles/robotics/industrial-robotics.html": ["Robotics", "Engineering", "ICS/OT", "Cyber-Physical Systems", "Control Theory & Engineering"],
   "blog-articles/firearms/external-and-terminal-ballistics.html": ["Firearms Engineering", "Engineering", "Physics"],
@@ -3346,7 +3543,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/hardware/storage-devices.html": ["Engineering", "Hardware", "Operating Systems"],
   "blog-articles/hardware/cpu-fundamentals.html": ["Engineering", "Hardware", "Operating Systems", "High-Performance Computing"],
   "blog-articles/hardware/ram.html": ["Engineering", "Hardware", "Operating Systems"],
-  "blog-articles/spring/spring-cache.html": ["Java", "Programming & Software", "Dev(Sec)Ops", "Spring"],
+  "blog-articles/spring/spring-cache.html": ["Redis", "Java", "Programming & Software", "Dev(Sec)Ops", "Spring"],
   "blog-articles/swe/complexity-classes.html": ["Math", "Programming & Software"],
   "blog-articles/security/memory-unsafe-c-cpp.html": ["Security", "Programming & Software", "Operating Systems"],
   "blog-articles/cyber-physical-systems/systems-engineering-methodologies.html": ["Engineering", "Cyber-Physical Systems"],
@@ -3388,10 +3585,10 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/nmap/nmap-fundamentals.html": ["Security", "Networks", "Nmap", "Pentesting"],
   "blog-articles/security/nmap/nmap-ics-ot-pentesting.html": ["ICS/OT", "Security", "Networks", "Cyber-Physical Systems", "Nmap", "Pentesting"],
   "blog-articles/security/nmap/nmap-reconnaissance-platform.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/swe/version_control.html": ["Programming & Software"],
-  "blog-articles/cyber-physical-systems/soft-robotics.html": ["Kinematics", "Cyber-Physical Systems", "Engineering"],
+  "blog-articles/swe/version_control.html": ["Git", "Programming & Software"],
+  "blog-articles/cyber-physical-systems/soft-robotics.html": ["Physical AI", "Kinematics", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/security/sfi.html": ["Operating Systems", "Security", "Programming & Software"],
-  "blog-articles/swe/rewriting_history_git.html": ["Programming & Software"],
+  "blog-articles/swe/rewriting_history_git.html": ["Git", "Programming & Software"],
   "blog-articles/swe/site-reliability-engineering.html": ["Engineering", "Dev(Sec)Ops", "Programming & Software", "SDLC"],
   "blog-articles/security/os-vm-isolation.html": ["Operating Systems", "Security", "Programming & Software"],
   "blog-articles/security/network-observability.html": ["Networks", "Security"],
@@ -3413,7 +3610,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/malware-analysis.html": ["Security"],
   "blog-articles/devops/docker/managing-docker-containers.html": ["Docker", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/programming-languages/mojo.html": ["Programming & Software", "Programming Languages", "Machine Learning", "High-Performance Computing"],
-  "blog-articles/ai/autonomous-vehicles.html": ["Automotive Engineering", "Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics", "Computer Vision"],
+  "blog-articles/ai/autonomous-vehicles.html": ["Physical AI", "Automotive Engineering", "Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics", "Computer Vision"],
   "blog-articles/swe/building-developer-communities.html": ["Programming & Software", "Society & Civics"],
   "blog-articles/ai/data-quality.html": ["Machine Learning", "Data Engineering", "Engineering", "Programming & Software"],
   "blog-articles/devops/docker/container-orchestration-ecosystem.html": ["Docker", "Kubernetes", "Dev(Sec)Ops", "Programming & Software"],
@@ -3455,7 +3652,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/api-security-best-practices.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/physics/newtons_second_law_dynamics.html": ["Physics", "Engineering", "Differential Equations"],
   "blog-articles/math/non-euclidean-geometry.html": ["Math", "Philosophy"],
-  "blog-articles/ai/drl-humanoid-robotics.html": ["Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
+  "blog-articles/ai/drl-humanoid-robotics.html": ["Physical AI", "Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/ai/causal_ai.html": ["Machine Learning"],
   "blog-articles/security/side-channel/cache-timing-attacks.html": ["Security", "Programming & Software", "Side-Channel Attacks"],
   "blog-articles/veganism/hidden-animal-ingredients.html": ["Veganism"],
@@ -3508,7 +3705,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring/spring-integration-patterns.html": ["Java", "Programming & Software", "Spring", "Networks", "Software Design & Architecture"],
   "blog-articles/spring/spring-internationalization.html": ["Java", "Programming & Software", "Spring", "Web & UI"],
   "blog-articles/spring/spring-jdbc.html": ["Java", "Programming & Software", "Spring", "Data Engineering"],
-  "blog-articles/spring/spring-messaging.html": ["Java", "Programming & Software", "Spring", "Networks"],
+  "blog-articles/spring/spring-messaging.html": ["Apache Kafka", "Java", "Programming & Software", "Spring", "Networks"],
   "blog-articles/spring/spring-microservices.html": ["Java", "Cloud", "Programming & Software", "Spring", "Networks", "Software Design & Architecture"],
   "blog-articles/spring/spring-mvc.html": ["Java", "Programming & Software", "Spring", "Web & UI", "Software Design & Architecture"],
   "blog-articles/spring/spring-native-graalvm.html": ["Java", "Programming & Software", "Spring", "Dev(Sec)Ops"],
@@ -3565,14 +3762,14 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/philosophy/metaethics.html": ["Philosophy", "Ethics"],
   "blog-articles/ai/machine-learning-lifecycle.html": ["Machine Learning", "Engineering"],
   "blog-articles/ai/genai/ai-agents/ai-coding-agent-failures.html": ["AI Agents", "Generative AI", "Programming & Software"],
-  "blog-articles/robotics/ai-in-robotics.html": ["Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
+  "blog-articles/robotics/ai-in-robotics.html": ["Physical AI", "Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
   "blog-articles/security/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
   "blog-articles/math/bayesian-statistics.html": ["Math", "Machine Learning"],
   "blog-articles/javascript/javascript.html": ["JavaScript", "Programming & Software", "Programming Languages", "Web & UI"],
   "blog-articles/security/pentesting/breach_attack_simulation.html": ["Security", "Pentesting"],
   "blog-articles/networks/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
-  "blog-articles/robotics/cognitive-layer-robotics.html": ["Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
-  "blog-articles/robotics/robotics-perception.html": ["Kinematics", "Robotics", "Engineering", "Computer Vision"],
+  "blog-articles/robotics/cognitive-layer-robotics.html": ["Physical AI", "Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
+  "blog-articles/robotics/robotics-perception.html": ["Physical AI", "Kinematics", "Robotics", "Engineering", "Computer Vision"],
   "blog-articles/robotics/three-walls-robotics.html": ["Kinematics", "Robotics", "Engineering"],
   "blog-articles/swe/why-projects-run-late-and-over-budget.html": ["Business", "Engineering", "SDLC"],
   "blog-articles/philosophy/engineering_is_philosophy.html": ["Engineering", "Philosophy"],
