@@ -20,6 +20,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Automotive Engineering**: Vehicle systems engineering, including vehicle dynamics, powertrain and chassis control, autonomous driving, in-vehicle networks, safety constraints, and connected-car platforms.
 - **AWS**: Amazon Web Services topics, including AWS architecture, IAM, serverless services, managed infrastructure, cloud security, and provider-specific operational practice.
 - **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
+- **Biology**: Living systems, cells, genetics, evolution, organisms, biological complexity, and the relationship between biological mechanisms and engineering.
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
 - **Chemistry**: Atomic and molecular structure, chemical bonding, intermolecular forces, periodic behavior, electronic structure, reactions, and the physical principles that govern matter at chemical scales.
 - **Cloud**: Cloud computing architecture, service models, cloud-native operations, managed infrastructure, serverless systems, hyperscaler platforms, and cloud security.
