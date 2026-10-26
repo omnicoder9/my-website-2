@@ -37,6 +37,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Django**: Django framework design, scaling, architecture, and Python web engineering specific to Django.
 - **Docker**: Docker images, containers, runtime behavior, persistence, security, and day-two operational practices.
 - **Earth Sciences**: Geology, planetary history, paleontology, and other sciences focused on the Earth and its long-term physical development.
+- **Electronic Warfare**: Military and defensive applications of the electromagnetic spectrum, including electronic attack, electronic protection, electronic support, signals intelligence, radar interactions, and EW systems engineering.
 - **Electronics**: Circuits, components, analog and digital electronics, signal behavior, embedded electrical design, and practical hardware-level engineering topics.
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
@@ -45,6 +46,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
 - **Fluid Mechanics**: Fluid flow, turbulence, hydraulics, Reynolds effects, open-channel behavior, and mathematical or engineering analysis of liquids and gases in motion.
 - **Futurism**: Evidence-based analysis of future technologies, computing trajectories, long-range engineering trends, and the constraints that shape plausible technological change.
+- **Game Theory**: Strategic interaction, game classification and representation, equilibrium concepts, mathematical methods, applications, limitations, and computational or AI uses of game theory.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Generative AI**: Systems that generate text, code, images, media, plans, or structured outputs, including RAG, conversational AI, foundation-model applications, and production GenAI workflows.
 - **Git**: Git version control, branching, repository security, history rewriting, troubleshooting, collaboration workflows, and GitHub-specific repository practices.
@@ -88,3 +90,4 @@ When an article has multiple categories, list the most specific category first. 
 - **Technical Writing**: Documentation, explanatory writing, developer education, information architecture, reference material, tutorials, API docs, and communication practices for technical subjects.
 - **Veganism**: Animal ethics, vegan advocacy, organizing, movement strategy, and analysis of systems built on animal use.
 - **Web & UI**: Frontend development, interface architecture, browser performance, styling systems, and user-interface engineering.
+- **Writing**: Writing craft, research, evidence, revision, composition workflows, and the tools and technologies writers use.

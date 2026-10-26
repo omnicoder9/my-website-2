@@ -30,6 +30,7 @@ const blogCategoryLabels = [
   "Django",
   "Docker",
   "Earth Sciences",
+  "Electronic Warfare",
   "Electronics",
   "Engineering",
   "Ethics",
@@ -38,6 +39,7 @@ const blogCategoryLabels = [
   "Finance",
   "Fluid Mechanics",
   "Futurism",
+  "Game Theory",
   "GCP",
   "Generative AI",
   "Git",
@@ -82,7 +84,8 @@ const blogCategoryLabels = [
   "Stylometry",
   "Technical Writing",
   "Veganism",
-  "Web & UI"
+  "Web & UI",
+  "Writing"
 ] as const;
 
 type BlogCategory = typeof blogCategoryLabels[number];
@@ -141,6 +144,264 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/game-theory/game-applications.html",
+    publishedAt: "2026-10-26",
+    summary: "How strategic-interaction models are applied in economics, business, cybersecurity, defence, AI, politics, biology, and networked systems.",
+    title: "Applications of Game Theory"
+  },
+  {
+    path: "blog-articles/game-theory/game-classification.html",
+    publishedAt: "2026-10-26",
+    summary: "A classification of games by timing, cooperation, payoffs, information, duration, chance, players, strategy spaces, communication, and participation.",
+    title: "Classification of Games"
+  },
+  {
+    path: "blog-articles/game-theory/game-limitations.html",
+    publishedAt: "2026-10-26",
+    summary: "The limits of classical game theory and extensions for bounded rationality, social preferences, uncertainty, experiments, complexity, and equilibrium selection.",
+    title: "Limitations and Extensions of Game Theory"
+  },
+  {
+    path: "blog-articles/game-theory/game-math-tools.html",
+    publishedAt: "2026-10-26",
+    summary: "The mathematical toolkit of game theory, from probability, utility, optimization, and fixed points to Bayesian inference, dynamic programming, and computational search.",
+    title: "Mathematical Tools of Game Theory"
+  },
+  {
+    path: "blog-articles/game-theory/game-representations.html",
+    publishedAt: "2026-10-26",
+    summary: "How games are represented in normal, extensive, and Bayesian form, along with repeated, stochastic, graphical, and mechanism-design models.",
+    title: "Representations of Games"
+  },
+  {
+    path: "blog-articles/game-theory/game-theory-cs-ai.html",
+    publishedAt: "2026-10-26",
+    summary: "Game theory in computer science and AI, including adversarial search, multi-agent learning, mechanism design, security games, distributed systems, and negotiation.",
+    title: "Game Theory in Computing"
+  },
+  {
+    path: "blog-articles/hardware/computer-architecture-and-organization.html",
+    publishedAt: "2026-10-26",
+    summary: "Computer architecture from stored-program machines and instruction sets through pipelining, out-of-order execution, multicore systems, virtualization, and systems-on-chip.",
+    title: "Computer Architecture and Organization"
+  },
+  {
+    path: "blog-articles/hardware/emerging-hardware-technologies.html",
+    publishedAt: "2026-10-26",
+    summary: "A referenced review of emerging hardware technologies, from chiplets and 3D integration to quantum, photonic, in-memory, and brain-computer-interface hardware.",
+    title: "Emerging Hardware Technologies"
+  },
+  {
+    path: "blog-articles/hardware/enterprise-hardware-infrastructure.html",
+    publishedAt: "2026-10-26",
+    summary: "A technical survey of enterprise hardware and data-centre infrastructure, from server architecture and storage to networking, management, resilience, and total cost of ownership.",
+    title: "Enterprise Hardware and Infrastructure"
+  },
+  {
+    path: "blog-articles/hardware/hardware-installation-maintenance-troubleshooting.html",
+    publishedAt: "2026-10-24",
+    summary: "A referenced guide to PC hardware installation, preventive maintenance, systematic diagnosis, repair decisions, and safe disposal.",
+    title: "Hardware Installation and Troubleshooting"
+  },
+  {
+    path: "blog-articles/writing/research-sources-evidence.html",
+    publishedAt: "2026-10-23",
+    summary: "A guide to research questions, source evaluation, note-taking, quotation, evidence, citation systems, plagiarism, research ethics, and responsible AI use.",
+    title: "Research, Sources, and Evidence"
+  },
+  {
+    path: "blog-articles/writing/tools-technologies-writers.html",
+    publishedAt: "2026-10-23",
+    summary: "A history and working guide to dictionaries, checkers, reference managers, word processors, markup, version control, AI assistance, and fact-checking tools.",
+    title: "Tools and Technologies for Writers"
+  },
+  {
+    path: "blog-articles/ew/electronic-attack-techniques.html",
+    publishedAt: "2026-10-21",
+    summary: "Principles of electronic attack against radar, communications, satellite navigation, and infrared and electro-optical sensors, with the protections that answer each.",
+    title: "Electronic Attack Techniques"
+  },
+  {
+    path: "blog-articles/ew/electronic-protection-and-resilience.html",
+    publishedAt: "2026-10-21",
+    summary: "How communications, sensing, and navigation systems resist jamming, spoofing, and interference through agility, processing, authentication, redundancy, and emission control.",
+    title: "Electronic Protection and Resilience"
+  },
+  {
+    path: "blog-articles/ew/electronic-support-sigint.html",
+    publishedAt: "2026-10-21",
+    summary: "Electronic support from signal detection and classification through direction finding, geolocation, emitter identification, SIGINT, MASINT, and ISR.",
+    title: "Electronic Support and SIGINT"
+  },
+  {
+    path: "blog-articles/ew/emerging-ew-technologies.html",
+    publishedAt: "2026-10-21",
+    summary: "Emerging electronic-warfare technologies including cognitive EW, machine learning, digital twins, distributed sensing, multifunction RF, photonics, and quantum sensing.",
+    title: "Emerging EW Technologies"
+  },
+  {
+    path: "blog-articles/ew/ew-modeling-simulation-testing.html",
+    publishedAt: "2026-10-21",
+    summary: "Modeling, simulation, and controlled testing for electronic-warfare systems, from link budgets and propagation models to hardware-in-the-loop facilities and authorized ranges.",
+    title: "EW Modelling, Simulation and Testing"
+  },
+  {
+    path: "blog-articles/ew/ew-platforms-and-operational-environments.html",
+    publishedAt: "2026-10-21",
+    summary: "How electronic warfare operates across air, sea, land, and space, and how terrain, logistics, critical infrastructure, and unmanned systems change the mission.",
+    title: "EW Platforms and Environments"
+  },
+  {
+    path: "blog-articles/ew/ew-systems-engineering.html",
+    publishedAt: "2026-10-21",
+    summary: "The engineering chain behind electronic-warfare systems, from antennas, receivers, converters, and processors through tracking, integration, and verification.",
+    title: "Electronic Warfare Systems Engineering"
+  },
+  {
+    path: "blog-articles/ew/radar-sensing-ew-interaction.html",
+    publishedAt: "2026-10-21",
+    summary: "Radar techniques and their interaction with electronic warfare, contrasting the countermeasures that exploit each technique with the counter-countermeasures that recover it.",
+    title: "Radar, Sensing and EW"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/continual-and-lifelong-learning.html",
+    publishedAt: "2026-10-14",
+    summary: "Continual learning for physical AI, including catastrophic forgetting, replay, regularization, architectural methods, evaluation, deployment, and regulation.",
+    title: "Continual and Lifelong Learning"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/multi-agent-physical-intelligence.html",
+    publishedAt: "2026-10-14",
+    summary: "Coordination for robot teams, autonomous vehicles, and human-robot teams through consensus, distributed perception, communication, game theory, and multi-agent reinforcement learning.",
+    title: "Multi-Agent Physical Intelligence"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/neuro-symbolic-and-hybrid-systems.html",
+    publishedAt: "2026-10-14",
+    summary: "Neuro-symbolic and hybrid physical AI, combining learned models with logic, planners, physical laws, formal verification, temporal logic, and runtime assurance.",
+    title: "Neuro-Symbolic and Hybrid Physical Systems"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/self-improving-physical-systems.html",
+    publishedAt: "2026-10-14",
+    summary: "How physical systems identify failures, generate training scenarios, adapt policies, and validate improvements before deployment.",
+    title: "Self-Improving Physical Systems"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/humanoid-intelligence.html",
+    publishedAt: "2026-10-13",
+    summary: "Humanoid intelligence across embodied perception, bipedal locomotion, balance, whole-body coordination, manipulation, retargeting, and social interaction.",
+    title: "Humanoid Intelligence in Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/classical-and-modern-control.html",
+    publishedAt: "2026-10-12",
+    summary: "Control for physical AI and robotics, from PID and state-space feedback to optimal, predictive, adaptive, robust, force, and learning-based control.",
+    title: "Classical and Modern Control"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/foundation-models-for-physical-ai.html",
+    publishedAt: "2026-10-12",
+    summary: "Foundation models for physical AI, including multimodal encoders, vision-language systems, language-conditioned planning, action models, and cross-embodiment transfer.",
+    title: "Foundation Models for Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/generative-and-predictive-models.html",
+    publishedAt: "2026-10-12",
+    summary: "Generative and predictive models for physical AI, including diffusion and flow-matching policies, learned dynamics, predictive video, and synthetic scenarios.",
+    title: "Generative and Predictive Models"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/imitation-learning-and-demonstration.html",
+    publishedAt: "2026-10-12",
+    summary: "Learning robot behavior from demonstration through movement primitives, behavioral cloning, inverse reinforcement learning, teleoperation, video, and human correction.",
+    title: "Imitation Learning in Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/motion-planning.html",
+    publishedAt: "2026-10-12",
+    summary: "Motion planning for robots, from configuration spaces and collision checking through sampling, trajectory optimization, model predictive control, and multi-robot planning.",
+    title: "Motion Planning for Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/reactive-behavior.html",
+    publishedAt: "2026-10-12",
+    summary: "Reactive behavior for physical systems, including collision response, disturbance rejection, grasp correction, replanning, safe stopping, and recovery.",
+    title: "Reactive Behavior in Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/reinforcement-learning.html",
+    publishedAt: "2026-10-12",
+    summary: "Reinforcement learning for physical AI, covering MDPs, POMDPs, policy learning, model-free and model-based methods, offline and safe RL, and sim-to-real transfer.",
+    title: "Reinforcement Learning for Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/representations-of-the-physical-world.html",
+    publishedAt: "2026-10-12",
+    summary: "Representations for physical AI, including geometric maps, occupancy grids, scene graphs, object-centric models, neural fields, Gaussian splats, and digital twins.",
+    title: "Representations of the Physical World"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/robotics-hardware-and-mechatronics.html",
+    publishedAt: "2026-10-12",
+    summary: "Robotics hardware and mechatronics across structures, actuators, transmissions, motors, end effectors, batteries, embedded computing, calibration, and maintainability.",
+    title: "Robotics Hardware and Mechatronics"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/task-planning.html",
+    publishedAt: "2026-10-12",
+    summary: "Task planning for physical AI through instruction interpretation, goal decomposition, classical and hierarchical planning, behavior trees, scheduling, and execution monitoring.",
+    title: "Task Planning for Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/traditional-ai-ml-physicalai.html",
+    publishedAt: "2026-10-12",
+    summary: "Traditional AI and machine learning for physical systems, including expert systems, supervised and self-supervised learning, anomaly detection, and probabilistic models.",
+    title: "Traditional AI and Machine Learning"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/world-models.html",
+    publishedAt: "2026-10-12",
+    summary: "World models for physical AI that predict future states, object interactions, action consequences, uncertainty, hypothetical scenarios, and plans.",
+    title: "World Models for Physical AI"
+  },
+  {
+    path: "blog-articles/programming-languages/cpp/cpp-core-data-structures.html",
+    publishedAt: "2026-10-12",
+    summary: "Arrays, strings, pointers, references, dynamic memory, enumerations, aliases, namespaces, structs, unions, and the preprocessor in modern C++.",
+    title: "Core Data Structures and Language Features in C++"
+  },
+  {
+    path: "blog-articles/programming-languages/cpp/cpp-memory-management.html",
+    publishedAt: "2026-10-12",
+    summary: "Memory management and ownership in modern C++, including storage duration, lifetime, RAII, smart pointers, copy and move semantics, and alignment.",
+    title: "Memory and Ownership in C++"
+  },
+  {
+    path: "blog-articles/programming-languages/cpp/cpp-oop.html",
+    publishedAt: "2026-10-12",
+    summary: "Object-oriented programming in modern C++, including classes, inheritance, polymorphism, composition, generic techniques, and practical design tradeoffs.",
+    title: "Object-Oriented Programming in C++"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/computer-vision-and-spatial-perception.html",
+    publishedAt: "2026-10-11",
+    summary: "Computer vision and spatial perception for physical AI, from detection and segmentation through 3D reconstruction, pose estimation, visual odometry, SLAM, and scene understanding.",
+    title: "Vision for Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/physical-modeling.html",
+    publishedAt: "2026-10-11",
+    summary: "Physical modeling for robotics, including kinematics, rigid-body and multibody dynamics, contact, friction, deformables, fluids, identification, simulation, and learned models.",
+    title: "Physical Modeling for Physical AI"
+  },
+  {
+    path: "blog-articles/ai/physical_ai/sensor-fusion-and-state-estimation.html",
+    publishedAt: "2026-10-11",
+    summary: "Sensor fusion and state estimation for robotics using Kalman and particle filters, camera-lidar-IMU fusion, localization, mapping, tracking, uncertainty, and fault detection.",
+    title: "Sensor Fusion for Physical AI"
+  },
   {
     path: "blog-articles/firearms/operating-mechanisms-firearms.html",
     publishedAt: "2026-10-11",
@@ -412,13 +673,13 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Who Decided That? Spring Boot fundamentals, configuration and Actuator"
   },
   {
-    path: "blog-articles/java/java-ai-ml.html",
+    path: "blog-articles/programming-languages/java/java-ai-ml.html",
     publishedAt: "2026-09-23",
     summary: "Java for AI and machine learning, from Weka to Spring AI and LangChain4j, organized by where the arithmetic runs and which JVM guarantees survive.",
     title: "What Does the JVM Still Vouch For? Java for AI and machine learning"
   },
   {
-    path: "blog-articles/java/jvm-languages.html",
+    path: "blog-articles/programming-languages/java/jvm-languages.html",
     publishedAt: "2026-09-23",
     summary: "A comparison of Java, Kotlin, Scala, Groovy, and Clojure through the guarantees enforced by the JVM, emitted bytecode, language runtime, compiler tooling, or source language alone.",
     title: "Who Keeps the Promise Once It Is Bytecode? Java, Kotlin, Scala, Groovy and Clojure compared"
@@ -442,13 +703,13 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Spring Expression Language (SpEL): Syntax, Operators, Collections, Templates, and Evaluation"
   },
   {
-    path: "blog-articles/java/cloud-native-java.html",
+    path: "blog-articles/programming-languages/java/cloud-native-java.html",
     publishedAt: "2026-09-22",
     summary: "Cloud-native Java across container images, Kubernetes, configuration, service meshes, health checks, observability, deployment, and serverless computing.",
     title: "Who Decides, and When? Cloud-native Java"
   },
   {
-    path: "blog-articles/java/java-testing.html",
+    path: "blog-articles/programming-languages/java/java-testing.html",
     publishedAt: "2026-09-22",
     summary: "Unit testing with JUnit 6 and assertions, mocking with Mockito 5, integration testing, and test coverage with JaCoCo, measured against 24 seeded faults.",
     title: "What Would Make This Test Fail? Testing in Java with JUnit, Mockito, integration tests and coverage"
@@ -1426,169 +1687,169 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Application Security - testing, measuring and defending software"
   },
   {
-    path: "blog-articles/java/java.html",
+    path: "blog-articles/programming-languages/java/java.html",
     publishedAt: "2026-07-16",
     summary: "A referenced technical portrait of Java, covering its design goals, runtime model, ecosystem, compatibility culture, and the engineering reasons it remains central in production systems.",
     title: "Java: a technical portrait of the language that refused to break"
   },
   {
-    path: "blog-articles/java/java-advanced-language-features.html",
+    path: "blog-articles/programming-languages/java/java-advanced-language-features.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to advanced Java language features: packages, imports, visibility, enums, records, sealed and nested classes, generics, annotations, reflection, and the Java Platform Module System.",
     title: "Advanced Java Language Features: Packages, Types, Generics, Reflection, and Modules"
   },
   {
-    path: "blog-articles/java/java-collections-framework.html",
+    path: "blog-articles/programming-languages/java/java-collections-framework.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to the Java Collections Framework: interfaces, implementations, algorithms, iterators, ordering, equality, concurrent maps, testing, and performance.",
     title: "Java Collections Framework: Interfaces, Implementations, Algorithms, and Ordering"
   },
   {
-    path: "blog-articles/java/java-exception-handling.html",
+    path: "blog-articles/programming-languages/java/java-exception-handling.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to exception handling in Java: checked and unchecked exceptions, Error, try/catch/finally, throw, throws, try-with-resources, custom exceptions, interruption, asynchronous failures, testing, and performance.",
     title: "Exception Handling in Java: Checked and Unchecked Exceptions, Resources, and Custom Design"
   },
   {
-    path: "blog-articles/java/java-functional-programming.html",
+    path: "blog-articles/programming-languages/java/java-functional-programming.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to functional programming in Java: lambda expressions, functional interfaces, predicates, functions, consumers, suppliers, operators, method references, Optional, composition, testing, and performance.",
     title: "Functional Programming in Java: Lambdas, Functional Interfaces, Method References, and Optional"
   },
   {
-    path: "blog-articles/java/java-language-basics.html",
+    path: "blog-articles/programming-languages/java/java-language-basics.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to Java language basics: syntax, source files, classes, methods, statements, expressions, blocks, comments, variables, primitive types, operators, and control flow.",
     title: "Java Language Basics: Syntax, Types, Operators, and Control Flow"
   },
   {
-    path: "blog-articles/java/java-oop.html",
+    path: "blog-articles/programming-languages/java/java-oop.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to object-oriented programming in Java: classes, objects, fields, methods, constructors, references, static members, encapsulation, inheritance, polymorphism, abstraction, interfaces, Object contracts, cloning, and finalization.",
     title: "Object-Oriented Programming in Java: Classes, Inheritance, Polymorphism, and Object Contracts"
   },
   {
-    path: "blog-articles/java/java-stream-api.html",
+    path: "blog-articles/programming-languages/java/java-stream-api.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to the Java Stream API: creation, lazy pipelines, intermediate and terminal operations, collectors, parallel streams, primitive streams, spliterators, gatherers, testing, and performance.",
     title: "Java Stream API: Creation, Operations, Collectors, Parallelism, and Primitive Streams"
   },
   {
-    path: "blog-articles/java/java-strings.html",
+    path: "blog-articles/programming-languages/java/java-strings.html",
     publishedAt: "2026-07-31",
     summary: "Technical guide to strings in Java: String, StringBuilder, StringBuffer, the string pool, Unicode, normalization, locale-sensitive text, regular expressions, security, testing, and performance.",
     title: "Strings in Java: String, Builders, the String Pool, Unicode, and Regular Expressions"
   },
   {
-    path: "blog-articles/java/jakarta-ee.html",
+    path: "blog-articles/programming-languages/java/jakarta-ee.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to Jakarta EE 11: Servlets, JSP/Jakarta Pages, JPA/Jakarta Persistence, CDI, Validation, REST/JAX-RS, and Messaging/JMS.",
     title: "Jakarta EE: Servlets, JSP, JPA, CDI, Validation, REST, and Messaging"
   },
   {
-    path: "blog-articles/java/java-application-domains.html",
+    path: "blog-articles/programming-languages/java/java-application-domains.html",
     publishedAt: "2026-07-30",
     summary: "A technical guide to Java application domains: enterprise backends, web services, cloud-native systems, finance, Android, big data, messaging, desktop, scientific computing, and embedded systems.",
     title: "Java Application Domains: Architecture, Fit, and Engineering Examples"
   },
   {
-    path: "blog-articles/java/java-best-practices.html",
+    path: "blog-articles/programming-languages/java/java-best-practices.html",
     publishedAt: "2026-07-30",
     summary: "A technical guide to modern Java best practices: SOLID, clean code, Effective Java, defensive and secure coding, API design, documentation, versioning, reviews, and CI/CD.",
     title: "Modern Java Best Practices: From Design Principles to Secure Delivery"
   },
   {
-    path: "blog-articles/java/java-build-dependency-management.html",
+    path: "blog-articles/programming-languages/java/java-build-dependency-management.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to Java build and dependency management using Maven and Gradle: project structure, POMs, build scripts, plugins, tasks, multi-module builds, dependency platforms, locking, verification, caching, and reproducibility.",
     title: "Build & Dependency Management in Java: Maven and Gradle"
   },
   {
-    path: "blog-articles/java/java-build-quality.html",
+    path: "blog-articles/programming-languages/java/java-build-quality.html",
     publishedAt: "2026-07-30",
     summary: "A technical guide to Java build quality using compiler diagnostics, SpotBugs, Checkstyle, PMD, SonarQube, and automated code formatting.",
     title: "Java Build Quality: Static Analysis, Quality Gates, and Automated Formatting"
   },
   {
-    path: "blog-articles/java/java-concurrency.html",
+    path: "blog-articles/programming-languages/java/java-concurrency.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to concurrency in Java: threads, the Java Memory Model, synchronization, locks, volatile, atomics, executors, futures, concurrent collections, fork/join, virtual threads, structured concurrency, testing, and diagnostics.",
     title: "Concurrency in Java: Threads, Synchronization, Executors, Futures, and Virtual Threads"
   },
   {
-    path: "blog-articles/java/java-database-programming.html",
+    path: "blog-articles/programming-languages/java/java-database-programming.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to database programming in Java: JDBC, drivers, connections, statements, PreparedStatement, transactions, batching, ORM, Jakarta Persistence, entity mapping, persistence contexts, and caching.",
     title: "Database Programming in Java: JDBC, Transactions, ORM, Persistence, and Caching"
   },
   {
-    path: "blog-articles/java/java-date-time-api.html",
+    path: "blog-articles/programming-languages/java/java-date-time-api.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to the Java Date and Time API: LocalDate, LocalTime, LocalDateTime, ZonedDateTime, Instant, Duration, Period, formatting, parsing, time-zone rules, persistence, testing, and scheduling.",
     title: "Date and Time API in Java: Local Types, Zoned Time, Duration, Period, Formatting, and Parsing"
   },
   {
-    path: "blog-articles/java/java-design-patterns.html",
+    path: "blog-articles/programming-languages/java/java-design-patterns.html",
     publishedAt: "2026-07-30",
     summary: "Technical article on creational, structural, and behavioral design patterns in modern Java, with source code and Vancouver-style references.",
     title: "Design Patterns in Java: Creational, Structural, and Behavioral Patterns"
   },
   {
-    path: "blog-articles/java/java-distributed-systems.html",
+    path: "blog-articles/programming-languages/java/java-distributed-systems.html",
     publishedAt: "2026-07-30",
     summary: "A technical guide to distributed systems in Java: REST, GraphQL, gRPC, microservices, service discovery, API gateways, circuit breakers, messaging, and event-driven architecture.",
     title: "Distributed Systems in Java: APIs, Resilience, Messaging, and Event-Driven Architecture"
   },
   {
-    path: "blog-articles/java/java-input-output.html",
+    path: "blog-articles/programming-languages/java/java-input-output.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to input and output in Java: classic streams, readers and writers, NIO.2 paths and files, channels, byte buffers, memory mapping, serialization, security, testing, and performance.",
     title: "Input and Output in Java: Classic I/O, NIO.2, Channels, Buffers, and Serialization"
   },
   {
-    path: "blog-articles/java/java-jvm-internals.html",
+    path: "blog-articles/programming-languages/java/java-jvm-internals.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to JVM internals: architecture, class loading, bytecode, runtime data areas, HotSpot memory, heap, stacks, Metaspace, native memory, garbage collectors, JIT compilation, diagnostics, and tuning.",
     title: "JVM Internals: Architecture, Memory, Garbage Collection, Bytecode, and JIT Compilation"
   },
   {
-    path: "blog-articles/java/java-logging.html",
+    path: "blog-articles/programming-languages/java/java-logging.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to logging in Java: java.util.logging, SLF4J, Logback, Log4j 2, structured JSON logging, context propagation, performance, security, testing, and migration.",
     title: "Logging in Java: JUL, SLF4J, Logback, Log4j 2, and Structured Logging"
   },
   {
-    path: "blog-articles/java/java-monitoring-observability.html",
+    path: "blog-articles/programming-languages/java/java-monitoring-observability.html",
     publishedAt: "2026-07-30",
     summary: "A technical guide to Java monitoring and observability using metrics, Micrometer, Prometheus, Grafana, OpenTelemetry distributed tracing, structured logging, JMX, JFR, and alerting.",
     title: "Java Monitoring & Observability: Metrics, Traces, Logs, Dashboards, and Alerting"
   },
   {
-    path: "blog-articles/java/java-networking.html",
+    path: "blog-articles/programming-languages/java/java-networking.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to networking in Java: addresses, TCP and UDP sockets, NIO channels, virtual threads, HTTP Client API, SSL/TLS, certificates, WebSockets, security, testing, and performance.",
     title: "Networking in Java: Sockets, TCP, UDP, HTTP, TLS, and WebSockets"
   },
   {
-    path: "blog-articles/java/java-performance.html",
+    path: "blog-articles/programming-languages/java/java-performance.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to Java performance: profiling, JFR, JMH benchmarking, memory and CPU optimization, allocation, escape analysis, garbage collection, and JVM tuning.",
     title: "Performance in Java: Profiling, JMH, Memory, CPU, Allocation, Escape Analysis, and JVM Tuning"
   },
   {
-    path: "blog-articles/java/java-security.html",
+    path: "blog-articles/programming-languages/java/java-security.html",
     publishedAt: "2026-07-30",
     summary: "Technical guide to security in Java: JCA cryptography, KeyStore, SecureRandom, MessageDigest, digital signatures, X.509 certificates, PKIX, TLS, JAAS authentication, and application authorization.",
     title: "Security in Java: Cryptography, KeyStore, Certificates, JAAS, Authentication, and Authorization"
   },
   {
-    path: "blog-articles/java/modern-java-features-java-8-to-25.html",
+    path: "blog-articles/programming-languages/java/modern-java-features-java-8-to-25.html",
     publishedAt: "2026-07-30",
     summary: "A technical history and practical guide to modern Java features from Java 8 through Java 25, with source code and Vancouver-style references.",
     title: "Modern Java Features, Java 8-25: History, Semantics, and Practice"
   },
   {
-    path: "blog-articles/java/native-java-graalvm-native-image-aot.html",
+    path: "blog-articles/programming-languages/java/native-java-graalvm-native-image-aot.html",
     publishedAt: "2026-07-30",
     summary: "A technical guide to Native Java, GraalVM, Native Image, and ahead-of-time compilation, including history, architecture, Maven and Gradle builds, reachability metadata, performance, diagnostics, and deployment.",
     title: "Native Java: GraalVM, Native Image, and Ahead-of-Time Compilation"
@@ -1726,7 +1987,7 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Managing Docker Containers — An Operator's Field Guide"
   },
   {
-    path: "blog-articles/python/python.html",
+    path: "blog-articles/programming-languages/python/python.html",
     publishedAt: "2026-07-04",
     summary: "A technical portrait of Python covering its origins, language design, technical strengths, ecosystem reach, and why it remains central across modern software stacks.",
     title: "Python: A Technical Portrait"
@@ -1738,7 +1999,7 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Digital Control Systems — Sampled-Data Theory, Controller Design & Real-Time Implementation"
   },
   {
-    path: "blog-articles/javascript/javascript.html",
+    path: "blog-articles/programming-languages/javascript/javascript.html",
     publishedAt: "2026-07-02",
     summary: "A technical field guide to JavaScript covering its history, engines, runtimes, event loop, ecosystem, and why the web's accidental language became unavoidable.",
     title: "JavaScript — The Accidental Language of the Web"
@@ -2584,7 +2845,7 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "C# — The Language of a Generation"
   },
   {
-    path: "blog-articles/python/concurrency_python.html",
+    path: "blog-articles/programming-languages/python/concurrency_python.html",
     publishedAt: "2026-05-29",
     summary: "A technical guide to Python concurrency, including the GIL, multithreading, multiprocessing, asyncio, decision tradeoffs, ecosystem tools, and the impact of PEP 703 free-threading.",
     title: "Concurrency in Python: A Comprehensive Technical Guide"
@@ -2836,7 +3097,7 @@ const blogPosts: BlogDirectoryPost[] = [
     title: "Math & Geometry in Competitive Programming"
   },
   {
-    path: "blog-articles/java/java-build-tools.html",
+    path: "blog-articles/programming-languages/java/java-build-tools.html",
     publishedAt: "2026-05-14",
     summary: "A technical deep dive into Java build tools, covering Maven, Gradle, Ant, dependency management, build lifecycles, and the trade-offs between ecosystem approaches.",
     title: "Java Build Tools: A Technical Deep Dive"
@@ -3324,6 +3585,49 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/game-theory/game-applications.html": ["Game Theory", "Math", "Business", "Artificial Intelligence"],
+  "blog-articles/game-theory/game-classification.html": ["Game Theory", "Math"],
+  "blog-articles/game-theory/game-limitations.html": ["Game Theory", "Math", "Philosophy", "Ethics"],
+  "blog-articles/game-theory/game-math-tools.html": ["Game Theory", "Math"],
+  "blog-articles/game-theory/game-representations.html": ["Game Theory", "Math"],
+  "blog-articles/game-theory/game-theory-cs-ai.html": ["Game Theory", "Artificial Intelligence", "Programming & Software", "Math"],
+  "blog-articles/hardware/computer-architecture-and-organization.html": ["Hardware", "Engineering", "High-Performance Computing"],
+  "blog-articles/hardware/emerging-hardware-technologies.html": ["Hardware", "Engineering", "Futurism"],
+  "blog-articles/hardware/enterprise-hardware-infrastructure.html": ["Hardware", "Engineering", "Dev(Sec)Ops"],
+  "blog-articles/hardware/hardware-installation-maintenance-troubleshooting.html": ["Hardware", "Engineering"],
+  "blog-articles/writing/research-sources-evidence.html": ["Writing", "Technical Writing", "Learning"],
+  "blog-articles/writing/tools-technologies-writers.html": ["Writing", "Technical Writing", "Society & Technology"],
+  "blog-articles/ew/electronic-attack-techniques.html": ["Electronic Warfare", "Electronics", "Physics", "Security"],
+  "blog-articles/ew/electronic-protection-and-resilience.html": ["Electronic Warfare", "Electronics", "Network Security", "Security"],
+  "blog-articles/ew/electronic-support-sigint.html": ["Electronic Warfare", "Electronics", "Networks", "Security"],
+  "blog-articles/ew/emerging-ew-technologies.html": ["Electronic Warfare", "Electronics", "Artificial Intelligence", "Futurism"],
+  "blog-articles/ew/ew-modeling-simulation-testing.html": ["Electronic Warfare", "Engineering", "Electronics"],
+  "blog-articles/ew/ew-platforms-and-operational-environments.html": ["Electronic Warfare", "Engineering", "Cyber-Physical Systems"],
+  "blog-articles/ew/ew-systems-engineering.html": ["Electronic Warfare", "Engineering", "Electronics"],
+  "blog-articles/ew/radar-sensing-ew-interaction.html": ["Electronic Warfare", "Electronics", "Physics"],
+  "blog-articles/ai/physical_ai/continual-and-lifelong-learning.html": ["Physical AI", "Machine Learning", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/multi-agent-physical-intelligence.html": ["Physical AI", "AI Agents", "Game Theory", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/neuro-symbolic-and-hybrid-systems.html": ["Physical AI", "Artificial Intelligence", "Robotics"],
+  "blog-articles/ai/physical_ai/self-improving-physical-systems.html": ["Physical AI", "Machine Learning", "Robotics"],
+  "blog-articles/ai/physical_ai/humanoid-intelligence.html": ["Physical AI", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/classical-and-modern-control.html": ["Physical AI", "Control Theory & Engineering", "Robotics", "Engineering"],
+  "blog-articles/ai/physical_ai/foundation-models-for-physical-ai.html": ["Physical AI", "Generative AI", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/generative-and-predictive-models.html": ["Physical AI", "Generative AI", "Machine Learning", "Robotics"],
+  "blog-articles/ai/physical_ai/imitation-learning-and-demonstration.html": ["Physical AI", "Machine Learning", "Robotics"],
+  "blog-articles/ai/physical_ai/motion-planning.html": ["Physical AI", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/reactive-behavior.html": ["Physical AI", "Control Theory & Engineering", "Robotics"],
+  "blog-articles/ai/physical_ai/reinforcement-learning.html": ["Physical AI", "Machine Learning", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/representations-of-the-physical-world.html": ["Physical AI", "Robotics", "Computer Vision"],
+  "blog-articles/ai/physical_ai/robotics-hardware-and-mechatronics.html": ["Physical AI", "Robotics", "Hardware", "Engineering"],
+  "blog-articles/ai/physical_ai/task-planning.html": ["Physical AI", "Artificial Intelligence", "Robotics"],
+  "blog-articles/ai/physical_ai/traditional-ai-ml-physicalai.html": ["Physical AI", "Machine Learning", "Artificial Intelligence", "Robotics"],
+  "blog-articles/ai/physical_ai/world-models.html": ["Physical AI", "Machine Learning", "Robotics"],
+  "blog-articles/programming-languages/cpp/cpp-core-data-structures.html": ["Programming Languages", "Programming & Software", "Hardware"],
+  "blog-articles/programming-languages/cpp/cpp-memory-management.html": ["Programming Languages", "Programming & Software", "Operating Systems", "Hardware"],
+  "blog-articles/programming-languages/cpp/cpp-oop.html": ["Programming Languages", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/ai/physical_ai/computer-vision-and-spatial-perception.html": ["Physical AI", "Computer Vision", "Robotics", "Artificial Intelligence"],
+  "blog-articles/ai/physical_ai/physical-modeling.html": ["Physical AI", "Robotics", "Physics", "Engineering"],
+  "blog-articles/ai/physical_ai/sensor-fusion-and-state-estimation.html": ["Physical AI", "Robotics", "Computer Vision"],
   "blog-articles/firearms/operating-mechanisms-firearms.html": ["Firearms Engineering", "Engineering", "Physics", "Hardware"],
   "blog-articles/ai/physical_ai/sensors-sensory-modalities.html": ["Physical AI", "Robotics", "Computer Vision", "Cyber-Physical Systems", "Engineering"],
   "blog-articles/kafka/kafka-in-microservices.html": ["Apache Kafka", "Software Design & Architecture", "Programming & Software", "Data Engineering", "Dev(Sec)Ops"],
@@ -3369,13 +3673,13 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/swe/design_patterns/resilience_patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software", "Engineering"],
   "blog-articles/swe/design_patterns/structural-patterns.html": ["Software Design Patterns", "Software Design & Architecture", "Programming & Software"],
   "blog-articles/spring/spring-boot.html": ["Java", "Spring", "Programming & Software", "Cloud", "Dev(Sec)Ops"],
-  "blog-articles/java/java-ai-ml.html": ["Java", "Machine Learning", "Artificial Intelligence", "Programming & Software"],
-  "blog-articles/java/jvm-languages.html": ["Java", "Programming Languages", "Programming & Software"],
+  "blog-articles/programming-languages/java/java-ai-ml.html": ["Java", "Machine Learning", "Artificial Intelligence", "Programming & Software"],
+  "blog-articles/programming-languages/java/jvm-languages.html": ["Java", "Programming Languages", "Programming & Software"],
   "blog-articles/spring/spring-core-container.html": ["Java", "Spring", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/spring/spring-ecosystem.html": ["Java", "Spring", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/spring/spring-expression-language.html": ["Java", "Spring", "Programming & Software"],
-  "blog-articles/java/cloud-native-java.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Docker", "Kubernetes"],
-  "blog-articles/java/java-testing.html": ["Java", "Programming & Software", "SDLC"],
+  "blog-articles/programming-languages/java/cloud-native-java.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Docker", "Kubernetes"],
+  "blog-articles/programming-languages/java/java-testing.html": ["Java", "Programming & Software", "SDLC"],
   "blog-articles/robotics/service-robotics.html": ["Physical AI", "Robotics", "Engineering", "Cyber-Physical Systems"],
   "blog-articles/math/linear_algebra/vectors.html": ["Math"],
   "blog-articles/robotics/industrial-robotics.html": ["Robotics", "Engineering", "ICS/OT", "Cyber-Physical Systems", "Control Theory & Engineering"],
@@ -3596,7 +3900,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/ai/mlops.html": ["Machine Learning", "Engineering", "Programming & Software"],
   "blog-articles/security/messaging-security.html": ["Security", "Privacy", "Programming & Software"],
   "blog-articles/programming-languages/csharp.html": ["Programming & Software", "Programming Languages"],
-  "blog-articles/python/concurrency_python.html": ["Python", "Programming & Software"],
+  "blog-articles/programming-languages/python/concurrency_python.html": ["Python", "Programming & Software"],
   "blog-articles/dotnet/aspnet-orm.html": ["ASP.NET", "Programming & Software"],
   "blog-articles/dotnet/aspnet-core-testing.html": ["ASP.NET", "Programming & Software", "SDLC"],
   "blog-articles/privacy/anonymous_comm.html": ["Privacy", "Security", "Networks"],
@@ -3643,7 +3947,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/cyber-physical-systems/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
   "blog-articles/ai/planning-reduction-sat-modelchecking.html": ["Machine Learning", "Programming & Software", "Math"],
   "blog-articles/competitive-programming/math-geometry-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/java/java-build-tools.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/java/java-build-tools.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/veganism/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
   "blog-articles/cyber-physical-systems/embedded-compute-layer.html": ["ICS/OT", "Cyber-Physical Systems", "Engineering", "IoT"],
   "blog-articles/cyber-physical-systems/cps-physical-layer.html": ["Cyber-Physical Systems", "Engineering"],
@@ -3724,34 +4028,34 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/security/software-security/product-security.html": ["Security", "Software Security", "SDLC"],
   "blog-articles/security/software-security/sse.html": ["Security", "Software Security", "SDLC"],
   "blog-articles/security/software-security/appsec.html": ["Security", "Software Security", "Dev(Sec)Ops"],
-  "blog-articles/java/java.html": ["Java", "Programming & Software", "Programming Languages"],
-  "blog-articles/java/java-advanced-language-features.html": ["Java", "Programming & Software", "Programming Languages"],
-  "blog-articles/java/java-collections-framework.html": ["Java", "Programming & Software"],
-  "blog-articles/java/java-exception-handling.html": ["Java", "Programming & Software"],
-  "blog-articles/java/java-functional-programming.html": ["Java", "Programming & Software", "Programming Languages"],
-  "blog-articles/java/java-language-basics.html": ["Java", "Programming & Software", "Programming Languages"],
-  "blog-articles/java/java-oop.html": ["Java", "Programming & Software", "Programming Languages"],
-  "blog-articles/java/java-stream-api.html": ["Java", "Programming & Software"],
-  "blog-articles/java/java-strings.html": ["Java", "Programming & Software"],
-  "blog-articles/java/jakarta-ee.html": ["Java", "Programming & Software", "Software Design & Architecture"],
-  "blog-articles/java/java-application-domains.html": ["Java", "Programming & Software", "Engineering", "Cloud"],
-  "blog-articles/java/java-best-practices.html": ["Java", "Programming & Software", "Engineering", "SDLC", "Software Security"],
-  "blog-articles/java/java-build-dependency-management.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/java/java-build-quality.html": ["Java", "Programming & Software", "Dev(Sec)Ops", "SDLC"],
-  "blog-articles/java/java-concurrency.html": ["Java", "Programming & Software"],
-  "blog-articles/java/java-database-programming.html": ["Java", "Programming & Software", "Data Engineering"],
-  "blog-articles/java/java-date-time-api.html": ["Java", "Programming & Software"],
-  "blog-articles/java/java-design-patterns.html": ["Java", "Programming & Software", "Software Design & Architecture"],
-  "blog-articles/java/java-distributed-systems.html": ["Java", "Programming & Software", "Networks", "Software Design & Architecture"],
-  "blog-articles/java/java-input-output.html": ["Java", "Programming & Software", "Operating Systems"],
-  "blog-articles/java/java-jvm-internals.html": ["Java", "Programming & Software", "Operating Systems"],
-  "blog-articles/java/java-logging.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/java/java-monitoring-observability.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/java/java-networking.html": ["Java", "Programming & Software", "Networks"],
-  "blog-articles/java/java-performance.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/java/java-security.html": ["Java", "Programming & Software", "Security", "Software Security"],
-  "blog-articles/java/modern-java-features-java-8-to-25.html": ["Java", "Programming & Software", "Programming Languages"],
-  "blog-articles/java/native-java-graalvm-native-image-aot.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/java/java.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/java/java-advanced-language-features.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/java/java-collections-framework.html": ["Java", "Programming & Software"],
+  "blog-articles/programming-languages/java/java-exception-handling.html": ["Java", "Programming & Software"],
+  "blog-articles/programming-languages/java/java-functional-programming.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/java/java-language-basics.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/java/java-oop.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/java/java-stream-api.html": ["Java", "Programming & Software"],
+  "blog-articles/programming-languages/java/java-strings.html": ["Java", "Programming & Software"],
+  "blog-articles/programming-languages/java/jakarta-ee.html": ["Java", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/programming-languages/java/java-application-domains.html": ["Java", "Programming & Software", "Engineering", "Cloud"],
+  "blog-articles/programming-languages/java/java-best-practices.html": ["Java", "Programming & Software", "Engineering", "SDLC", "Software Security"],
+  "blog-articles/programming-languages/java/java-build-dependency-management.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/java/java-build-quality.html": ["Java", "Programming & Software", "Dev(Sec)Ops", "SDLC"],
+  "blog-articles/programming-languages/java/java-concurrency.html": ["Java", "Programming & Software"],
+  "blog-articles/programming-languages/java/java-database-programming.html": ["Java", "Programming & Software", "Data Engineering"],
+  "blog-articles/programming-languages/java/java-date-time-api.html": ["Java", "Programming & Software"],
+  "blog-articles/programming-languages/java/java-design-patterns.html": ["Java", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/programming-languages/java/java-distributed-systems.html": ["Java", "Programming & Software", "Networks", "Software Design & Architecture"],
+  "blog-articles/programming-languages/java/java-input-output.html": ["Java", "Programming & Software", "Operating Systems"],
+  "blog-articles/programming-languages/java/java-jvm-internals.html": ["Java", "Programming & Software", "Operating Systems"],
+  "blog-articles/programming-languages/java/java-logging.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/java/java-monitoring-observability.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/java/java-networking.html": ["Java", "Programming & Software", "Networks"],
+  "blog-articles/programming-languages/java/java-performance.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
+  "blog-articles/programming-languages/java/java-security.html": ["Java", "Programming & Software", "Security", "Software Security"],
+  "blog-articles/programming-languages/java/modern-java-features-java-8-to-25.html": ["Java", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/java/native-java-graalvm-native-image-aot.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/veganism/veganism-and-mental-health.html": ["Veganism", "Society & Civics"],
   "blog-articles/data-engineering/data-architecture-patterns.html": ["Data Engineering", "Programming & Software", "Software Design & Architecture", "Engineering"],
   "blog-articles/data-engineering/data-engineering-lifecycle.html": ["Data Engineering", "Programming & Software", "Engineering"],
@@ -3766,7 +4070,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/robotics/ai-in-robotics.html": ["Physical AI", "Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
   "blog-articles/security/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
   "blog-articles/math/bayesian-statistics.html": ["Math", "Machine Learning"],
-  "blog-articles/javascript/javascript.html": ["JavaScript", "Programming & Software", "Programming Languages", "Web & UI"],
+  "blog-articles/programming-languages/javascript/javascript.html": ["JavaScript", "Programming & Software", "Programming Languages", "Web & UI"],
   "blog-articles/security/pentesting/breach_attack_simulation.html": ["Security", "Pentesting"],
   "blog-articles/networks/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
   "blog-articles/robotics/cognitive-layer-robotics.html": ["Physical AI", "Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
@@ -3817,7 +4121,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/cloud/multicloud/cloud-service-models.html": ["Cloud", "AWS", "Azure", "GCP", "Programming & Software", "Networks", "Dev(Sec)Ops"],
   "blog-articles/physics/heliocentrism-copernican-revolution.html": ["Physics", "Philosophy"],
   "blog-articles/swe/phase-0-planning-feasibility.html": ["Programming & Software", "Engineering", "SDLC"],
-  "blog-articles/python/python.html": ["Python", "Programming & Software", "Programming Languages"],
+  "blog-articles/programming-languages/python/python.html": ["Python", "Programming & Software", "Programming Languages"],
   "blog-articles/swe/software-by-market-segment.html": ["Business", "Programming & Software", "Engineering"],
   "blog-articles/physics/cosmology/the-big-bang.html": ["Physics", "Philosophy", "Cosmology"],
   "blog-articles/devops/docker/the-path-to-production.html": ["Cloud", "Programming & Software", "Dev(Sec)Ops", "Networks", "Docker", "SDLC"],
