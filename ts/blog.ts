@@ -3,6 +3,7 @@ const blogCategoryLabels = [
   "AI Agents",
   "AI Security",
   "AI Strategy",
+  "Algorithms",
   "Artificial Intelligence",
   "Apache Kafka",
   "ASP.NET",
@@ -15,6 +16,8 @@ const blogCategoryLabels = [
   "Azure",
   "Biology",
   "Business",
+  "C++",
+  "Calculus",
   "Chemistry",
   "Cloud",
   "Computer Graphics",
@@ -53,6 +56,7 @@ const blogCategoryLabels = [
   "Kubernetes",
   "Law",
   "Learning",
+  "Linear Algebra",
   "Logic",
   "Machine Learning",
   "Math",
@@ -81,6 +85,7 @@ const blogCategoryLabels = [
   "Software Design Patterns",
   "Software Security",
   "Spring",
+  "Statistics",
   "Stylometry",
   "Technical Writing",
   "Veganism",
@@ -89,6 +94,24 @@ const blogCategoryLabels = [
 ] as const;
 
 type BlogCategory = typeof blogCategoryLabels[number];
+
+type BlogCategoryMatchMode = "include" | "exact";
+
+type BlogCategoryGroup = {
+  children: readonly BlogCategory[];
+  parent: BlogCategory;
+};
+
+const blogCategoryGroups: readonly BlogCategoryGroup[] = [
+  {
+    parent: "Math",
+    children: ["Calculus", "Linear Algebra", "Statistics"]
+  },
+  {
+    parent: "Programming Languages",
+    children: ["C++"]
+  }
+];
 
 type BlogDirectoryPost = {
   path: string;
@@ -138,12 +161,109 @@ const blogCategorySpecificityRanks: Partial<Record<BlogCategory, number>> = {
 };
 
 type BlogDirectoryViewState = {
-  categoryValue: string;
+  matchMode: BlogCategoryMatchMode;
   searchTerm: string;
+  selectedCategories: BlogCategory[];
   visibleCount: number;
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/statistics/descriptive-statistics.html",
+    publishedAt: "2026-10-27",
+    summary: "How to describe distributions with appropriate measures of center, spread, quantiles, plots, and robust summaries without hiding their shape.",
+    title: "Reading a Distribution: Descriptive Statistics Without Losing the Shape"
+  },
+  {
+    path: "blog-articles/statistics/probability-distributions.html",
+    publishedAt: "2026-10-27",
+    summary: "Random variables, expectation, variance, and the Bernoulli, binomial, Poisson, normal, exponential, and beta distribution families.",
+    title: "Probability Distributions: Models, Parameters, and Choosing a Family"
+  },
+  {
+    path: "blog-articles/statistics/sampling-and-central-limit-theorem.html",
+    publishedAt: "2026-10-27",
+    summary: "How samples connect to populations through sampling distributions, standard errors, the law of large numbers, and the central limit theorem.",
+    title: "From Samples to Populations: Sampling Distributions and the Central Limit Theorem"
+  },
+  {
+    path: "blog-articles/statistics/estimation-and-confidence-intervals.html",
+    publishedAt: "2026-10-27",
+    summary: "Point estimators, bias, standard error, confidence intervals, bootstrap methods, sample-size planning, and correct interpretation.",
+    title: "Estimation and Confidence Intervals: What the Interval Actually Says"
+  },
+  {
+    path: "blog-articles/statistics/hypothesis-testing-and-power.html",
+    publishedAt: "2026-10-27",
+    summary: "Null hypotheses, p-values, Type I and Type II errors, effect sizes, statistical power, multiple testing, and responsible reporting.",
+    title: "Hypothesis Testing, Effect Size, and Power"
+  },
+  {
+    path: "blog-articles/statistics/correlation-and-linear-regression.html",
+    publishedAt: "2026-10-27",
+    summary: "Correlation, simple and multiple linear regression, residual diagnostics, prediction, extrapolation, confounding, and causal limits.",
+    title: "Correlation and Linear Regression: Association, Prediction, and Residuals"
+  },
+  {
+    path: "blog-articles/math/statistics/conditional-probability-and-independence.html",
+    publishedAt: "2026-10-27",
+    summary: "Conditional probability, total probability, Bayes' theorem, independence, odds, likelihood ratios, worked examples, and exercises.",
+    title: "Conditional Probability and Independence"
+  },
+  {
+    path: "blog-articles/math/statistics/counting-and-combinatorics.html",
+    publishedAt: "2026-10-27",
+    summary: "Counting principles, permutations, combinations, binomial coefficients, inclusion-exclusion, derangements, and probability applications.",
+    title: "Counting and Combinatorics"
+  },
+  {
+    path: "blog-articles/math/statistics/data-and-measurement.html",
+    publishedAt: "2026-10-27",
+    summary: "Data types, measurement scales, operational definitions, validity, reliability, measurement error, and responsible data collection.",
+    title: "Data and Measurement"
+  },
+  {
+    path: "blog-articles/math/statistics/data-organization-and-summarization.html",
+    publishedAt: "2026-10-27",
+    summary: "Tidy data, frequency tables, cross-tabulation, grouping, aggregation, missingness, and accurate statistical summaries.",
+    title: "Data Organization and Summarization"
+  },
+  {
+    path: "blog-articles/math/statistics/distributional-characteristics.html",
+    publishedAt: "2026-10-27",
+    summary: "Distribution shape, location, scale, skewness, kurtosis, tails, modality, quantiles, and transformations.",
+    title: "Distributional Characteristics"
+  },
+  {
+    path: "blog-articles/math/statistics/exploratory-data-analysis.html",
+    publishedAt: "2026-10-27",
+    summary: "An evidence-first workflow for exploring data with visualization, robust summaries, transformations, relationships, and diagnostic checks.",
+    title: "Exploratory Data Analysis"
+  },
+  {
+    path: "blog-articles/math/statistics/measures-of-central-tendency.html",
+    publishedAt: "2026-10-27",
+    summary: "Means, medians, modes, trimmed and weighted means, robustness, and choosing a defensible measure of center.",
+    title: "Measures of Central Tendency"
+  },
+  {
+    path: "blog-articles/math/statistics/measures-of-dispersion.html",
+    publishedAt: "2026-10-27",
+    summary: "Range, variance, standard deviation, IQR, median absolute deviation, coefficient of variation, and robust spread.",
+    title: "Measures of Dispersion"
+  },
+  {
+    path: "blog-articles/math/statistics/statistical-data-visualization.html",
+    publishedAt: "2026-10-27",
+    summary: "Principled statistical graphics for distributions, comparisons, relationships, uncertainty, high-dimensional data, and honest communication.",
+    title: "Statistical Data Visualization"
+  },
+  {
+    path: "blog-articles/math/statistics/stats-mathcl-fndtns.html",
+    publishedAt: "2026-10-27",
+    summary: "The mathematical foundations of statistics, including sets, sums, functions, probability, calculus, linear algebra, and optimization.",
+    title: "Mathematical Foundations for Statistics"
+  },
   {
     path: "blog-articles/game-theory/game-applications.html",
     publishedAt: "2026-10-26",
@@ -3585,6 +3705,22 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/statistics/descriptive-statistics.html": ["Statistics", "Math"],
+  "blog-articles/statistics/probability-distributions.html": ["Statistics", "Math"],
+  "blog-articles/statistics/sampling-and-central-limit-theorem.html": ["Statistics", "Math"],
+  "blog-articles/statistics/estimation-and-confidence-intervals.html": ["Statistics", "Math"],
+  "blog-articles/statistics/hypothesis-testing-and-power.html": ["Statistics", "Math"],
+  "blog-articles/statistics/correlation-and-linear-regression.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/conditional-probability-and-independence.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/counting-and-combinatorics.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/data-and-measurement.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/data-organization-and-summarization.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/distributional-characteristics.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/exploratory-data-analysis.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/measures-of-central-tendency.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/measures-of-dispersion.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/statistical-data-visualization.html": ["Statistics", "Math"],
+  "blog-articles/math/statistics/stats-mathcl-fndtns.html": ["Statistics", "Math"],
   "blog-articles/game-theory/game-applications.html": ["Game Theory", "Math", "Business", "Artificial Intelligence"],
   "blog-articles/game-theory/game-classification.html": ["Game Theory", "Math"],
   "blog-articles/game-theory/game-limitations.html": ["Game Theory", "Math", "Philosophy", "Ethics"],
@@ -3622,9 +3758,9 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/ai/physical_ai/task-planning.html": ["Physical AI", "Artificial Intelligence", "Robotics"],
   "blog-articles/ai/physical_ai/traditional-ai-ml-physicalai.html": ["Physical AI", "Machine Learning", "Artificial Intelligence", "Robotics"],
   "blog-articles/ai/physical_ai/world-models.html": ["Physical AI", "Machine Learning", "Robotics"],
-  "blog-articles/programming-languages/cpp/cpp-core-data-structures.html": ["Programming Languages", "Programming & Software", "Hardware"],
-  "blog-articles/programming-languages/cpp/cpp-memory-management.html": ["Programming Languages", "Programming & Software", "Operating Systems", "Hardware"],
-  "blog-articles/programming-languages/cpp/cpp-oop.html": ["Programming Languages", "Programming & Software", "Software Design & Architecture"],
+  "blog-articles/programming-languages/cpp/cpp-core-data-structures.html": ["C++", "Programming Languages", "Programming & Software", "Hardware"],
+  "blog-articles/programming-languages/cpp/cpp-memory-management.html": ["C++", "Programming Languages", "Programming & Software", "Operating Systems", "Hardware"],
+  "blog-articles/programming-languages/cpp/cpp-oop.html": ["C++", "Programming Languages", "Programming & Software", "Software Design & Architecture"],
   "blog-articles/ai/physical_ai/computer-vision-and-spatial-perception.html": ["Physical AI", "Computer Vision", "Robotics", "Artificial Intelligence"],
   "blog-articles/ai/physical_ai/physical-modeling.html": ["Physical AI", "Robotics", "Physics", "Engineering"],
   "blog-articles/ai/physical_ai/sensor-fusion-and-state-estimation.html": ["Physical AI", "Robotics", "Computer Vision"],
@@ -3681,7 +3817,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/programming-languages/java/cloud-native-java.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Docker", "Kubernetes"],
   "blog-articles/programming-languages/java/java-testing.html": ["Java", "Programming & Software", "SDLC"],
   "blog-articles/robotics/service-robotics.html": ["Physical AI", "Robotics", "Engineering", "Cyber-Physical Systems"],
-  "blog-articles/math/linear_algebra/vectors.html": ["Math"],
+  "blog-articles/math/linear_algebra/vectors.html": ["Linear Algebra", "Math"],
   "blog-articles/robotics/industrial-robotics.html": ["Robotics", "Engineering", "ICS/OT", "Cyber-Physical Systems", "Control Theory & Engineering"],
   "blog-articles/firearms/external-and-terminal-ballistics.html": ["Firearms Engineering", "Engineering", "Physics"],
   "blog-articles/robotics/robot-mechanisms.html": ["Robotics", "Engineering", "Kinematics"],
@@ -3760,15 +3896,15 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/hpc/hpc-operations.html": ["High-Performance Computing", "Engineering", "Dev(Sec)Ops", "Security"],
   "blog-articles/engineering/knowledge-graphs-and-metaphysics.html": ["Engineering", "Philosophy", "Data Engineering", "Generative AI", "Machine Learning"],
   "blog-articles/ai/agi/general-over-what.html": ["AGI", "Machine Learning", "Philosophy", "AI Strategy"],
-  "blog-articles/competitive-programming/backtracking.html": ["Competitive Programming", "Programming & Software", "Math"],
-  "blog-articles/competitive-programming/the-root-is-the-only-promise.html": ["Competitive Programming", "Programming & Software", "Math"],
-  "blog-articles/competitive-programming/tries.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/competitive-programming/backtracking.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
+  "blog-articles/competitive-programming/the-root-is-the-only-promise.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
+  "blog-articles/competitive-programming/tries.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/engineering/metaphysics-of-engineering.html": ["Engineering", "Philosophy"],
   "blog-articles/fluid-mechanics/which-way-can-a-ripple-travel.html": ["Fluid Mechanics", "Physics", "Engineering"],
   "blog-articles/ai/agi/what-would-tell-them-apart.html": ["AGI", "Machine Learning", "AI Strategy", "Philosophy"],
   "blog-articles/ai/ai-security/ai-security-frameworks.html": ["AI Security", "Security", "Machine Learning", "AI Strategy", "Software Security"],
-  "blog-articles/competitive-programming/trees.html": ["Competitive Programming", "Programming & Software", "Math"],
-  "blog-articles/fluid-mechanics/turbulence-and-the-closure-problem.html": ["Fluid Mechanics", "Physics", "Engineering", "Differential Equations"],
+  "blog-articles/competitive-programming/trees.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
+  "blog-articles/fluid-mechanics/turbulence-and-the-closure-problem.html": ["Fluid Mechanics", "Differential Equations", "Calculus", "Physics", "Engineering"],
   "blog-articles/cloud/multicloud/multicloud-patterns.html": ["Cloud", "AWS", "Azure", "GCP", "Networks", "Dev(Sec)Ops", "Software Design & Architecture"],
   "blog-articles/swe/api-design.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "Security", "SDLC"],
   "blog-articles/swe/configuration-management.html": ["Programming & Software", "Engineering", "Software Design & Architecture", "SDLC", "Dev(Sec)Ops", "Security"],
@@ -3830,13 +3966,13 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/mobile/android/mobile-device-vulnerabilities.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
   "blog-articles/security/pentesting/windows-legacy-security.html": ["ICS/OT", "Security", "Operating Systems", "Pentesting", "Cyber-Physical Systems"],
   "blog-articles/programming-languages/cobol.html": ["Programming & Software", "Programming Languages", "Engineering"],
-  "blog-articles/competitive-programming/advanced-graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/competitive-programming/advanced-graph-problems.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/swe/cache-invalidation.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops"],
   "blog-articles/security/its-always-dns.html": ["Networks", "Security"],
   "blog-articles/operating-systems/printer-troubleshooting.html": ["Engineering", "Operating Systems"],
   "blog-articles/networks/ping.html": ["Networks"],
-  "blog-articles/programming-languages/cpp.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Engineering", "High-Performance Computing"],
-  "blog-articles/competitive-programming/graph-problems.html": ["Competitive Programming", "Programming & Software", "Math"],
+  "blog-articles/programming-languages/cpp.html": ["C++", "Programming Languages", "High-Performance Computing", "Operating Systems", "Programming & Software", "Engineering"],
+  "blog-articles/competitive-programming/graph-problems.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/security/supply-chain-vulnerabilities.html": ["Security", "Dev(Sec)Ops", "Programming & Software", "Engineering"],
   "blog-articles/physics/impossibility.html": ["Philosophy", "Math", "Physics", "Engineering"],
   "blog-articles/cloud/multicloud/cloud-vulnerabilities.html": ["Cloud", "AWS", "Azure", "GCP", "Security", "Networks", "Dev(Sec)Ops"],
@@ -3856,18 +3992,18 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring/spring-cloud-devops.html": ["Java", "Cloud", "Programming & Software", "Dev(Sec)Ops", "Kubernetes", "Networks", "Spring"],
   "blog-articles/security/secure-architecture.html": ["Security", "Engineering", "Dev(Sec)Ops", "Software Design & Architecture"],
   "blog-articles/programming-languages/rust-programming-language.html": ["Programming & Software", "Programming Languages", "Operating Systems", "Security"],
-  "blog-articles/physics/rlc-circuit-equation.html": ["Physics", "Engineering", "Differential Equations", "Control Theory & Engineering"],
+  "blog-articles/physics/rlc-circuit-equation.html": ["Differential Equations", "Calculus", "Control Theory & Engineering", "Physics", "Engineering"],
   "blog-articles/security/pentesting/ot-ics-scada-pentesting.html": ["ICS/OT", "Security", "Cyber-Physical Systems", "Networks", "Pentesting"],
-  "blog-articles/competitive-programming/interval-problems-playbook.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/competitive-programming/greedy-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/interval-problems-playbook.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
+  "blog-articles/competitive-programming/greedy-competitive-programming.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/swe/django-architecture-scaling.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops", "Django"],
   "blog-articles/cloud/devsecops-engineer.html": ["Dev(Sec)Ops", "Security", "Programming & Software", "Cloud"],
   "blog-articles/angular/angular-security-testing.html": ["Web & UI", "Programming & Software", "Angular", "Security"],
   "blog-articles/ai/ai-cannot-compensate-for-natural-stupidity.html": ["Machine Learning", "Philosophy", "Society & Civics"],
-  "blog-articles/competitive-programming/2d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/2d-dynamic-programming.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/security/critical-infrastructure/automotive-cybersecurity.html": ["Automotive Engineering", "Security", "Engineering", "Hardware", "Cyber-Physical Systems"],
   "blog-articles/security/the-map-is-not-the-territory.html": ["Philosophy", "Security", "Engineering"],
-  "blog-articles/competitive-programming/stacks-in-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/stacks-in-competitive-programming.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/security/privilege-separation.html": ["Operating Systems", "Security", "Programming & Software"],
   "blog-articles/physics/models-of-reality.html": ["Philosophy", "Machine Learning", "Math", "Physics"],
   "blog-articles/mobile/android/mobile-security-architecture.html": ["Security", "Mobile App Development", "Android", "Operating Systems"],
@@ -3877,11 +4013,11 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/web-ui/css-methodologies.html": ["Web & UI", "Programming & Software"],
   "blog-articles/swe/code-review-best-practices.html": ["Programming & Software", "Engineering"],
   "blog-articles/swe/backend-performance.html": ["Programming & Software", "Engineering", "Dev(Sec)Ops"],
-  "blog-articles/competitive-programming/arrays-and-hashing-cp.html": ["Math", "Programming & Software", "Competitive Programming"],
-  "blog-articles/competitive-programming/two-pointers.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/arrays-and-hashing-cp.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
+  "blog-articles/competitive-programming/two-pointers.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/security/trusted-hardware.html": ["Security", "Engineering", "Hardware", "Operating Systems"],
   "blog-articles/security/nmap/nmap-red-team.html": ["Security", "Networks", "Nmap", "Pentesting"],
-  "blog-articles/competitive-programming/1d-dynamic-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/1d-dynamic-programming.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/angular/angular-performance.html": ["Web & UI", "Programming & Software", "Angular"],
   "blog-articles/angular/animation-angular.html": ["Web & UI", "Programming & Software", "Angular"],
   "blog-articles/angular/internationalization-angular.html": ["Web & UI", "Programming & Software", "Angular"],
@@ -3924,7 +4060,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/ai/vibe-coding-risk-framework.html": ["Machine Learning", "AI Strategy", "Programming & Software", "Security", "Dev(Sec)Ops"],
   "blog-articles/security/wireless-networking.html": ["Networks", "Security"],
   "blog-articles/security/api-authentication.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/competitive-programming/bit-manipulation.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/bit-manipulation.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/engineering/error-prevention-high-stakes.html": ["Engineering"],
   "blog-articles/veganism/Farm_Bill_2026.html": ["Society & Civics", "Veganism"],
   "blog-articles/web-ui/frontend-performance.html": ["Web & UI", "Programming & Software"],
@@ -3946,7 +4082,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/spring/spring-testing-article.html": ["Java", "Programming & Software", "Security", "Dev(Sec)Ops", "Docker", "Spring"],
   "blog-articles/cyber-physical-systems/signal-conditioning-hardware.html": ["Cyber-Physical Systems", "Engineering", "Control Theory & Engineering"],
   "blog-articles/ai/planning-reduction-sat-modelchecking.html": ["Machine Learning", "Programming & Software", "Math"],
-  "blog-articles/competitive-programming/math-geometry-competitive-programming.html": ["Math", "Programming & Software", "Competitive Programming"],
+  "blog-articles/competitive-programming/math-geometry-competitive-programming.html": ["Competitive Programming", "Algorithms", "Math", "Programming & Software"],
   "blog-articles/programming-languages/java/java-build-tools.html": ["Java", "Programming & Software", "Dev(Sec)Ops"],
   "blog-articles/veganism/entertainment-sport-spectacle.html": ["Veganism", "Society & Civics"],
   "blog-articles/cyber-physical-systems/embedded-compute-layer.html": ["ICS/OT", "Cyber-Physical Systems", "Engineering", "IoT"],
@@ -3955,7 +4091,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/veganism/animal-research-science-education.html": ["Veganism", "Society & Civics"],
   "blog-articles/veganism/humane-ethical-small-scale-animal-use.html": ["Veganism", "Society & Civics"],
   "blog-articles/security/api-security-best-practices.html": ["Security", "Programming & Software", "Dev(Sec)Ops"],
-  "blog-articles/physics/newtons_second_law_dynamics.html": ["Physics", "Engineering", "Differential Equations"],
+  "blog-articles/physics/newtons_second_law_dynamics.html": ["Differential Equations", "Calculus", "Physics", "Engineering"],
   "blog-articles/math/non-euclidean-geometry.html": ["Math", "Philosophy"],
   "blog-articles/ai/drl-humanoid-robotics.html": ["Physical AI", "Kinematics", "Machine Learning", "Cyber-Physical Systems", "Engineering", "Robotics"],
   "blog-articles/ai/causal_ai.html": ["Machine Learning"],
@@ -4069,7 +4205,7 @@ const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
   "blog-articles/ai/genai/ai-agents/ai-coding-agent-failures.html": ["AI Agents", "Generative AI", "Programming & Software"],
   "blog-articles/robotics/ai-in-robotics.html": ["Physical AI", "Kinematics", "Robotics", "Machine Learning", "Computer Vision"],
   "blog-articles/security/vulnerability-scanning.html": ["Security", "Dev(Sec)Ops"],
-  "blog-articles/math/bayesian-statistics.html": ["Math", "Machine Learning"],
+  "blog-articles/math/bayesian-statistics.html": ["Statistics", "Math", "Machine Learning"],
   "blog-articles/programming-languages/javascript/javascript.html": ["JavaScript", "Programming & Software", "Programming Languages", "Web & UI"],
   "blog-articles/security/pentesting/breach_attack_simulation.html": ["Security", "Pentesting"],
   "blog-articles/networks/the-language-of-things.html": ["IoT", "Networks", "Engineering"],
@@ -4270,14 +4406,31 @@ function getBlogCategoryPostCount(category: BlogCategory): number {
   return blogCategoryPostCounts[category] || 0;
 }
 
+function normalizeBlogCategories(value: unknown): BlogCategory[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const selected = new Set(
+    value.filter((category): category is BlogCategory => typeof category === "string" && isBlogCategory(category))
+  );
+  return blogCategoryLabels.filter((category) => selected.has(category));
+}
+
+function normalizeBlogCategoryMatchMode(value: unknown): BlogCategoryMatchMode {
+  return value === "exact" ? "exact" : "include";
+}
+
 function getNormalizedBlogDirectoryViewState(
   searchTerm: unknown,
-  categoryValue: unknown,
+  selectedCategories: unknown,
+  matchMode: unknown,
   visibleCount: unknown
 ): BlogDirectoryViewState {
   return {
-    categoryValue: typeof categoryValue === "string" && isBlogCategory(categoryValue) ? categoryValue : "",
+    matchMode: normalizeBlogCategoryMatchMode(matchMode),
     searchTerm: normalizeBlogSearchTerm(typeof searchTerm === "string" ? searchTerm : ""),
+    selectedCategories: normalizeBlogCategories(selectedCategories),
     visibleCount: normalizeBlogDirectoryVisibleCount(visibleCount)
   };
 }
@@ -4293,11 +4446,31 @@ function getBlogDirectoryStateFromHistory(state: unknown): BlogDirectoryViewStat
   }
 
   const record = viewState as Record<string, unknown>;
-  return getNormalizedBlogDirectoryViewState(record.searchTerm, record.categoryValue, record.visibleCount);
+  const selectedCategories = Array.isArray(record.selectedCategories)
+    ? record.selectedCategories
+    : typeof record.categoryValue === "string" && record.categoryValue
+      ? [record.categoryValue]
+      : [];
+  return getNormalizedBlogDirectoryViewState(
+    record.searchTerm,
+    selectedCategories,
+    record.matchMode,
+    record.visibleCount
+  );
 }
 
-function updateBlogDirectoryHistoryState(searchTerm: string, categoryValue: string, visibleCount: number): void {
-  const nextViewState = getNormalizedBlogDirectoryViewState(searchTerm, categoryValue, visibleCount);
+function updateBlogDirectoryHistoryState(
+  searchTerm: string,
+  selectedCategories: BlogCategory[],
+  matchMode: BlogCategoryMatchMode,
+  visibleCount: number
+): void {
+  const nextViewState = getNormalizedBlogDirectoryViewState(
+    searchTerm,
+    selectedCategories,
+    matchMode,
+    visibleCount
+  );
   const currentState = window.history.state;
   const stateRecord =
     currentState && typeof currentState === "object"
@@ -4309,15 +4482,76 @@ function updateBlogDirectoryHistoryState(searchTerm: string, categoryValue: stri
   window.history.replaceState(stateRecord, document.title, window.location.href);
 }
 
-function renderBlogCategoryOptions(selectElement: HTMLSelectElement): void {
+function renderBlogCategoryCheckbox(category: BlogCategory): string {
+  const count = getBlogCategoryPostCount(category);
+  const inputId = `blogCategory-${blogCategoryLabels.indexOf(category)}`;
+  return `
+    <label class="blog-category-option" for="${inputId}">
+      <input id="${inputId}" type="checkbox" value="${escapeHtml(category)}">
+      <span>${escapeHtml(category)}</span>
+      <span class="blog-category-option__count">${count}</span>
+    </label>
+  `;
+}
+
+function renderBlogCategoryOptions(optionsElement: HTMLElement): void {
+  const groupedChildren = new Set<BlogCategory>();
+  blogCategoryGroups.forEach((group) => {
+    group.children.forEach((category) => groupedChildren.add(category));
+  });
+
   const categoryOptions = blogCategoryLabels
     .map((category) => {
-      const count = getBlogCategoryPostCount(category);
-      return `<option value="${escapeHtml(category)}">${escapeHtml(category)} (${count})</option>`;
+      if (groupedChildren.has(category)) {
+        return "";
+      }
+
+      const group = blogCategoryGroups.find((candidate) => candidate.parent === category);
+      if (!group) {
+        return renderBlogCategoryCheckbox(category);
+      }
+
+      const nestedOptions = [group.parent, ...group.children]
+        .map((groupCategory) => renderBlogCategoryCheckbox(groupCategory))
+        .join("");
+      return `
+        <fieldset class="blog-category-option-group">
+          <legend>${escapeHtml(group.parent)} categories</legend>
+          ${nestedOptions}
+        </fieldset>
+      `;
     })
     .join("");
 
-  selectElement.innerHTML = `<option value="">All categories</option>${categoryOptions}`;
+  optionsElement.innerHTML = categoryOptions;
+}
+
+function getSelectedBlogCategories(optionsElement: HTMLElement): BlogCategory[] {
+  const selectedValues = Array.from(
+    optionsElement.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')
+  ).map((input) => input.value);
+  return normalizeBlogCategories(selectedValues);
+}
+
+function applySelectedBlogCategories(optionsElement: HTMLElement, categories: BlogCategory[]): void {
+  const selected = new Set(categories);
+  optionsElement.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => {
+    input.checked = isBlogCategory(input.value) && selected.has(input.value);
+  });
+}
+
+function updateBlogCategorySummary(summaryElement: HTMLElement, categories: BlogCategory[]): void {
+  if (categories.length === 0) {
+    summaryElement.textContent = "All labels";
+    return;
+  }
+
+  if (categories.length <= 2) {
+    summaryElement.textContent = categories.join(" + ");
+    return;
+  }
+
+  summaryElement.textContent = `${categories.length} labels selected`;
 }
 
 function renderBlogCategoryChips(categories: BlogCategory[]): string {
@@ -4356,14 +4590,40 @@ preparedBlogPosts.forEach((preparedPost) => {
   });
 });
 
-function getFilteredBlogPosts(searchTerm: string, categoryValue: string): PreparedBlogDirectoryPost[] {
+function blogCategoriesMatchSelection(
+  postCategories: readonly BlogCategory[],
+  selectedCategories: readonly BlogCategory[],
+  matchMode: BlogCategoryMatchMode
+): boolean {
+  if (selectedCategories.length === 0) {
+    return true;
+  }
+
+  const includesEverySelectedCategory = selectedCategories.every(
+    (category) => postCategories.indexOf(category) !== -1
+  );
+  if (!includesEverySelectedCategory) {
+    return false;
+  }
+
+  return matchMode === "include" || postCategories.length === selectedCategories.length;
+}
+
+function getFilteredBlogPosts(
+  searchTerm: string,
+  selectedCategories: BlogCategory[],
+  matchMode: BlogCategoryMatchMode
+): PreparedBlogDirectoryPost[] {
   const normalizedSearchTerm = getNormalizedBlogSearchQuery(searchTerm);
-  const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
 
   return preparedBlogPosts.filter((preparedPost) => {
     const matchesSearch = preparedPost.searchHaystack.includes(normalizedSearchTerm);
-    const matchesCategory = activeCategory === "" || preparedPost.categories.indexOf(activeCategory) !== -1;
-    return matchesSearch && matchesCategory;
+    const matchesCategories = blogCategoriesMatchSelection(
+      preparedPost.categories,
+      selectedCategories,
+      matchMode
+    );
+    return matchesSearch && matchesCategories;
   });
 }
 
@@ -4385,7 +4645,13 @@ function renderBlogDirectoryActions(totalCount: number, visibleCount: number): s
   `;
 }
 
-function renderBlogArticles(searchTerm: string, categoryValue: string, visibleCount: number, onLoadMore: () => void): void {
+function renderBlogArticles(
+  searchTerm: string,
+  selectedCategories: BlogCategory[],
+  matchMode: BlogCategoryMatchMode,
+  visibleCount: number,
+  onLoadMore: () => void
+): void {
   const target = document.getElementById("blog-articles");
   const statusElement = document.getElementById("blogResultsStatus");
 
@@ -4393,14 +4659,13 @@ function renderBlogArticles(searchTerm: string, categoryValue: string, visibleCo
     return;
   }
 
-  const activeCategory = isBlogCategory(categoryValue) ? categoryValue : "";
-  const filteredPosts = getFilteredBlogPosts(searchTerm, categoryValue);
+  const filteredPosts = getFilteredBlogPosts(searchTerm, selectedCategories, matchMode);
 
   if (filteredPosts.length === 0) {
     target.innerHTML = `
       <section class="privacy-section blog-empty-state">
         <h2>No matching articles</h2>
-        <p>Try a different title search or category.</p>
+        <p>Try a different title search, label combination, or match mode.</p>
       </section>
     `;
     statusElement.textContent = "0 articles shown.";
@@ -4427,7 +4692,9 @@ function renderBlogArticles(searchTerm: string, categoryValue: string, visibleCo
     .join("") +
     renderBlogDirectoryActions(filteredPosts.length, visiblePosts.length);
 
-  const categoryStatus = activeCategory ? ` in ${activeCategory}` : "";
+  const categoryStatus = selectedCategories.length > 0
+    ? ` matching ${selectedCategories.join(" + ")}${matchMode === "exact" ? " exactly" : " (additional labels allowed)"}`
+    : "";
   statusElement.textContent =
     `${visiblePosts.length} of ${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown${categoryStatus}. ` +
     `Sorted newest first.`;
@@ -4440,50 +4707,73 @@ function renderBlogArticles(searchTerm: string, categoryValue: string, visibleCo
 
 function initializeBlogDirectory(): void {
   const searchInput = document.getElementById("blogSearchInput") as HTMLInputElement | null;
-  const categorySelect = document.getElementById("blogCategorySelect") as HTMLSelectElement | null;
-  if (!searchInput) {
+  const categoryPicker = document.getElementById("blogCategoryPicker") as HTMLDetailsElement | null;
+  const categoryOptions = document.getElementById("blogCategoryOptions");
+  const categorySummary = document.getElementById("blogCategorySummary");
+  const matchModeFieldset = document.getElementById("blogCategoryMatchMode");
+  if (!searchInput || !categoryOptions || !categorySummary || !matchModeFieldset) {
     return;
   }
 
   const initialSearchValue = searchInput.value;
-  const initialCategoryValue = categorySelect ? categorySelect.value : "";
-
-  if (categorySelect) {
-    renderBlogCategoryOptions(categorySelect);
-  }
+  renderBlogCategoryOptions(categoryOptions);
 
   searchInput.maxLength = 120;
   let visibleCount = BLOG_PAGE_SIZE;
 
+  const getSelectedMatchMode = (): BlogCategoryMatchMode => {
+    const selectedInput = matchModeFieldset.querySelector<HTMLInputElement>(
+      'input[name="blogCategoryMatchMode"]:checked'
+    );
+    return normalizeBlogCategoryMatchMode(selectedInput?.value);
+  };
+
+  const applySelectedMatchMode = (matchMode: BlogCategoryMatchMode): void => {
+    matchModeFieldset.querySelectorAll<HTMLInputElement>('input[name="blogCategoryMatchMode"]').forEach((input) => {
+      input.checked = input.value === matchMode;
+    });
+  };
+
   const applyBlogDirectoryState = (state: BlogDirectoryViewState): void => {
     searchInput.value = state.searchTerm;
     visibleCount = state.visibleCount;
-
-    if (categorySelect) {
-      categorySelect.value = state.categoryValue;
-    }
+    applySelectedBlogCategories(categoryOptions, state.selectedCategories);
+    applySelectedMatchMode(state.matchMode);
+    updateBlogCategorySummary(categorySummary, state.selectedCategories);
   };
 
   const restoreBlogDirectoryState = (): void => {
     const historyState = getBlogDirectoryStateFromHistory(window.history.state);
-    const fallbackState = getNormalizedBlogDirectoryViewState(initialSearchValue, initialCategoryValue, visibleCount);
+    const fallbackState = getNormalizedBlogDirectoryViewState(initialSearchValue, [], "include", visibleCount);
     applyBlogDirectoryState(historyState || fallbackState);
   };
 
   const renderCurrentBlogDirectory = (): void => {
     const nextViewState = getNormalizedBlogDirectoryViewState(
       searchInput.value,
-      categorySelect ? categorySelect.value : "",
+      getSelectedBlogCategories(categoryOptions),
+      getSelectedMatchMode(),
       visibleCount
     );
 
     applyBlogDirectoryState(nextViewState);
-    updateBlogDirectoryHistoryState(nextViewState.searchTerm, nextViewState.categoryValue, nextViewState.visibleCount);
+    updateBlogDirectoryHistoryState(
+      nextViewState.searchTerm,
+      nextViewState.selectedCategories,
+      nextViewState.matchMode,
+      nextViewState.visibleCount
+    );
 
-    renderBlogArticles(nextViewState.searchTerm, nextViewState.categoryValue, nextViewState.visibleCount, () => {
-      visibleCount += BLOG_PAGE_SIZE;
-      renderCurrentBlogDirectory();
-    });
+    renderBlogArticles(
+      nextViewState.searchTerm,
+      nextViewState.selectedCategories,
+      nextViewState.matchMode,
+      nextViewState.visibleCount,
+      () => {
+        visibleCount += BLOG_PAGE_SIZE;
+        renderCurrentBlogDirectory();
+      }
+    );
   };
 
   const resetAndRenderBlogDirectory = (): void => {
@@ -4497,11 +4787,23 @@ function initializeBlogDirectory(): void {
     resetAndRenderBlogDirectory();
   });
 
-  if (categorySelect) {
-    categorySelect.addEventListener("change", () => {
+  categoryOptions.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
       resetAndRenderBlogDirectory();
-    });
-  }
+    }
+  });
+
+  matchModeFieldset.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === "radio") {
+      resetAndRenderBlogDirectory();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (categoryPicker?.open && event.target instanceof Node && !categoryPicker.contains(event.target)) {
+      categoryPicker.open = false;
+    }
+  });
 
   window.addEventListener("pageshow", () => {
     restoreBlogDirectoryState();

@@ -4,6 +4,11 @@ This document defines the current blog categories used in the site taxonomy. Cat
 
 When an article has multiple categories, list the most specific category first. Broad catch-all categories such as **Programming & Software**, **Engineering**, **Security**, **Philosophy**, **Society & Civics**, and **Society & Technology** should come after narrower framework, discipline, tool, provider, or method categories.
 
+The blog filter visually groups related labels while keeping every label independently selectable:
+
+- **Math**: Calculus, Linear Algebra, and Statistics.
+- **Programming Languages**: C++.
+
 ## Categories
 
 - **AGI**: Artificial general intelligence topics, including generality, transfer, cognitive capability scope, architectures, evaluation, and philosophical or technical questions specific to AGI.
@@ -11,6 +16,7 @@ When an article has multiple categories, list the most specific category first. 
 - **AI Agents**: Agent-based AI systems that use tools, workflows, memory, orchestration, multi-step reasoning, or protocol-driven integration.
 - **AI Security**: Security issues specific to AI and machine-learning systems, including model abuse, adversarial attacks, agent risk, governance controls, and defensive architecture around AI deployments.
 - **AI Strategy**: Organizational, operational, and governance questions around adopting AI in products, teams, or enterprises.
+- **Algorithms**: Algorithm design, analysis, data structures, complexity, and reusable problem-solving techniques across programming and computer science.
 - **Artificial Intelligence**: Broad artificial intelligence topics, including symbolic AI, search, planning, reasoning systems, machine intelligence concepts, and AI work that is not limited to model training or generative systems.
 - **Apache Kafka**: Apache Kafka event streaming, brokers, topics, partitions, producers, consumers, delivery semantics, Java and Spring integration, and event-driven system patterns built around Kafka.
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
@@ -22,6 +28,8 @@ When an article has multiple categories, list the most specific category first. 
 - **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Biology**: Living systems, cells, genetics, evolution, organisms, biological complexity, and the relationship between biological mechanisms and engineering.
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
+- **C++**: C++ language design, standard-library facilities, memory and object models, performance, tooling, and C++-specific engineering practices.
+- **Calculus**: Limits, derivatives, integrals, series, multivariable calculus, and calculus-based analysis of continuous change.
 - **Chemistry**: Atomic and molecular structure, chemical bonding, intermolecular forces, periodic behavior, electronic structure, reactions, and the physical principles that govern matter at chemical scales.
 - **Cloud**: Cloud computing architecture, service models, cloud-native operations, managed infrastructure, serverless systems, hyperscaler platforms, and cloud security.
 - **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
@@ -60,6 +68,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Kubernetes**: Kubernetes architecture, deployment patterns, orchestration behavior, and production cluster operations.
 - **Law**: Legal systems, rights, regulation, legal institutions, compliance, and the interaction between law, technology, policy, and civic life.
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
+- **Linear Algebra**: Vectors, matrices, linear transformations, vector spaces, eigenvalues, decompositions, and their mathematical or computational applications.
 - **Logic**: Formal and informal reasoning, propositional and first-order logic, semantics, inference, proof systems, validity, and argumentation.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.
 - **Mobile App Development**: Cross-cutting mobile engineering topics beyond one platform, including architecture, security, testing, and deployment.
@@ -86,6 +95,7 @@ When an article has multiple categories, list the most specific category first. 
 - **Software Design & Architecture**: System structure, modeling, requirements, design methods, architecture frameworks, and large-scale software organization.
 - **Software Security**: Secure software design, implementation, testing, and hardening work focused on application-level defenses and the security properties of software systems.
 - **Spring**: Spring ecosystem topics, including Spring Boot, caching, testing, and Java application architecture in the Spring stack.
+- **Statistics**: Statistical inference, probability models, estimation, uncertainty, hypothesis testing, Bayesian methods, and data-driven reasoning.
 - **Stylometry**: Quantitative authorship analysis, writing-style measurement, attribution methods, linguistic fingerprints, and computational approaches to textual identity or similarity.
 - **Technical Writing**: Documentation, explanatory writing, developer education, information architecture, reference material, tutorials, API docs, and communication practices for technical subjects.
 - **Veganism**: Animal ethics, vegan advocacy, organizing, movement strategy, and analysis of systems built on animal use.

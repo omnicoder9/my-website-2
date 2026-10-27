@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  blogCategoriesMatchSelection,
   blogMatchesSearch,
   formatBlogDate,
   getBlogFilenameLabel,
@@ -11,6 +12,16 @@ import {
   sortBlogCategoriesMostSpecificFirst,
   sortBlogPostsNewestFirst
 } from "../dist/js/test-core/blog-core.js";
+
+test("blogCategoriesMatchSelection supports inclusive and exact label combinations", () => {
+  const postCategories = ["Python", "Security", "Networks"];
+
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python", "Security"], "include"), true);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python", "Security"], "exact"), false);
+  assert.equal(blogCategoriesMatchSelection(postCategories, postCategories, "exact"), true);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python", "C++"], "include"), false);
+  assert.equal(blogCategoriesMatchSelection(postCategories, [], "exact"), true);
+});
 
 test("formatBlogDate renders long-form US dates", () => {
   assert.equal(formatBlogDate("2026-07-13"), "July 13, 2026");

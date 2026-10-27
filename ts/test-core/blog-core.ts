@@ -12,6 +12,8 @@ export type BlogDirectoryViewState = {
   visibleCount: number;
 };
 
+export type BlogCategoryMatchMode = "include" | "exact";
+
 const BLOG_PAGE_SIZE = 24;
 const BLOG_SPECIFIC_CATEGORY_RANK = 10;
 const BLOG_CATEGORY_SPECIFICITY_RANKS: Record<string, number> = {
@@ -138,4 +140,23 @@ export function blogMatchesSearch(post: Pick<BlogDirectoryPost, "title" | "path"
 
   const searchHaystack = `${post.title} ${getBlogFilenameLabel(post)}`.toLowerCase();
   return searchHaystack.includes(normalizedSearchTerm);
+}
+
+export function blogCategoriesMatchSelection(
+  postCategories: readonly string[],
+  selectedCategories: readonly string[],
+  matchMode: BlogCategoryMatchMode
+): boolean {
+  if (selectedCategories.length === 0) {
+    return true;
+  }
+
+  const includesEverySelectedCategory = selectedCategories.every(
+    (category) => postCategories.indexOf(category) !== -1
+  );
+  if (!includesEverySelectedCategory) {
+    return false;
+  }
+
+  return matchMode === "include" || postCategories.length === selectedCategories.length;
 }
