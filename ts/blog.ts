@@ -48,6 +48,7 @@ const blogCategoryLabels = [
   "Git",
   "Hardware",
   "High-Performance Computing",
+  "Human Biology",
   "ICS/OT",
   "IoT",
   "Java",
@@ -95,14 +96,16 @@ const blogCategoryLabels = [
 
 type BlogCategory = typeof blogCategoryLabels[number];
 
-type BlogCategoryMatchMode = "include" | "exact";
-
 type BlogCategoryGroup = {
   children: readonly BlogCategory[];
   parent: BlogCategory;
 };
 
 const blogCategoryGroups: readonly BlogCategoryGroup[] = [
+  {
+    parent: "Biology",
+    children: ["Human Biology"]
+  },
   {
     parent: "Math",
     children: ["Calculus", "Linear Algebra", "Statistics"]
@@ -133,6 +136,7 @@ const BLOG_PAGE_SIZE = 24;
 const BLOG_DIRECTORY_HISTORY_STATE_KEY = "blogDirectory";
 const BLOG_SPECIFIC_CATEGORY_RANK = 10;
 const blogCategorySpecificityRanks: Partial<Record<BlogCategory, number>> = {
+  Biology: 30,
   "Earth Sciences": 20,
   "Mobile App Development": 20,
   "Operating Systems": 20,
@@ -161,13 +165,85 @@ const blogCategorySpecificityRanks: Partial<Record<BlogCategory, number>> = {
 };
 
 type BlogDirectoryViewState = {
-  matchMode: BlogCategoryMatchMode;
+  excludedCategories: BlogCategory[];
+  includedCategories: BlogCategory[];
   searchTerm: string;
-  selectedCategories: BlogCategory[];
   visibleCount: number;
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/biology/human-biology/attention-executive-function.html",
+    publishedAt: "2026-10-27",
+    summary: "How the brain selects information, holds goals in mind, resists distraction, switches strategies, and supports controlled behavior.",
+    title: "Attention and Executive Function"
+  },
+  {
+    path: "blog-articles/biology/human-biology/bioinformatics-human-biology.html",
+    publishedAt: "2026-10-27",
+    summary: "How computation, biological databases, modeling, and statistics turn genomic, proteomic, and physiological data into knowledge about the human body.",
+    title: "Bioinformatics in Human Biology"
+  },
+  {
+    path: "blog-articles/biology/human-biology/brain-organization.html",
+    publishedAt: "2026-10-27",
+    summary: "The organization of the human brain, including the cerebral cortex, cerebellum, brainstem, limbic structures, and the systems connecting them.",
+    title: "Organization of the Human Brain"
+  },
+  {
+    path: "blog-articles/biology/human-biology/emotion-motivation-reward.html",
+    publishedAt: "2026-10-27",
+    summary: "How the brain assigns value, generates drives, learns from reward prediction errors, coordinates stress responses, and prepares the body to act.",
+    title: "Emotion, Motivation and Reward"
+  },
+  {
+    path: "blog-articles/biology/human-biology/language-social-cognition.html",
+    publishedAt: "2026-10-27",
+    summary: "The neurobiology of language and social cognition, from speech, reading, and lateralization to theory of mind, face perception, empathy, and disorders.",
+    title: "Language and Social Cognition"
+  },
+  {
+    path: "blog-articles/biology/human-biology/learning-and-memory.html",
+    publishedAt: "2026-10-27",
+    summary: "How human learning changes behavior and neural circuits, how memories are encoded and retrieved, and why distinct memory systems fail differently.",
+    title: "The Biology of Learning and Memory"
+  },
+  {
+    path: "blog-articles/biology/human-biology/motor-control-and-coordination.html",
+    publishedAt: "2026-10-27",
+    summary: "How the nervous system turns intention into coordinated force through motor units, spinal reflexes, cortex, basal ganglia, and cerebellum.",
+    title: "Motor Control and Coordination"
+  },
+  {
+    path: "blog-articles/biology/human-biology/nervous-system.html",
+    publishedAt: "2026-10-27",
+    summary: "The structure, electrical signaling, integration, autonomic control, reflexes, plasticity, and diseases of the human nervous system.",
+    title: "The Human Nervous System"
+  },
+  {
+    path: "blog-articles/biology/human-biology/neurological-psychiatric-disorders.html",
+    publishedAt: "2026-10-27",
+    summary: "How brain disorders affect movement, sensation, cognition, mood, and behavior, including their classification, mechanisms, diagnosis, and treatment.",
+    title: "Neurological and Psychiatric Disorders"
+  },
+  {
+    path: "blog-articles/biology/human-biology/neuroplasticity.html",
+    publishedAt: "2026-10-27",
+    summary: "How the human brain develops, refines its wiring through experience, and continues changing in response to learning, injury, and age.",
+    title: "Neuroplasticity and Brain Development"
+  },
+  {
+    path: "blog-articles/biology/human-biology/sensory-processing-and-perception.html",
+    publishedAt: "2026-10-27",
+    summary: "How physical energy becomes neural code and how the brain transforms that code into vision, hearing, touch, body sense, and a unified perceived world.",
+    title: "Sensory Processing and Perception"
+  },
+  {
+    path: "blog-articles/biology/human-biology/sleep-and-circadian-rhythms.html",
+    publishedAt: "2026-10-27",
+    summary: "The architecture, regulation, functions, development, and disorders of human sleep and the circadian systems that align physiology with time.",
+    title: "Sleep and Circadian Rhythms"
+  },
   {
     path: "blog-articles/statistics/descriptive-statistics.html",
     publishedAt: "2026-10-27",
@@ -3705,6 +3781,18 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/biology/human-biology/attention-executive-function.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/bioinformatics-human-biology.html": ["Human Biology", "Biology", "Data Engineering", "Statistics"],
+  "blog-articles/biology/human-biology/brain-organization.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/emotion-motivation-reward.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/language-social-cognition.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/learning-and-memory.html": ["Human Biology", "Biology", "Learning"],
+  "blog-articles/biology/human-biology/motor-control-and-coordination.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/nervous-system.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/neurological-psychiatric-disorders.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/neuroplasticity.html": ["Human Biology", "Biology", "Learning"],
+  "blog-articles/biology/human-biology/sensory-processing-and-perception.html": ["Human Biology", "Biology"],
+  "blog-articles/biology/human-biology/sleep-and-circadian-rhythms.html": ["Human Biology", "Biology"],
   "blog-articles/statistics/descriptive-statistics.html": ["Statistics", "Math"],
   "blog-articles/statistics/probability-distributions.html": ["Statistics", "Math"],
   "blog-articles/statistics/sampling-and-central-limit-theorem.html": ["Statistics", "Math"],
@@ -4417,20 +4505,21 @@ function normalizeBlogCategories(value: unknown): BlogCategory[] {
   return blogCategoryLabels.filter((category) => selected.has(category));
 }
 
-function normalizeBlogCategoryMatchMode(value: unknown): BlogCategoryMatchMode {
-  return value === "exact" ? "exact" : "include";
-}
-
 function getNormalizedBlogDirectoryViewState(
   searchTerm: unknown,
-  selectedCategories: unknown,
-  matchMode: unknown,
+  includedCategories: unknown,
+  excludedCategories: unknown,
   visibleCount: unknown
 ): BlogDirectoryViewState {
+  const normalizedExcludedCategories = normalizeBlogCategories(excludedCategories);
+  const excludedCategorySet = new Set(normalizedExcludedCategories);
+
   return {
-    matchMode: normalizeBlogCategoryMatchMode(matchMode),
+    excludedCategories: normalizedExcludedCategories,
+    includedCategories: normalizeBlogCategories(includedCategories).filter(
+      (category) => !excludedCategorySet.has(category)
+    ),
     searchTerm: normalizeBlogSearchTerm(typeof searchTerm === "string" ? searchTerm : ""),
-    selectedCategories: normalizeBlogCategories(selectedCategories),
     visibleCount: normalizeBlogDirectoryVisibleCount(visibleCount)
   };
 }
@@ -4446,29 +4535,31 @@ function getBlogDirectoryStateFromHistory(state: unknown): BlogDirectoryViewStat
   }
 
   const record = viewState as Record<string, unknown>;
-  const selectedCategories = Array.isArray(record.selectedCategories)
-    ? record.selectedCategories
-    : typeof record.categoryValue === "string" && record.categoryValue
-      ? [record.categoryValue]
-      : [];
+  const includedCategories = Array.isArray(record.includedCategories)
+    ? record.includedCategories
+    : Array.isArray(record.selectedCategories)
+      ? record.selectedCategories
+      : typeof record.categoryValue === "string" && record.categoryValue
+        ? [record.categoryValue]
+        : [];
   return getNormalizedBlogDirectoryViewState(
     record.searchTerm,
-    selectedCategories,
-    record.matchMode,
+    includedCategories,
+    record.excludedCategories,
     record.visibleCount
   );
 }
 
 function updateBlogDirectoryHistoryState(
   searchTerm: string,
-  selectedCategories: BlogCategory[],
-  matchMode: BlogCategoryMatchMode,
+  includedCategories: BlogCategory[],
+  excludedCategories: BlogCategory[],
   visibleCount: number
 ): void {
   const nextViewState = getNormalizedBlogDirectoryViewState(
     searchTerm,
-    selectedCategories,
-    matchMode,
+    includedCategories,
+    excludedCategories,
     visibleCount
   );
   const currentState = window.history.state;
@@ -4482,9 +4573,9 @@ function updateBlogDirectoryHistoryState(
   window.history.replaceState(stateRecord, document.title, window.location.href);
 }
 
-function renderBlogCategoryCheckbox(category: BlogCategory): string {
+function renderBlogCategoryCheckbox(category: BlogCategory, inputPrefix: string): string {
   const count = getBlogCategoryPostCount(category);
-  const inputId = `blogCategory-${blogCategoryLabels.indexOf(category)}`;
+  const inputId = `${inputPrefix}-${blogCategoryLabels.indexOf(category)}`;
   return `
     <label class="blog-category-option" for="${inputId}">
       <input id="${inputId}" type="checkbox" value="${escapeHtml(category)}">
@@ -4494,7 +4585,7 @@ function renderBlogCategoryCheckbox(category: BlogCategory): string {
   `;
 }
 
-function renderBlogCategoryOptions(optionsElement: HTMLElement): void {
+function renderBlogCategoryOptions(optionsElement: HTMLElement, inputPrefix: string): void {
   const groupedChildren = new Set<BlogCategory>();
   blogCategoryGroups.forEach((group) => {
     group.children.forEach((category) => groupedChildren.add(category));
@@ -4508,11 +4599,11 @@ function renderBlogCategoryOptions(optionsElement: HTMLElement): void {
 
       const group = blogCategoryGroups.find((candidate) => candidate.parent === category);
       if (!group) {
-        return renderBlogCategoryCheckbox(category);
+        return renderBlogCategoryCheckbox(category, inputPrefix);
       }
 
       const nestedOptions = [group.parent, ...group.children]
-        .map((groupCategory) => renderBlogCategoryCheckbox(groupCategory))
+        .map((groupCategory) => renderBlogCategoryCheckbox(groupCategory, inputPrefix))
         .join("");
       return `
         <fieldset class="blog-category-option-group">
@@ -4540,9 +4631,13 @@ function applySelectedBlogCategories(optionsElement: HTMLElement, categories: Bl
   });
 }
 
-function updateBlogCategorySummary(summaryElement: HTMLElement, categories: BlogCategory[]): void {
+function updateBlogCategorySummary(
+  summaryElement: HTMLElement,
+  categories: BlogCategory[],
+  emptyLabel: string
+): void {
   if (categories.length === 0) {
-    summaryElement.textContent = "All labels";
+    summaryElement.textContent = emptyLabel;
     return;
   }
 
@@ -4592,27 +4687,22 @@ preparedBlogPosts.forEach((preparedPost) => {
 
 function blogCategoriesMatchSelection(
   postCategories: readonly BlogCategory[],
-  selectedCategories: readonly BlogCategory[],
-  matchMode: BlogCategoryMatchMode
+  includedCategories: readonly BlogCategory[],
+  excludedCategories: readonly BlogCategory[]
 ): boolean {
-  if (selectedCategories.length === 0) {
-    return true;
-  }
-
-  const includesEverySelectedCategory = selectedCategories.every(
+  const includesEverySelectedCategory = includedCategories.every(
     (category) => postCategories.indexOf(category) !== -1
   );
-  if (!includesEverySelectedCategory) {
-    return false;
-  }
-
-  return matchMode === "include" || postCategories.length === selectedCategories.length;
+  const includesNoExcludedCategory = excludedCategories.every(
+    (category) => postCategories.indexOf(category) === -1
+  );
+  return includesEverySelectedCategory && includesNoExcludedCategory;
 }
 
 function getFilteredBlogPosts(
   searchTerm: string,
-  selectedCategories: BlogCategory[],
-  matchMode: BlogCategoryMatchMode
+  includedCategories: BlogCategory[],
+  excludedCategories: BlogCategory[]
 ): PreparedBlogDirectoryPost[] {
   const normalizedSearchTerm = getNormalizedBlogSearchQuery(searchTerm);
 
@@ -4620,8 +4710,8 @@ function getFilteredBlogPosts(
     const matchesSearch = preparedPost.searchHaystack.includes(normalizedSearchTerm);
     const matchesCategories = blogCategoriesMatchSelection(
       preparedPost.categories,
-      selectedCategories,
-      matchMode
+      includedCategories,
+      excludedCategories
     );
     return matchesSearch && matchesCategories;
   });
@@ -4647,8 +4737,8 @@ function renderBlogDirectoryActions(totalCount: number, visibleCount: number): s
 
 function renderBlogArticles(
   searchTerm: string,
-  selectedCategories: BlogCategory[],
-  matchMode: BlogCategoryMatchMode,
+  includedCategories: BlogCategory[],
+  excludedCategories: BlogCategory[],
   visibleCount: number,
   onLoadMore: () => void
 ): void {
@@ -4659,13 +4749,13 @@ function renderBlogArticles(
     return;
   }
 
-  const filteredPosts = getFilteredBlogPosts(searchTerm, selectedCategories, matchMode);
+  const filteredPosts = getFilteredBlogPosts(searchTerm, includedCategories, excludedCategories);
 
   if (filteredPosts.length === 0) {
     target.innerHTML = `
       <section class="privacy-section blog-empty-state">
         <h2>No matching articles</h2>
-        <p>Try a different title search, label combination, or match mode.</p>
+        <p>Try a different title search or adjust the included and excluded labels.</p>
       </section>
     `;
     statusElement.textContent = "0 articles shown.";
@@ -4692,11 +4782,14 @@ function renderBlogArticles(
     .join("") +
     renderBlogDirectoryActions(filteredPosts.length, visiblePosts.length);
 
-  const categoryStatus = selectedCategories.length > 0
-    ? ` matching ${selectedCategories.join(" + ")}${matchMode === "exact" ? " exactly" : " (additional labels allowed)"}`
+  const includedStatus = includedCategories.length > 0
+    ? ` matching ${includedCategories.join(" + ")}`
+    : "";
+  const excludedStatus = excludedCategories.length > 0
+    ? `, excluding ${excludedCategories.join(" + ")}`
     : "";
   statusElement.textContent =
-    `${visiblePosts.length} of ${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown${categoryStatus}. ` +
+    `${visiblePosts.length} of ${filteredPosts.length} article${filteredPosts.length === 1 ? "" : "s"} shown${includedStatus}${excludedStatus}. ` +
     `Sorted newest first.`;
 
   const loadMoreButton = document.getElementById("blogLoadMoreButton");
@@ -4707,67 +4800,64 @@ function renderBlogArticles(
 
 function initializeBlogDirectory(): void {
   const searchInput = document.getElementById("blogSearchInput") as HTMLInputElement | null;
-  const categoryPicker = document.getElementById("blogCategoryPicker") as HTMLDetailsElement | null;
-  const categoryOptions = document.getElementById("blogCategoryOptions");
-  const categorySummary = document.getElementById("blogCategorySummary");
-  const matchModeFieldset = document.getElementById("blogCategoryMatchMode");
-  if (!searchInput || !categoryOptions || !categorySummary || !matchModeFieldset) {
+  const includedCategoryPicker = document.getElementById("blogIncludedCategoryPicker") as HTMLDetailsElement | null;
+  const includedCategoryOptions = document.getElementById("blogIncludedCategoryOptions");
+  const includedCategorySummary = document.getElementById("blogIncludedCategorySummary");
+  const excludedCategoryPicker = document.getElementById("blogExcludedCategoryPicker") as HTMLDetailsElement | null;
+  const excludedCategoryOptions = document.getElementById("blogExcludedCategoryOptions");
+  const excludedCategorySummary = document.getElementById("blogExcludedCategorySummary");
+  if (
+    !searchInput ||
+    !includedCategoryOptions ||
+    !includedCategorySummary ||
+    !excludedCategoryOptions ||
+    !excludedCategorySummary
+  ) {
     return;
   }
 
   const initialSearchValue = searchInput.value;
-  renderBlogCategoryOptions(categoryOptions);
+  renderBlogCategoryOptions(includedCategoryOptions, "blogIncludedCategory");
+  renderBlogCategoryOptions(excludedCategoryOptions, "blogExcludedCategory");
 
   searchInput.maxLength = 120;
   let visibleCount = BLOG_PAGE_SIZE;
 
-  const getSelectedMatchMode = (): BlogCategoryMatchMode => {
-    const selectedInput = matchModeFieldset.querySelector<HTMLInputElement>(
-      'input[name="blogCategoryMatchMode"]:checked'
-    );
-    return normalizeBlogCategoryMatchMode(selectedInput?.value);
-  };
-
-  const applySelectedMatchMode = (matchMode: BlogCategoryMatchMode): void => {
-    matchModeFieldset.querySelectorAll<HTMLInputElement>('input[name="blogCategoryMatchMode"]').forEach((input) => {
-      input.checked = input.value === matchMode;
-    });
-  };
-
   const applyBlogDirectoryState = (state: BlogDirectoryViewState): void => {
     searchInput.value = state.searchTerm;
     visibleCount = state.visibleCount;
-    applySelectedBlogCategories(categoryOptions, state.selectedCategories);
-    applySelectedMatchMode(state.matchMode);
-    updateBlogCategorySummary(categorySummary, state.selectedCategories);
+    applySelectedBlogCategories(includedCategoryOptions, state.includedCategories);
+    applySelectedBlogCategories(excludedCategoryOptions, state.excludedCategories);
+    updateBlogCategorySummary(includedCategorySummary, state.includedCategories, "Any label");
+    updateBlogCategorySummary(excludedCategorySummary, state.excludedCategories, "No excluded labels");
   };
 
   const restoreBlogDirectoryState = (): void => {
     const historyState = getBlogDirectoryStateFromHistory(window.history.state);
-    const fallbackState = getNormalizedBlogDirectoryViewState(initialSearchValue, [], "include", visibleCount);
+    const fallbackState = getNormalizedBlogDirectoryViewState(initialSearchValue, [], [], visibleCount);
     applyBlogDirectoryState(historyState || fallbackState);
   };
 
   const renderCurrentBlogDirectory = (): void => {
     const nextViewState = getNormalizedBlogDirectoryViewState(
       searchInput.value,
-      getSelectedBlogCategories(categoryOptions),
-      getSelectedMatchMode(),
+      getSelectedBlogCategories(includedCategoryOptions),
+      getSelectedBlogCategories(excludedCategoryOptions),
       visibleCount
     );
 
     applyBlogDirectoryState(nextViewState);
     updateBlogDirectoryHistoryState(
       nextViewState.searchTerm,
-      nextViewState.selectedCategories,
-      nextViewState.matchMode,
+      nextViewState.includedCategories,
+      nextViewState.excludedCategories,
       nextViewState.visibleCount
     );
 
     renderBlogArticles(
       nextViewState.searchTerm,
-      nextViewState.selectedCategories,
-      nextViewState.matchMode,
+      nextViewState.includedCategories,
+      nextViewState.excludedCategories,
       nextViewState.visibleCount,
       () => {
         visibleCount += BLOG_PAGE_SIZE;
@@ -4787,21 +4877,42 @@ function initializeBlogDirectory(): void {
     resetAndRenderBlogDirectory();
   });
 
-  categoryOptions.addEventListener("change", (event) => {
+  includedCategoryOptions.addEventListener("change", (event) => {
     if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+      const changedInput = event.target;
+      if (changedInput.checked) {
+        const counterpart = Array.from(
+          excludedCategoryOptions.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+        ).find((input) => input.value === changedInput.value);
+        if (counterpart) {
+          counterpart.checked = false;
+        }
+      }
       resetAndRenderBlogDirectory();
     }
   });
 
-  matchModeFieldset.addEventListener("change", (event) => {
-    if (event.target instanceof HTMLInputElement && event.target.type === "radio") {
+  excludedCategoryOptions.addEventListener("change", (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+      const changedInput = event.target;
+      if (changedInput.checked) {
+        const counterpart = Array.from(
+          includedCategoryOptions.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+        ).find((input) => input.value === changedInput.value);
+        if (counterpart) {
+          counterpart.checked = false;
+        }
+      }
       resetAndRenderBlogDirectory();
     }
   });
 
   document.addEventListener("click", (event) => {
-    if (categoryPicker?.open && event.target instanceof Node && !categoryPicker.contains(event.target)) {
-      categoryPicker.open = false;
+    if (includedCategoryPicker?.open && event.target instanceof Node && !includedCategoryPicker.contains(event.target)) {
+      includedCategoryPicker.open = false;
+    }
+    if (excludedCategoryPicker?.open && event.target instanceof Node && !excludedCategoryPicker.contains(event.target)) {
+      excludedCategoryPicker.open = false;
     }
   });
 

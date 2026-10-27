@@ -13,14 +13,16 @@ import {
   sortBlogPostsNewestFirst
 } from "../dist/js/test-core/blog-core.js";
 
-test("blogCategoriesMatchSelection supports inclusive and exact label combinations", () => {
-  const postCategories = ["Python", "Security", "Networks"];
+test("blogCategoriesMatchSelection combines required and excluded labels", () => {
+  const postCategories = ["Java", "Spring", "Security"];
 
-  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python", "Security"], "include"), true);
-  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python", "Security"], "exact"), false);
-  assert.equal(blogCategoriesMatchSelection(postCategories, postCategories, "exact"), true);
-  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python", "C++"], "include"), false);
-  assert.equal(blogCategoriesMatchSelection(postCategories, [], "exact"), true);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Java"], []), true);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Java", "Security"], []), true);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Java"], ["Spring"]), false);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Java"], ["Python"]), true);
+  assert.equal(blogCategoriesMatchSelection(postCategories, ["Python"], []), false);
+  assert.equal(blogCategoriesMatchSelection(postCategories, [], ["Spring"]), false);
+  assert.equal(blogCategoriesMatchSelection(postCategories, [], []), true);
 });
 
 test("formatBlogDate renders long-form US dates", () => {
@@ -66,6 +68,11 @@ test("sortBlogCategoriesMostSpecificFirst moves narrow categories before catch-a
   );
 
   assert.deepEqual(
+    sortBlogCategoriesMostSpecificFirst(["Biology", "Human Biology"]),
+    ["Human Biology", "Biology"]
+  );
+
+  assert.deepEqual(
     sortBlogCategoriesMostSpecificFirst([
       "Finance",
       "FinTech",
@@ -91,18 +98,32 @@ test("normalizeBlogDirectoryVisibleCount enforces a minimum page size", () => {
   assert.equal(normalizeBlogDirectoryVisibleCount("48"), 24);
 });
 
-test("normalizeBlogDirectoryViewState keeps valid categories and sanitizes invalid state", () => {
-  const allowedCategories = ["Docker", "Security"];
-  const restored = normalizeBlogDirectoryViewState("dock\u0000er", "Docker", 48, allowedCategories);
-  const invalid = normalizeBlogDirectoryViewState("query", "Unknown", 3, allowedCategories);
+test("normalizeBlogDirectoryViewState keeps valid include and exclude categories", () => {
+  const allowedCategories = ["Docker", "Java", "Security", "Spring"];
+  const restored = normalizeBlogDirectoryViewState(
+    "java\u0000security",
+    ["Java", "Security", "Unknown"],
+    ["Spring"],
+    48,
+    allowedCategories
+  );
+  const overlap = normalizeBlogDirectoryViewState(
+    "query",
+    ["Docker", "Security"],
+    ["Security", "Unknown"],
+    3,
+    allowedCategories
+  );
 
   assert.deepEqual(restored, {
-    categoryValue: "Docker",
-    searchTerm: "dock er",
+    excludedCategories: ["Spring"],
+    includedCategories: ["Java", "Security"],
+    searchTerm: "java security",
     visibleCount: 48
   });
-  assert.deepEqual(invalid, {
-    categoryValue: "",
+  assert.deepEqual(overlap, {
+    excludedCategories: ["Security"],
+    includedCategories: ["Docker"],
     searchTerm: "query",
     visibleCount: 24
   });

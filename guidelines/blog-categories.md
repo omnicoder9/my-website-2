@@ -6,6 +6,7 @@ When an article has multiple categories, list the most specific category first. 
 
 The blog filter visually groups related labels while keeping every label independently selectable:
 
+- **Biology**: Human Biology.
 - **Math**: Calculus, Linear Algebra, and Statistics.
 - **Programming Languages**: C++.
 
@@ -60,6 +61,7 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Git**: Git version control, branching, repository security, history rewriting, troubleshooting, collaboration workflows, and GitHub-specific repository practices.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
 - **High-Performance Computing**: Accelerated, parallel, throughput-oriented, or low-level performance work involving CPUs, GPUs, memory hierarchy, numerical workloads, and performance-focused programming systems.
+- **Human Biology**: Human anatomy, physiology, neuroscience, cognition, development, genetics, health, and disease at the level of the human organism.
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
 - **Java**: Java language, JVM, Java standard libraries, Jakarta EE, Java tooling, Java performance, Java security, and Java ecosystem engineering.

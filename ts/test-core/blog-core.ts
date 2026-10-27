@@ -7,16 +7,16 @@ export type BlogDirectoryPost = {
 };
 
 export type BlogDirectoryViewState = {
-  categoryValue: string;
+  excludedCategories: string[];
+  includedCategories: string[];
   searchTerm: string;
   visibleCount: number;
 };
 
-export type BlogCategoryMatchMode = "include" | "exact";
-
 const BLOG_PAGE_SIZE = 24;
 const BLOG_SPECIFIC_CATEGORY_RANK = 10;
 const BLOG_CATEGORY_SPECIFICITY_RANKS: Record<string, number> = {
+  Biology: 30,
   "Earth Sciences": 20,
   "Mobile App Development": 20,
   "Operating Systems": 20,
@@ -120,13 +120,31 @@ export function normalizeBlogDirectoryVisibleCount(value: unknown): number {
 
 export function normalizeBlogDirectoryViewState(
   searchTerm: unknown,
-  categoryValue: unknown,
+  includedCategories: unknown,
+  excludedCategories: unknown,
   visibleCount: unknown,
   allowedCategories: readonly string[]
 ): BlogDirectoryViewState {
+  const normalizeCategories = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    const selected = new Set(
+      value.filter((category): category is string =>
+        typeof category === "string" && allowedCategories.indexOf(category) !== -1
+      )
+    );
+    return allowedCategories.filter((category) => selected.has(category));
+  };
+  const normalizedExcludedCategories = normalizeCategories(excludedCategories);
+  const excludedCategorySet = new Set(normalizedExcludedCategories);
+
   return {
-    categoryValue:
-      typeof categoryValue === "string" && allowedCategories.indexOf(categoryValue) !== -1 ? categoryValue : "",
+    excludedCategories: normalizedExcludedCategories,
+    includedCategories: normalizeCategories(includedCategories).filter(
+      (category) => !excludedCategorySet.has(category)
+    ),
     searchTerm: normalizeBlogSearchTerm(typeof searchTerm === "string" ? searchTerm : ""),
     visibleCount: normalizeBlogDirectoryVisibleCount(visibleCount)
   };
@@ -144,19 +162,14 @@ export function blogMatchesSearch(post: Pick<BlogDirectoryPost, "title" | "path"
 
 export function blogCategoriesMatchSelection(
   postCategories: readonly string[],
-  selectedCategories: readonly string[],
-  matchMode: BlogCategoryMatchMode
+  includedCategories: readonly string[],
+  excludedCategories: readonly string[]
 ): boolean {
-  if (selectedCategories.length === 0) {
-    return true;
-  }
-
-  const includesEverySelectedCategory = selectedCategories.every(
+  const includesEverySelectedCategory = includedCategories.every(
     (category) => postCategories.indexOf(category) !== -1
   );
-  if (!includesEverySelectedCategory) {
-    return false;
-  }
-
-  return matchMode === "include" || postCategories.length === selectedCategories.length;
+  const includesNoExcludedCategory = excludedCategories.every(
+    (category) => postCategories.indexOf(category) === -1
+  );
+  return includesEverySelectedCategory && includesNoExcludedCategory;
 }
