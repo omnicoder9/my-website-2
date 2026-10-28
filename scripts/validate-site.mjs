@@ -231,6 +231,7 @@ function validateCoreInternalLinks() {
     "tools.html",
     "flashcards.html",
     "quizzes.html",
+    "interview-questions.html",
     "games.html",
     "blog-articles/privacy/privacy.html"
   ];

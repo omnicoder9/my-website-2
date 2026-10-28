@@ -17,23 +17,31 @@ const fallbackHeaderMarkup = `
   </button>
   <nav class="site-nav" id="site-nav-menu" aria-label="Primary">
     <ul>
-      <li><a href="cheatsheets.html">Cheat Sheets</a></li>
-      <li><a href="stylingpg.html">Styling</a></li>
       <li><a href="index.html#home">Home</a></li>
-      <li><a href="index.html#about">About</a></li>
-      <li><a href="index.html#services">Services</a></li>
-      <li><a href="index.html#opensource">Open-Source Contributions</a></li>
-      <li><a href="index.html#resources">Resources</a></li>
-      <li><a href="index.html#contact">Contact</a></li>
-      <li><a href="memes.html">Tech Memes</a></li>
-      <li><a href="tools.html">Tools</a></li>
-      <li><a href="flashcards.html">Flashcards</a></li>
-      <li><a href="quizzes.html">Quizzes</a></li>
-      <li><a href="games.html">Games</a></li>
       <li><a href="blog.html">Blog</a></li>
-      <li><a href="infographics.html">Infographics</a></li>
-      <li><a href="tutorials.html">Tutorials and Walkthroughs</a></li>
-      <li><a href="other.html">Other</a></li>
+      <li><a href="interview-questions.html">Interview Questions</a></li>
+      <li><a href="cheatsheets.html">Cheat Sheets</a></li>
+      <li><a href="quizzes.html">Quizzes</a></li>
+      <li><a href="tools.html">Tools</a></li>
+      <li class="site-nav__more-item">
+        <details class="site-nav-more">
+          <summary>Explore</summary>
+          <div class="site-nav-more__menu">
+            <a href="index.html#about">About</a>
+            <a href="index.html#services">Services</a>
+            <a href="index.html#opensource">Open Source</a>
+            <a href="index.html#resources">Resources</a>
+            <a href="index.html#contact">Contact</a>
+            <a href="stylingpg.html">Styling</a>
+            <a href="memes.html">Tech Memes</a>
+            <a href="flashcards.html">Flashcards</a>
+            <a href="games.html">Games</a>
+            <a href="infographics.html">Infographics</a>
+            <a href="tutorials.html">Tutorials</a>
+            <a href="other.html">Other</a>
+          </div>
+        </details>
+      </li>
     </ul>
   </nav>
 </header>
@@ -228,11 +236,33 @@ function normalizeHeaderLinks(mountNode: HTMLElement): void {
   });
 }
 
+function markCurrentNavigationLink(mountNode: HTMLElement): void {
+  const currentPath = window.location.pathname.replace(/\/$/, "/index.html");
+  const currentHash = window.location.hash || "#home";
+
+  mountNode.querySelectorAll<HTMLAnchorElement>(".site-nav a[href]").forEach((link) => {
+    const target = new URL(link.href, window.location.href);
+    const targetPath = target.pathname.replace(/\/$/, "/index.html");
+    const targetsHomePage = targetPath.endsWith("/index.html");
+    const isCurrent =
+      targetPath === currentPath &&
+      (!targetsHomePage || target.hash === currentHash || (!target.hash && currentHash === "#home"));
+
+    if (isCurrent) {
+      link.setAttribute("aria-current", "page");
+      link.closest(".site-nav-more")?.classList.add("site-nav-more--contains-current");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+}
+
 function initializeMobileNavigation(mountNode: HTMLElement): void {
   const header = mountNode.querySelector<HTMLElement>(".site-header");
   const toggle = mountNode.querySelector<HTMLButtonElement>(".site-nav-toggle");
   const nav = mountNode.querySelector<HTMLElement>(".site-nav");
-  const mobileQuery = window.matchMedia("(max-width: 760px)");
+  const mobileQuery = window.matchMedia("(max-width: 960px)");
+  const moreMenu = nav.querySelector<HTMLDetailsElement>(".site-nav-more");
 
   if (!header || !toggle || !nav) {
     return;
@@ -253,10 +283,24 @@ function initializeMobileNavigation(mountNode: HTMLElement): void {
   nav.addEventListener("click", (event) => {
     if (mobileQuery.matches && event.target instanceof Element && event.target.closest("a")) {
       setMenuOpen(false);
+      if (moreMenu) {
+        moreMenu.open = false;
+      }
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (moreMenu?.open && event.target instanceof Node && !moreMenu.contains(event.target)) {
+      moreMenu.open = false;
     }
   });
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && moreMenu?.open) {
+      moreMenu.open = false;
+      moreMenu.querySelector<HTMLElement>("summary")?.focus();
+      return;
+    }
     if (event.key === "Escape" && header.dataset.navOpen === "true") {
       setMenuOpen(false);
       toggle.focus();
@@ -326,6 +370,7 @@ function initializeWallpaperEngine(): void {
 
     mountNode.innerHTML = await response.text();
     normalizeHeaderLinks(mountNode);
+    markCurrentNavigationLink(mountNode);
     initializeMobileNavigation(mountNode);
     renderEnhancementTier(mountNode);
     document.dispatchEvent(new Event("header:loaded"));
@@ -333,6 +378,7 @@ function initializeWallpaperEngine(): void {
     console.error("Unable to load shared header:", error);
     mountNode.innerHTML = fallbackHeaderMarkup;
     normalizeHeaderLinks(mountNode);
+    markCurrentNavigationLink(mountNode);
     initializeMobileNavigation(mountNode);
     renderEnhancementTier(mountNode);
     document.dispatchEvent(new Event("header:loaded"));
