@@ -203,6 +203,18 @@ type BlogDirectoryViewState = {
 
 const blogPosts: BlogDirectoryPost[] = [
   {
+    path: "blog-articles/computer-graphics/color-science-human-vision.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on color science and human vision for computer graphics: light, radiometry and photometry, color spaces, color processing, HDR and tone mapping, and perceptual considerations.",
+    title: "Color Science and Human Vision"
+  },
+  {
+    path: "blog-articles/swe/sdlc/ai-native-sdlc.html",
+    publishedAt: "2026-11-04",
+    summary: "The AI-native software development lifecycle, and the bottleneck that moves when writing code stops being the hard part.",
+    title: "Where Is Intent Checked? The AI-native SDLC"
+  },
+  {
     path: "blog-articles/biology/human-biology/human-aging.html",
     publishedAt: "2026-11-04",
     summary: "A referenced technical review of human aging: history, key concepts, cellular senescence, changes in organ function, frailty and age-related disease, and longevity and healthy aging.",
@@ -4297,6 +4309,8 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/computer-graphics/color-science-human-vision.html": ["Computer Graphics", "Human Biology", "Physics"],
+  "blog-articles/swe/sdlc/ai-native-sdlc.html": ["SDLC", "Generative AI", "AI Agents", "AI Strategy", "Programming & Software"],
   "blog-articles/biology/human-biology/human-aging.html": ["Human Biology","Biology"],
   "blog-articles/biology/human-biology/nutrition-and-disease.html": ["Human Biology","Biology","Chemistry"],
   "blog-articles/programming-languages/python/django/django-async-background-jobs.html": ["Django","Python","Redis","Dev(Sec)Ops","Programming & Software"],
