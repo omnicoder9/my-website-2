@@ -6,9 +6,13 @@ When an article has multiple categories, list the most specific category first. 
 
 The blog filter visually groups related labels while keeping every label independently selectable:
 
+- **Artificial Intelligence**: AGI, AI Agents, AI Security, AI Strategy, Machine Learning, and Physical AI.
 - **Biology**: Human Biology.
+- **Cloud**: AWS, Azure, and GCP.
+- **Engineering**: Automotive Engineering, Control Theory & Engineering, Firearms Engineering, and Power Engineering.
 - **Math**: Calculus, Linear Algebra, and Statistics.
-- **Programming Languages**: C++ and Go.
+- **Programming Languages**: C++, Go (with Gin nested beneath Go), Java, and Python.
+- **Writing**: Stylometry and Technical Writing.
 
 ## Categories
 

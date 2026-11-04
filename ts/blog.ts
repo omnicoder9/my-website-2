@@ -108,8 +108,29 @@ type BlogCategoryGroup = {
 
 const blogCategoryGroups: readonly BlogCategoryGroup[] = [
   {
+    parent: "Artificial Intelligence",
+    children: ["AGI", "AI Agents", "AI Security", "AI Strategy", "Machine Learning", "Physical AI"]
+  },
+  {
     parent: "Biology",
     children: ["Human Biology"]
+  },
+  {
+    parent: "Cloud",
+    children: ["AWS", "Azure", "GCP"]
+  },
+  {
+    parent: "Engineering",
+    children: [
+      "Automotive Engineering",
+      "Control Theory & Engineering",
+      "Firearms Engineering",
+      "Power Engineering"
+    ]
+  },
+  {
+    parent: "Go",
+    children: ["Gin"]
   },
   {
     parent: "Math",
@@ -117,7 +138,11 @@ const blogCategoryGroups: readonly BlogCategoryGroup[] = [
   },
   {
     parent: "Programming Languages",
-    children: ["C++", "Go"]
+    children: ["C++", "Go", "Java", "Python"]
+  },
+  {
+    parent: "Writing",
+    children: ["Stylometry", "Technical Writing"]
   }
 ];
 
@@ -5157,6 +5182,33 @@ function renderBlogCategoryCheckbox(category: BlogCategory, inputPrefix: string)
   `;
 }
 
+function renderBlogCategoryBranch(
+  category: BlogCategory,
+  inputPrefix: string,
+  ancestorCategories: ReadonlySet<BlogCategory> = new Set<BlogCategory>()
+): string {
+  const group = blogCategoryGroups.find((candidate) => candidate.parent === category);
+  if (!group || ancestorCategories.has(category)) {
+    return renderBlogCategoryCheckbox(category, inputPrefix);
+  }
+
+  const nextAncestorCategories = new Set(ancestorCategories);
+  nextAncestorCategories.add(category);
+  const nestedOptions = [
+    renderBlogCategoryCheckbox(group.parent, inputPrefix),
+    ...group.children.map((childCategory) =>
+      renderBlogCategoryBranch(childCategory, inputPrefix, nextAncestorCategories)
+    )
+  ].join("");
+
+  return `
+    <fieldset class="blog-category-option-group">
+      <legend>${escapeHtml(group.parent)} categories</legend>
+      ${nestedOptions}
+    </fieldset>
+  `;
+}
+
 function renderBlogCategoryOptions(optionsElement: HTMLElement, inputPrefix: string): void {
   const groupedChildren = new Set<BlogCategory>();
   blogCategoryGroups.forEach((group) => {
@@ -5164,26 +5216,8 @@ function renderBlogCategoryOptions(optionsElement: HTMLElement, inputPrefix: str
   });
 
   const categoryOptions = blogCategoryLabels
-    .map((category) => {
-      if (groupedChildren.has(category)) {
-        return "";
-      }
-
-      const group = blogCategoryGroups.find((candidate) => candidate.parent === category);
-      if (!group) {
-        return renderBlogCategoryCheckbox(category, inputPrefix);
-      }
-
-      const nestedOptions = [group.parent, ...group.children]
-        .map((groupCategory) => renderBlogCategoryCheckbox(groupCategory, inputPrefix))
-        .join("");
-      return `
-        <fieldset class="blog-category-option-group">
-          <legend>${escapeHtml(group.parent)} categories</legend>
-          ${nestedOptions}
-        </fieldset>
-      `;
-    })
+    .filter((category) => !groupedChildren.has(category))
+    .map((category) => renderBlogCategoryBranch(category, inputPrefix))
     .join("");
 
   optionsElement.innerHTML = categoryOptions;
