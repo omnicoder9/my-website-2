@@ -45,11 +45,14 @@ const blogCategoryLabels = [
   "Game Theory",
   "GCP",
   "Generative AI",
+  "Gin",
   "Git",
+  "Go",
   "Hardware",
   "High-Performance Computing",
   "Human Biology",
   "ICS/OT",
+  "IT Roles",
   "IoT",
   "Java",
   "JavaScript",
@@ -59,6 +62,7 @@ const blogCategoryLabels = [
   "Learning",
   "Linear Algebra",
   "Logic",
+  "Mainframes",
   "Machine Learning",
   "Math",
   "Mobile App Development",
@@ -72,6 +76,7 @@ const blogCategoryLabels = [
   "Philosophy",
   "Privacy",
   "PostgreSQL",
+  "Power Engineering",
   "Programming & Software",
   "Programming Languages",
   "Python",
@@ -112,7 +117,7 @@ const blogCategoryGroups: readonly BlogCategoryGroup[] = [
   },
   {
     parent: "Programming Languages",
-    children: ["C++"]
+    children: ["C++", "Go"]
   }
 ];
 
@@ -172,6 +177,492 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/biology/human-biology/human-aging.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced technical review of human aging: history, key concepts, cellular senescence, changes in organ function, frailty and age-related disease, and longevity and healthy aging.",
+    title: "Human Aging"
+  },
+  {
+    path: "blog-articles/biology/human-biology/nutrition-and-disease.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced technical review of nutrition and disease: history, key concepts, obesity, type 2 diabetes, cardiovascular disease, malnutrition and dietary risk factors.",
+    title: "Nutrition and Disease"
+  },
+  {
+    path: "blog-articles/programming-languages/python/django/django-async-background-jobs.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on asynchronous programming and background job processing in Django and Python: ASGI, async views, async ORM, Channels, SSE, Celery, Redis, RabbitMQ, scheduling, retries, idempotency, event-driven design and task monitoring. With exercises, solutions and Vancouver-style references.",
+    title: "Django Async and Background Jobs"
+  },
+  {
+    path: "blog-articles/programming-languages/python/django/django-caching-performance.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on caching and performance engineering for Django and Python, with code, exercises, solutions and Vancouver-style references.",
+    title: "Django Caching and Performance"
+  },
+  {
+    path: "blog-articles/programming-languages/python/django/django-in-production.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to deploying and operating Django in production, with code, exercises and Vancouver-style references.",
+    title: "Django in Production"
+  },
+  {
+    path: "blog-articles/programming-languages/python/django/django-rest-framework-in-practice.html",
+    publishedAt: "2026-11-04",
+    summary: "A tested, referenced guide to building HTTP APIs with Django REST framework: serializers, views, routers, auth, JWT, filtering, pagination, throttling, versioning, OpenAPI and contract testing.",
+    title: "Django REST Framework in Practice"
+  },
+  {
+    path: "blog-articles/programming-languages/python/django/django-security.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Django security: CSRF, XSS, SQL injection, clickjacking, passwords, sessions, HTTPS, CORS, secrets, uploads, authorization, rate limiting, dependency scanning, deployment and GDPR.",
+    title: "Securing Django Applications"
+  },
+  {
+    path: "blog-articles/programming-languages/python/django/django-testing-quality-assurance.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on testing and quality assurance for Django and Python: unit, integration and end-to-end tests, TestCase and the test client, model, view and DRF API tests, authentication and permissions, mocking, factories and fixtures, transactions, coverage, regression tests, Hypothesis, Ruff, mypy, pytest and pytest-django. Every example was run; exercises with solutions; Vancouver-style references.",
+    title: "Django Testing and Quality Assurance"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-ai.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to building AI software in Python: LLM applications, retrieval-augmented generation, agents, LangChain, LangGraph and the Model Context Protocol, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python for AI"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-ast-module.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python's ast module: parsing, inspecting, walking, transforming and compiling abstract syntax trees, ast.unparse and ast.literal_eval, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python ast Module"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-bytecode.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to CPython bytecode: the compiler, the evaluation loop, code objects, dis, .pyc files, py_compile, compileall and the specializing adaptive interpreter, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Bytecode"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-c-extensions.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to writing CPython C extensions: the C API, reference counting, modules and types, building wheels, the GIL, the stable ABI, free-threaded Python and the alternatives, with tested examples, exercises and Vancouver-style references.",
+    title: "Python C Extensions"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-cloud-computing.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to cloud computing with Python: AWS with Boto3, the Azure SDK for Python, the Google Cloud client libraries and serverless functions, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python for Cloud Computing"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-code-quality.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python code quality: PEP 8, PEP 257, clean code, refactoring, documentation, code review, static analysis, Ruff, Flake8, Pylint, Black and isort, with tested examples, exercises and Vancouver-style references.",
+    title: "Python Code Quality"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-conditional-statements.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to if, elif, else and match-case in Python, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Conditional Statements"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-cybersecurity.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to using Python for penetration testing, malware analysis, reverse engineering, network automation, incident response and digital forensics, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python for Cybersecurity"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-cython.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Cython: compiling Python to C, static typing with cdef and cpdef, pure-Python mode, typed memoryviews and NumPy, releasing the GIL with prange, calling C libraries and Cython 3, with compiled and benchmarked examples, exercises with solutions and Vancouver-style references.",
+    title: "Cython for Python Developers"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-data-types.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on Python's built-in data types with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Data Types"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-decorators.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python decorators: closures, @ syntax, functools.wraps, decorator factories, stacking, class decorators, built-in decorators and ParamSpec typing, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Decorators"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-deployment.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to deploying Python applications: packaging, Docker, PyInstaller, cloud platforms, systemd services, logging, monitoring and observability, with tested examples, exercises and Vancouver-style references.",
+    title: "Python Deployment"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-descriptors.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python descriptors: __get__, __set__, __delete__, __set_name__, data and non-data descriptors, attribute lookup, property, classmethod, staticmethod and __slots__, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Descriptors"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-design-patterns.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Singleton, Factory, Strategy, Observer, Adapter, Builder and Dependency Injection in idiomatic Python, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Design Patterns"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-dynamic-imports.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to dynamic imports in Python: the import system, importlib, loading from file paths, reload, lazy imports, plugin discovery, package resources and security, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Dynamic Imports"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-introspection.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to examining Python objects at runtime: type checks, dir and vars, docstrings, the inspect module, frames, annotations, sys and gc, and code objects, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Introspection"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-loops.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python loops: for, while, nested loops, break, continue, pass and else clauses, with tested examples, exercises and Vancouver-style references.",
+    title: "Python Loops"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-metaclasses.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python metaclasses: classes as objects, type(), the class creation process, __prepare__, metaclass conflicts, __init_subclass__, __set_name__, class decorators, ABCMeta and Enum, with tested examples, exercises and Vancouver-style references.",
+    title: "Python Metaclasses"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-monkey-patching.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to monkey patching in Python: patching functions, methods, classes and modules at run time, where to patch, unittest.mock.patch, pytest monkeypatch, built-in type limits, real uses, risks and alternatives, with tested examples, exercises and Vancouver-style references.",
+    title: "Python Monkey Patching"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-operators.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced technical article on Python operators: arithmetic, comparison, logical, assignment, bitwise, membership, identity and precedence, with tested examples and exercises.",
+    title: "Python Operators"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-reflection.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to reflection in Python: reading and writing attributes by name, building classes at runtime, dispatch, serializers, CLIs and plugins, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Reflection"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-robotics-iot.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to Python for robotics and the Internet of Things: Raspberry Pi GPIO, hardware buses, MicroPython, MQTT, OpenCV computer vision and ROS 2, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python for Robotics and IoT"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-software-architecture.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to MVC, layered, event-driven, microservice and domain-driven architecture in Python, with tested examples, exercises with solutions and Vancouver-style references.",
+    title: "Python Software Architecture"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-syntax.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced technical article on Python syntax: comments, indentation, statements, expressions, variables, dynamic typing, keywords, identifiers, naming conventions and PEP 8.",
+    title: "Python Syntax, Line by Line"
+  },
+  {
+    path: "blog-articles/programming-languages/python/python-variables.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on Python variables: assignment, multiple assignment, unpacking, scope, global variables and constants, with tested examples, exercises and Vancouver-style references.",
+    title: "Python Variables"
+  },
+  {
+    path: "blog-articles/ai/evolutionary-computation.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on evolutionary computation and nature-inspired AI: genetic algorithms, genetic programming, evolution strategies, differential evolution, swarm intelligence, ant colony optimization, neuroevolution, artificial life, multi-objective optimization and hybrid methods.",
+    title: "Evolving Solutions"
+  },
+  {
+    path: "blog-articles/ai/knowledge-representation-and-reasoning.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on knowledge representation and reasoning in artificial intelligence, with history, worked examples, Python code, diagrams, exercises and Vancouver-style references.",
+    title: "Knowledge Representation and Reasoning"
+  },
+  {
+    path: "blog-articles/ai/ml/supervised-learning.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on supervised learning: history, theory, algorithms, Python code, diagrams, exercises with solutions, and Vancouver-style references.",
+    title: "Supervised Learning: Classification and Regression"
+  },
+  {
+    path: "blog-articles/ai/probabilistic-ai-reasoning-under-uncertainty.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on probabilistic AI: probability and Bayesian inference, graphical models, HMMs, Kalman and particle filters, probabilistic programming, causal inference, calibration and decision-making under uncertainty.",
+    title: "Reasoning Under Uncertainty"
+  },
+  {
+    path: "blog-articles/ai/search-planning-problem-solving.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on search, planning and problem solving in artificial intelligence, with history, Python code, diagrams, exercises and Vancouver-style references.",
+    title: "Search, Planning, and Problem Solving"
+  },
+  {
+    path: "blog-articles/architecture/architectural-design-principles.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on fourteen architectural design principles, with diagrams, worked code, exercises and Vancouver-style references.",
+    title: "Architectural Design Principles"
+  },
+  {
+    path: "blog-articles/architecture/architectural-practice.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on architectural practice: programming, conceptual design, design development, technical documentation, construction administration, project delivery, professional ethics, and public health, safety, and welfare.",
+    title: "Architectural Practice"
+  },
+  {
+    path: "blog-articles/computer-graphics/computer-graphics-applications.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on thirteen application areas of computer graphics, with concepts, source code, diagrams, interactive demonstrations, exercises with solutions and Vancouver-style references.",
+    title: "Applications of Computer Graphics"
+  },
+  {
+    path: "blog-articles/computer-graphics/graphics-systems.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on computer graphics systems: hardware, software, GPUs, APIs, displays, input and output devices, graphics engines and rendering engines.",
+    title: "Graphics Systems"
+  },
+  {
+    path: "blog-articles/computer-vision/camera-models-3d-geometry.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on camera models and 3D geometry: pinhole, perspective and orthographic projection, calibration and lens distortion, coordinate systems, rotations and SE(3), homogeneous coordinates, epipolar geometry, stereo depth, triangulation, pose estimation and PnP, with tested code, diagrams, exercises and Vancouver-style references.",
+    title: "Through the Pinhole"
+  },
+  {
+    path: "blog-articles/computer-vision/classical-computer-vision.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on classical computer vision: filtering and scale space, edge detection (Sobel, Canny, LoG), corners and blobs, SIFT, SURF, BRIEF, ORB and HOG descriptors, matching and the ratio test, registration with RANSAC, ECC and mutual information, optical flow, thresholding, region growing and watershed, shape analysis, texture (LBP, GLCM) and Hough transforms. Runnable code with real outputs, diagrams, exercises with solutions and Vancouver references.",
+    title: "Classical Computer Vision"
+  },
+  {
+    path: "blog-articles/computer-vision/core-computer-vision-tasks.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on the core tasks of computer vision: image classification, object detection, semantic, instance and panoptic segmentation, keypoints and pose estimation, recognition and retrieval, and an overview of motion analysis. Concepts, runnable code, diagrams, exercises with solutions and Vancouver references.",
+    title: "Core Computer Vision Tasks"
+  },
+  {
+    path: "blog-articles/computer-vision/cv-application-domains.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical survey of twelve computer vision application domains, with concepts, worked examples, Python code, exercises with solutions, diagrams and Vancouver-style references.",
+    title: "Computer Vision Application Domains"
+  },
+  {
+    path: "blog-articles/computer-vision/cv-evaluation-reliability.html",
+    publishedAt: "2026-11-04",
+    summary: "Evaluation, reliability and responsible deployment of computer vision models: metrics, robustness, data quality, security, privacy, and monitoring, with runnable code and exercises.",
+    title: "Measuring Vision Systems"
+  },
+  {
+    path: "blog-articles/computer-vision/cv-production-engineering.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on production engineering and deployment for computer vision systems, with code, diagrams, exercises and Vancouver-style references.",
+    title: "Shipping Vision Models"
+  },
+  {
+    path: "blog-articles/computer-vision/deep-learning-for-vision.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on deep learning for computer vision: neural-network foundations, convolutional networks, vision transformers, and training and model optimisation, with runnable NumPy code, exercises with solutions, and Vancouver references.",
+    title: "Deep Learning for Vision"
+  },
+  {
+    path: "blog-articles/computer-vision/generative-vision-language-models.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on vision-language models, contrastive learning, VLM assistants, grounding, open-vocabulary detection, promptable segmentation, diffusion-based generation and editing, multimodal RAG, document understanding and visual agents.",
+    title: "Generative & Vision-Language Models"
+  },
+  {
+    path: "blog-articles/computer-vision/image-processing.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on image processing for computer vision: point operations, convolution, filtering, frequency-domain processing, morphology, enhancement, restoration, geometric transforms and image pyramids. Concepts, runnable NumPy/OpenCV/scikit-image code with real outputs, diagrams, exercises with solutions and Vancouver references.",
+    title: "Image Processing Foundations"
+  },
+  {
+    path: "blog-articles/computer-vision/seeing-in-depth.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on 3D computer vision and reconstruction: depth estimation, point clouds, SfM and MVS, visual odometry and SLAM, volumetric representations, NeRF, Gaussian splatting, 3D deep learning, shape completion and novel-view synthesis, with tested code, diagrams, exercises and Vancouver-style references.",
+    title: "Seeing in Depth"
+  },
+  {
+    path: "blog-articles/computer-vision/video-understanding-tracking.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on video understanding and multi-object tracking, with runnable code, diagrams, exercises and Vancouver-style references.",
+    title: "Tracking Through Time"
+  },
+  {
+    path: "blog-articles/engineering/power-engineering/electrical-power-generation.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on electrical power generation: conventional and renewable plants, electrical generators, and generation planning and economics, with worked examples, source code, exercises and Vancouver-style references.",
+    title: "Electrical Power Generation"
+  },
+  {
+    path: "blog-articles/engineering/power-engineering/power-transmission-systems.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on electric power transmission: infrastructure, line engineering, power transformers and transmission system analysis, with worked examples, Python code, exercises and Vancouver-style references.",
+    title: "Power Transmission Systems"
+  },
+  {
+    path: "blog-articles/mainframes/jcl.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on z/OS Job Control Language (JCL): JOB, EXEC and DD statements, data set allocation, procedures, conditional execution, return codes, job dependencies, restart, JES2/JES3 and scheduling, with examples, exercises and Vancouver-style references.",
+    title: "Job Control Language on z/OS"
+  },
+  {
+    path: "blog-articles/mainframes/mainframe-databases.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on mainframe databases: IBM Db2 for z/OS, IMS DB, VSAM, hierarchical and relational models, SQL and embedded SQL, indexing, normalization, query optimization, transactions, locking, backup and recovery, and replication, with code, exercises and Vancouver-style references.",
+    title: "Mainframe Databases"
+  },
+  {
+    path: "blog-articles/mainframes/mainframe-hardware-architecture.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on IBM Z mainframe hardware architecture: processors, instruction set, memory, caches, channel subsystem, storage, redundancy, cryptography and hardware management, with code, exercises and Vancouver-style references.",
+    title: "Mainframe Hardware Architecture"
+  },
+  {
+    path: "blog-articles/mainframes/mainframe-operating-systems.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on IBM Z operating systems: z/OS, z/VM, Linux on IBM Z, z/VSE and z/TPF, with examples, source code, exercises and Vancouver-style references.",
+    title: "Mainframe Operating Systems"
+  },
+  {
+    path: "blog-articles/mainframes/mainframe-programming-languages.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on IBM Z mainframe programming languages: COBOL, HLASM, PL/I, C/C++, Java, Python, REXX, SQL and JCL, with worked examples, exercises and Vancouver-style references.",
+    title: "Mainframe Programming Languages"
+  },
+  {
+    path: "blog-articles/mainframes/mainframe-storage-data-management.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on z/OS storage and data management: DASD, sequential, partitioned, PDSE and VSAM data sets, GDGs, tape, storage pools, SMS, backup and recovery, replication and disaster recovery, with code, exercises and Vancouver-style references.",
+    title: "Mainframe Storage and Data Management"
+  },
+  {
+    path: "blog-articles/mainframes/mainframe-transaction-processing.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on mainframe transaction processing and middleware: CICS, IMS TM, OLTP, the transaction lifecycle, commit and rollback, isolation, IBM MQ, asynchronous processing, distributed transactions, two-phase commit, monitoring and high-volume design, with examples, exercises and Vancouver-style references.",
+    title: "Mainframe Transaction Processing"
+  },
+  {
+    path: "blog-articles/professions-occupations-roles/tech/IT-info-systems/enterprise-applications-careers.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced review of 14 enterprise applications roles (ERP, CRM, SAP, Salesforce, ServiceNow, Workday, integration): responsibilities, competencies, tools, processes, qualifications, credentials and career paths, across five dimensions.",
+    title: "Careers in Enterprise Applications"
+  },
+  {
+    path: "blog-articles/professions-occupations-roles/tech/IT-info-systems/enterprise-infrastructure-careers.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced review of 11 enterprise infrastructure roles: responsibilities, competencies, tools, processes, qualifications, credentials and career paths, across five dimensions.",
+    title: "Careers in Enterprise Infrastructure"
+  },
+  {
+    path: "blog-articles/professions-occupations-roles/tech/IT-info-systems/it-governance-and-management-careers.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced review of 11 IT governance and management roles: responsibilities, competencies, tools, processes, qualifications, credentials and career paths, across five dimensions.",
+    title: "Careers in IT Governance and Management"
+  },
+  {
+    path: "blog-articles/professions-occupations-roles/tech/IT-info-systems/it-support-and-service-management-careers.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced review of 15 IT support and service management roles: responsibilities, competencies, tools, processes, qualifications, credentials and career paths, across five dimensions.",
+    title: "Careers in IT Support and Service Management"
+  },
+  {
+    path: "blog-articles/professions-occupations-roles/tech/IT-info-systems/systems-administration-careers.html",
+    publishedAt: "2026-11-04",
+    summary: "A referenced review of 13 systems administration roles: responsibilities, competencies, tools, processes, qualifications, credentials and career paths, across five dimensions.",
+    title: "Careers in Systems Administration"
+  },
+  {
+    path: "blog-articles/programming-languages/go/gin/gin-handlers-and-controllers.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on handlers, controllers, handler chaining, dependency injection and layered architecture in Go with the Gin web framework, with runnable code, exercises, solutions and Vancouver-style references.",
+    title: "Gin Handlers and Controllers"
+  },
+  {
+    path: "blog-articles/programming-languages/go/gin/gin-middleware.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to writing, ordering and testing middleware in the Gin web framework for Go, with runnable examples, exercises and solutions, and Vancouver-style references.",
+    title: "Middleware in Gin"
+  },
+  {
+    path: "blog-articles/programming-languages/go/gin/gin-request-handling-and-data-binding.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to request handling, data binding, validation, sanitization and size limits in the Gin web framework for Go, with tested examples, exercises and Vancouver-style references.",
+    title: "Gin Request Binding"
+  },
+  {
+    path: "blog-articles/programming-languages/go/gin/gin-response-handling.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical guide to producing HTTP responses with the Gin web framework for Go: JSON, XML, YAML, strings, HTML, redirects, files, streaming, status codes, headers, cookies, structured APIs, serialization and error responses.",
+    title: "Gin Response Handling"
+  },
+  {
+    path: "blog-articles/programming-languages/go/gin/gin-routing-and-http-methods.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on routing and HTTP methods in the Gin web framework for Go, with runnable examples, exercises and solutions, and Vancouver-style references.",
+    title: "Routing and HTTP Methods in Gin"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-architecture-design-patterns.html",
+    publishedAt: "2026-11-04",
+    summary: "A practical guide to software architecture and design patterns in Go: clean, hexagonal, DDD, modular monoliths, microservices, events, CQRS, event sourcing, GoF patterns, resilience patterns and twelve-factor apps, with runnable code, exercises and references.",
+    title: "Go Architecture Patterns"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-concurrency-and-parallelism.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on Go's concurrency model: goroutines, channels, select, sync, atomics, context, concurrency patterns, and concurrency bugs, with verified examples, exercises and solutions, and Vancouver-style references.",
+    title: "Concurrency and Parallelism in Go"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-control-flow.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on control flow in Go: if, switch, for and range, break and continue, goto, defer, panic and recover, with runnable examples, exercises, solutions and Vancouver-style references.",
+    title: "Control Flow in Go"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-data-structures-and-collections.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on Go's built-in data structures and collections: arrays, slices, maps, structs and pointers, with runnable examples, exercises, solutions and Vancouver-style references.",
+    title: "Go Data Structures"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-error-handling-and-reliability.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on error handling and reliability in Go: the error interface, creating, propagating and wrapping errors, errors.Is, errors.As and errors.AsType, fmt.Errorf, custom and sentinel errors, panic and recover, defensive programming, input validation, graceful degradation, retries with backoff and jitter, timeouts and circuit breakers, with runnable examples, exercises, solutions and Vancouver-style references.",
+    title: "Error Handling in Go"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-functions-and-paradigms.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on functions and programming paradigms in Go: declarations, parameters and results, variadic functions, closures, first-class and higher-order functions, recursion, function types, methods and receivers, functional and procedural styles, and composition and delegation, with runnable examples, exercises, solutions and Vancouver-style references.",
+    title: "Functions and Paradigms in Go"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-object-oriented-programming.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on object-oriented programming in Go: encapsulation, abstraction, polymorphism, interfaces (declarations, implicit implementation, any, type assertions, type switches, composition and embedding), composition over inheritance, struct embedding, method sets, dependency injection, SOLID and design patterns, with runnable examples, exercises, solutions and Vancouver-style references.",
+    title: "Object-Oriented Programming in Go"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-syntax-and-basic-types.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on Go language syntax and basic types: variables, constants, zero values, primitive types, conversions, type aliases, operators, precedence, comments and formatting, with verified examples, exercises and Vancouver-style references.",
+    title: "Go Syntax and Basic Types"
+  },
+  {
+    path: "blog-articles/programming-languages/go/go-web-and-backend-development.html",
+    publishedAt: "2026-11-04",
+    summary: "A technical article on building HTTP servers and APIs in Go: routing, middleware, authentication, authorization, sessions, JWT, OAuth 2.0 and OpenID Connect, validation, rate limiting, CORS, versioning, documentation, error responses, logging, metrics, WebSockets, Server-Sent Events, uploads, background jobs, caching and microservices, with verified examples, exercises and solutions, and Vancouver-style references.",
+    title: "Web and Backend Development in Go"
+  },
   {
     path: "blog-articles/biology/human-biology/attention-executive-function.html",
     publishedAt: "2026-10-27",
@@ -3781,6 +4272,87 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/biology/human-biology/human-aging.html": ["Human Biology","Biology"],
+  "blog-articles/biology/human-biology/nutrition-and-disease.html": ["Human Biology","Biology","Chemistry"],
+  "blog-articles/programming-languages/python/django/django-async-background-jobs.html": ["Django","Python","Redis","Dev(Sec)Ops","Programming & Software"],
+  "blog-articles/programming-languages/python/django/django-caching-performance.html": ["Django","Python","Redis","Dev(Sec)Ops","Programming & Software"],
+  "blog-articles/programming-languages/python/django/django-in-production.html": ["Django","Python","Cloud","Dev(Sec)Ops","Security","Programming & Software"],
+  "blog-articles/programming-languages/python/django/django-rest-framework-in-practice.html": ["Django","Python","Web & UI","Software Design & Architecture","Programming & Software"],
+  "blog-articles/programming-languages/python/django/django-security.html": ["Django","Python","Software Security","Security","Programming & Software"],
+  "blog-articles/programming-languages/python/django/django-testing-quality-assurance.html": ["Django","Python","SDLC","Programming & Software"],
+  "blog-articles/programming-languages/python/python-ai.html": ["Python","Generative AI","AI Agents","Artificial Intelligence","Programming & Software"],
+  "blog-articles/programming-languages/python/python-ast-module.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-bytecode.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-c-extensions.html": ["Python","High-Performance Computing","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-cloud-computing.html": ["Python","Cloud","AWS","Azure","GCP","Programming & Software"],
+  "blog-articles/programming-languages/python/python-code-quality.html": ["Python","SDLC","Dev(Sec)Ops","Programming & Software"],
+  "blog-articles/programming-languages/python/python-conditional-statements.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-cybersecurity.html": ["Python","Security","Pentesting","Network Security","Programming & Software"],
+  "blog-articles/programming-languages/python/python-cython.html": ["Python","High-Performance Computing","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-data-types.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-decorators.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-deployment.html": ["Python","Dev(Sec)Ops","Cloud","Programming & Software"],
+  "blog-articles/programming-languages/python/python-descriptors.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-design-patterns.html": ["Python","Software Design & Architecture","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-dynamic-imports.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-introspection.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-loops.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-metaclasses.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-monkey-patching.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-operators.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-reflection.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-robotics-iot.html": ["Python","IoT","Robotics","Physical AI","Programming & Software"],
+  "blog-articles/programming-languages/python/python-software-architecture.html": ["Python","Software Design & Architecture","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-syntax.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/python/python-variables.html": ["Python","Programming Languages","Programming & Software"],
+  "blog-articles/ai/evolutionary-computation.html": ["Artificial Intelligence","Machine Learning","Algorithms"],
+  "blog-articles/ai/knowledge-representation-and-reasoning.html": ["Artificial Intelligence","Logic"],
+  "blog-articles/ai/ml/supervised-learning.html": ["Machine Learning","Artificial Intelligence","Statistics"],
+  "blog-articles/ai/probabilistic-ai-reasoning-under-uncertainty.html": ["Artificial Intelligence","Machine Learning","Statistics"],
+  "blog-articles/ai/search-planning-problem-solving.html": ["Artificial Intelligence","Algorithms","Programming & Software"],
+  "blog-articles/architecture/architectural-design-principles.html": ["Architecture","Construction","Engineering"],
+  "blog-articles/architecture/architectural-practice.html": ["Architecture","Construction","Engineering"],
+  "blog-articles/computer-graphics/computer-graphics-applications.html": ["Computer Graphics","High-Performance Computing","Hardware","Programming & Software"],
+  "blog-articles/computer-graphics/graphics-systems.html": ["Computer Graphics","High-Performance Computing","Hardware","Programming & Software"],
+  "blog-articles/computer-vision/camera-models-3d-geometry.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/classical-computer-vision.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/core-computer-vision-tasks.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/cv-application-domains.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/cv-evaluation-reliability.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/cv-production-engineering.html": ["Computer Vision","Machine Learning","Artificial Intelligence","Dev(Sec)Ops","Engineering"],
+  "blog-articles/computer-vision/deep-learning-for-vision.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/generative-vision-language-models.html": ["Computer Vision","Generative AI","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/image-processing.html": ["Computer Vision","Computer Graphics","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/seeing-in-depth.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/computer-vision/video-understanding-tracking.html": ["Computer Vision","Machine Learning","Artificial Intelligence"],
+  "blog-articles/engineering/power-engineering/electrical-power-generation.html": ["Power Engineering","Electronics","Cyber-Physical Systems","Engineering"],
+  "blog-articles/engineering/power-engineering/power-transmission-systems.html": ["Power Engineering","Electronics","Cyber-Physical Systems","Engineering"],
+  "blog-articles/mainframes/jcl.html": ["Mainframes","Operating Systems","Programming Languages","Programming & Software"],
+  "blog-articles/mainframes/mainframe-databases.html": ["Mainframes","Data Engineering","Programming & Software"],
+  "blog-articles/mainframes/mainframe-hardware-architecture.html": ["Mainframes","Hardware","Operating Systems","Engineering"],
+  "blog-articles/mainframes/mainframe-operating-systems.html": ["Mainframes","Operating Systems","Hardware"],
+  "blog-articles/mainframes/mainframe-programming-languages.html": ["Mainframes","Programming Languages","Programming & Software"],
+  "blog-articles/mainframes/mainframe-storage-data-management.html": ["Mainframes","Data Engineering","Hardware","Operating Systems"],
+  "blog-articles/mainframes/mainframe-transaction-processing.html": ["Mainframes","Data Engineering","Programming & Software"],
+  "blog-articles/professions-occupations-roles/tech/IT-info-systems/enterprise-applications-careers.html": ["IT Roles","Business","Data Engineering","Programming & Software"],
+  "blog-articles/professions-occupations-roles/tech/IT-info-systems/enterprise-infrastructure-careers.html": ["IT Roles","Cloud","Hardware","Networks","Dev(Sec)Ops"],
+  "blog-articles/professions-occupations-roles/tech/IT-info-systems/it-governance-and-management-careers.html": ["IT Roles","Business","SDLC","Security"],
+  "blog-articles/professions-occupations-roles/tech/IT-info-systems/it-support-and-service-management-careers.html": ["IT Roles","Dev(Sec)Ops","Learning","Programming & Software"],
+  "blog-articles/professions-occupations-roles/tech/IT-info-systems/systems-administration-careers.html": ["IT Roles","Operating Systems","Networks","Dev(Sec)Ops"],
+  "blog-articles/programming-languages/go/gin/gin-handlers-and-controllers.html": ["Gin","Go","Web & UI","Programming & Software"],
+  "blog-articles/programming-languages/go/gin/gin-middleware.html": ["Gin","Go","Web & UI","Programming & Software"],
+  "blog-articles/programming-languages/go/gin/gin-request-handling-and-data-binding.html": ["Gin","Go","Web & UI","Programming & Software"],
+  "blog-articles/programming-languages/go/gin/gin-response-handling.html": ["Gin","Go","Web & UI","Programming & Software"],
+  "blog-articles/programming-languages/go/gin/gin-routing-and-http-methods.html": ["Gin","Go","Web & UI","Programming & Software"],
+  "blog-articles/programming-languages/go/go-architecture-design-patterns.html": ["Go","Software Design & Architecture","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-concurrency-and-parallelism.html": ["Go","High-Performance Computing","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-control-flow.html": ["Go","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-data-structures-and-collections.html": ["Go","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-error-handling-and-reliability.html": ["Go","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-functions-and-paradigms.html": ["Go","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-object-oriented-programming.html": ["Go","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-syntax-and-basic-types.html": ["Go","Programming Languages","Programming & Software"],
+  "blog-articles/programming-languages/go/go-web-and-backend-development.html": ["Go","Web & UI","Networks","Programming Languages","Programming & Software"],
   "blog-articles/biology/human-biology/attention-executive-function.html": ["Human Biology", "Biology"],
   "blog-articles/biology/human-biology/bioinformatics-human-biology.html": ["Human Biology", "Biology", "Data Engineering", "Statistics"],
   "blog-articles/biology/human-biology/brain-organization.html": ["Human Biology", "Biology"],

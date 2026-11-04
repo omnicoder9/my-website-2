@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Django in Production</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A technical guide to deploying and operating Django in production, with code, exercises and Vancouver-style references.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a field manual. Narrow serif reading column, sticky contents rail on wide screens,
+   code set as labelled "config file" plates; exercises marked by an ochre tab. */
+:root {
+  --bg: #f6f8f8;
+  --surface: #ffffff;
+  --fg: #1b2427;
+  --muted: #56666b;
+  --rule: #d5dee0;
+  --accent: #0b6874;
+  --accent-soft: #e2eff1;
+  --ochre: #9a5b06;
+  --ochre-soft: #fbf1e1;
+  --code-bg: #eef3f4;
+  --code-fg: #1d2a2e;
+  --code-comment: #5f7479;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --step--1: 0.875rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.25rem;
+  --step-2: 1.6rem;
+  --step-3: clamp(2.2rem, 5vw, 3.4rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1517; --surface: #151d20; --fg: #d8e2e4; --muted: #93a5aa; --rule: #2a373b;
+    --accent: #62c3cf; --accent-soft: #15292d; --ochre: #e3a64e; --ochre-soft: #2a2114;
+    --code-bg: #121a1d; --code-fg: #d3dfe2; --code-comment: #7d969c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1517; --surface: #151d20; --fg: #d8e2e4; --muted: #93a5aa; --rule: #2a373b;
+  --accent: #62c3cf; --accent-soft: #15292d; --ochre: #e3a64e; --ochre-soft: #2a2114;
+  --code-bg: #121a1d; --code-fg: #d3dfe2; --code-comment: #7d969c;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 2.5rem 4rem;
+}
+a { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+a:focus-visible, summary:focus-visible, pre:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px;
+}
+
+/* Masthead */
+.masthead { display: grid; gap: 0.9rem; padding-bottom: 2rem; border-bottom: 2px solid var(--fg); margin-bottom: 2.5rem; }
+.kicker {
+  margin: 0; font-family: var(--font-display); font-size: var(--step--1); font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
+}
+h1 {
+  margin: 0; font-family: var(--font-display); font-weight: 800; font-stretch: 78%;
+  font-size: var(--step-3); line-height: 1.02; letter-spacing: -0.01em; text-wrap: balance;
+}
+.dek { margin: 0; max-width: 46rem; font-size: var(--step-1); line-height: 1.5; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 0.5rem 2.25rem; margin: 0.4rem 0 0; }
+.meta div { display: grid; gap: 0.1rem; }
+.meta dt {
+  font-family: var(--font-display); font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.meta dd { margin: 0; font-family: var(--font-mono); font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+
+/* Two-column layout */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
+@media (min-width: 1100px) {
+  .layout { grid-template-columns: 15rem minmax(0, 1fr); gap: 3.5rem; }
+  .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1rem); align-self: start;
+         max-height: calc(100vh - 2rem); overflow-y: auto; }
+}
+.toc { font-family: var(--font-display); font-size: 0.9rem; min-width: 0; }
+.toc-title { margin: 0 0 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.75rem; color: var(--muted); }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
+.toc a { display: block; padding: 0.22rem 0 0.22rem 0.6rem; color: var(--fg); text-decoration: none; border-left: 2px solid var(--rule); line-height: 1.3; }
+.toc a:hover { border-left-color: var(--accent); color: var(--accent); }
+.toc .secno { color: var(--muted); font-family: var(--font-mono); font-size: 0.8em; margin-right: 0.35rem; }
+@media (max-width: 1099px) {
+  .toc { border: 1px solid var(--rule); background: var(--surface); padding: 1rem 1.1rem; }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); column-gap: 1.5rem; }
+}
+
+/* Prose */
+.prose { min-width: 0; max-width: 46rem; }
+.prose section { padding-top: 0.5rem; margin-bottom: 3.5rem; }
+.prose h2 {
+  font-family: var(--font-display); font-weight: 750; font-stretch: 85%;
+  font-size: var(--step-2); line-height: 1.15; margin: 0 0 1rem; text-wrap: balance;
+  display: flex; align-items: baseline; gap: 0.7rem;
+}
+.prose h2 .secno {
+  font-family: var(--font-mono); font-weight: 600; font-size: 0.6em; color: var(--accent);
+  border: 1.5px solid var(--accent); padding: 0.05em 0.4em; flex: none; position: relative; top: -0.15em;
+}
+.prose h3 {
+  font-family: var(--font-display); font-weight: 650; font-size: var(--step-1);
+  margin: 2rem 0 0.6rem; line-height: 1.25; text-wrap: balance;
+}
+.prose p, .prose li { max-width: 68ch; }
+.prose ul, .prose ol { padding-left: 1.3rem; }
+.prose li + li { margin-top: 0.35rem; }
+.prose code {
+  font-family: var(--font-mono); font-size: 0.84em; background: var(--code-bg);
+  padding: 0.08em 0.3em; border-radius: 3px; overflow-wrap: anywhere;
+}
+sup.cite { font-family: var(--font-display); font-size: 0.68em; font-weight: 600; line-height: 0; white-space: nowrap; }
+sup.cite a { text-decoration: none; }
+sup.cite a:hover { text-decoration: underline; }
+
+/* Code plates */
+figure.code { margin: 1.3rem 0 1.6rem; border: 1px solid var(--rule); background: var(--code-bg); min-width: 0; }
+figure.code figcaption {
+  display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0.9rem;
+  border-bottom: 1px solid var(--rule); font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted);
+  background: var(--surface);
+}
+figure.code .fname { color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+figure.code .lang { text-transform: uppercase; letter-spacing: 0.08em; flex: none; }
+figure.code pre { margin: 0; padding: 0.9rem 1rem; overflow-x: auto; }
+figure.code pre code {
+  background: none; padding: 0; font-size: 0.8rem; line-height: 1.55; color: var(--code-fg);
+  white-space: pre; overflow-wrap: normal; display: block; tab-size: 4;
+}
+figure.code .c { color: var(--code-comment); font-style: italic; }
+
+/* Diagram */
+figure.diagram { margin: 1.4rem 0; border: 1px solid var(--rule); background: var(--surface); }
+figure.diagram pre.ascii { margin: 0; padding: 1rem; overflow-x: auto; font-family: var(--font-mono); font-size: 0.74rem; line-height: 1.45; color: var(--fg); }
+figure.diagram figcaption, .table-wrap caption {
+  font-family: var(--font-display); font-size: var(--step--1); color: var(--muted); padding: 0.5rem 1rem; text-align: left;
+}
+figure.diagram figcaption { border-top: 1px solid var(--rule); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; margin: 1.2rem 0 1.6rem; border: 1px solid var(--rule); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; line-height: 1.45; }
+th, td { text-align: left; vertical-align: top; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--font-display); font-weight: 650; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+td code { white-space: nowrap; }
+tbody.num td:nth-child(2) { font-family: var(--font-mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-wrap caption { caption-side: top; border-bottom: 1px solid var(--rule); }
+
+/* Exercises */
+.exercise {
+  margin: 2rem 0 0; padding: 1.1rem 1.25rem 1.2rem; background: var(--ochre-soft);
+  border-top: 3px solid var(--ochre);
+}
+.exercise > p { margin: 0 0 0.8rem; }
+.ex-label {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ochre);
+}
+.exercise details { border-top: 1px solid var(--rule); padding-top: 0.7rem; }
+.exercise summary {
+  cursor: pointer; font-family: var(--font-display); font-weight: 650; color: var(--accent);
+  list-style-position: outside; width: fit-content;
+}
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+.exercise details p { margin: 0 0 0.7rem; }
+.exercise figure.code { background: var(--code-bg); }
+
+/* Checklist, exercise index, references */
+.checklist { counter-reset: none; padding-left: 1.6rem; }
+.checklist li::marker { font-family: var(--font-mono); color: var(--accent); }
+.ex-index { list-style: none; padding: 0; display: grid; gap: 0.55rem; }
+.ex-index li { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: 0.8rem; font-size: 0.95rem; max-width: none; }
+.ex-index span { color: var(--muted); }
+@media (max-width: 520px) { .ex-index li { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; } }
+.ref-note { color: var(--muted); font-size: var(--step--1); }
+.refs { font-size: 0.86rem; line-height: 1.5; padding-left: 2.2rem; }
+.refs li { max-width: none; overflow-wrap: anywhere; scroll-margin-top: 1rem; }
+.refs li::marker { font-family: var(--font-mono); color: var(--muted); }
+.refs li:target { background: var(--accent-soft); outline: 4px solid var(--accent-soft); }
+
+</style>
+</head>
+<body>
+<nav aria-label="Site navigation" style="position:relative;display:flex;gap:1rem;align-items:center;padding:.8rem 1rem;margin:0;background:#111827;color:#f9fafb;font:600 0.9rem/1.2 system-ui,-apple-system,Segoe UI,sans-serif">
+  <a href="../../../../index.html" style="color:#f9fafb;text-decoration:none">Home</a>
+  <a href="../../../../blog.html" style="color:#f9fafb;text-decoration:none">Blog</a>
+</nav>
+<div class="page">
+<header class="masthead">
+  <p class="kicker">Production deployment and DevOps · Django 6.x · Python 3.12+</p>
+  <h1>Django in Production</h1>
+  <p class="dek">Settings, application servers, proxies, PostgreSQL, containers, pipelines, cloud and Kubernetes, secrets, observability, shutdown, migrations, recovery and scaling. Sixteen topics, each with working configuration, an exercise and a worked solution.</p>
+  <dl class="meta">
+    <div><dt>Topics</dt><dd>16</dd></div>
+    <div><dt>Exercises</dt><dd>16</dd></div>
+    <div><dt>References</dt><dd>96</dd></div>
+    <div><dt>Sources checked</dt><dd>28 Oct 2026</dd></div>
+  </dl>
+</header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <p class="toc-title">Contents</p>
+  <ol><li><a href="#intro">Introduction and reference architecture</a></li><li><a href="#settings"><span class="secno">1</span> Production settings and environment variables</a></li><li><a href="#gunicorn"><span class="secno">2</span> WSGI servers: Gunicorn</a></li><li><a href="#asgi"><span class="secno">3</span> ASGI servers: Uvicorn or Daphne</a></li><li><a href="#nginx"><span class="secno">4</span> Reverse proxies: Nginx</a></li><li><a href="#postgres"><span class="secno">5</span> PostgreSQL production configuration</a></li><li><a href="#static"><span class="secno">6</span> Static and media storage</a></li><li><a href="#docker"><span class="secno">7</span> Docker and Docker Compose</a></li><li><a href="#cicd"><span class="secno">8</span> CI/CD with GitHub Actions, GitLab CI or Jenkins</a></li><li><a href="#cloud"><span class="secno">9</span> Cloud deployment: AWS, Azure or GCP</a></li><li><a href="#kubernetes"><span class="secno">10</span> Kubernetes deployment</a></li><li><a href="#secrets"><span class="secno">11</span> Secrets management and IAM</a></li><li><a href="#observability"><span class="secno">12</span> Logging, metrics, tracing and alerting</a></li><li><a href="#health"><span class="secno">13</span> Health checks and graceful shutdown</a></li><li><a href="#migrations"><span class="secno">14</span> Database migration strategy</a></li><li><a href="#backups"><span class="secno">15</span> Backups and disaster recovery</a></li><li><a href="#scaling"><span class="secno">16</span> Horizontal scaling and load balancing</a></li><li><a href="#checklist">Go-live checklist</a></li><li><a href="#exercises-index">Exercise index</a></li><li><a href="#references">References</a></li></ol>
+</nav>
+<article class="prose">
+<section id="intro">
+<h2>Introduction and reference architecture</h2>
+<p>Running Django in production is mostly about the parts around Django. The framework's own deployment checklist is short: turn off debug mode, keep the secret key secret, set allowed hosts, serve over HTTPS, and use a real application server instead of <code>runserver</code>, which "is not designed for a production setting" <sup class="cite">[<a href="#ref-1">1</a>]</sup>. Everything else in this article is about the processes, proxies, databases, pipelines and runbooks that keep those settings true under load, during deploys and after failures.</p>
+<p>The examples target Django 6.x on Python 3.12 or later. At the time of writing, the latest official Django release is 6.1, and 5.2 is the supported long-term-support (LTS) release, with extended support until April 2028 <sup class="cite">[<a href="#ref-2">2</a>]</sup>. Django 6.0 supports Python 3.12, 3.13 and 3.14 <sup class="cite">[<a href="#ref-3">3</a>]</sup>. The settings shown here also work on 5.2 unless a note says otherwise. All code is written for an imaginary online shop called <em>acme-shop</em>, with the Django project package named <code>config</code>.</p>
+<p>The architecture used throughout looks like this. Each layer gets its own section.</p>
+<figure class="diagram" aria-label="Reference architecture">
+<pre class="ascii">
+  clients ──HTTPS──▶  load balancer / reverse proxy   (Nginx, ALB, Ingress)     §4, §16
+                         │  TLS termination, buffering, static files, WebSocket upgrade
+                         ▼
+             ┌─────────────────────────────┐
+             │ app replicas (stateless)    │  Gunicorn (WSGI) or Uvicorn/Daphne (ASGI)   §2, §3
+             │ container image, 12-factor  │  Docker → Compose / ECS / Kubernetes        §7, §9, §10
+             └──────┬───────────┬──────────┘
+                    │           │
+          ┌─────────▼──┐   ┌────▼──────┐   ┌───────────────────┐
+          │ PostgreSQL │   │  Redis    │   │ object storage    │
+          │ + pooler   │   │ cache,    │   │ media uploads,    │   §5, §6
+          │ + WAL/PITR │   │ sessions  │   │ backups           │   §15
+          └────────────┘   └───────────┘   └───────────────────┘
+  cross-cutting: secrets & IAM §11 · logs/metrics/traces/alerts §12 · health & shutdown §13
+                 migrations §14 · CI/CD §8
+</pre>
+<figcaption>Reference architecture for <em>acme-shop</em>. Section numbers point to where each part is covered.</figcaption>
+</figure>
+<p>Two ideas from the Twelve-Factor App methodology run through every section: configuration lives in the environment, not in code <sup class="cite">[<a href="#ref-4">4</a>]</sup>, and application processes are stateless and share nothing, so anything that must persist lives in a backing service such as a database <sup class="cite">[<a href="#ref-5">5</a>]</sup>. Those two rules are what make horizontal scaling, rolling deploys and disaster recovery tractable.</p>
+</section>
+
+<section id="settings">
+<h2><span class="secno">1</span> Production settings and environment variables</h2>
+<p>Split settings into a shared base module and small environment-specific modules. Keep anything that differs between deploys, or that is secret, out of the repository and read it from the environment at startup <sup class="cite">[<a href="#ref-4">4</a>]</sup>. The Django checklist gives the canonical example: <code>SECRET_KEY = os.environ["SECRET_KEY"]</code>, and stresses that the key "must be a large random value and it must be kept secret" <sup class="cite">[<a href="#ref-1">1</a>]</sup>.</p>
+
+<h3>A settings layout that fails fast</h3>
+<p>A missing variable should crash the process at boot with a clear message, not surface as a confusing error on the first request. The helper below also supports the <code>NAME_FILE</code> convention, where a secret is mounted as a file by Docker or Kubernetes instead of placed in the environment (see §11).</p>
+<figure class="code"><figcaption><span class="fname">config/settings/env.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import os
+from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+
+_TRUE = {"1", "true", "yes", "on"}
+
+
+def env(name: str, default: str | None = None, *, required: bool = False) -&gt; str | None:
+    value = os.environ.get(name, default)
+    if required and not value:
+        raise ImproperlyConfigured(f"Environment variable {name} is required")
+    return value
+
+
+def env_bool(name: str, default: bool = False) -&gt; bool:
+    return env(name, str(default)).strip().lower() in _TRUE
+
+
+def env_int(name: str, default: int) -&gt; int:
+    return int(env(name, str(default)))
+
+
+def env_list(name: str, default: str = "") -&gt; list[str]:
+    return [item.strip() for item in env(name, default).split(",") if item.strip()]
+
+
+def secret(name: str) -&gt; str:
+    """Read NAME_FILE (a mounted secret file) if set, else NAME."""
+    path = os.environ.get(f"{name}_FILE")
+    if path:
+        return Path(path).read_text(encoding="utf-8").strip()
+    return env(name, required=True)</code></pre></figure>
+
+<figure class="code"><figcaption><span class="fname">config/settings/production.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>from .base import *  # noqa: F403  (INSTALLED_APPS, MIDDLEWARE, TEMPLATES, ...)
+from .env import env, env_bool, env_int, env_list, secret
+
+DEBUG = False  # never read from the environment; there is no safe "on" value
+
+SECRET_KEY = secret("DJANGO_SECRET_KEY")
+<span class="c"># During rotation: put the old key here, deploy, then remove it once</span>
+<span class="c"># sessions and signed tokens issued with it have expired.</span>
+SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")          # "shop.example.com"
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")  # "https://shop.example.com"
+
+<span class="c"># --- HTTPS behind a TLS-terminating proxy (see §4) ---------------------------</span>
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = True
+SECURE_REDIRECT_EXEMPT = [r"^healthz/$", r"^readyz/$"]  # probes speak plain HTTP
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_HSTS_SECONDS = env_int("DJANGO_HSTS_SECONDS", 3600)  # raise to 31536000 once verified
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", False)
+SECURE_HSTS_PRELOAD = False
+
+<span class="c"># --- Database (see §5) --------------------------------------------------------</span>
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": env("POSTGRES_HOST", required=True),
+        "PORT": env("POSTGRES_PORT", "5432"),
+        "NAME": env("POSTGRES_DB", required=True),
+        "USER": env("POSTGRES_USER", required=True),
+        "PASSWORD": secret("POSTGRES_PASSWORD"),
+        "CONN_MAX_AGE": 0,          # must be 0 when "pool" is enabled
+        "CONN_HEALTH_CHECKS": True,
+        "OPTIONS": {
+            "sslmode": env("POSTGRES_SSLMODE", "verify-full"),
+            "sslrootcert": env("POSTGRES_SSLROOTCERT", "/etc/ssl/certs/rds-ca.pem"),
+            "pool": {"min_size": 2, "max_size": env_int("DB_POOL_MAX", 8), "timeout": 10},
+        },
+    }
+}
+
+<span class="c"># --- Cache and sessions: shared by every replica (see §16) --------------------</span>
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("REDIS_URL", required=True),   # rediss://... for TLS
+    }
+}
+SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+
+<span class="c"># --- Static and media (see §6) ------------------------------------------------</span>
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {"bucket_name": env("MEDIA_BUCKET", required=True),
+                    "file_overwrite": False, "querystring_auth": True},
+    },
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
+
+<span class="c"># --- Logging (see §12) --------------------------------------------------------</span>
+LOGGING = build_logging(level=env("LOG_LEVEL", "INFO"))  # noqa: F405, defined in base.py</code></pre></figure>
+
+<h3>Settings that matter most</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th>Default</th><th>Production value and reason</th></tr></thead>
+<tbody>
+<tr><td><code>DEBUG</code></td><td><code>False</code></td><td>Keep <code>False</code>. With debug on, error pages leak source excerpts, local variables and settings; "You must never enable debug in production" <sup class="cite">[<a href="#ref-1">1</a>]</sup>.</td></tr>
+<tr><td><code>ALLOWED_HOSTS</code></td><td><code>[]</code></td><td>The exact public hostnames. "When DEBUG = False, Django doesn't work at all without a suitable value" <sup class="cite">[<a href="#ref-1">1</a>]</sup>. Also make the proxy reject unknown hosts (§4).</td></tr>
+<tr><td><code>SECRET_KEY_FALLBACKS</code></td><td><code>[]</code></td><td>Lets you rotate the key without logging everyone out: set a new <code>SECRET_KEY</code> and move the old value to the front of the fallbacks; each extra key adds verification overhead, so remove old keys promptly <sup class="cite">[<a href="#ref-6">6</a>]</sup>.</td></tr>
+<tr><td><code>SECURE_PROXY_SSL_HEADER</code></td><td><code>None</code></td><td>Set only if you control the proxy and it overwrites <code>X-Forwarded-Proto</code>; misconfiguration can create CSRF vulnerabilities <sup class="cite">[<a href="#ref-6">6</a>,<a href="#ref-7">7</a>]</sup>.</td></tr>
+<tr><td><code>SECURE_HSTS_SECONDS</code></td><td><code>0</code></td><td>Start small. Django warns that a wrong value "can irreversibly (for some time) break your site" <sup class="cite">[<a href="#ref-6">6</a>]</sup>; browsers cache the policy for the whole max-age <sup class="cite">[<a href="#ref-8">8</a>]</sup>.</td></tr>
+<tr><td><code>CONN_MAX_AGE</code></td><td><code>0</code></td><td>Keep 0 when using Django's built-in pool, which requires it <sup class="cite">[<a href="#ref-9">9</a>]</sup>.</td></tr>
+<tr><td><code>CACHES</code></td><td>local memory</td><td>Per-process local memory "may not be desirable" in production <sup class="cite">[<a href="#ref-1">1</a>]</sup>; use a shared cache so all replicas agree.</td></tr>
+</tbody></table></div>
+
+<h3>Verifying the configuration</h3>
+<p>Run the deployment checks against the production settings module in CI. <code>check --deploy</code> "activates some additional checks that are only relevant in a deployment setting", and <code>--fail-level WARNING</code> makes warnings fail the build (the default level is <code>ERROR</code>) <sup class="cite">[<a href="#ref-10">10</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">CI step</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code>DJANGO_SETTINGS_MODULE=config.settings.production \
+DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')" \
+DJANGO_ALLOWED_HOSTS=shop.example.com DJANGO_HSTS_SECONDS=31536000 \
+POSTGRES_HOST=localhost POSTGRES_DB=ci POSTGRES_USER=ci POSTGRES_PASSWORD=ci \
+REDIS_URL=redis://localhost:6379/0 MEDIA_BUCKET=ci \
+python manage.py check --deploy --fail-level WARNING</code></pre></figure>
+<p>Django 6.0 also added built-in Content Security Policy support through <code>ContentSecurityPolicyMiddleware</code> and the <code>SECURE_CSP</code> and <code>SECURE_CSP_REPORT_ONLY</code> settings <sup class="cite">[<a href="#ref-3">3</a>]</sup>. Start in report-only mode, read the reports, then enforce.</p>
+
+<div class="exercise" id="ex1">
+<p class="ex-label">Exercise 1</p>
+<p>A teammate proposes <code>DEBUG = os.environ.get("DEBUG", False)</code> so that staging can turn debugging on. Find the bug, then explain why the article's settings module does not read <code>DEBUG</code> from the environment at all.</p>
+<details><summary>Show solution</summary>
+<p><code>os.environ.get</code> returns a string when the variable is set, and every non-empty string is truthy. <code>DEBUG=False</code> or <code>DEBUG=0</code> in the environment therefore turns debug mode <em>on</em>. Even with correct parsing, the setting is a single typo away from leaking source code and settings on every error page <sup class="cite">[<a href="#ref-1">1</a>]</sup>. Keeping <code>DEBUG = False</code> hard-coded in <code>production.py</code> and using a separate <code>staging.py</code> module (with its own error tracking) removes the failure mode entirely.</p>
+</details>
+</div>
+</section>
+
+<section id="gunicorn">
+<h2><span class="secno">2</span> WSGI servers: Gunicorn</h2>
+<p>WSGI, defined in PEP 3333, is the standard interface between Python web servers and synchronous applications <sup class="cite">[<a href="#ref-11">11</a>]</sup>. Django's <code>startproject</code> generates <code>wsgi.py</code> exposing an <code>application</code> callable, and Gunicorn is the most common server for it. Gunicorn is "a pure-Python WSGI server for UNIX" with no dependencies; <code>gunicorn myproject.wsgi</code> starts one process with one thread on <code>127.0.0.1:8000</code> <sup class="cite">[<a href="#ref-12">12</a>]</sup>. That default is for trying it out, not for production.</p>
+
+<h3>Process model</h3>
+<p>Gunicorn uses a pre-fork model: a master (arbiter) process manages a pool of worker processes. The default <code>sync</code> worker handles one request at a time and assumes the application avoids indefinite blocking; async or threaded workers suit long blocking calls, streaming and long polling <sup class="cite">[<a href="#ref-13">13</a>]</sup>. The design page suggests starting from <code>(2 × CPU cores) + 1</code> workers and adjusting under load <sup class="cite">[<a href="#ref-13">13</a>]</sup>.</p>
+<p>Because sync workers handle one request at a time, Gunicorn must sit behind a buffering proxy. Without one, slow clients tie up workers and the server becomes vulnerable to denial-of-service; Gunicorn's deployment guide "strongly recommends" a proxy and prefers Nginx <sup class="cite">[<a href="#ref-14">14</a>]</sup>.</p>
+
+<h3>A production configuration file</h3>
+<figure class="code"><figcaption><span class="fname">gunicorn.conf.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import os
+
+<span class="c"># Containers often report the host's CPU count, not the container's quota,</span>
+<span class="c"># so set WEB_CONCURRENCY explicitly per environment.</span>
+workers = int(os.environ.get("WEB_CONCURRENCY", "3"))
+worker_class = "gthread"            # threads help with I/O-bound views
+threads = int(os.environ.get("GUNICORN_THREADS", "4"))
+bind = os.environ.get("GUNICORN_BIND", "0.0.0.0:8000")
+
+timeout = 30            # kill a worker silent for 30 s
+graceful_timeout = 25   # time to finish in-flight requests after SIGTERM
+keepalive = 5           # seconds; keep below the proxy's upstream idle timeout
+
+max_requests = 2000          # recycle workers to contain slow memory leaks
+max_requests_jitter = 200    # ...but not all at the same moment
+
+worker_tmp_dir = "/dev/shm"  # heartbeat file on tmpfs, not a slow overlay disk
+accesslog = "-"              # stdout; the platform collects logs (§12)
+errorlog = "-"
+access_log_format = '%({x-forwarded-for}i)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(L)s'
+
+<span class="c"># Trust X-Forwarded-* only from the proxy network, never "*" if clients can</span>
+<span class="c"># reach Gunicorn directly.</span>
+forwarded_allow_ips = os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1,::1")
+
+
+def child_exit(server, worker):
+<span class="c">    # Clean up per-process Prometheus files (see §12).</span>
+    from prometheus_client import multiprocess
+    multiprocess.mark_process_dead(worker.pid)</code></pre></figure>
+<p>Start it with <code>gunicorn config.wsgi:application --config gunicorn.conf.py</code>. Gunicorn reads <code>WEB_CONCURRENCY</code> for <code>workers</code> by default as well <sup class="cite">[<a href="#ref-15">15</a>]</sup>.</p>
+
+<div class="table-wrap"><table>
+<caption>Gunicorn defaults worth knowing <sup class="cite">[<a href="#ref-15">15</a>]</sup></caption>
+<thead><tr><th>Setting</th><th>Default</th><th>Why you might change it</th></tr></thead>
+<tbody>
+<tr><td><code>workers</code></td><td>1 (or <code>WEB_CONCURRENCY</code>)</td><td>One worker cannot use more than one core.</td></tr>
+<tr><td><code>worker_class</code></td><td><code>sync</code></td><td><code>gthread</code> adds threads per worker; only <code>gthread</code> honours <code>threads</code>.</td></tr>
+<tr><td><code>timeout</code></td><td>30 s</td><td>Silent workers are killed and restarted; lower only if every view is fast.</td></tr>
+<tr><td><code>graceful_timeout</code></td><td>30 s</td><td>Must fit inside the orchestrator's stop grace period (§13).</td></tr>
+<tr><td><code>keepalive</code></td><td>2 s</td><td>Raise when a proxy keeps upstream connections open.</td></tr>
+<tr><td><code>max_requests</code></td><td>0 (off)</td><td>Periodic worker recycling; pair with jitter.</td></tr>
+<tr><td><code>forwarded_allow_ips</code></td><td><code>127.0.0.1,::1</code></td><td>Set to the proxy's addresses; <code>*</code> disables the check.</td></tr>
+<tr><td><code>preload_app</code></td><td><code>False</code></td><td>Saves memory, but code changes then need a full restart, and connections opened before fork are shared.</td></tr>
+</tbody></table></div>
+
+<h3>Signals</h3>
+<p>The master reacts to signals: <code>TERM</code> is a graceful shutdown in which workers finish in-flight requests up to <code>graceful_timeout</code>; <code>INT</code> and <code>QUIT</code> are a quick shutdown; <code>HUP</code> reloads configuration and replaces workers gracefully; <code>TTIN</code> and <code>TTOU</code> add or remove a worker <sup class="cite">[<a href="#ref-13">13</a>,<a href="#ref-16">16</a>]</sup>. Container platforms send <code>SIGTERM</code> on stop, which is exactly what you want (§13).</p>
+
+<div class="exercise" id="ex2">
+<p class="ex-label">Exercise 2</p>
+<p>A 4-vCPU VM runs Gunicorn with <code>gthread</code>, 9 workers and 4 threads each, and Django's connection pool has <code>max_size = 4</code>. How many requests can be in progress at once, and what is the maximum number of PostgreSQL connections this VM can open? What happens if you raise threads to 8 without changing the pool?</p>
+<details><summary>Show solution</summary>
+<p>Concurrency is 9 × 4 = 36 requests. The pool is per process, so the VM can open up to 9 × 4 = 36 database connections. With 8 threads, 72 requests can run, but each worker still has only 4 pooled connections; threads beyond that wait up to the pool's <code>timeout</code> and then fail. Size <code>max_size</code> to at least the thread count, then check that replicas × workers × <code>max_size</code> stays under PostgreSQL's <code>max_connections</code> (§5, §16).</p>
+</details>
+</div>
+</section>
+
+<section id="asgi">
+<h2><span class="secno">3</span> ASGI servers: Uvicorn or Daphne</h2>
+<p>ASGI is the asynchronous successor to WSGI. It supports long-lived connections such as WebSockets and an optional lifespan protocol for startup and shutdown events <sup class="cite">[<a href="#ref-17">17</a>,<a href="#ref-18">18</a>]</sup>. Django ships an <code>asgi.py</code> with an <code>application</code> object, and documents Daphne, Hypercorn and Uvicorn as servers <sup class="cite">[<a href="#ref-19">19</a>]</sup>.</p>
+<p>Use ASGI when you have async views that wait on I/O, streaming responses, or WebSockets through Django Channels. A purely synchronous app gains nothing: Django's ASGI handler runs sync code in a thread, and Django's docs warn against calling blocking synchronous code from async code <sup class="cite">[<a href="#ref-19">19</a>]</sup>.</p>
+
+<h3>Database connections under ASGI</h3>
+<p>Django's database docs are explicit: "When using ASGI, persistent connections should be disabled. Instead, use your database backend's built-in connection pooling if available" <sup class="cite">[<a href="#ref-9">9</a>]</sup>. With PostgreSQL that means <code>CONN_MAX_AGE = 0</code> plus the <code>"pool"</code> option shown in §1, or an external pooler such as PgBouncer.</p>
+
+<h3>Uvicorn</h3>
+<p>Uvicorn can manage its own worker processes or run under Gunicorn as a process manager. Its docs note that the old <code>uvicorn.workers</code> module is deprecated in favour of the separate <code>uvicorn-worker</code> package, and that <code>--reload</code> and <code>--workers</code> are mutually exclusive <sup class="cite">[<a href="#ref-20">20</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">Two ways to run Uvicorn</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code><span class="c"># 1) Uvicorn's own process manager</span>
+uvicorn config.asgi:application \
+  --host 0.0.0.0 --port 8000 --workers 4 \
+  --proxy-headers --forwarded-allow-ips 10.0.0.0/8 \
+  --lifespan off            # skip lifespan events unless your app handles them
+
+<span class="c"># 2) Gunicorn as process manager (pip install uvicorn-worker)</span>
+gunicorn config.asgi:application -k uvicorn_worker.UvicornWorker \
+  --config gunicorn.conf.py</code></pre></figure>
+<p><code>--forwarded-allow-ips</code> accepts addresses and networks; the docs warn "Only trust clients you can actually trust!" and allow <code>*</code> only when every proxy strips incoming forwarded headers first <sup class="cite">[<a href="#ref-20">20</a>,<a href="#ref-21">21</a>]</sup>.</p>
+
+<h3>Daphne and Channels</h3>
+<p>Daphne is the server built for Django Channels. Channels' deployment guide shows <code>daphne -b 0.0.0.0 -p 8001 myproject.asgi:application</code>, describes running Daphne for all traffic or only for WebSockets behind a path-routing proxy, and recommends a supervisor or orchestrator to restart and scale processes <sup class="cite">[<a href="#ref-22">22</a>,<a href="#ref-23">23</a>]</sup>. Initialise Django's ASGI app before importing consumers so the app registry is populated <sup class="cite">[<a href="#ref-22">22</a>]</sup>:</p>
+<figure class="code"><figcaption><span class="fname">config/asgi.py (Channels)</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import os
+
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.production")
+django_asgi_app = get_asgi_application()  # must run before importing consumers
+
+from channels.auth import AuthMiddlewareStack  # noqa: E402
+from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
+from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
+
+import orders.routing  # noqa: E402
+
+application = ProtocolTypeRouter({
+    "http": django_asgi_app,
+    "websocket": AllowedHostsOriginValidator(
+        AuthMiddlewareStack(URLRouter(orders.routing.websocket_urlpatterns))
+    ),
+})</code></pre></figure>
+<p>With more than one Daphne process, consumers in different processes can only message each other through a shared channel layer, usually Redis, configured with <code>CHANNEL_LAYERS</code> <sup class="cite">[<a href="#ref-22">22</a>]</sup>.</p>
+
+<div class="exercise" id="ex3">
+<p class="ex-label">Exercise 3</p>
+<p>After switching from Gunicorn (WSGI) to Uvicorn, a team keeps <code>CONN_MAX_AGE = 600</code>. Under load PostgreSQL reports "too many connections". Explain why and give the fix.</p>
+<details><summary>Show solution</summary>
+<p>Under ASGI, Django runs sync ORM code in a thread pool, and persistent connections are tied to threads that come and go, so connections accumulate instead of being reused. Django's docs say persistent connections should be disabled under ASGI <sup class="cite">[<a href="#ref-9">9</a>]</sup>. Set <code>CONN_MAX_AGE = 0</code> and enable <code>"pool"</code> in <code>OPTIONS</code> (requires <code>psycopg[pool]</code>), or put PgBouncer in transaction mode in front of the database (§5).</p>
+</details>
+</div>
+</section>
+
+<section id="nginx">
+<h2><span class="secno">4</span> Reverse proxies: Nginx</h2>
+<p>The reverse proxy terminates TLS, buffers slow clients, serves static files, rejects unknown hosts and upgrades WebSocket connections. Uvicorn's docs call a proxy "not necessary" but "recommended for additional resilience" <sup class="cite">[<a href="#ref-20">20</a>]</sup>, and for Gunicorn's sync workers it is required in practice <sup class="cite">[<a href="#ref-14">14</a>]</sup>.</p>
+
+<h3>Proxy defaults you need to override</h3>
+<p>By default Nginx rewrites <code>Host</code> to <code>$proxy_host</code> and sends <code>Connection: close</code> upstream <sup class="cite">[<a href="#ref-24">24</a>]</sup>, so Django would see the upstream name instead of the public hostname. Buffering is on by default, which is what protects sync workers; <code>proxy_read_timeout</code> defaults to 60 s between two reads <sup class="cite">[<a href="#ref-24">24</a>]</sup>. Upstream keepalive needs HTTP/1.1 and a cleared <code>Connection</code> header <sup class="cite">[<a href="#ref-25">25</a>]</sup>. WebSockets need the <code>Upgrade</code> and <code>Connection</code> headers passed explicitly, because they are hop-by-hop <sup class="cite">[<a href="#ref-26">26</a>]</sup>.</p>
+
+<figure class="code"><figcaption><span class="fname">/etc/nginx/conf.d/acme-shop.conf</span><span class="lang">nginx</span></figcaption><pre tabindex="0"><code>upstream django_app {
+    server web:8000 max_fails=3 fail_timeout=10s;   # Compose service name (§7)
+    keepalive 32;                      # idle connections kept per worker
+}
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+<span class="c"># Reject requests for unknown hosts before they reach Django.</span>
+server {
+    listen 80 default_server;
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;           # no certificate for unknown SNI names
+    return 444;                        # close the connection, no response
+}
+
+server {
+    listen 80;
+    server_name shop.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name shop.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/shop.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/shop.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 20m;          # upload limit; Django's limits are a second line
+
+    location /static/ {
+        alias /srv/static/;            # output of collectstatic
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    location /ws/ {
+        proxy_pass http://django_app;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 1h;         # idle WebSockets would otherwise close at 60 s
+    }
+
+    location / {
+        proxy_pass http://django_app;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";          # enables upstream keepalive
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_redirect off;
+        proxy_read_timeout 35s;                  # a little above Gunicorn's timeout
+    }
+}</code></pre></figure>
+<p>The catch-all server with <code>return 444</code> is the pattern from Django's own checklist <sup class="cite">[<a href="#ref-1">1</a>]</sup>. HSTS is left to Django's <code>SecurityMiddleware</code> here; set it in one place only, or browsers receive duplicate headers.</p>
+
+<h3>Forwarded headers and trust</h3>
+<p><code>X-Forwarded-For</code> and <code>X-Forwarded-Proto</code> are de facto headers; RFC 7239 standardises the same information in a single <code>Forwarded</code> header <sup class="cite">[<a href="#ref-27">27</a>]</sup>. Whichever you use, the rule is the same: the first proxy must overwrite, not append to, the scheme header it receives, and the application must trust forwarded headers only from known proxy addresses. That is what Django's <code>SECURE_PROXY_SSL_HEADER</code> warning and Gunicorn's <code>forwarded_allow_ips</code> are about <sup class="cite">[<a href="#ref-6">6</a>,<a href="#ref-15">15</a>]</sup>.</p>
+
+<div class="exercise" id="ex4">
+<p class="ex-label">Exercise 4</p>
+<p>Users report that the order-tracking WebSocket disconnects every minute when nothing happens. The <code>/ws/</code> location has the Upgrade headers but no other settings. What is the cause, and what are two fixes?</p>
+<details><summary>Show solution</summary>
+<p><code>proxy_read_timeout</code> defaults to 60 s and applies between two reads from the upstream <sup class="cite">[<a href="#ref-24">24</a>]</sup>; an idle WebSocket sends nothing, so Nginx closes it. Nginx's WebSocket guide gives two remedies: raise <code>proxy_read_timeout</code> for that location, or have the backend send periodic ping frames so the connection is never idle that long <sup class="cite">[<a href="#ref-26">26</a>]</sup>. Doing both is common: a longer timeout plus application-level heartbeats every 20–30 s.</p>
+</details>
+</div>
+</section>
+<section id="postgres">
+<h2><span class="secno">5</span> PostgreSQL production configuration</h2>
+<p>Recent Django releases support PostgreSQL 15 and later <sup class="cite">[<a href="#ref-9">9</a>]</sup>. Production configuration has three layers: the server's resource settings, the connection path between Django and the server, and the roles and timeouts that keep one bad query from hurting everyone.</p>
+
+<h3>Server resources</h3>
+<p>For a dedicated server with at least 1 GB of RAM, the PostgreSQL manual calls 25% of memory "a reasonable starting value" for <code>shared_buffers</code>, and says more than 40% is unlikely to help because PostgreSQL also relies on the OS cache <sup class="cite">[<a href="#ref-28">28</a>]</sup>. <code>work_mem</code> defaults to 4 MB and applies per sort or hash operation, so one complex query can use several multiples of it, and many sessions can do so at once <sup class="cite">[<a href="#ref-28">28</a>]</sup>. Size it with your connection count in mind.</p>
+<figure class="code"><figcaption><span class="fname">postgresql.conf (dedicated 16 GB server, starting point)</span><span class="lang">ini</span></figcaption><pre tabindex="0"><code><span class="c"># Memory</span>
+shared_buffers = 4GB                 # ~25% of RAM
+effective_cache_size = 12GB          # planner hint: RAM likely available for caching
+work_mem = 16MB                      # per sort/hash node, per session
+maintenance_work_mem = 1GB           # VACUUM, CREATE INDEX
+
+<span class="c"># Connections: keep this modest and pool in front of it</span>
+max_connections = 200
+
+<span class="c"># WAL and archiving for point-in-time recovery (see §15)</span>
+wal_level = replica
+archive_mode = on
+archive_command = 'pgbackrest --stanza=acme archive-push %p'
+
+<span class="c"># Observability</span>
+log_min_duration_statement = 500ms   # log slow statements
+log_lock_waits = on</code></pre></figure>
+<p>Managed services (Amazon RDS, Cloud SQL, Azure Database for PostgreSQL) set most of these through parameter groups or flags rather than a file, but the reasoning is the same.</p>
+
+<h3>Timeouts per role, not globally</h3>
+<p><code>statement_timeout</code> and <code>idle_in_transaction_session_timeout</code> default to 0, meaning disabled <sup class="cite">[<a href="#ref-29">29</a>]</sup>. Set them on the application role so they apply to every session that role opens, including sessions opened through a pooler. Migrations run under a separate role (§14), so long index builds are not cut off.</p>
+<figure class="code"><figcaption><span class="fname">roles.sql</span><span class="lang">sql</span></figcaption><pre tabindex="0"><code><span class="c">-- Owner of the schema; used only by the migration job.</span>
+CREATE ROLE acme_migrator LOGIN PASSWORD :'migrator_pw';
+CREATE SCHEMA acme AUTHORIZATION acme_migrator;
+
+<span class="c">-- Runtime role: data access only, no DDL.</span>
+CREATE ROLE acme_app LOGIN PASSWORD :'app_pw';
+GRANT USAGE ON SCHEMA acme TO acme_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE acme_migrator IN SCHEMA acme
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO acme_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE acme_migrator IN SCHEMA acme
+    GRANT USAGE, SELECT ON SEQUENCES TO acme_app;
+
+ALTER ROLE acme_app SET search_path = acme;
+ALTER ROLE acme_migrator SET search_path = acme;
+ALTER ROLE acme_app SET statement_timeout = '30s';
+ALTER ROLE acme_app SET idle_in_transaction_session_timeout = '60s';
+ALTER ROLE acme_migrator SET lock_timeout = '5s';   -- see §14</code></pre></figure>
+
+<h3>Connection pooling</h3>
+<p>Every PostgreSQL connection is a server process, so connection count is a real cost. There are two pooling options, and you usually want one of them, not both.</p>
+<ul>
+<li><strong>Django's built-in pool.</strong> Set <code>"pool"</code> in <code>OPTIONS</code> to <code>True</code> or to a dict of <code>ConnectionPool</code> arguments. It requires psycopg 3 with <code>psycopg[pool]</code>, and <code>CONN_MAX_AGE</code> must be 0; connection lifetime is then controlled with the pool's <code>max_lifetime</code> <sup class="cite">[<a href="#ref-9">9</a>]</sup>. The pool lives inside each worker process.</li>
+<li><strong>PgBouncer.</strong> An external pooler shared by every process and replica. Its default <code>pool_mode</code> is <code>session</code>; in <code>transaction</code> mode a server connection returns to the pool when each transaction finishes <sup class="cite">[<a href="#ref-30">30</a>]</sup>. Django's docs say transaction pooling "requires disabling server-side cursors", via <code>DISABLE_SERVER_SIDE_CURSORS = True</code> <sup class="cite">[<a href="#ref-9">9</a>]</sup>.</li>
+</ul>
+<figure class="code"><figcaption><span class="fname">pgbouncer.ini</span><span class="lang">ini</span></figcaption><pre tabindex="0"><code>[databases]
+acme = host=db.internal port=5432 dbname=acme
+
+[pgbouncer]
+listen_addr = 0.0.0.0
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+default_pool_size = 20        ; server connections per user/database pair (default 20)
+max_client_conn = 1000        ; default 100; raise file descriptor limits to match</code></pre></figure>
+<figure class="code"><figcaption><span class="fname">settings when Django connects through PgBouncer</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>DATABASES["default"].update({
+    "PORT": "6432",
+    "DISABLE_SERVER_SIDE_CURSORS": True,   # required for transaction pooling
+    "CONN_MAX_AGE": 0,
+})
+DATABASES["default"]["OPTIONS"].pop("pool", None)  # let PgBouncer do the pooling</code></pre></figure>
+
+<h3>Encrypt and verify the connection</h3>
+<p>libpq's <code>sslmode=require</code> encrypts traffic but does not check who is on the other end. <code>verify-full</code> also checks that the server certificate is signed by a trusted CA and that its name matches the host you asked for <sup class="cite">[<a href="#ref-31">31</a>]</sup>. Use <code>verify-full</code> with the provider's CA bundle in <code>sslrootcert</code>, as in §1.</p>
+
+<div class="table-wrap"><table>
+<caption>Isolation level</caption>
+<tbody><tr><td>Django, like PostgreSQL, defaults to <code>READ COMMITTED</code>. Higher levels can be set with <code>OPTIONS["isolation_level"]</code>, but then the application must handle serialization failures <sup class="cite">[<a href="#ref-9">9</a>]</sup>. Most Django apps should stay on the default and use <code>select_for_update()</code> where they need row locks.</td></tr></tbody>
+</table></div>
+
+<div class="exercise" id="ex5">
+<p class="ex-label">Exercise 5</p>
+<p>Six app replicas each run 3 Gunicorn workers, and each worker uses Django's pool with <code>max_size=8</code>. PostgreSQL has <code>max_connections = 100</code>, of which you reserve 10 for admin and migration sessions. Does this fit? If not, give two ways to make it fit.</p>
+<details><summary>Show solution</summary>
+<p>Worst case is 6 × 3 × 8 = 144 connections, which exceeds the 90 available. Options: (1) shrink the per-worker pool, for example <code>max_size=5</code> gives 90, but only if threads per worker are 5 or fewer, or requests will queue on the pool; (2) remove in-process pooling and put PgBouncer in transaction mode in front of PostgreSQL with <code>default_pool_size</code> around 40–80, so thousands of client connections share a small number of server connections <sup class="cite">[<a href="#ref-9">9</a>,<a href="#ref-30">30</a>]</sup>. Raising <code>max_connections</code> is a third option, but each connection costs server memory, and <code>work_mem</code> multiplies with it <sup class="cite">[<a href="#ref-28">28</a>]</sup>.</p>
+</details>
+</div>
+</section>
+
+<section id="static">
+<h2><span class="secno">6</span> Static and media storage</h2>
+<p>Django separates <em>static files</em> (CSS, JavaScript and images that ship with the code) from <em>media files</em> (files users upload at runtime) <sup class="cite">[<a href="#ref-32">32</a>,<a href="#ref-33">33</a>]</sup>. They have different lifecycles and different security properties, and should be stored differently.</p>
+
+<h3>Static files: hashed names and long caching</h3>
+<p><code>collectstatic</code> gathers files from every app and from <code>STATICFILES_DIRS</code> into <code>STATIC_ROOT</code> <sup class="cite">[<a href="#ref-34">34</a>]</sup>. <code>ManifestStaticFilesStorage</code> appends an MD5 content hash to each filename (for example <code>css/styles.55e7cbb9ba48.css</code>), rewrites references inside CSS, and records the mapping in <code>staticfiles.json</code>, which makes far-future cache headers safe <sup class="cite">[<a href="#ref-34">34</a>]</sup>. Run <code>collectstatic</code> once, at image build time, so every replica serves identical files.</p>
+<p>WhiteNoise lets the app server serve these files itself with correct caching and compression, which removes the need for a separate static file server on platforms such as ECS or Cloud Run. Place its middleware directly after <code>SecurityMiddleware</code> and select its compressed manifest storage <sup class="cite">[<a href="#ref-35">35</a>]</sup>:</p>
+<figure class="code"><figcaption><span class="fname">config/settings/base.py (excerpt)</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>MIDDLEWARE = [
+    "config.middleware.HealthCheckMiddleware",        # §13: before host validation
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+STATIC_URL = "static/"</code></pre></figure>
+<p>Put a CDN in front for global users; the hashed names mean the CDN never serves a stale file after a deploy.</p>
+
+<h3>Media files: object storage, private by default</h3>
+<p>WhiteNoise is explicitly not for user uploads: it only scans files at startup, and serving uploads from the main domain is a security risk <sup class="cite">[<a href="#ref-35">35</a>]</sup>. In a multi-replica deployment, local disk is also wrong because each replica would see different files. Use object storage through django-storages. Its S3 backend keeps files private by default (<code>default_acl</code> is <code>None</code>), signs URLs with query-string authentication by default, and overwrites same-named files unless <code>file_overwrite</code> is <code>False</code> <sup class="cite">[<a href="#ref-36">36</a>]</sup>. If no keys are configured it falls back to the boto3 default session <sup class="cite">[<a href="#ref-36">36</a>]</sup>, which is how an IAM role on ECS, EKS or EC2 supplies credentials without any secret in settings (§11).</p>
+<figure class="code"><figcaption><span class="fname">media storage options</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>STORAGES["default"] = {
+    "BACKEND": "storages.backends.s3.S3Storage",
+    "OPTIONS": {
+        "bucket_name": env("MEDIA_BUCKET", required=True),
+        "region_name": env("AWS_REGION", "eu-west-1"),
+        "location": "media",            # key prefix inside the bucket
+        "file_overwrite": False,        # never let one upload replace another
+        "querystring_auth": True,       # time-limited signed URLs
+        "querystring_expire": 600,      # seconds
+    },
+}</code></pre></figure>
+<p>Django's security guide adds two rules for uploads: limit upload size at the web server, and serve user content from a separate registrable domain (for example <code>usercontent-example.com</code>, not a subdomain), because a file can be a valid image and valid HTML at the same time <sup class="cite">[<a href="#ref-7">7</a>]</sup>.</p>
+
+<div class="exercise" id="ex6">
+<p class="ex-label">Exercise 6</p>
+<p>After a deploy, some users see an unstyled page for a few minutes. The site uses plain <code>StaticFilesStorage</code>, Nginx sends <code>expires 1y</code> for <code>/static/</code>, and a CDN sits in front. Explain what happened and how the article's setup prevents it.</p>
+<details><summary>Show solution</summary>
+<p>With unhashed names, <code>styles.css</code> keeps the same URL across deploys. Browsers and the CDN hold the old file for up to a year, so new HTML can be paired with old CSS, or, during a rolling deploy, old HTML with new CSS. Manifest storage gives each version a unique name and keeps old hashed files available, so cached pages still find the files they reference, and long cache lifetimes become safe <sup class="cite">[<a href="#ref-34">34</a>]</sup>. Running <code>collectstatic</code> in the image build keeps the manifest identical on every replica.</p>
+</details>
+</div>
+</section>
+
+<section id="docker">
+<h2><span class="secno">7</span> Docker and Docker Compose</h2>
+<p>A container image is the unit you build once in CI and promote unchanged through staging to production. Docker's guidance is to use multi-stage builds so the final image holds only what it needs, choose a small trusted base image, pin its version, exclude irrelevant files with <code>.dockerignore</code>, and rebuild regularly to pick up patched dependencies <sup class="cite">[<a href="#ref-37">37</a>,<a href="#ref-38">38</a>]</sup>.</p>
+
+<h3>A multi-stage Dockerfile</h3>
+<figure class="code"><figcaption><span class="fname">Dockerfile</span><span class="lang">dockerfile</span></figcaption><pre tabindex="0"><code><span class="c"># syntax=docker/dockerfile:1</span>
+ARG PYTHON_IMAGE=python:3.13-slim
+<span class="c"># In production, pin by digest too: python:3.13-slim@sha256:...</span>
+
+FROM ${PYTHON_IMAGE} AS builder
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
+RUN apt-get update \
+ &amp;&amp; apt-get install -y --no-install-recommends build-essential \
+ &amp;&amp; rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY requirements.txt .
+RUN pip wheel --wheel-dir /wheels -r requirements.txt
+
+FROM ${PYTHON_IMAGE} AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=config.settings.production
+RUN groupadd --system app &amp;&amp; useradd --system --gid app --home-dir /app app
+WORKDIR /app
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir /wheels/* &amp;&amp; rm -rf /wheels
+COPY --chown=app:app . .
+<span class="c"># Static files are baked into the image with a settings module that needs no secrets.</span>
+RUN DJANGO_SETTINGS_MODULE=config.settings.build python manage.py collectstatic --noinput
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=2)"]
+CMD ["gunicorn", "config.wsgi:application", "--config", "gunicorn.conf.py"]</code></pre></figure>
+<figure class="code"><figcaption><span class="fname">config/settings/build.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code><span class="c"># Used only for collectstatic during the image build.</span>
+from .base import *  # noqa: F403
+
+SECRET_KEY = "build-only-not-a-secret"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}</code></pre></figure>
+<p>Three details matter for operations. <code>CMD</code> uses the exec (JSON array) form, which the Dockerfile reference recommends for the main process; the shell form wraps the command in <code>/bin/sh -c</code>, so the shell, not Gunicorn, becomes PID 1 and receives the stop signal <sup class="cite">[<a href="#ref-39">39</a>]</sup>. The process runs as an unprivileged user. And the build stage's compilers never reach the runtime image <sup class="cite">[<a href="#ref-38">38</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">.dockerignore</span><span class="lang">text</span></figcaption><pre tabindex="0"><code>.git
+.venv
+**/__pycache__
+*.sqlite3
+media/
+staticfiles/
+.env
+node_modules/</code></pre></figure>
+
+<h3>Compose for a single host or a production-like local stack</h3>
+<p>Compose's <code>depends_on</code> supports three conditions: <code>service_started</code>, <code>service_healthy</code> (based on the dependency's healthcheck) and <code>service_completed_successfully</code> <sup class="cite">[<a href="#ref-40">40</a>]</sup>. The last one is how a one-shot migration service gates the web service. Compose secrets are mounted as files under <code>/run/secrets/</code> rather than exposed as environment variables <sup class="cite">[<a href="#ref-41">41</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">compose.yaml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: acme
+      POSTGRES_USER: acme
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  migrate:
+    image: ghcr.io/acme/shop:${TAG:?set TAG}
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    env_file: [app.env]
+    environment: { POSTGRES_PASSWORD_FILE: /run/secrets/db_password }
+    secrets: [db_password, django_secret_key]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    image: ghcr.io/acme/shop:${TAG:?set TAG}
+    env_file: [app.env]
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
+    secrets: [db_password, django_secret_key]
+    stop_grace_period: 30s          # &gt; Gunicorn graceful_timeout (25 s)
+    deploy: { replicas: 2 }
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  nginx:
+    image: nginx:1.29
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/nginx:/etc/nginx/conf.d:ro
+      - ./certs:/etc/letsencrypt:ro
+    depends_on: [web]
+
+secrets:
+  db_password: { file: ./secrets/db_password.txt }
+  django_secret_key: { file: ./secrets/django_secret_key.txt }
+
+volumes:
+  pgdata:</code></pre></figure>
+<p>The <code>$$</code> in the healthcheck escapes Compose interpolation so the variables are expanded inside the container, as in Docker's own example <sup class="cite">[<a href="#ref-40">40</a>]</sup>. Nginx reaches the app through the service name, <code>web:8000</code>, in its <code>upstream</code> block.</p>
+
+<div class="exercise" id="ex7">
+<p class="ex-label">Exercise 7</p>
+<p>A container takes the full 10 seconds to stop on every <code>docker compose down</code>, and in-flight requests are cut off. Its Dockerfile ends with <code>CMD gunicorn config.wsgi:application -c gunicorn.conf.py</code>. What is wrong?</p>
+<details><summary>Show solution</summary>
+<p>That is the shell form, so the container runs <code>/bin/sh -c "gunicorn ..."</code> and the shell is PID 1 <sup class="cite">[<a href="#ref-39">39</a>]</sup>. The stop signal goes to the shell, which does not forward it, so Gunicorn never starts its graceful shutdown; after the timeout Docker kills everything. Switch to the exec form, <code>CMD ["gunicorn", "config.wsgi:application", "-c", "gunicorn.conf.py"]</code>, so Gunicorn receives <code>SIGTERM</code> and drains requests up to <code>graceful_timeout</code> <sup class="cite">[<a href="#ref-16">16</a>]</sup>. Also make sure <code>stop_grace_period</code> is longer than that timeout.</p>
+</details>
+</div>
+</section>
+
+<section id="cicd">
+<h2><span class="secno">8</span> CI/CD with GitHub Actions, GitLab CI or Jenkins</h2>
+<p>A Django pipeline should do the same things in every tool: run tests against the same database engine as production, fail on missing migrations and deployment-check warnings, build one image tagged with the commit SHA, run migrations as a separate step, and then roll out. Below is a full GitHub Actions workflow, followed by the same shape in GitLab CI and Jenkins.</p>
+
+<h3>GitHub Actions</h3>
+<p>Service containers give each job a real PostgreSQL, with health options so steps wait until it accepts connections <sup class="cite">[<a href="#ref-42">42</a>]</sup>. For deployment, GitHub recommends OpenID Connect over stored cloud keys: the job requests a short-lived token (<code>id-token: write</code>) and exchanges it for temporary credentials of an IAM role whose trust policy checks the token's <code>sub</code> claim, for example a specific repository and environment <sup class="cite">[<a href="#ref-43">43</a>]</sup>. GitHub's hardening guide also says to grant <code>GITHUB_TOKEN</code> the minimum permissions and to pin third-party actions to a full commit SHA <sup class="cite">[<a href="#ref-44">44</a>]</sup>. Tags are used below for readability; replace them with SHAs in a real repository.</p>
+<figure class="code"><figcaption><span class="fname">.github/workflows/deploy.yml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>name: test-build-deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read            # least privilege by default
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: eu-west-1
+  IMAGE: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/acme-shop
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: acme_test
+        ports: ["5432:5432"]
+        options: &gt;-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      POSTGRES_HOST: localhost
+      POSTGRES_DB: acme_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Fail if models changed without a migration
+        run: python manage.py makemigrations --check
+      - run: pytest -q --maxfail=1
+      - name: Deployment checks against production settings
+        run: ./scripts/check_deploy.sh     # the command from §1
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' &amp;&amp; github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production         # required reviewers / wait timers live here
+    permissions:
+      contents: read
+      id-token: write               # allow OIDC token request
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push image
+        run: |
+          docker build --pull -t "$IMAGE:$GITHUB_SHA" .
+          docker push "$IMAGE:$GITHUB_SHA"
+      - name: Run migrations as a one-off task
+        run: ./scripts/ecs_run_migrations.sh "$IMAGE:$GITHUB_SHA"
+      - name: Roll out new task definition
+        run: ./scripts/ecs_deploy.sh "$IMAGE:$GITHUB_SHA"</code></pre></figure>
+<p><code>makemigrations --check</code> exits non-zero when model changes lack a migration and implies <code>--dry-run</code> <sup class="cite">[<a href="#ref-10">10</a>]</sup>. The <code>environment: production</code> key attaches the job to a GitHub deployment environment, where you can require reviewers or wait timers before the job starts <sup class="cite">[<a href="#ref-45">45</a>]</sup>. The workflow syntax reference covers <code>concurrency</code>, <code>permissions</code> and job conditions <sup class="cite">[<a href="#ref-46">46</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">scripts/ecs_run_migrations.sh</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code><span class="c">#!/usr/bin/env bash</span>
+set -euo pipefail
+IMAGE="$1"
+CLUSTER=acme-prod
+TASKDEF=$(./scripts/register_taskdef.sh acme-migrate "$IMAGE")   # prints new task definition ARN
+
+TASK_ARN=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE \
+  --task-definition "$TASKDEF" \
+  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$APP_SG],assignPublicIp=DISABLED}" \
+  --overrides '{"containerOverrides":[{"name":"app","command":["python","manage.py","migrate","--noinput"]}]}' \
+  --query 'tasks[0].taskArn' --output text)
+
+aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+  --query 'tasks[0].containers[0].exitCode' --output text)
+[ "$EXIT_CODE" = "0" ] || { echo "migrate failed with exit code $EXIT_CODE"; exit 1; }</code></pre></figure>
+
+<h3>GitLab CI</h3>
+<p>GitLab expresses the same pipeline in <code>.gitlab-ci.yml</code> with <code>stages</code>, <code>services</code>, <code>rules</code> and <code>environment</code>, and <code>when: manual</code> for a gated production job <sup class="cite">[<a href="#ref-47">47</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">.gitlab-ci.yml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>stages: [test, build, deploy]
+
+variables:
+  POSTGRES_DB: acme_test
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_HOST: postgres
+  DJANGO_SETTINGS_MODULE: config.settings.test
+
+test:
+  stage: test
+  image: python:3.13-slim
+  services: [postgres:17]
+  script:
+    - pip install -r requirements.txt -r requirements-dev.txt
+    - python manage.py makemigrations --check
+    - pytest -q
+
+build:
+  stage: build
+  image: docker:27
+  services: [docker:27-dind]
+  rules: [{ if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH' }]
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build --pull -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+
+deploy_production:
+  stage: deploy
+  image: registry.example.com/tools/kubectl:1.34   # your own pinned tooling image
+  environment: { name: production, url: https://shop.example.com }
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: manual
+  script:
+    - ./scripts/k8s_deploy.sh "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"</code></pre></figure>
+
+<h3>Jenkins</h3>
+<p>Jenkins declarative pipelines use <code>pipeline</code>, <code>agent</code>, <code>stages</code>, <code>when</code> and <code>input</code> directives <sup class="cite">[<a href="#ref-48">48</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">Jenkinsfile</span><span class="lang">groovy</span></figcaption><pre tabindex="0"><code>pipeline {
+  agent { label 'docker' }
+  environment { IMAGE = "registry.example.com/acme-shop:${env.GIT_COMMIT}" }
+  stages {
+    stage('Test') {
+      steps {
+        sh 'docker compose -f compose.ci.yaml run --rm tests'
+      }
+    }
+    stage('Build') {
+      when { branch 'main' }
+      steps { sh 'docker build --pull -t "$IMAGE" . &amp;&amp; docker push "$IMAGE"' }
+    }
+    stage('Deploy') {
+      when { branch 'main' }
+      input { message 'Deploy to production?' }
+      steps {
+        sh './scripts/k8s_migrate.sh "$IMAGE"'
+        sh './scripts/k8s_deploy.sh "$IMAGE"'
+      }
+    }
+  }
+  post { failure { echo 'Pipeline failed; nothing was deployed past the failing stage.' } }
+}</code></pre></figure>
+
+<div class="exercise" id="ex8">
+<p class="ex-label">Exercise 8</p>
+<p>Write the IAM trust-policy condition that lets only the <code>deploy</code> job of <code>acme/shop</code>, running in the <code>production</code> GitHub environment, assume the deploy role.</p>
+<details><summary>Show solution</summary>
+<p>GitHub's OIDC tokens carry <code>aud</code> and <code>sub</code> claims; for a job tied to an environment, <code>sub</code> has the form <code>repo:OWNER/REPO:environment:NAME</code> <sup class="cite">[<a href="#ref-43">43</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">trust policy condition</span><span class="lang">json</span></figcaption><pre tabindex="0"><code>"Condition": {
+  "StringEquals": {
+    "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+    "token.actions.githubusercontent.com:sub": "repo:acme/shop:environment:production"
+  }
+}</code></pre></figure>
+<p>Using <code>StringEquals</code> instead of a <code>StringLike</code> wildcard means a pull-request workflow or another branch cannot obtain the role, and combining it with required reviewers on the environment adds a human gate <sup class="cite">[<a href="#ref-45">45</a>]</sup>.</p>
+</details>
+</div>
+</section>
+
+<section id="cloud">
+<h2><span class="secno">9</span> Cloud deployment: AWS, Azure or GCP</h2>
+<p>All three major clouds offer the same building blocks: a container runtime, a managed PostgreSQL, a managed cache, object storage, a secrets store, and a load balancer. This section deploys <em>acme-shop</em> on AWS with ECS on Fargate and shows how the pieces map to Google Cloud and Azure.</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Role</th><th>AWS</th><th>Google Cloud</th><th>Azure</th></tr></thead>
+<tbody>
+<tr><td>Run containers</td><td>ECS on Fargate, or EKS</td><td>Cloud Run, or GKE</td><td>App Service, Container Apps, or AKS</td></tr>
+<tr><td>PostgreSQL</td><td>RDS / Aurora PostgreSQL</td><td>Cloud SQL for PostgreSQL</td><td>Azure Database for PostgreSQL</td></tr>
+<tr><td>Media files</td><td>S3</td><td>Cloud Storage</td><td>Blob Storage</td></tr>
+<tr><td>Secrets</td><td>Secrets Manager / SSM Parameter Store</td><td>Secret Manager</td><td>Key Vault</td></tr>
+<tr><td>Workload identity</td><td>Task role (IAM)</td><td>Service account</td><td>Managed identity</td></tr>
+<tr><td>Load balancing</td><td>Application Load Balancer</td><td>Built into Cloud Run / Cloud Load Balancing</td><td>Built into App Service / Application Gateway</td></tr>
+</tbody></table></div>
+
+<p>Google's official Django tutorial for Cloud Run uses Cloud SQL for PostgreSQL through the built-in Cloud SQL connection, stores a <code>.env</code>-style settings blob in Secret Manager, keeps media in Cloud Storage via django-storages, runs migrations as a Cloud Run job from Cloud Build, and recommends a dedicated least-privilege service account <sup class="cite">[<a href="#ref-49">49</a>]</sup>. Microsoft's tutorial deploys Django with Azure App Service and Azure Database for PostgreSQL <sup class="cite">[<a href="#ref-50">50</a>]</sup>. The design below follows the same shape on AWS.</p>
+
+<h3>ECS task definition</h3>
+<p>Each container definition can inject secrets through a <code>secrets</code> list whose <code>valueFrom</code> is the ARN of a Secrets Manager secret or an SSM parameter; the value arrives as an environment variable when the task starts <sup class="cite">[<a href="#ref-51">51</a>]</sup>. <code>stopTimeout</code> is how long ECS waits before forcefully killing a container that does not exit on its own; without it, the default is 30 seconds <sup class="cite">[<a href="#ref-51">51</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">taskdef.json (excerpt)</span><span class="lang">json</span></figcaption><pre tabindex="0"><code>{
+  "family": "acme-web",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::123456789012:role/acme-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::123456789012:role/acme-web-task",
+  "containerDefinitions": [{
+    "name": "app",
+    "image": "123456789012.dkr.ecr.eu-west-1.amazonaws.com/acme-shop:REPLACED_BY_CI",
+    "portMappings": [{ "containerPort": 8000 }],
+    "environment": [
+      { "name": "DJANGO_ALLOWED_HOSTS", "value": "shop.example.com" },
+      { "name": "WEB_CONCURRENCY", "value": "3" },
+      { "name": "FORWARDED_ALLOW_IPS", "value": "10.0.0.0/16" }
+    ],
+    "secrets": [
+      { "name": "DJANGO_SECRET_KEY",
+        "valueFrom": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:acme/django-secret-key" },
+      { "name": "POSTGRES_PASSWORD",
+        "valueFrom": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:acme/db:password::" }
+    ],
+    "stopTimeout": 30,
+    "healthCheck": {
+      "command": ["CMD", "python", "-c",
+                  "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=2)"],
+      "interval": 15, "timeout": 3, "retries": 3, "startPeriod": 20
+    },
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": { "awslogs-group": "/acme/web", "awslogs-region": "eu-west-1",
+                   "awslogs-stream-prefix": "web" }
+    }
+  }]
+}</code></pre></figure>
+<p>The <em>execution role</em> is used by ECS itself to pull the image and read the secrets; the <em>task role</em> is what the Django code assumes when it calls AWS APIs, for example S3 for media. Keep them separate so the application cannot read secrets it was not given <sup class="cite">[<a href="#ref-51">51</a>]</sup> (§11).</p>
+
+<h3>Load balancer target group</h3>
+<p>The ALB health check should call <code>/readyz/</code>. By default, ELB waits 300 seconds when deregistering a target so in-flight requests can finish <sup class="cite">[<a href="#ref-52">52</a>]</sup>; for a Django app with a 30-second request timeout, lowering <code>deregistration_delay.timeout_seconds</code> to 30–60 seconds makes rolling deploys much faster. Slow start mode ramps traffic to new targets linearly, which helps when fresh workers have cold caches <sup class="cite">[<a href="#ref-52">52</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">target group tuning</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code>aws elbv2 modify-target-group-attributes --target-group-arn "$TG_ARN" --attributes \
+  Key=deregistration_delay.timeout_seconds,Value=45 \
+  Key=slow_start.duration_seconds,Value=30
+aws elbv2 modify-target-group --target-group-arn "$TG_ARN" \
+  --health-check-path /readyz/ --health-check-interval-seconds 10 \
+  --healthy-threshold-count 2 --unhealthy-threshold-count 3 --matcher HttpCode=200</code></pre></figure>
+
+<div class="exercise" id="ex9">
+<p class="ex-label">Exercise 9</p>
+<p>The team stores the database password as a plain <code>environment</code> entry in the task definition so it "works the same as locally". List two concrete risks and the change you would make.</p>
+<details><summary>Show solution</summary>
+<p>Plain <code>environment</code> values are part of the task definition, so anyone with permission to describe task definitions can read the password, and it is copied into every revision and often into CI logs or infrastructure-as-code state. Rotation also requires a new task definition revision. Move it to Secrets Manager and reference it with <code>secrets[].valueFrom</code> <sup class="cite">[<a href="#ref-51">51</a>]</sup>; grant only the execution role <code>secretsmanager:GetSecretValue</code> on that one ARN. Secrets Manager can then rotate the credential on a schedule <sup class="cite">[<a href="#ref-53">53</a>]</sup>, and a redeploy picks up the new value.</p>
+</details>
+</div>
+</section>
+<section id="kubernetes">
+<h2><span class="secno">10</span> Kubernetes deployment</h2>
+<p>On Kubernetes, the Django web tier is a <code>Deployment</code>: a controller that keeps a set of identical Pods running and replaces them gradually during a rolling update, bounded by <code>maxSurge</code> and <code>maxUnavailable</code> <sup class="cite">[<a href="#ref-54">54</a>]</sup>. Migrations run as a <code>Job</code>, which retries failed Pods up to <code>backoffLimit</code> <sup class="cite">[<a href="#ref-55">55</a>]</sup>. Probes tell the kubelet when to restart a container and when to send it traffic <sup class="cite">[<a href="#ref-56">56</a>]</sup>.</p>
+
+<h3>Configuration and secrets</h3>
+<figure class="code"><figcaption><span class="fname">k8s/config.yaml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>apiVersion: v1
+kind: ConfigMap
+metadata: { name: acme-web-config }
+data:
+  DJANGO_SETTINGS_MODULE: config.settings.production
+  DJANGO_ALLOWED_HOSTS: shop.example.com
+  DJANGO_CSRF_TRUSTED_ORIGINS: https://shop.example.com
+  POSTGRES_HOST: acme-db.internal
+  POSTGRES_DB: acme
+  POSTGRES_USER: acme_app
+  REDIS_URL: rediss://acme-cache.internal:6379/0
+  MEDIA_BUCKET: acme-shop-media
+  WEB_CONCURRENCY: "3"
+  FORWARDED_ALLOW_IPS: "10.0.0.0/8"</code></pre></figure>
+<p>Kubernetes Secrets are, by default, stored unencrypted in etcd, and anyone who can create a Pod in a namespace can read every Secret in it. The docs list the minimum steps: enable encryption at rest, restrict access with least-privilege RBAC, limit which containers see each Secret, and consider an external secret store provider <sup class="cite">[<a href="#ref-57">57</a>]</sup>. In practice that means the Secret below is created by a controller that syncs it from your cloud secret manager, not committed as YAML.</p>
+
+<h3>Deployment</h3>
+<figure class="code"><figcaption><span class="fname">k8s/web.yaml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acme-web
+  labels: { app: acme-web }
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector: { matchLabels: { app: acme-web } }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }   # never drop below desired capacity
+  template:
+    metadata:
+      labels: { app: acme-web }
+    spec:
+      serviceAccountName: acme-web          # bound to a cloud IAM role (§11)
+      terminationGracePeriodSeconds: 45     # &gt; preStop (10) + graceful_timeout (25) + margin
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: app
+          image: registry.example.com/acme-shop:3f9c2e1   # immutable tag = commit SHA
+          ports: [{ name: http, containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: acme-web-config }
+          env:
+            - name: POSTGRES_PASSWORD_FILE
+              value: /var/run/secrets/acme/postgres-password
+            - name: DJANGO_SECRET_KEY_FILE
+              value: /var/run/secrets/acme/django-secret-key
+          volumeMounts:
+            - { name: app-secrets, mountPath: /var/run/secrets/acme, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 500m, memory: 512Mi }
+            limits:   { memory: 1Gi }
+          startupProbe:
+            httpGet: { path: /healthz/, port: http }
+            periodSeconds: 2
+            failureThreshold: 30              # up to 60 s to boot
+          livenessProbe:
+            httpGet: { path: /healthz/, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz/, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] } # let endpoint removal propagate
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: app-secrets
+          secret: { secretName: acme-web-secrets }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: { name: acme-web }
+spec:
+  selector: { app: acme-web }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: acme-web }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: acme-web } }</code></pre></figure>
+<p>The <code>PodDisruptionBudget</code> limits how many Pods voluntary disruptions such as node drains can take down at once <sup class="cite">[<a href="#ref-58">58</a>,<a href="#ref-59">59</a>]</sup>. <code>preStop</code> hooks run before the container receives its termination signal, and their time counts against the grace period <sup class="cite">[<a href="#ref-60">60</a>,<a href="#ref-61">61</a>]</sup>.</p>
+
+<h3>Migration Job</h3>
+<figure class="code"><figcaption><span class="fname">k8s/migrate-job.yaml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>apiVersion: batch/v1
+kind: Job
+metadata:
+  name: acme-migrate-3f9c2e1          # one Job per release
+spec:
+  backoffLimit: 1                     # retry once, then fail the pipeline
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: acme-migrator
+      containers:
+        - name: migrate
+          image: registry.example.com/acme-shop:3f9c2e1
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom: [{ configMapRef: { name: acme-web-config } }]
+          env:
+            - { name: POSTGRES_USER, value: acme_migrator }
+            - { name: POSTGRES_PASSWORD_FILE, value: /var/run/secrets/acme/migrator-password }
+          volumeMounts:
+            - { name: migrator-secret, mountPath: /var/run/secrets/acme, readOnly: true }
+      volumes:
+        - name: migrator-secret
+          secret: { secretName: acme-migrator-secret }</code></pre></figure>
+<figure class="code"><figcaption><span class="fname">scripts/k8s_deploy.sh</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code><span class="c">#!/usr/bin/env bash</span>
+set -euo pipefail
+IMAGE="$1"; SHA="${IMAGE##*:}"
+sed "s/3f9c2e1/${SHA}/g" k8s/migrate-job.yaml | kubectl apply -f -
+kubectl wait --for=condition=complete --timeout=900s "job/acme-migrate-${SHA}"
+kubectl set image deployment/acme-web app="$IMAGE"
+kubectl rollout status deployment/acme-web --timeout=600s || {
+  kubectl rollout undo deployment/acme-web; exit 1; }</code></pre></figure>
+
+<div class="exercise" id="ex10">
+<p class="ex-label">Exercise 10</p>
+<p>A team's liveness probe calls <code>/readyz/</code>, which checks PostgreSQL. During a 2-minute database failover, every web Pod in the cluster restarts repeatedly, and recovery takes 10 minutes after the database is back. Explain the chain of events and the fix.</p>
+<details><summary>Show solution</summary>
+<p>A failing liveness probe makes the kubelet restart the container <sup class="cite">[<a href="#ref-56">56</a>]</sup>. Because the probe depends on the database, a database outage fails liveness everywhere at once; all Pods restart, enter crash back-off, and then reconnect at the same moment, adding load just as the database recovers. Liveness should only answer "is this process wedged?" and so should call <code>/healthz/</code>, which touches no dependencies. Dependency checks belong in the readiness probe, which only removes the Pod from Service endpoints without restarting it <sup class="cite">[<a href="#ref-56">56</a>]</sup>.</p>
+</details>
+</div>
+</section>
+
+<section id="secrets">
+<h2><span class="secno">11</span> Secrets management and IAM</h2>
+<p>OWASP's secrets management guidance comes down to a few rules: keep secrets in a dedicated store rather than in code, images or configuration files; give each workload only the secrets it needs; prefer short-lived, automatically rotated credentials; and log access to secrets <sup class="cite">[<a href="#ref-62">62</a>]</sup>. Cloud IAM guidance says the same from the identity side: use temporary credentials through roles instead of long-term access keys, and grant least privilege <sup class="cite">[<a href="#ref-63">63</a>]</sup>.</p>
+
+<h3>Where each Django secret should live</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Secret</th><th>Store</th><th>How the app gets it</th><th>Rotation</th></tr></thead>
+<tbody>
+<tr><td><code>SECRET_KEY</code></td><td>Secrets Manager / Secret Manager / Key Vault</td><td>Env var or mounted file at start</td><td>New key, old one to <code>SECRET_KEY_FALLBACKS</code>, remove later <sup class="cite">[<a href="#ref-6">6</a>]</sup></td></tr>
+<tr><td>Database password</td><td>Same, ideally with managed rotation</td><td>Mounted file or env var</td><td>Scheduled rotation with the store's database integration <sup class="cite">[<a href="#ref-53">53</a>]</sup></td></tr>
+<tr><td>S3 / Cloud Storage access</td><td>No secret at all</td><td>Workload identity (task role, service account)</td><td>Temporary credentials rotate automatically <sup class="cite">[<a href="#ref-63">63</a>]</sup></td></tr>
+<tr><td>CI deploy credentials</td><td>No stored secret</td><td>OIDC federation from the CI provider</td><td>Token per job <sup class="cite">[<a href="#ref-43">43</a>]</sup></td></tr>
+<tr><td>Third-party API keys</td><td>Secrets store</td><td>Fetched at start, cached in memory</td><td>Per vendor; automate where possible</td></tr>
+</tbody></table></div>
+
+<h3>Reading a secret at startup</h3>
+<p>AWS Secrets Manager stores, retrieves and rotates credentials such as database passwords and API keys, with access controlled by IAM <sup class="cite">[<a href="#ref-64">64</a>]</sup>. Reading it directly from settings works when you cannot inject it through the platform:</p>
+<figure class="code"><figcaption><span class="fname">config/settings/aws_secrets.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import functools
+import json
+
+import boto3
+
+
+@functools.cache
+def aws_secret(secret_id: str) -&gt; dict:
+    """Fetch a JSON secret once per process; credentials come from the task role."""
+    client = boto3.client("secretsmanager")
+    return json.loads(client.get_secret_value(SecretId=secret_id)["SecretString"])
+
+
+<span class="c"># production.py</span>
+<span class="c"># db = aws_secret("acme/db")</span>
+<span class="c"># DATABASES["default"].update(USER=db["username"], PASSWORD=db["password"])</span></code></pre></figure>
+<p>The cache is per process, so after a rotation, a rolling restart picks up the new value. Rotation schemes that keep two valid credentials during the switch avoid failures during that window <sup class="cite">[<a href="#ref-53">53</a>]</sup>.</p>
+
+<h3>Least-privilege policy for media</h3>
+<figure class="code"><figcaption><span class="fname">acme-web-task role policy</span><span class="lang">json</span></figcaption><pre tabindex="0"><code>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MediaObjects",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::acme-shop-media/media/*"
+    },
+    {
+      "Sid": "ListMediaPrefix",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::acme-shop-media",
+      "Condition": { "StringLike": { "s3:prefix": ["media/*"] } }
+    }
+  ]
+}</code></pre></figure>
+<p>The task role cannot read secrets, cannot touch other buckets and cannot delete backups. On Kubernetes the equivalent is a ServiceAccount bound to a cloud role, combined with RBAC rules that stop the app's ServiceAccount from listing Secrets <sup class="cite">[<a href="#ref-57">57</a>,<a href="#ref-65">65</a>]</sup>.</p>
+
+<div class="exercise" id="ex11">
+<p class="ex-label">Exercise 11</p>
+<p>Plan a zero-downtime rotation of <code>SECRET_KEY</code> after a laptop holding it was lost. What do you deploy, in what order, and what will users notice?</p>
+<details><summary>Show solution</summary>
+<p>Generate a new key and store it. Deploy with <code>SECRET_KEY</code> set to the new key and the compromised key at the front of <code>SECRET_KEY_FALLBACKS</code> <sup class="cite">[<a href="#ref-6">6</a>]</sup>. Existing sessions and signed tokens keep validating against the fallback, so nobody is logged out, and everything newly signed uses the new key. Because the old key is compromised, keep the fallback window short: once you accept that sessions signed with it are invalidated, deploy again with the fallback removed. At that point users with old sessions must log in again, and password-reset links issued before the rotation stop working. Django's checklist asks you to remove old fallbacks "in a timely manner" <sup class="cite">[<a href="#ref-1">1</a>]</sup>.</p>
+</details>
+</div>
+</section>
+
+<section id="observability">
+<h2><span class="secno">12</span> Logging, metrics, tracing and alerting</h2>
+<p>Google's SRE book names four "golden signals" for user-facing systems: latency, traffic, errors and saturation <sup class="cite">[<a href="#ref-66">66</a>]</sup>. Logs explain individual events, metrics show the four signals over time, traces show where time went inside one request, and alerts turn metrics into pages. Each needs a deliberate design.</p>
+
+<h3>Logs as JSON on stdout</h3>
+<p>The Twelve-Factor App treats logs as an event stream: the app writes unbuffered to stdout and the platform routes it <sup class="cite">[<a href="#ref-67">67</a>]</sup>. Django's logging is configured with Python's <code>dictConfig</code> schema through the <code>LOGGING</code> setting <sup class="cite">[<a href="#ref-68">68</a>,<a href="#ref-69">69</a>]</sup>. Structured JSON with a request ID makes logs searchable and lets you join them with traces.</p>
+<figure class="code"><figcaption><span class="fname">config/logging.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import contextvars
+import json
+import logging
+import uuid
+
+request_id_var = contextvars.ContextVar("request_id", default="-")
+
+
+class RequestIdFilter(logging.Filter):
+    def filter(self, record):
+        record.request_id = request_id_var.get()
+        return True
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        payload = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+            "request_id": getattr(record, "request_id", "-"),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+class RequestIdMiddleware:
+    """Reuse the proxy's X-Request-ID (§4) or create one; echo it to the client."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        token = request_id_var.set(rid)
+        try:
+            response = self.get_response(request)
+        finally:
+            request_id_var.reset(token)
+        response["X-Request-ID"] = rid
+        return response
+
+
+def build_logging(level: str = "INFO") -&gt; dict:
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "filters": {"request_id": {"()": RequestIdFilter}},
+        "formatters": {"json": {"()": JsonFormatter}},
+        "handlers": {
+            "stdout": {"class": "logging.StreamHandler", "formatter": "json",
+                       "filters": ["request_id"]},
+        },
+        "root": {"handlers": ["stdout"], "level": level},
+        "loggers": {
+            "django.request": {"level": "WARNING", "propagate": True},  # 4xx/5xx
+            "django.security": {"level": "WARNING", "propagate": True},  # DisallowedHost etc.
+            "django.db.backends": {"level": "WARNING", "propagate": True},  # never DEBUG in prod
+        },
+    }</code></pre></figure>
+<p>A <code>ContextVar</code> works for both WSGI threads and ASGI tasks, unlike a thread-local. Django's checklist asks you to review logging before launch and to consider an error-tracking service, since email error reports "don't scale very well" <sup class="cite">[<a href="#ref-1">1</a>]</sup>.</p>
+
+<h3>Metrics with Prometheus</h3>
+<p>Prometheus naming practice: use base units such as seconds, suffix counters with <code>_total</code>, and never put unbounded values such as user IDs in labels <sup class="cite">[<a href="#ref-70">70</a>]</sup>. Label by the URL <em>route pattern</em>, not the raw path. Because Gunicorn runs several processes, the Python client must run in multiprocess mode: point <code>PROMETHEUS_MULTIPROC_DIR</code> at an empty directory before start, collect with <code>MultiProcessCollector</code>, and mark dead workers in Gunicorn's <code>child_exit</code> hook, as in §2 <sup class="cite">[<a href="#ref-71">71</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">config/metrics.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import time
+
+from django.http import HttpResponse
+from prometheus_client import (CONTENT_TYPE_LATEST, CollectorRegistry, Counter,
+                               Histogram, generate_latest, multiprocess)
+
+REQUEST_LATENCY = Histogram(
+    "django_http_request_duration_seconds", "Request latency by route",
+    ["method", "route", "status"],
+    buckets=(0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+)
+REQUESTS = Counter("django_http_requests_total", "Requests by route",
+                   ["method", "route", "status"])
+
+
+class MetricsMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        start = time.perf_counter()
+        response = self.get_response(request)
+        match = getattr(request, "resolver_match", None)
+        route = match.route if match else "unmatched"   # e.g. "orders/&lt;int:pk&gt;/"
+        labels = (request.method, route, str(response.status_code))
+        REQUEST_LATENCY.labels(*labels).observe(time.perf_counter() - start)
+        REQUESTS.labels(*labels).inc()
+        return response
+
+
+def metrics_view(request):
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)   # aggregate every worker's files
+    return HttpResponse(generate_latest(registry), content_type=CONTENT_TYPE_LATEST)</code></pre></figure>
+<p>Expose <code>metrics_view</code> on an internal port or protect it; it should not be reachable from the internet.</p>
+
+<h3>Distributed tracing with OpenTelemetry</h3>
+<p>OpenTelemetry's Python distribution provides zero-code instrumentation through <code>opentelemetry-instrument</code>, which monkey-patches supported libraries <sup class="cite">[<a href="#ref-72">72</a>]</sup>. Pre-fork servers such as Gunicorn need care, because exporters and background threads created before <code>fork()</code> do not work in the workers; the troubleshooting guide's workarounds include programmatic instrumentation in Gunicorn's <code>post_fork</code> hook <sup class="cite">[<a href="#ref-73">73</a>]</sup>. Trace context travels between services in the W3C <code>traceparent</code> header <sup class="cite">[<a href="#ref-74">74</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">gunicorn.conf.py (add)</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>def post_fork(server, worker):
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.django import DjangoInstrumentor
+    from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    provider = TracerProvider(resource=Resource.create({"service.name": "acme-web"}))
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))  # OTEL_EXPORTER_OTLP_ENDPOINT
+    trace.set_tracer_provider(provider)
+    DjangoInstrumentor().instrument()
+    PsycopgInstrumentor().instrument()</code></pre></figure>
+<p>Add the trace ID to the JSON log payload and you can jump from a log line to its trace.</p>
+
+<h3>Alerting on symptoms, against an SLO</h3>
+<p>The SRE book says every page should be actionable and that it is better to alert on symptoms than causes <sup class="cite">[<a href="#ref-66">66</a>]</sup>. The SRE workbook's recommended set-up for a 99.9% SLO uses multiwindow burn rates: page when the 1-hour and 5-minute error rates both exceed 14.4× the budget rate (2% of the monthly budget gone), or the 6-hour and 30-minute rates exceed 6× (5% gone); open a ticket at 1× over 3 days <sup class="cite">[<a href="#ref-75">75</a>]</sup>. Prometheus alerting rules express this with an expression and an optional <code>for</code> duration <sup class="cite">[<a href="#ref-76">76</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">prometheus/rules/acme-web.yml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>groups:
+  - name: acme-web-slo
+    rules:
+      - record: job:slo_errors_per_request:ratio_rate5m
+        expr: |
+          sum by (job) (rate(django_http_requests_total{status=~"5.."}[5m]))
+          / sum by (job) (rate(django_http_requests_total[5m]))
+<span class="c">      # ...same recording rule for 30m, 1h and 6h windows...</span>
+
+      - alert: AcmeWebErrorBudgetBurn
+        expr: |
+          (job:slo_errors_per_request:ratio_rate1h{job="acme-web"} &gt; (14.4 * 0.001)
+           and job:slo_errors_per_request:ratio_rate5m{job="acme-web"} &gt; (14.4 * 0.001))
+          or
+          (job:slo_errors_per_request:ratio_rate6h{job="acme-web"} &gt; (6 * 0.001)
+           and job:slo_errors_per_request:ratio_rate30m{job="acme-web"} &gt; (6 * 0.001))
+        labels: { severity: page }
+        annotations:
+          summary: "acme-web is burning its 99.9% error budget too fast"
+          runbook: "https://runbooks.example.com/acme-web/error-budget"
+
+      - alert: AcmeWebLatencyP95High
+        expr: |
+          histogram_quantile(0.95, sum by (le) (
+            rate(django_http_request_duration_seconds_bucket{job="acme-web"}[5m]))) &gt; 1
+        for: 10m
+        labels: { severity: ticket }</code></pre></figure>
+
+<div class="exercise" id="ex12">
+<p class="ex-label">Exercise 12</p>
+<p>A developer adds a <code>path</code> label containing <code>request.path</code> to the request counter. Within a day Prometheus memory doubles. Why, and how does the article's middleware avoid it?</p>
+<details><summary>Show solution</summary>
+<p>Every distinct label value creates a new time series. Raw paths include IDs, slugs and query-like segments (<code>/orders/18231/</code>, <code>/orders/18232/</code>, ...), plus whatever bots request, so the number of series grows without limit. Prometheus's naming guide warns against high-cardinality labels such as user IDs for exactly this reason <sup class="cite">[<a href="#ref-70">70</a>]</sup>. The middleware labels by <code>request.resolver_match.route</code>, the URL pattern (<code>orders/&lt;int:pk&gt;/</code>), which has one value per route, and uses <code>"unmatched"</code> for 404s.</p>
+</details>
+</div>
+</section>
+
+<section id="health">
+<h2><span class="secno">13</span> Health checks and graceful shutdown</h2>
+<p>Health endpoints answer two different questions. <em>Liveness</em>: is this process able to make progress, or should it be restarted? <em>Readiness</em>: should this instance receive traffic right now? Kubernetes maps them to separate probes, and adds a startup probe that holds the other two off until a slow-starting app is up <sup class="cite">[<a href="#ref-56">56</a>]</sup>.</p>
+
+<h3>Endpoints that bypass host validation</h3>
+<p>Probes from the kubelet or a load balancer usually connect by IP address, so their <code>Host</code> header is not in <code>ALLOWED_HOSTS</code> and Django would answer 400. The middleware below sits first in <code>MIDDLEWARE</code> (§6) and answers before anything calls <code>request.get_host()</code>. A failing readiness check returns 503, the status RFC 9110 defines for a server that is temporarily unable to handle the request, optionally with <code>Retry-After</code> <sup class="cite">[<a href="#ref-77">77</a>]</sup>.</p>
+<figure class="code"><figcaption><span class="fname">config/middleware.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>import logging
+
+from django.core.cache import cache
+from django.db import connections
+from django.http import JsonResponse
+
+log = logging.getLogger(__name__)
+
+
+def _check_database() -&gt; str:
+    try:
+        with connections["default"].cursor() as cursor:
+            cursor.execute("SELECT 1")
+        return "ok"
+    except Exception as exc:  # noqa: BLE001
+        log.warning("readiness: database check failed", exc_info=exc)
+        return "fail"
+
+
+def _check_cache() -&gt; str:
+    try:
+        cache.set("readyz", "1", timeout=5)
+        return "ok" if cache.get("readyz") == "1" else "fail"
+    except Exception as exc:  # noqa: BLE001
+        log.warning("readiness: cache check failed", exc_info=exc)
+        return "fail"
+
+
+class HealthCheckMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path == "/healthz/":
+            return JsonResponse({"status": "ok"})          # process is alive; no I/O
+        if request.path == "/readyz/":
+            checks = {"database": _check_database(), "cache": _check_cache()}
+            ok = all(v == "ok" for v in checks.values())
+            response = JsonResponse({"status": "ok" if ok else "fail", "checks": checks},
+                                    status=200 if ok else 503)
+            if not ok:
+                response["Retry-After"] = "5"
+            return response
+        return self.get_response(request)</code></pre></figure>
+<p>Keep the readiness check cheap: it runs every few seconds on every replica. Do not expose error details in the response body; log them instead.</p>
+
+<h3>The shutdown sequence</h3>
+<p>Graceful shutdown means no request is cut off when an instance stops, whether for a deploy, a scale-in or a node drain. The Twelve-Factor App calls this disposability: fast startup and graceful shutdown on <code>SIGTERM</code> <sup class="cite">[<a href="#ref-78">78</a>]</sup>. On Kubernetes, when a Pod is deleted it is removed from Service endpoints while the <code>preStop</code> hook runs; then the container receives <code>SIGTERM</code>; if it is still running when <code>terminationGracePeriodSeconds</code> (default 30 s) expires, it is killed with <code>SIGKILL</code> <sup class="cite">[<a href="#ref-60">60</a>,<a href="#ref-61">61</a>]</sup>. Gunicorn responds to <code>SIGTERM</code> by finishing in-flight requests for up to <code>graceful_timeout</code> <sup class="cite">[<a href="#ref-16">16</a>]</sup>.</p>
+<div class="table-wrap"><table>
+<caption>Shutdown time budget for the Kubernetes manifest in §10</caption>
+<thead><tr><th>Phase</th><th>Duration</th><th>What happens</th></tr></thead>
+<tbody class="num">
+<tr><td>preStop <code>sleep</code></td><td>10 s</td><td>Endpoint removal reaches kube-proxy and the ingress; the Pod still serves stragglers.</td></tr>
+<tr><td>Gunicorn drain</td><td>≤ 25 s</td><td><code>SIGTERM</code> → workers stop accepting and finish in-flight requests.</td></tr>
+<tr><td>Margin</td><td>10 s</td><td>Exporters flush spans and logs.</td></tr>
+<tr><td><strong>terminationGracePeriodSeconds</strong></td><td><strong>45 s</strong></td><td>Anything still running gets <code>SIGKILL</code>.</td></tr>
+</tbody></table></div>
+<p>On ECS, the equivalent knobs are the target group's deregistration delay and the container's <code>stopTimeout</code> <sup class="cite">[<a href="#ref-51">51</a>,<a href="#ref-52">52</a>]</sup>. In Compose, it is <code>stop_grace_period</code> <sup class="cite">[<a href="#ref-79">79</a>]</sup>. The rule is the same everywhere: the platform's grace period must be longer than the server's drain time, which must be longer than your slowest legitimate request.</p>
+
+<div class="exercise" id="ex13">
+<p class="ex-label">Exercise 13</p>
+<p>During every rolling deploy on Kubernetes, the ingress logs a burst of 502 errors lasting about a second per Pod, even though Gunicorn drains correctly. There is no <code>preStop</code> hook. Explain the race and the fix.</p>
+<details><summary>Show solution</summary>
+<p>Endpoint removal and <code>SIGTERM</code> happen at roughly the same time, and endpoint removal takes a moment to reach every proxy <sup class="cite">[<a href="#ref-61">61</a>]</sup>. Gunicorn closes its listening socket as soon as it gets <code>SIGTERM</code>, so for a short window the ingress still routes new connections to a Pod that refuses them, producing 502s. A <code>preStop</code> hook that sleeps a few seconds delays <code>SIGTERM</code> until routing has caught up <sup class="cite">[<a href="#ref-60">60</a>]</sup>; then raise <code>terminationGracePeriodSeconds</code> so that the sleep plus <code>graceful_timeout</code> still fits.</p>
+</details>
+</div>
+</section>
+
+<section id="migrations">
+<h2><span class="secno">14</span> Database migration strategy</h2>
+<p>During a rolling deploy, old and new code run against the same database at the same time. Every migration must therefore be compatible with both the release before it and the release after it. The usual way to achieve that is <em>expand and contract</em>: first add new structures that old code ignores, deploy code that uses them, and only in a later release remove what is no longer used.</p>
+
+<h3>When and how migrations run</h3>
+<ul>
+<li>Run <code>migrate</code> once per release as a separate one-off step (a CI step, an ECS task or a Kubernetes Job), before the new code rolls out. The Twelve-Factor App calls these admin processes and asks that they run in an identical environment to the app <sup class="cite">[<a href="#ref-80">80</a>]</sup>. Do not run it in each container's entrypoint, where several replicas start it at once.</li>
+<li>On PostgreSQL, each migration runs in a transaction by default because PostgreSQL supports transactional DDL <sup class="cite">[<a href="#ref-81">81</a>]</sup>. A failed migration rolls back cleanly unless you set <code>atomic = False</code>.</li>
+<li>Review the SQL before merging with <code>sqlmigrate app 0042</code> <sup class="cite">[<a href="#ref-81">81</a>]</sup>, and gate deploys on <code>migrate --check</code>, which exits non-zero when unapplied migrations exist <sup class="cite">[<a href="#ref-10">10</a>]</sup>.</li>
+</ul>
+
+<h3>Locks are the real risk</h3>
+<p>Most <code>ALTER TABLE</code> forms take an <code>ACCESS EXCLUSIVE</code> lock <sup class="cite">[<a href="#ref-82">82</a>]</sup>, which conflicts with every other lock mode, including plain <code>SELECT</code> <sup class="cite">[<a href="#ref-83">83</a>]</sup>. The statement itself may be instant, but if it waits behind a long transaction, every query that arrives after it queues too. Setting <code>lock_timeout</code> for the migration role (§5) makes the migration fail fast instead of freezing the site; retry it later.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Change</th><th>Safe approach on PostgreSQL</th></tr></thead>
+<tbody>
+<tr><td>Add a nullable column, or one with a constant default</td><td>Safe. A non-volatile default is stored in metadata, so no table rewrite is needed <sup class="cite">[<a href="#ref-82">82</a>]</sup>.</td></tr>
+<tr><td>Add an index</td><td><code>AddIndexConcurrently</code> in a migration with <code>atomic = False</code> <sup class="cite">[<a href="#ref-84">84</a>,<a href="#ref-85">85</a>]</sup>. Concurrent builds avoid blocking writes but cannot run in a transaction and leave an <code>INVALID</code> index on failure, which you drop and retry <sup class="cite">[<a href="#ref-86">86</a>]</sup>.</td></tr>
+<tr><td>Add <code>NOT NULL</code> to an existing column</td><td>Add <code>CHECK (col IS NOT NULL) NOT VALID</code>, then <code>VALIDATE CONSTRAINT</code> (weaker lock), then <code>SET NOT NULL</code>, which skips the scan because the valid check proves it <sup class="cite">[<a href="#ref-82">82</a>]</sup>.</td></tr>
+<tr><td>Add a foreign key</td><td>Add with <code>NOT VALID</code>, then validate separately <sup class="cite">[<a href="#ref-82">82</a>]</sup>.</td></tr>
+<tr><td>Rename a column or table</td><td>Avoid. Add the new column, write to both, backfill, switch reads, then drop the old one in a later release.</td></tr>
+<tr><td>Drop a column</td><td>Release 1: remove the field from the model and from Django's migration state only. Release 2: drop it from the database.</td></tr>
+<tr><td>Backfill a large table</td><td>Non-atomic data migration in batches, each batch in its own transaction <sup class="cite">[<a href="#ref-85">85</a>]</sup>.</td></tr>
+</tbody></table></div>
+
+<h3>Examples</h3>
+<figure class="code"><figcaption><span class="fname">orders/migrations/0042_order_created_idx.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>from django.contrib.postgres.operations import AddIndexConcurrently
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    atomic = False   # CREATE INDEX CONCURRENTLY cannot run inside a transaction
+
+    dependencies = [("orders", "0041_order_channel")]
+
+    operations = [
+        AddIndexConcurrently(
+            "order",
+            models.Index(fields=["customer", "-created_at"], name="order_customer_created_idx"),
+        ),
+    ]</code></pre></figure>
+<figure class="code"><figcaption><span class="fname">orders/migrations/0043_drop_legacy_field_state.py (release 1 of 2)</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>from django.db import migrations
+
+
+class Migration(migrations.Migration):
+    dependencies = [("orders", "0042_order_created_idx")]
+
+    operations = [
+        migrations.SeparateDatabaseAndState(
+            state_operations=[migrations.RemoveField("order", "legacy_status")],
+            database_operations=[],          # column stays until release 2
+        ),
+    ]</code></pre></figure>
+<p>Before release 1, give the column a database default or make it nullable so that inserts from the new code, which no longer sends a value, do not fail. In release 2, a <code>RunSQL("ALTER TABLE orders_order DROP COLUMN legacy_status")</code> removes it.</p>
+<figure class="code"><figcaption><span class="fname">orders/migrations/0044_backfill_channel.py</span><span class="lang">python</span></figcaption><pre tabindex="0"><code>from django.db import migrations, transaction
+
+BATCH = 5_000
+
+
+def backfill(apps, schema_editor):
+    Order = apps.get_model("orders", "Order")   # historical model, never a direct import
+    while True:
+        with transaction.atomic():
+            ids = list(Order.objects.filter(channel__isnull=True)
+                       .values_list("pk", flat=True)[:BATCH])
+            if not ids:
+                break
+            Order.objects.filter(pk__in=ids).update(channel="web")
+
+
+class Migration(migrations.Migration):
+    atomic = False
+    dependencies = [("orders", "0043_drop_legacy_field_state")]
+    operations = [migrations.RunPython(backfill, migrations.RunPython.noop)]</code></pre></figure>
+<p>Data migrations must use <code>apps.get_model()</code>; importing the model directly "may work initially" but breaks when old migrations are re-run later <sup class="cite">[<a href="#ref-81">81</a>]</sup>.</p>
+
+<div class="exercise" id="ex14">
+<p class="ex-label">Exercise 14</p>
+<p>A migration adds an index with plain <code>AddIndex</code> to a 200-million-row <code>orders</code> table, and checkout is down for 18 minutes. Rewrite it safely, and say what to do if the concurrent build fails halfway.</p>
+<details><summary>Show solution</summary>
+<p>A plain <code>CREATE INDEX</code> blocks writes on the table until it finishes <sup class="cite">[<a href="#ref-86">86</a>]</sup>, so every checkout insert waited. Use <code>AddIndexConcurrently</code> from <code>django.contrib.postgres.operations</code> in a migration with <code>atomic = False</code>, as in the <code>0042</code> example <sup class="cite">[<a href="#ref-84">84</a>]</sup>. If the build fails (for example on a deadlock or a uniqueness violation), PostgreSQL leaves an <code>INVALID</code> index that is ignored for queries but still costs write overhead; drop it and run the concurrent build again, or use <code>REINDEX INDEX CONCURRENTLY</code> <sup class="cite">[<a href="#ref-86">86</a>]</sup>.</p>
+</details>
+</div>
+</section>
+
+<section id="backups">
+<h2><span class="secno">15</span> Backups and disaster recovery</h2>
+<p>Two numbers drive the design. The <em>recovery point objective</em> (RPO) is how much data, measured in time, you can afford to lose; the <em>recovery time objective</em> (RTO) is how long the service can be down. AWS describes four strategies in increasing cost and decreasing RTO and RPO: backup and restore, pilot light, warm standby, and multi-site active/active <sup class="cite">[<a href="#ref-87">87</a>]</sup>. NIST SP 800-34 frames the same work as contingency planning, including regular testing of the plan <sup class="cite">[<a href="#ref-88">88</a>]</sup>.</p>
+
+<h3>Database: physical backups plus WAL for point-in-time recovery</h3>
+<p>A base backup combined with a continuous archive of WAL files lets PostgreSQL restore to any moment since the base backup <sup class="cite">[<a href="#ref-89">89</a>]</sup>. <code>pg_dump</code> output is a logical backup: useful for copies and migrations between versions, but it "cannot be used as part of a continuous-archiving solution" <sup class="cite">[<a href="#ref-89">89</a>,<a href="#ref-90">90</a>]</sup>. Managed services do this for you: RDS automated backups let you restore to any point within the retention period you configure <sup class="cite">[<a href="#ref-91">91</a>]</sup>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Layer</th><th>Mechanism</th><th>Typical RPO</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>PostgreSQL</td><td>Base backup + WAL archive (pgBackRest, or managed PITR)</td><td>Minutes</td><td>Primary recovery path <sup class="cite">[<a href="#ref-89">89</a>,<a href="#ref-91">91</a>]</sup></td></tr>
+<tr><td>PostgreSQL</td><td>Nightly <code>pg_dump -Fc</code> to another account/region</td><td>24 h</td><td>Independent copy; protects against provider-level mistakes <sup class="cite">[<a href="#ref-90">90</a>]</sup></td></tr>
+<tr><td>Media files</td><td>Object storage versioning + cross-region replication</td><td>Minutes</td><td>Versioning protects against deletes and overwrites <sup class="cite">[<a href="#ref-87">87</a>]</sup></td></tr>
+<tr><td>Code and config</td><td>Git, image registry, infrastructure as code</td><td>0</td><td>Rebuild the environment instead of backing it up <sup class="cite">[<a href="#ref-87">87</a>]</sup></td></tr>
+<tr><td>Secrets</td><td>Secret store replication or documented re-issue</td><td>N/A</td><td>Test that you can recreate them</td></tr>
+</tbody></table></div>
+
+<h3>Logical backup and an automated restore test</h3>
+<figure class="code"><figcaption><span class="fname">scripts/backup_logical.sh</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code><span class="c">#!/usr/bin/env bash</span>
+set -euo pipefail
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+FILE="/backups/acme-${STAMP}.dump"
+
+pg_dump --format=custom --no-owner --dbname="$BACKUP_DATABASE_URL" --file="$FILE"
+pg_restore --list "$FILE" &gt; /dev/null            # archive is readable
+aws s3 cp "$FILE" "s3://acme-db-backups-dr/daily/" --sse aws:kms
+echo "backup ok: $FILE"</code></pre></figure>
+<figure class="code"><figcaption><span class="fname">scripts/restore_drill.sh (weekly, alerts on failure)</span><span class="lang">bash</span></figcaption><pre tabindex="0"><code><span class="c">#!/usr/bin/env bash</span>
+set -euo pipefail
+LATEST=$(aws s3 ls s3://acme-db-backups-dr/daily/ | sort | tail -n1 | awk '{print $4}')
+aws s3 cp "s3://acme-db-backups-dr/daily/$LATEST" /tmp/drill.dump
+
+createdb --maintenance-db="$DRILL_ADMIN_URL" acme_drill
+trap 'dropdb --maintenance-db="$DRILL_ADMIN_URL" acme_drill' EXIT
+pg_restore --no-owner --jobs=4 --dbname="${DRILL_ADMIN_URL%/*}/acme_drill" /tmp/drill.dump
+
+<span class="c"># The restored schema must match the code we run today.</span>
+POSTGRES_DB=acme_drill python manage.py migrate --check
+ORDERS=$(psql "${DRILL_ADMIN_URL%/*}/acme_drill" -tAc "select count(*) from orders_order")
+[ "$ORDERS" -gt 0 ] || { echo "restore drill: orders table is empty"; exit 1; }
+echo "restore drill ok: $LATEST, $ORDERS orders"</code></pre></figure>
+<p>An untested backup is a hope, not a plan. Record how long the drill took: that is your measured RTO for this path.</p>
+
+<div class="exercise" id="ex15">
+<p class="ex-label">Exercise 15</p>
+<p>At 14:05 a faulty data migration sets every order's status to <code>cancelled</code>. You have nightly <code>pg_dump</code> files and RDS automated backups with 7-day retention. Which do you use, and how do you limit the damage to other data written since 14:05?</p>
+<details><summary>Show solution</summary>
+<p>Use point-in-time recovery from the automated backups to a new instance at 14:04, just before the migration <sup class="cite">[<a href="#ref-91">91</a>]</sup>. The nightly dump would lose up to a day of data. PITR always creates a new database, so do not cut over blindly: orders, payments and users written after 14:05 exist only in the damaged database. Either copy the correct <code>status</code> values from the restored instance back into production with a targeted <code>UPDATE ... FROM</code>, or switch to the restored instance and replay later writes from the damaged one. The first is usually smaller and safer. Afterwards, add the incident to your restore drills, and require <code>RunPython</code> migrations to be reversible or tested against a production-sized copy.</p>
+</details>
+</div>
+</section>
+
+<section id="scaling">
+<h2><span class="secno">16</span> Horizontal scaling and load balancing</h2>
+<p>Horizontal scaling means adding identical app instances behind a load balancer. It only works if instances are stateless: anything that must outlive a request goes to a backing service <sup class="cite">[<a href="#ref-5">5</a>]</sup>. For Django, that checklist is short.</p>
+<ul>
+<li><strong>Sessions</strong> in the database or cache (<code>cached_db</code>), never in local files or local memory <sup class="cite">[<a href="#ref-92">92</a>]</sup>.</li>
+<li><strong>Cache</strong> shared, such as Redis, so invalidation is seen by every instance <sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-93">93</a>]</sup>.</li>
+<li><strong>Media</strong> in object storage (§6). <strong>Static files</strong> baked into the image.</li>
+<li><strong>Background work</strong> in a queue processed by separate workers. Django 6.0's <code>django.tasks</code> framework defines tasks and enqueues them, but "does not provide a worker mechanism"; execution needs external infrastructure <sup class="cite">[<a href="#ref-3">3</a>]</sup>.</li>
+<li><strong>WebSockets</strong> with Channels need a shared channel layer to reach clients connected to other instances <sup class="cite">[<a href="#ref-22">22</a>]</sup>.</li>
+</ul>
+
+<h3>Load balancing algorithms</h3>
+<p>Nginx balances round-robin by default, and also offers <code>least_conn</code> and <code>ip_hash</code> for session persistence <sup class="cite">[<a href="#ref-94">94</a>]</sup>. With stateless Django, prefer round-robin or least-connections; sticky sessions hide state bugs and unbalance load. Passive health checks (<code>max_fails</code>, <code>fail_timeout</code>) take a failing server out of rotation <sup class="cite">[<a href="#ref-25">25</a>]</sup>. Managed load balancers such as the ALB combine active health checks with slow start for new targets <sup class="cite">[<a href="#ref-52">52</a>,<a href="#ref-95">95</a>]</sup>.</p>
+
+<h3>Autoscaling</h3>
+<p>Kubernetes' Horizontal Pod Autoscaler changes the replica count of a Deployment to match demand, and needs resource requests on the containers to compute CPU utilization <sup class="cite">[<a href="#ref-96">96</a>]</sup>. Scale on CPU for CPU-bound apps, or on request rate or latency through custom metrics for I/O-bound ones.</p>
+<figure class="code"><figcaption><span class="fname">k8s/hpa.yaml</span><span class="lang">yaml</span></figcaption><pre tabindex="0"><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: acme-web }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: acme-web }
+  minReplicas: 3
+  maxReplicas: 12              # bounded by database connections, see below
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 65 }
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # avoid flapping after a spike</code></pre></figure>
+
+<h3>The database is the ceiling</h3>
+<p>Web replicas scale out easily; the primary database does not. Write the connection budget down and let it set <code>maxReplicas</code>:</p>
+<div class="table-wrap"><table>
+<caption>Connection budget for <code>maxReplicas: 12</code></caption>
+<tbody class="num">
+<tr><td>Replicas × workers × pool size</td><td>12 × 3 × 4 = 144 client connections</td></tr>
+<tr><td>Through PgBouncer (transaction mode)</td><td>→ <code>default_pool_size</code> 40 server connections</td></tr>
+<tr><td>Plus migrations, admin, monitoring</td><td>+ 15</td></tr>
+<tr><td>PostgreSQL <code>max_connections</code></td><td>200 (comfortable headroom)</td></tr>
+</tbody></table></div>
+<p>Beyond that, scale reads with replicas and Django's database routers, cache aggressively, and move slow work to background workers. Without a pooler, the same 12 replicas would need 144 server connections and would hit the limit during a deploy surge, when old and new Pods overlap.</p>
+
+<div class="exercise" id="ex16">
+<p class="ex-label">Exercise 16</p>
+<p>After scaling from 2 to 6 replicas, some users are logged out at random, and a "recently viewed" list flickers between two versions. Settings show <code>SESSION_ENGINE = "django.contrib.sessions.backends.file"</code> and the default cache. Explain both symptoms and fix them.</p>
+<details><summary>Show solution</summary>
+<p>File sessions live on each instance's own disk, so a request routed to a different replica cannot find the session and the user appears logged out. The default cache is per-process local memory <sup class="cite">[<a href="#ref-1">1</a>]</sup>, so each worker on each replica has its own "recently viewed" list. Both break the stateless-process rule <sup class="cite">[<a href="#ref-5">5</a>]</sup>. Use a shared Redis cache for <code>CACHES</code> and <code>SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"</code> <sup class="cite">[<a href="#ref-92">92</a>]</sup>. Sticky sessions at the load balancer would hide the symptom but not fix the design, and would break again on every deploy.</p>
+</details>
+</div>
+</section>
+
+<section id="checklist">
+<h2>Go-live checklist</h2>
+<ol class="checklist">
+<li><code>check --deploy --fail-level WARNING</code> passes against production settings (§1).</li>
+<li>Gunicorn or Uvicorn runs behind a buffering proxy; forwarded headers trusted only from the proxy (§2–4).</li>
+<li>Unknown hosts are rejected at the proxy; HSTS starts with a short max-age (§1, §4).</li>
+<li>Database connections are pooled and budgeted; app role has timeouts and no DDL rights (§5).</li>
+<li>Static files are hashed and baked into the image; media is in private object storage on a separate domain (§6).</li>
+<li>Image runs as non-root with an exec-form command and a health check (§7).</li>
+<li>CI fails on missing migrations; deploys use OIDC and immutable image tags (§8).</li>
+<li>Secrets come from a secret store; workloads use roles, not keys (§9, §11).</li>
+<li>Liveness has no dependencies; readiness does; grace periods exceed drain time (§10, §13).</li>
+<li>JSON logs with request IDs, golden-signal metrics, traces, and SLO burn-rate alerts with runbooks (§12).</li>
+<li>Migrations are backward compatible, run once per release, with <code>lock_timeout</code> (§14).</li>
+<li>PITR is enabled, an independent copy exists, and a restore drill ran this month (§15).</li>
+<li>Instances are stateless and the connection budget caps autoscaling (§16).</li>
+</ol>
+</section>
+
+<section id="exercises-index">
+<h2>Exercise index</h2>
+<p>Every section ends with one exercise. Solutions are folded under each one; try the problem first.</p>
+<ol class="ex-index"><li><a href="#ex1">Exercise 1</a><span>A teammate proposes DEBUG = os.environ.get(&quot;DEBUG&quot;, False) so that staging can turn debugging on. Find the bug, then…</span></li><li><a href="#ex2">Exercise 2</a><span>A 4-vCPU VM runs Gunicorn with gthread, 9 workers and 4 threads each, and Django&#x27;s connection pool has max_size = 4.…</span></li><li><a href="#ex3">Exercise 3</a><span>After switching from Gunicorn (WSGI) to Uvicorn, a team keeps CONN_MAX_AGE = 600. Under load PostgreSQL reports &quot;too…</span></li><li><a href="#ex4">Exercise 4</a><span>Users report that the order-tracking WebSocket disconnects every minute when nothing happens. The /ws/ location has…</span></li><li><a href="#ex5">Exercise 5</a><span>Six app replicas each run 3 Gunicorn workers, and each worker uses Django&#x27;s pool with max_size=8. PostgreSQL has…</span></li><li><a href="#ex6">Exercise 6</a><span>After a deploy, some users see an unstyled page for a few minutes. The site uses plain StaticFilesStorage, Nginx…</span></li><li><a href="#ex7">Exercise 7</a><span>A container takes the full 10 seconds to stop on every docker compose down, and in-flight requests are cut off. Its…</span></li><li><a href="#ex8">Exercise 8</a><span>Write the IAM trust-policy condition that lets only the deploy job of acme/shop, running in the production GitHub…</span></li><li><a href="#ex9">Exercise 9</a><span>The team stores the database password as a plain environment entry in the task definition so it &quot;works the same as…</span></li><li><a href="#ex10">Exercise 10</a><span>A team&#x27;s liveness probe calls /readyz/, which checks PostgreSQL. During a 2-minute database failover, every web Pod…</span></li><li><a href="#ex11">Exercise 11</a><span>Plan a zero-downtime rotation of SECRET_KEY after a laptop holding it was lost. What do you deploy, in what order,…</span></li><li><a href="#ex12">Exercise 12</a><span>A developer adds a path label containing request.path to the request counter. Within a day Prometheus memory…</span></li><li><a href="#ex13">Exercise 13</a><span>During every rolling deploy on Kubernetes, the ingress logs a burst of 502 errors lasting about a second per Pod,…</span></li><li><a href="#ex14">Exercise 14</a><span>A migration adds an index with plain AddIndex to a 200-million-row orders table, and checkout is down for 18…</span></li><li><a href="#ex15">Exercise 15</a><span>At 14:05 a faulty data migration sets every order&#x27;s status to cancelled. You have nightly pg_dump files and RDS…</span></li><li><a href="#ex16">Exercise 16</a><span>After scaling from 2 to 6 replicas, some users are logged out at random, and a &quot;recently viewed&quot; list flickers…</span></li></ol>
+</section>
+<section id="references">
+<h2>References</h2>
+<p class="ref-note">Cited in the Vancouver (ICMJE/NLM) style, numbered in order of first citation. Every URL was opened and checked against the claim it supports on 28 October 2026. Vendor documentation changes between releases; where a page is versioned, the cited version is named.</p>
+<ol class="refs"><li id="ref-1">Django Software Foundation. Deployment checklist [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/">https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/</a></li><li id="ref-2">Django Software Foundation. Download Django: supported versions [Internet]. djangoproject.com; 2026 [cited 2026 Oct 28]. Available from: <a href="https://www.djangoproject.com/download/">https://www.djangoproject.com/download/</a></li><li id="ref-3">Django Software Foundation. Django 6.0 release notes [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/releases/6.0/">https://docs.djangoproject.com/en/6.0/releases/6.0/</a></li><li id="ref-4">Wiggins A. The Twelve-Factor App: III. Config [Internet]. 12factor.net; 2017 [cited 2026 Oct 28]. Available from: <a href="https://12factor.net/config">https://12factor.net/config</a></li><li id="ref-5">Wiggins A. The Twelve-Factor App: VI. Processes [Internet]. 12factor.net; 2017 [cited 2026 Oct 28]. Available from: <a href="https://12factor.net/processes">https://12factor.net/processes</a></li><li id="ref-6">Django Software Foundation. Settings [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/ref/settings/">https://docs.djangoproject.com/en/6.0/ref/settings/</a></li><li id="ref-7">Django Software Foundation. Security in Django [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/topics/security/">https://docs.djangoproject.com/en/6.0/topics/security/</a></li><li id="ref-8">Hodges J, Jackson C, Barth A. HTTP Strict Transport Security (HSTS). RFC 6797 [Internet]. Internet Engineering Task Force; 2012 [cited 2026 Oct 28]. Available from: <a href="https://www.rfc-editor.org/info/rfc6797/">https://www.rfc-editor.org/info/rfc6797/</a></li><li id="ref-9">Django Software Foundation. Databases [Internet]. Django 6.1 documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.1/ref/databases/">https://docs.djangoproject.com/en/6.1/ref/databases/</a></li><li id="ref-10">Django Software Foundation. django-admin and manage.py [Internet]. Django 6.1 documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.1/ref/django-admin/">https://docs.djangoproject.com/en/6.1/ref/django-admin/</a></li><li id="ref-11">Eby PJ. PEP 3333 – Python Web Server Gateway Interface v1.0.1 [Internet]. Python Software Foundation; 2010 [cited 2026 Oct 28]. Available from: <a href="https://peps.python.org/3333">https://peps.python.org/3333</a></li><li id="ref-12">Django Software Foundation. How to use Django with Gunicorn [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/howto/deployment/wsgi/gunicorn/">https://docs.djangoproject.com/en/6.0/howto/deployment/wsgi/gunicorn/</a></li><li id="ref-13">Gunicorn project. Design [Internet]. Gunicorn documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://gunicorn.org/design/">https://gunicorn.org/design/</a></li><li id="ref-14">Gunicorn project. Deploying Gunicorn [Internet]. Gunicorn documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://gunicorn.org/deploy/">https://gunicorn.org/deploy/</a></li><li id="ref-15">Gunicorn project. Settings reference [Internet]. Gunicorn documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://gunicorn.org/reference/settings/">https://gunicorn.org/reference/settings/</a></li><li id="ref-16">Gunicorn project. Signal handling [Internet]. Gunicorn documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://gunicorn.org/signals/">https://gunicorn.org/signals/</a></li><li id="ref-17">ASGI Team. ASGI (Asynchronous Server Gateway Interface) specification [Internet]. ASGI documentation; 2019 [cited 2026 Oct 28]. Available from: <a href="https://asgi.readthedocs.io/en/latest/specs/main.html">https://asgi.readthedocs.io/en/latest/specs/main.html</a></li><li id="ref-18">ASGI Team. Lifespan protocol [Internet]. ASGI documentation; 2019 [cited 2026 Oct 28]. Available from: <a href="https://asgi.readthedocs.io/en/latest/specs/lifespan.html">https://asgi.readthedocs.io/en/latest/specs/lifespan.html</a></li><li id="ref-19">Django Software Foundation. How to deploy with ASGI [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/">https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/</a></li><li id="ref-20">Uvicorn project. Deployment [Internet]. Uvicorn documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://uvicorn.dev/deployment/">https://uvicorn.dev/deployment/</a></li><li id="ref-21">Uvicorn project. Settings [Internet]. Uvicorn documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://uvicorn.dev/settings/">https://uvicorn.dev/settings/</a></li><li id="ref-22">Django Channels project. Deploying [Internet]. Channels 4.3 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://channels.readthedocs.io/en/latest/deploying.html">https://channels.readthedocs.io/en/latest/deploying.html</a></li><li id="ref-23">Django Software Foundation. How to use Django with Daphne [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/daphne/">https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/daphne/</a></li><li id="ref-24">F5 Inc. Module ngx_http_proxy_module [Internet]. nginx documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://nginx.org/en/docs/http/ngx_http_proxy_module.html">https://nginx.org/en/docs/http/ngx_http_proxy_module.html</a></li><li id="ref-25">F5 Inc. Module ngx_http_upstream_module [Internet]. nginx documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://nginx.org/en/docs/http/ngx_http_upstream_module.html">https://nginx.org/en/docs/http/ngx_http_upstream_module.html</a></li><li id="ref-26">F5 Inc. WebSocket proxying [Internet]. nginx documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://nginx.org/en/docs/http/websocket.html">https://nginx.org/en/docs/http/websocket.html</a></li><li id="ref-27">Petersson A, Nilsson M. Forwarded HTTP Extension. RFC 7239 [Internet]. Internet Engineering Task Force; 2014 [cited 2026 Oct 28]. Available from: <a href="https://www.rfc-editor.org/rfc/rfc7239">https://www.rfc-editor.org/rfc/rfc7239</a></li><li id="ref-28">PostgreSQL Global Development Group. 19.4. Resource consumption [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/runtime-config-resource.html">https://www.postgresql.org/docs/current/runtime-config-resource.html</a></li><li id="ref-29">PostgreSQL Global Development Group. 19.11. Client connection defaults [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/runtime-config-client.html">https://www.postgresql.org/docs/current/runtime-config-client.html</a></li><li id="ref-30">PgBouncer project. PgBouncer configuration [Internet]. pgbouncer.org; 2026 [cited 2026 Oct 28]. Available from: <a href="https://www.pgbouncer.org/config.html">https://www.pgbouncer.org/config.html</a></li><li id="ref-31">PostgreSQL Global Development Group. 32.19. SSL support (libpq) [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/libpq-ssl.html">https://www.postgresql.org/docs/current/libpq-ssl.html</a></li><li id="ref-32">Django Software Foundation. Managing files [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/topics/files/">https://docs.djangoproject.com/en/6.0/topics/files/</a></li><li id="ref-33">Django Software Foundation. How to deploy static files [Internet]. Django 5.2 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/5.2/howto/static-files/deployment/">https://docs.djangoproject.com/en/5.2/howto/static-files/deployment/</a></li><li id="ref-34">Django Software Foundation. The staticfiles app [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/ref/contrib/staticfiles/">https://docs.djangoproject.com/en/6.0/ref/contrib/staticfiles/</a></li><li id="ref-35">Evans D. Using WhiteNoise with Django [Internet]. WhiteNoise documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://whitenoise.readthedocs.io/en/stable/django.html">https://whitenoise.readthedocs.io/en/stable/django.html</a></li><li id="ref-36">django-storages project. Amazon S3 [Internet]. django-storages 1.14 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://django-storages.readthedocs.io/en/1.14.6/backends/amazon-S3.html">https://django-storages.readthedocs.io/en/1.14.6/backends/amazon-S3.html</a></li><li id="ref-37">Docker Inc. Building best practices [Internet]. Docker documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.docker.com/build/building/best-practices/">https://docs.docker.com/build/building/best-practices/</a></li><li id="ref-38">Docker Inc. Multi-stage builds [Internet]. Docker documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.docker.com/build/building/multi-stage/">https://docs.docker.com/build/building/multi-stage/</a></li><li id="ref-39">Docker Inc. Dockerfile reference [Internet]. Docker documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.docker.com/reference/dockerfile/">https://docs.docker.com/reference/dockerfile/</a></li><li id="ref-40">Docker Inc. Control startup and shutdown order in Compose [Internet]. Docker documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.docker.com/compose/how-tos/startup-order/">https://docs.docker.com/compose/how-tos/startup-order/</a></li><li id="ref-41">Docker Inc. Manage secrets securely in Docker Compose [Internet]. Docker documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.docker.com/compose/how-tos/use-secrets/">https://docs.docker.com/compose/how-tos/use-secrets/</a></li><li id="ref-42">GitHub Inc. Creating PostgreSQL service containers [Internet]. GitHub Docs; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers">https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers</a></li><li id="ref-43">GitHub Inc. Configuring OpenID Connect in Amazon Web Services [Internet]. GitHub Docs; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws">https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws</a></li><li id="ref-44">GitHub Inc. Secure use reference [Internet]. GitHub Docs; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.github.com/en/actions/reference/security/secure-use">https://docs.github.com/en/actions/reference/security/secure-use</a></li><li id="ref-45">GitHub Inc. Managing environments for deployment [Internet]. GitHub Docs; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.github.com/actions/deployment/targeting-different-environments/using-environments-for-deployment">https://docs.github.com/actions/deployment/targeting-different-environments/using-environments-for-deployment</a></li><li id="ref-46">GitHub Inc. Workflow syntax for GitHub Actions [Internet]. GitHub Docs; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions">https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions</a></li><li id="ref-47">GitLab Inc. CI/CD YAML syntax reference [Internet]. GitLab Docs; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.gitlab.com/ci/yaml/">https://docs.gitlab.com/ci/yaml/</a></li><li id="ref-48">Jenkins project. Pipeline syntax [Internet]. Jenkins User Handbook; 2026 [cited 2026 Oct 28]. Available from: <a href="https://www.jenkins.io/doc/book/pipeline/syntax/">https://www.jenkins.io/doc/book/pipeline/syntax/</a></li><li id="ref-49">Google LLC. Running Django on the Cloud Run environment [Internet]. Google Cloud documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.cloud.google.com/python/django/run">https://docs.cloud.google.com/python/django/run</a></li><li id="ref-50">Microsoft. Tutorial: Deploy a Python Django web app with PostgreSQL in Azure App Service [Internet]. Microsoft Learn; 2026 [cited 2026 Oct 28]. Available from: <a href="https://learn.microsoft.com/en-us/azure/app-service/tutorial-python-postgresql-app-django">https://learn.microsoft.com/en-us/azure/app-service/tutorial-python-postgresql-app-django</a></li><li id="ref-51">Amazon Web Services. Amazon ECS task definition parameters for Amazon EC2 [Internet]. Amazon Elastic Container Service Developer Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters_ec2.html">https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters_ec2.html</a></li><li id="ref-52">Amazon Web Services. Edit target group attributes for your Application Load Balancer [Internet]. Elastic Load Balancing User Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/elasticloadbalancing/latest/application/edit-target-group-attributes.html">https://docs.aws.amazon.com/elasticloadbalancing/latest/application/edit-target-group-attributes.html</a></li><li id="ref-53">Amazon Web Services. Rotate AWS Secrets Manager secrets [Internet]. AWS Secrets Manager User Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html">https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html</a></li><li id="ref-54">The Kubernetes Authors. Deployments [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">https://kubernetes.io/docs/concepts/workloads/controllers/deployment/</a></li><li id="ref-55">The Kubernetes Authors. Jobs [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/workloads/controllers/job/">https://kubernetes.io/docs/concepts/workloads/controllers/job/</a></li><li id="ref-56">The Kubernetes Authors. Liveness, readiness, and startup probes [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/workloads/pods/probes/">https://kubernetes.io/docs/concepts/workloads/pods/probes/</a></li><li id="ref-57">The Kubernetes Authors. Secrets [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/configuration/secret/">https://kubernetes.io/docs/concepts/configuration/secret/</a></li><li id="ref-58">The Kubernetes Authors. Specifying a disruption budget for your application [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/tasks/run-application/configure-pdb/">https://kubernetes.io/docs/tasks/run-application/configure-pdb/</a></li><li id="ref-59">The Kubernetes Authors. Disruptions [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/workloads/pods/disruptions/">https://kubernetes.io/docs/concepts/workloads/pods/disruptions/</a></li><li id="ref-60">The Kubernetes Authors. Container lifecycle hooks [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/">https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/</a></li><li id="ref-61">The Kubernetes Authors. Pod lifecycle [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/">https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/</a></li><li id="ref-62">OWASP Foundation. Secrets management cheat sheet [Internet]. OWASP Cheat Sheet Series; 2026 [cited 2026 Oct 28]. Available from: <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html">https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html</a></li><li id="ref-63">Amazon Web Services. Security best practices in IAM [Internet]. AWS Identity and Access Management User Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html">https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html</a></li><li id="ref-64">Amazon Web Services. What is AWS Secrets Manager? [Internet]. AWS Secrets Manager User Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html">https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html</a></li><li id="ref-65">The Kubernetes Authors. Using RBAC authorization [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/">https://kubernetes.io/docs/reference/access-authn-authz/rbac/</a></li><li id="ref-66">Ewaschuk R. Monitoring distributed systems. In: Beyer B, Jones C, Petoff J, Murphy NR, editors. Site reliability engineering: how Google runs production systems [Internet]. Sebastopol (CA): O&#x27;Reilly Media; 2016 [cited 2026 Oct 28]. Available from: <a href="https://sre.google/sre-book/monitoring-distributed-systems/">https://sre.google/sre-book/monitoring-distributed-systems/</a></li><li id="ref-67">Wiggins A. The Twelve-Factor App: XI. Logs [Internet]. 12factor.net; 2017 [cited 2026 Oct 28]. Available from: <a href="https://12factor.net/logs">https://12factor.net/logs</a></li><li id="ref-68">Django Software Foundation. Logging [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/topics/logging/">https://docs.djangoproject.com/en/6.0/topics/logging/</a></li><li id="ref-69">Python Software Foundation. logging.config — Logging configuration [Internet]. Python 3 documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.python.org/3/library/logging.config.html">https://docs.python.org/3/library/logging.config.html</a></li><li id="ref-70">Prometheus Authors. Metric and label naming [Internet]. Prometheus documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://prometheus.io/docs/practices/naming/">https://prometheus.io/docs/practices/naming/</a></li><li id="ref-71">Prometheus Authors. Multiprocess mode [Internet]. Prometheus Python client documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://prometheus.github.io/client_python/multiprocess/">https://prometheus.github.io/client_python/multiprocess/</a></li><li id="ref-72">OpenTelemetry Authors. Python zero-code instrumentation [Internet]. OpenTelemetry documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://opentelemetry.io/docs/zero-code/python/">https://opentelemetry.io/docs/zero-code/python/</a></li><li id="ref-73">OpenTelemetry Authors. Troubleshooting Python automatic instrumentation issues [Internet]. OpenTelemetry documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://opentelemetry.io/docs/zero-code/python/troubleshooting/">https://opentelemetry.io/docs/zero-code/python/troubleshooting/</a></li><li id="ref-74">World Wide Web Consortium. Trace Context. W3C Recommendation [Internet]. W3C; 2020 [cited 2026 Oct 28]. Available from: <a href="https://www.w3.org/TR/trace-context/">https://www.w3.org/TR/trace-context/</a></li><li id="ref-75">Google LLC. Alerting on SLOs. In: Beyer B, Murphy NR, Rensin DK, Kawahara K, Thorne S, editors. The site reliability workbook [Internet]. Sebastopol (CA): O&#x27;Reilly Media; 2018 [cited 2026 Oct 28]. Available from: <a href="https://sre.google/workbook/alerting-on-slos/">https://sre.google/workbook/alerting-on-slos/</a></li><li id="ref-76">Prometheus Authors. Alerting rules [Internet]. Prometheus documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/">https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/</a></li><li id="ref-77">Fielding R, Nottingham M, Reschke J, editors. HTTP Semantics. RFC 9110 [Internet]. Internet Engineering Task Force; 2022 [cited 2026 Oct 28]. Available from: <a href="https://www.rfc-editor.org/rfc/rfc9110.html">https://www.rfc-editor.org/rfc/rfc9110.html</a></li><li id="ref-78">Wiggins A. The Twelve-Factor App: IX. Disposability [Internet]. 12factor.net; 2017 [cited 2026 Oct 28]. Available from: <a href="https://12factor.net/disposability">https://12factor.net/disposability</a></li><li id="ref-79">Docker Inc. Define services in Docker Compose [Internet]. Docker documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.docker.com/reference/compose-file/services/">https://docs.docker.com/reference/compose-file/services/</a></li><li id="ref-80">Wiggins A. The Twelve-Factor App: XII. Admin processes [Internet]. 12factor.net; 2017 [cited 2026 Oct 28]. Available from: <a href="https://12factor.net/admin-processes">https://12factor.net/admin-processes</a></li><li id="ref-81">Django Software Foundation. Migrations [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/topics/migrations/">https://docs.djangoproject.com/en/6.0/topics/migrations/</a></li><li id="ref-82">PostgreSQL Global Development Group. ALTER TABLE [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/sql-altertable.html">https://www.postgresql.org/docs/current/sql-altertable.html</a></li><li id="ref-83">PostgreSQL Global Development Group. 13.3. Explicit locking [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/explicit-locking.html">https://www.postgresql.org/docs/current/explicit-locking.html</a></li><li id="ref-84">Django Software Foundation. Database migration operations (django.contrib.postgres) [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/ref/contrib/postgres/operations/">https://docs.djangoproject.com/en/6.0/ref/contrib/postgres/operations/</a></li><li id="ref-85">Django Software Foundation. How to create database migrations [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/howto/writing-migrations/">https://docs.djangoproject.com/en/6.0/howto/writing-migrations/</a></li><li id="ref-86">PostgreSQL Global Development Group. CREATE INDEX [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/sql-createindex.html">https://www.postgresql.org/docs/current/sql-createindex.html</a></li><li id="ref-87">Amazon Web Services. Disaster recovery options in the cloud. In: Disaster recovery of workloads on AWS: recovery in the cloud [Internet]. AWS Whitepapers; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html">https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html</a></li><li id="ref-88">Swanson M, Bowen P, Phillips AW, Gallup D, Lynes D. Contingency planning guide for federal information systems. NIST Special Publication 800-34 Rev. 1 (updated) [Internet]. Gaithersburg (MD): National Institute of Standards and Technology; 2010 [cited 2026 Oct 28]. Available from: <a href="https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final">https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final</a></li><li id="ref-89">PostgreSQL Global Development Group. 25.3. Continuous archiving and point-in-time recovery (PITR) [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/continuous-archiving.html">https://www.postgresql.org/docs/current/continuous-archiving.html</a></li><li id="ref-90">PostgreSQL Global Development Group. pg_dump [Internet]. PostgreSQL 18 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://www.postgresql.org/docs/current/app-pgdump.html">https://www.postgresql.org/docs/current/app-pgdump.html</a></li><li id="ref-91">Amazon Web Services. Introduction to backups [Internet]. Amazon RDS User Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html">https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html</a></li><li id="ref-92">Django Software Foundation. How to use sessions [Internet]. Django 6.0 documentation; 2025 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.0/topics/http/sessions/">https://docs.djangoproject.com/en/6.0/topics/http/sessions/</a></li><li id="ref-93">Django Software Foundation. Django&#x27;s cache framework [Internet]. Django 6.1 documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.djangoproject.com/en/6.1/topics/cache/">https://docs.djangoproject.com/en/6.1/topics/cache/</a></li><li id="ref-94">F5 Inc. Using nginx as HTTP load balancer [Internet]. nginx documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://nginx.org/en/docs/http/load_balancing.html">https://nginx.org/en/docs/http/load_balancing.html</a></li><li id="ref-95">Amazon Web Services. Check the health of your Application Load Balancer targets [Internet]. Elastic Load Balancing User Guide; 2026 [cited 2026 Oct 28]. Available from: <a href="https://docs.aws.amazon.com/elasticloadbalancing/latest/application/check-target-health.html">https://docs.aws.amazon.com/elasticloadbalancing/latest/application/check-target-health.html</a></li><li id="ref-96">The Kubernetes Authors. Horizontal Pod Autoscaling [Internet]. Kubernetes documentation; 2026 [cited 2026 Oct 28]. Available from: <a href="https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/">https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/</a></li></ol>
+</section>
+</article>
+</div>
+</div>
+<footer style="padding:1rem;font:400 .9rem/1.4 system-ui,-apple-system,Segoe UI,sans-serif">
+  <p>&copy; 2026 Nicholas Knapp. All rights reserved.</p>
+</footer>
+</body>
+</html>

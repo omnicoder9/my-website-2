@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Python Dynamic Imports</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A technical guide to dynamic imports in Python: the import system, importlib, loading from file paths, reload, lazy imports, plugin discovery, package resources and security, with tested examples, exercises with solutions and Vancouver-style references.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a reading column of ~68ch with a sticky contents rail on wide screens; code figures break slightly wider than the text. */
+:root {
+  --paper: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #18202b;
+  --muted: #566173;
+  --rule: #d8dde5;
+  --accent: #2a5ca8;
+  --accent-soft: #e3ebf7;
+  --marker: #b38600;
+  --marker-soft: #fbf1d3;
+  --code-bg: #eef1f5;
+  --out-bg: #f9fafb;
+  --err: #b42318;
+  --err-soft: #fdecea;
+  --hl-kw: #7b2fa8;
+  --hl-str: #2b7a30;
+  --hl-com: #6b7686;
+  --hl-num: #b0501a;
+  --hl-fn: #1f5fbf;
+  --hl-bi: #0b7480;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Literata", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f141b; --surface: #141b24; --ink: #e2e7ee; --muted: #9ba6b6; --rule: #273141;
+    --accent: #8ab2f2; --accent-soft: #1b2a40; --marker: #e3bd4c; --marker-soft: #2e2713;
+    --code-bg: #161e29; --out-bg: #121921; --err: #ff9b8f; --err-soft: #3a1c1a;
+    --hl-kw: #d2a8f5; --hl-str: #9ed699; --hl-com: #7f8b9c; --hl-num: #f2a46f; --hl-fn: #91b9ff; --hl-bi: #72d3dc;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f141b; --surface: #141b24; --ink: #e2e7ee; --muted: #9ba6b6; --rule: #273141;
+  --accent: #8ab2f2; --accent-soft: #1b2a40; --marker: #e3bd4c; --marker-soft: #2e2713;
+  --code-bg: #161e29; --out-bg: #121921; --err: #ff9b8f; --err-soft: #3a1c1a;
+  --hl-kw: #d2a8f5; --hl-str: #9ed699; --hl-com: #7f8b9c; --hl-num: #f2a46f; --hl-fn: #91b9ff; --hl-bi: #72d3dc;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 0.18em; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.page {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding-block: 3rem 5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+}
+.masthead { grid-area: head; max-width: 46rem; }
+.toc { grid-area: toc; }
+main { grid-area: main; }
+.page { grid-template-areas: "head" "toc" "main"; }
+@media (min-width: 1100px) {
+  .page { grid-template-columns: 14rem minmax(0, 1fr); grid-template-areas: "toc head" "toc main"; column-gap: 4rem; row-gap: 0; }
+  .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 2rem); align-self: start; max-height: calc(100vh - 4rem); overflow-y: auto; }
+}
+main { min-width: 0; max-width: 46rem; }
+
+/* Header */
+.masthead { display: grid; gap: 1rem; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); margin-bottom: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; color: var(--ink); }
+h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 700; margin: 0; letter-spacing: -0.015em; }
+h1 code { font-family: inherit; }
+.standfirst { font-size: 1.2rem; color: var(--muted); margin: 0; max-width: 40rem; }
+.keywords { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0; padding: 0; list-style: none; }
+.keywords li { font-family: var(--font-mono); font-size: 0.875rem; padding: 0.25rem 0.6rem; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.keywords li span { color: var(--muted); font-size: 0.75rem; margin-left: 0.35rem; }
+.meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); margin: 0; }
+
+h2 { font-size: 1.75rem; font-weight: 700; margin: 3.5rem 0 1rem; scroll-margin-top: 1.5rem; }
+h2 .num { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 400; color: var(--marker); margin-right: 0.6rem; vertical-align: 0.25em; }
+h3 { font-size: 1.25rem; font-weight: 500; margin: 2.25rem 0 0.75rem; scroll-margin-top: 1.5rem; }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin-bottom: 0.35rem; }
+li > ul { margin-top: 0.35rem; }
+:not(pre) > code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.08em 0.32em; border-radius: 3px; overflow-wrap: anywhere; }
+strong { font-weight: 600; }
+
+sup.cite { font-family: var(--font-mono); font-size: 0.68em; line-height: 0; margin-left: 0.1em; }
+sup.cite a { text-decoration: none; }
+sup.cite a:hover { text-decoration: underline; }
+
+/* Contents */
+.toc { font-family: var(--font-display); font-size: 0.92rem; }
+.toc h2 { font-size: 0.75rem; font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.75rem; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; counter-reset: toc; }
+.toc li { margin: 0; }
+.toc a { display: block; padding: 0.3rem 0.6rem; border-left: 2px solid var(--rule); color: var(--muted); text-decoration: none; }
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+@media (max-width: 1099px) {
+  .toc { border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.25rem; background: var(--surface); }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+}
+
+/* Code */
+figure { margin: 1.5rem 0; }
+figure.code { border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+.code-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem 0.45rem 0.9rem; border-bottom: 1px solid var(--rule); font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+.fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { padding: 0.1rem 0.45rem; border-radius: 3px; background: var(--marker-soft); color: var(--marker); font-weight: 600; }
+.copy { font: inherit; color: var(--muted); background: transparent; border: 1px solid var(--rule); border-radius: 4px; padding: 0.15rem 0.55rem; cursor: pointer; }
+.copy:hover { color: var(--ink); border-color: var(--muted); }
+pre { margin: 0; overflow-x: auto; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.6; tab-size: 4; }
+pre.src { padding: 0.9rem 1rem; }
+.out { border-top: 1px dashed var(--rule); background: var(--out-bg); padding: 0.6rem 1rem 0.8rem; }
+.out-label { display: block; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+.out pre { color: var(--ink); }
+.out-error { background: var(--err-soft); }
+.out-error .out-label, .out-error pre { color: var(--err); }
+
+.grammar { border-left: 3px solid var(--marker); background: var(--surface); padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; }
+.grammar figcaption { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+.grammar pre { font-size: 0.82rem; }
+
+code, pre { font-variant-ligatures: none; }
+td:nth-child(2) code { white-space: nowrap; }
+/* Pygments tokens */
+.src .k, .src .kn, .src .kd, .src .kr, .src .ow, .src .kp { color: var(--hl-kw); font-weight: 600; }
+.src .kc { color: var(--hl-num); font-weight: 600; }
+.src .s, .src .s1, .src .s2, .src .sa, .src .sb, .src .sd, .src .sr, .src .sc { color: var(--hl-str); }
+.src .si, .src .se { color: var(--hl-num); }
+.src .c, .src .c1, .src .ch, .src .cm { color: var(--hl-com); font-style: italic; }
+.src .m, .src .mi, .src .mf { color: var(--hl-num); }
+.src .nf, .src .nc, .src .fm, .src .nd { color: var(--hl-fn); }
+.src .nb, .src .bp, .src .ne { color: var(--hl-bi); }
+.src .nn { color: var(--ink); }
+.src .o, .src .p { color: var(--muted); }
+
+/* Callouts and tables */
+.note { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.15rem; margin: 1.5rem 0; }
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+.note .note-title { display: block; font-family: var(--font-display); font-weight: 700; margin-bottom: 0.35rem; }
+.note.warn { border-color: var(--marker); background: var(--marker-soft); }
+.table-wrap { overflow-x: auto; margin: 1.5rem 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; background: var(--code-bg); }
+
+/* Exercises */
+.exercise { border-top: 1px solid var(--rule); padding-top: 1.25rem; margin-top: 2rem; }
+.exercise h3 { margin-top: 0; }
+.exercise h3 .lvl { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 0.1rem 0.4rem; margin-left: 0.5rem; vertical-align: 0.2em; }
+details { border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); margin: 1rem 0; }
+summary { cursor: pointer; padding: 0.6rem 0.9rem; font-family: var(--font-display); font-weight: 500; color: var(--accent); }
+details[open] summary { border-bottom: 1px solid var(--rule); }
+details > .sol { padding: 0.25rem 1rem 0.5rem; }
+
+/* References */
+.refs { font-size: 0.93rem; padding-left: 2rem; }
+.refs li { margin-bottom: 0.7rem; padding-left: 0.25rem; scroll-margin-top: 1.5rem; }
+.refs li:target { background: var(--marker-soft); border-radius: 3px; }
+.refs a { overflow-wrap: anywhere; }
+footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); font-size: 0.88rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<nav aria-label="Site navigation" style="position:relative;display:flex;gap:1rem;align-items:center;padding:.8rem 1rem;margin:0;background:#111827;color:#f9fafb;font:600 0.9rem/1.2 system-ui,-apple-system,Segoe UI,sans-serif">
+  <a href="../../../index.html" style="color:#f9fafb;text-decoration:none">Home</a>
+  <a href="../../../blog.html" style="color:#f9fafb;text-decoration:none">Blog</a>
+</nav>
+
+<div class="page">
+<header class="masthead">
+<p class="eyebrow">Python fundamentals · Dynamic imports</p>
+<h1>Dynamic Imports in Python</h1>
+<p class="standfirst">How to import a module whose name you only learn at run time: what the import system actually does, the <code>importlib</code> tools that drive it, and the patterns built on them (plugins, lazy loading, hot reloading, bundled data files), together with the security traps that come with choosing code by name.</p>
+<ul class="keywords" aria-label="Topics covered">
+<li>sys.modules<span>cache</span></li><li>import_module<span>by name</span></li><li>spec_from_file_location<span>by path</span></li><li>reload<span>hot swap</span></li><li>LazyLoader<span>deferred</span></li><li>lazy import<span>3.15</span></li><li>entry_points<span>plugins</span></li><li>resources<span>data files</span></li>
+</ul>
+<p class="meta">Examples run on CPython 3.13.17 (Python 3.15 syntax on CPython 3.15.0b4), real output shown beneath each · References accessed 29 October 2026</p>
+</header>
+<nav class="toc" aria-label="Contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#overview">What “dynamic import” means</a></li>
+<li><a href="#machinery">How the import system works</a></li>
+<li><a href="#import-module">import_module and __import__</a></li>
+<li><a href="#from-path">Importing a file by path</a></li>
+<li><a href="#reload">Reloading a module</a></li>
+<li><a href="#lazy">Lazy imports</a></li>
+<li><a href="#plugins">Plugin discovery</a></li>
+<li><a href="#resources">Package data with importlib.resources</a></li>
+<li><a href="#security">Security</a></li>
+<li><a href="#pitfalls">Pitfalls</a></li>
+<li><a href="#summary">Quick reference</a></li>
+<li><a href="#exercises">Exercises</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+<main>
+
+<section>
+<h2 id="overview"><span class="num">1</span>What “dynamic import” means</h2>
+<p>An ordinary <code>import json</code> statement names its module in the source code. The statement does two separate things: it <strong>searches</strong> for the named module (loading it if necessary), and then it <strong>binds</strong> the result to a name in the local scope<sup class="cite">[<a href="#ref-1">1</a>]</sup>. A <em>dynamic import</em> performs the first step with a module name that is only known when the program runs: a string read from a configuration file, a command-line option, a plugin directory or an installed package's metadata. You then keep the returned module object in whatever variable, dictionary or registry suits you.</p>
+<p>Python exposes the import machinery through the <code>importlib</code> package, and its documentation recommends <code>importlib.import_module()</code> as a simpler API than the built-in <code>__import__()</code> for invoking that machinery<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-2">2</a>]</sup>. The same package also lets you build modules from file paths, reload them, defer their loading and inspect installed distributions. Typical reasons to reach for these tools are:</p>
+<ul>
+<li><strong>Plugins and extensions</strong>: an application loads exporters, drivers or commands that third parties install separately.</li>
+<li><strong>Configuration-driven wiring</strong>: a setting such as <code>"myapp.backends.redis:RedisCache"</code> chooses the class to use.</li>
+<li><strong>Optional dependencies</strong>: use a fast library when it is installed and fall back otherwise.</li>
+<li><strong>Startup time</strong>: postpone loading heavy modules until the first time they are used.</li>
+<li><strong>Development tools</strong>: test runners, REPL helpers and auto-reloaders that load or re-execute code by path.</li>
+</ul>
+<p>Every example in this article is a complete file that was run on CPython 3.13.17. Where an example needs more than one file, each file starts with a <code># file:</code> comment that gives its path relative to the directory the program runs in.</p>
+</section>
+
+<section>
+<h2 id="machinery"><span class="num">2</span>How the import system works</h2>
+<p>Dynamic imports use exactly the same machinery as the <code>import</code> statement, so it pays to know its parts. Four objects do most of the work.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Part</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td><code>sys.modules</code></td><td>A dictionary that maps module names to modules already loaded. It is the first place every import looks<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-3">3</a>]</sup>.</td></tr>
+<tr><td>Finder</td><td>An object that decides whether it can find a named module. It does not load anything; it returns a <em>module spec</em> describing the module<sup class="cite">[<a href="#ref-1">1</a>]</sup>.</td></tr>
+<tr><td>Module spec</td><td>A <code>ModuleSpec</code> carrying the import-related information (name, loader, origin) needed to load a module. Specs were introduced by PEP 451 and are exposed afterwards as <code>module.__spec__</code><sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-4">4</a>]</sup>.</td></tr>
+<tr><td>Loader</td><td>The object that performs the critical step of loading: executing the module's code<sup class="cite">[<a href="#ref-1">1</a>]</sup>.</td></tr>
+</tbody>
+</table></div>
+<p>When you import <code>foo.bar.baz</code>, Python first imports <code>foo</code>, then <code>foo.bar</code>, then <code>foo.bar.baz</code>; if any intermediate import fails, the whole import raises <code>ModuleNotFoundError</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>. For each name it checks <code>sys.modules</code>. On a miss it asks each <em>meta path finder</em> in <code>sys.meta_path</code>, in order, for a spec<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-3">3</a>]</sup>. By default there are three of them: one for built-in modules, one for frozen modules, and the <em>path based finder</em>, which searches the import path<sup class="cite">[<a href="#ref-1">1</a>]</sup>. The hook mechanism behind this design (meta path finders, path hooks and loaders) was first specified in PEP 302<sup class="cite">[<a href="#ref-5">5</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">import_steps.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">name</span> <span class="o">=</span> <span class="s2">"colorsys"</span>              <span class="c1"># pretend this came from a config file</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">name</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+
+<span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">module</span> <span class="ow">is</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+
+<span class="c1"># A second import is a cache hit: the very same object comes back.</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="n">module</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">rgb_to_hsv</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>False
+colorsys True
+True
+True
+(0.0, 1.0, 1.0)</pre></div></figure>
+
+<p>The cache is why importing a module twice runs its top-level code only once, and why a module's global state is shared by everything that imports it. You can watch the finders at work with <code>importlib.util.find_spec()</code>, which returns the spec that an import would use, or <code>None</code> when no finder knows the name<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">finders.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="k">for</span> <span class="n">finder</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">meta_path</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"finder:"</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">finder</span><span class="p">,</span> <span class="s2">"__name__"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">finder</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
+
+<span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"sys"</span><span class="p">,</span> <span class="s2">"zipimport"</span><span class="p">,</span> <span class="s2">"colorsys"</span><span class="p">,</span> <span class="s2">"no_such_module"</span><span class="p">):</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">:</span><span class="s2">15</span><span class="si">}</span><span class="s2"> -&gt; no spec (not importable)"</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">origin</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">origin</span> <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">origin</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"built-in"</span><span class="p">,</span> <span class="s2">"frozen"</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"a .py file"</span>
+        <span class="n">loader</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="p">,</span> <span class="s2">"__name__"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">:</span><span class="s2">15</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">loader</span><span class="si">:</span><span class="s2">20</span><span class="si">}</span><span class="s2"> origin: </span><span class="si">{</span><span class="n">origin</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>finder: DistutilsMetaFinder
+finder: BuiltinImporter
+finder: FrozenImporter
+finder: PathFinder
+sys             -&gt; BuiltinImporter      origin: built-in
+zipimport       -&gt; FrozenImporter       origin: frozen
+colorsys        -&gt; SourceFileLoader     origin: a .py file
+no_such_module  -&gt; no spec (not importable)</pre></div></figure>
+
+<p>Notice that this interpreter has <em>four</em> meta path finders, not three. The extra <code>DistutilsMetaFinder</code> comes from a <code>distutils-precedence.pth</code> file that setuptools installed in the system <code>site-packages</code>; running the same program with <code>python -S</code>, which skips the <code>site</code> module<sup class="cite">[<a href="#ref-6">6</a>]</sup>, leaves only the three defaults. Any installed package can extend the import system this way, a point Section 9 returns to. The built-in and frozen importers act as their own loaders, which is why the class names repeat.</p>
+
+<h3 id="sys-path">The search path, <code>sys.path</code></h3>
+<p>The path based finder walks the list of strings in <code>sys.path</code>. It is initialised from the <code>PYTHONPATH</code> environment variable plus an installation-dependent default<sup class="cite">[<a href="#ref-3">3</a>]</sup>, and the <code>site</code> module then adds the <code>site-packages</code> directories<sup class="cite">[<a href="#ref-7">7</a>]</sup>. By default a “potentially unsafe” entry is also <em>prepended</em>: the script's directory for <code>python script.py</code>, the current working directory for <code>python -m module</code>, and an empty string (meaning the current directory) for <code>-c</code> and the REPL<sup class="cite">[<a href="#ref-3">3</a>]</sup>. Section 9 shows why that matters. For each <code>sys.path</code> entry the path based finder obtains a path entry finder through the callables in <code>sys.path_hooks</code> and caches it in <code>sys.path_importer_cache</code><sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">show_path.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">script_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"sys.path[0] is the script's directory:"</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">script_dir</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"entries on sys.path:"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"site-packages present:"</span><span class="p">,</span> <span class="nb">any</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"-packages"</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>sys.path[0] is the script&#x27;s directory: True
+entries on sys.path: 7
+site-packages present: True</pre></div></figure>
+
+<h3 id="cache-control">Controlling the cache</h3>
+<p>Because <code>sys.modules</code> is consulted first, it can be manipulated directly. If a name maps to <code>None</code>, the import stops with <code>ModuleNotFoundError</code>; if the name is missing, the search continues<sup class="cite">[<a href="#ref-1">1</a>]</sup>. Test suites use this to simulate a missing optional dependency. The <code>sys</code> documentation warns, though, that replacing the dictionary may not work as expected and that deleting essential entries can make Python fail; when iterating over it, use <code>sys.modules.copy()</code> or <code>tuple(sys.modules)</code> because its size can change during iteration<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">block_import.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"colorsys"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># simulate "not installed"</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">colorsys</span></code></pre><div class="out out-error"><span class="out-label">Raises</span><pre>ModuleNotFoundError: import of colorsys halted; None in sys.modules</pre></div></figure>
+
+<p>A loader adds the new module to <code>sys.modules</code> <em>before</em> executing the module's code. The language reference calls this crucial: a module may import itself, directly or indirectly, and registering it first prevents unbounded recursion and repeated loading<sup class="cite">[<a href="#ref-1">1</a>]</sup>. It is also the reason a circular import sees a partially initialised module (Section 10).</p>
+</section>
+
+<section>
+<h2 id="import-module"><span class="num">3</span><code>import_module</code> and <code>__import__</code></h2>
+<p><code>importlib.import_module(name, package=None)</code> imports a module given its absolute or relative name and returns it. For a relative name such as <code>"..mod"</code>, the <em>package</em> argument must name the anchor package, so <code>import_module('..mod', 'pkg.subpkg')</code> imports <code>pkg.mod</code>. Parent packages are imported automatically, and a failure raises <code>ImportError</code> or a subclass such as <code>ModuleNotFoundError</code><sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+<p>The built-in <code>__import__(name, globals=None, locals=None, fromlist=(), level=0)</code> is the function the <code>import</code> statement calls. It performs the search and creates the module, but it does not bind any name<sup class="cite">[<a href="#ref-1">1</a>]</sup>. Its documentation describes it as an advanced function that is not needed in everyday programming and points to <code>importlib.import_module()</code> instead<sup class="cite">[<a href="#ref-8">8</a>]</sup>. The most important difference is the return value: <code>import_module()</code> returns the module you asked for, such as <code>pkg.mod</code>, while <code>__import__()</code> returns the top-level package, such as <code>pkg</code>, unless <em>fromlist</em> is non-empty<sup class="cite">[<a href="#ref-2">2</a>,<a href="#ref-8">8</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">import_module_vs_dunder.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+<span class="n">top</span> <span class="o">=</span> <span class="nb">__import__</span><span class="p">(</span><span class="s2">"xml.etree.ElementTree"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"__import__ returned:"</span><span class="p">,</span> <span class="n">top</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">leaf</span> <span class="o">=</span> <span class="nb">__import__</span><span class="p">(</span><span class="s2">"xml.etree.ElementTree"</span><span class="p">,</span> <span class="n">fromlist</span><span class="o">=</span><span class="p">[</span><span class="s2">"ElementTree"</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"with a fromlist:    "</span><span class="p">,</span> <span class="n">leaf</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">mod</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">"xml.etree.ElementTree"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"import_module:      "</span><span class="p">,</span> <span class="n">mod</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">mod</span> <span class="ow">is</span> <span class="n">leaf</span><span class="p">)</span>
+
+<span class="c1"># A relative name needs an anchor package.</span>
+<span class="n">rel</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">".ElementTree"</span><span class="p">,</span> <span class="n">package</span><span class="o">=</span><span class="s2">"xml.etree"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"relative import:    "</span><span class="p">,</span> <span class="n">rel</span> <span class="ow">is</span> <span class="n">mod</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>__import__ returned: xml
+with a fromlist:     xml.etree.ElementTree
+import_module:       xml.etree.ElementTree True
+relative import:     True</pre></div></figure>
+
+<p>Most dynamic imports end by fetching an attribute from the module, so a common convention writes the target as <code>"module:attribute"</code>. This is the same <em>object reference</em> syntax that packaging entry points use, <code>importable.module:object.attr</code><sup class="cite">[<a href="#ref-9">9</a>]</sup>, and the standard library can resolve it for you with <code>pkgutil.resolve_name()</code> (added in Python 3.9)<sup class="cite">[<a href="#ref-10">10</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">resolve_name.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">pkgutil</span>
+
+<span class="n">join</span> <span class="o">=</span> <span class="n">pkgutil</span><span class="o">.</span><span class="n">resolve_name</span><span class="p">(</span><span class="s2">"os.path:join"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">join</span><span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"csv.py"</span><span class="p">))</span>
+
+<span class="n">error_class</span> <span class="o">=</span> <span class="n">pkgutil</span><span class="o">.</span><span class="n">resolve_name</span><span class="p">(</span><span class="s2">"json.decoder:JSONDecodeError"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">error_class</span><span class="o">.</span><span class="vm">__module__</span><span class="p">,</span> <span class="n">error_class</span><span class="o">.</span><span class="vm">__qualname__</span><span class="p">)</span>
+
+<span class="c1"># Without a colon, the longest importable prefix is imported and the rest is</span>
+<span class="c1"># looked up as attributes.</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pkgutil</span><span class="o">.</span><span class="n">resolve_name</span><span class="p">(</span><span class="s2">"collections.abc.Mapping"</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>plugins/csv.py
+json.decoder JSONDecodeError
+&lt;class &#x27;collections.abc.Mapping&#x27;&gt;</pre></div></figure>
+
+<h3 id="new-files">Modules created while the program runs</h3>
+<p>Finders cache what they have seen on disk. If your program writes or installs a module after the interpreter started, call <code>importlib.invalidate_caches()</code> before importing it; the documentation says this should be done so that all finders notice the new module<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">generated.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+
+<span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="s2">"generated_settings.py"</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">"ANSWER = 42</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">importlib</span><span class="o">.</span><span class="n">invalidate_caches</span><span class="p">()</span>          <span class="c1"># make finders rescan the directory</span>
+
+<span class="n">settings</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">"generated_settings"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">ANSWER</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>42</pre></div></figure>
+</section>
+
+<section>
+<h2 id="from-path"><span class="num">4</span>Importing a file by path</h2>
+<p>Sometimes the thing you have is a path, not a module name: a user-supplied script, a plugin file in a configuration directory, or a test fixture. <code>importlib.util</code> lets you run the import steps by hand. <code>spec_from_file_location(name, location)</code> builds a spec for a file, <code>module_from_spec(spec)</code> creates an empty module from it (preferred over creating a <code>types.ModuleType</code> yourself because the spec fills in the import-related attributes), and the loader's <code>exec_module()</code> runs the code<sup class="cite">[<a href="#ref-2">2</a>]</sup>. The importlib documentation gives this recipe, with the caution that it only approximates an <code>import</code> statement and that alternatives such as adjusting <code>sys.path</code> or <code>runpy.run_path()</code> should be considered first<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">import_from_path.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: extras/hello_plugin.py</span>
+<span class="n">GREETING</span> <span class="o">=</span> <span class="s2">"Hello"</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">GREETING</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">!"</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">import_from_path</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">file_path</span><span class="p">):</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="n">file_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot build a spec for </span><span class="si">{</span><span class="n">file_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>          <span class="c1"># register before executing</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
+        <span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">module_name</span><span class="p">]</span>           <span class="c1"># do not leave a half-built module</span>
+        <span class="k">raise</span>
+    <span class="k">return</span> <span class="n">module</span>
+
+
+<span class="n">here</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span>
+<span class="n">plugin</span> <span class="o">=</span> <span class="n">import_from_path</span><span class="p">(</span><span class="s2">"hello_plugin"</span><span class="p">,</span> <span class="n">here</span> <span class="o">/</span> <span class="s2">"extras"</span> <span class="o">/</span> <span class="s2">"hello_plugin.py"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">plugin</span><span class="o">.</span><span class="n">greet</span><span class="p">(</span><span class="s2">"Ada"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">plugin</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"in sys.modules:"</span><span class="p">,</span> <span class="s2">"hello_plugin"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loaded from:"</span><span class="p">,</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">plugin</span><span class="o">.</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">here</span><span class="p">)</span><span class="o">.</span><span class="n">as_posix</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loader:"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">plugin</span><span class="o">.</span><span class="n">__spec__</span><span class="o">.</span><span class="n">loader</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Hello, Ada!
+hello_plugin in sys.modules: True
+loaded from: extras/hello_plugin.py
+loader: SourceFileLoader</pre></div></figure>
+
+<p>The <code>sys.modules</code> step is not decoration. Code inside the module, and libraries such as <code>pickle</code> that look classes up by their module name, expect to find the module there. The next example skips that line and then tries to pickle an instance of a class defined in the file.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">unregistered.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: shapes.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Point</span><span class="p">:</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">y</span><span class="p">:</span> <span class="nb">int</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="s2">"shapes_by_path"</span><span class="p">,</span> <span class="s2">"shapes.py"</span><span class="p">)</span>
+<span class="n">shapes</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">shapes</span><span class="p">)</span>                <span class="c1"># never added to sys.modules</span>
+
+<span class="n">point</span> <span class="o">=</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Point</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">point</span><span class="p">)</span>
+<span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">point</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Point(x=1, y=2)</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>_pickle.PicklingError: Can&#x27;t pickle &lt;class &#x27;shapes_by_path.Point&#x27;&gt;: import of module &#x27;shapes_by_path&#x27; failed</pre></div></figure>
+
+<p>Each call to <code>module_from_spec()</code> also creates a <em>new</em> module object. Loading the same file twice without checking <code>sys.modules</code> gives you two copies of every class and every global, which breaks <code>isinstance()</code> checks and splits module state in two:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">loaded_twice.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: shapes.py</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Point</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">module</span>
+
+
+<span class="n">first</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="s2">"shapes"</span><span class="p">,</span> <span class="s2">"shapes.py"</span><span class="p">)</span>
+<span class="n">second</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="s2">"shapes"</span><span class="p">,</span> <span class="s2">"shapes.py"</span><span class="p">)</span>
+<span class="n">p</span> <span class="o">=</span> <span class="n">first</span><span class="o">.</span><span class="n">Point</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"same module object:"</span><span class="p">,</span> <span class="n">first</span> <span class="ow">is</span> <span class="n">second</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"same class object: "</span><span class="p">,</span> <span class="n">first</span><span class="o">.</span><span class="n">Point</span> <span class="ow">is</span> <span class="n">second</span><span class="o">.</span><span class="n">Point</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"isinstance across copies:"</span><span class="p">,</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">second</span><span class="o">.</span><span class="n">Point</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>same module object: False
+same class object:  False
+isinstance across copies: False</pre></div></figure>
+
+<div class="note"><span class="note-title">Replacing the removed <code>imp</code> module</span>
+<p>Older code loads files with <code>imp.load_source()</code>. The <code>imp</code> module was removed in Python 3.12<sup class="cite">[<a href="#ref-11">11</a>]</sup>; the <code>spec_from_file_location()</code> recipe above is its replacement.</p></div>
+</section>
+
+<section>
+<h2 id="reload"><span class="num">5</span>Reloading a module</h2>
+<p><code>importlib.reload(module)</code> recompiles and re-executes the module's code using the loader that originally loaded it, and binds the new objects into the module's existing dictionary<sup class="cite">[<a href="#ref-2">2</a>]</sup>. It is the basis of auto-reloaders and of the REPL habit of editing a file and reloading it. Its limits all follow from one fact: only names <em>inside the module</em> are updated. The documentation lists the consequences<sup class="cite">[<a href="#ref-2">2</a>]</sup>:</p>
+<ul>
+<li>Other references to the old objects, such as names created elsewhere with <code>from module import name</code>, keep pointing at the old objects.</li>
+<li>The module dictionary is retained, so a name that the new version no longer defines keeps its old value.</li>
+<li>Existing instances keep using the old class definition, and so do subclasses defined elsewhere.</li>
+<li>The <code>init</code> function of an extension module is not called again, and reloading <code>sys</code>, <code>__main__</code> or <code>builtins</code> is not recommended.</li>
+<li>The function is not thread-safe; guard concurrent reloads with a lock.</li>
+</ul>
+
+<figure class="code"><div class="code-head"><span class="fname">reload_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+
+<span class="n">source</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="s2">"settings.py"</span><span class="p">)</span>
+<span class="n">source</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
+    <span class="s2">"DEBUG = False</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"LEVEL = 'info'</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"class Handler:</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"    def describe(self):</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"        return 'version 1'</span><span class="se">\n</span><span class="s2">"</span>
+<span class="p">)</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEBUG</span>            <span class="c1"># a second reference to the old value</span>
+<span class="n">handler</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">Handler</span><span class="p">()</span>
+
+<span class="c1"># Edit the file: DEBUG flips, LEVEL is deleted, Handler changes.</span>
+<span class="n">source</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
+    <span class="s2">"DEBUG = True</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"class Handler:</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"    def describe(self):</span><span class="se">\n</span><span class="s2">"</span>
+    <span class="s2">"        return 'version 2 (reloaded)'</span><span class="se">\n</span><span class="s2">"</span>
+<span class="p">)</span>
+<span class="n">importlib</span><span class="o">.</span><span class="n">reload</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"settings.DEBUG:"</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">,</span> <span class="s2">"| from-imported DEBUG:"</span><span class="p">,</span> <span class="n">DEBUG</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"LEVEL still there:"</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">LEVEL</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"old instance:"</span><span class="p">,</span> <span class="n">handler</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"new instance:"</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">Handler</span><span class="p">()</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"old instance is a new Handler:"</span><span class="p">,</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">Handler</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>settings.DEBUG: True | from-imported DEBUG: False
+LEVEL still there: info
+old instance: version 1
+new instance: version 2 (reloaded)
+old instance is a new Handler: False</pre></div></figure>
+
+<p>Robust reloaders therefore re-read values through the module (<code>settings.DEBUG</code>) rather than through <code>from</code>-imported names, which is one of the two fixes the documentation suggests<sup class="cite">[<a href="#ref-2">2</a>]</sup>, and many development servers sidestep the problem entirely by restarting the whole process when a file changes. Note also that <code>reload()</code> needs a module object that was imported successfully; a module that lacks a spec raises <code>ModuleNotFoundError</code><sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+</section>
+
+<section>
+<h2 id="lazy"><span class="num">6</span>Lazy imports</h2>
+<p>Importing a large library can dominate a command-line tool's startup time. Python offers three ways to postpone the cost until a module is actually used. To find out which imports are worth deferring, run <code>python -X importtime</code>, which reports the cumulative and self time of each import<sup class="cite">[<a href="#ref-6">6</a>]</sup>.</p>
+
+<h3 id="getattr">Module <code>__getattr__</code> (PEP 562)</h3>
+<p>Since Python 3.7 a module can define <code>__getattr__(name)</code> and <code>__dir__()</code> functions. When normal attribute lookup on the module fails, <code>__getattr__</code> is called before <code>AttributeError</code> is raised, and PEP 562 names lazy submodule imports as a widespread use case, alongside deprecation warnings for renamed attributes<sup class="cite">[<a href="#ref-12">12</a>]</sup>. Lookups of a name as a <em>global</em> from inside the module bypass <code>__getattr__</code><sup class="cite">[<a href="#ref-12">12</a>]</sup>. When a submodule is imported, the import system also binds it as an attribute of its parent package<sup class="cite">[<a href="#ref-1">1</a>]</sup>, so <code>__getattr__</code> runs only on first access.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">lazy_package.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: geo/__init__.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+<span class="n">_SUBMODULES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"distance"</span><span class="p">,</span> <span class="s2">"shapes"</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_SUBMODULES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="sa">f</span><span class="s2">".</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"module </span><span class="si">{</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="fm">__dir__</span><span class="p">():</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">globals</span><span class="p">())</span> <span class="o">|</span> <span class="n">_SUBMODULES</span><span class="p">)</span>
+<span class="c1"># file: geo/distance.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (executing geo/distance.py)"</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">km_to_miles</span><span class="p">(</span><span class="n">km</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">km</span> <span class="o">*</span> <span class="mf">0.621371</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="c1"># file: geo/shapes.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (executing geo/shapes.py)"</span><span class="p">)</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">geo</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"geo.distance loaded?"</span><span class="p">,</span> <span class="s2">"geo.distance"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">geo</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">km_to_miles</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"geo.distance loaded?"</span><span class="p">,</span> <span class="s2">"geo.distance"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">geo</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">km_to_miles</span><span class="p">(</span><span class="mi">42</span><span class="p">))</span>          <span class="c1"># no second import</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"listed by dir():"</span><span class="p">,</span> <span class="s2">"shapes"</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">geo</span><span class="p">))</span>
+<span class="n">geo</span><span class="o">.</span><span class="n">elevation</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>geo.distance loaded? False
+    (executing geo/distance.py)
+6.214
+geo.distance loaded? True
+26.098
+listed by dir(): True</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>AttributeError: module &#x27;geo&#x27; has no attribute &#x27;elevation&#x27;</pre></div></figure>
+
+<h3 id="lazyloader"><code>importlib.util.LazyLoader</code></h3>
+<p><code>LazyLoader</code> wraps another loader and postpones executing the module until one of its attributes is first accessed. It only works with loaders that define <code>exec_module()</code>, and the importlib recipe for it is reproduced below<sup class="cite">[<a href="#ref-2">2</a>]</sup>. The documentation is unusually blunt about when to use it: for projects where startup time is not critical, the class is <em>heavily</em> discouraged, because errors raised while loading are postponed and appear out of context<sup class="cite">[<a href="#ref-2">2</a>]</sup>. The second half of the example shows exactly that.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">lazy_loader.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: reports.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (executing reports.py)"</span><span class="p">)</span>
+<span class="n">TITLE</span> <span class="o">=</span> <span class="s2">"Quarterly report"</span>
+<span class="c1"># file: broken_config.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (executing broken_config.py)"</span><span class="p">)</span>
+<span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"missing setting: DATABASE_URL"</span><span class="p">)</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">lazy_import</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="n">loader</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">LazyLoader</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="p">)</span>
+    <span class="n">spec</span><span class="o">.</span><span class="n">loader</span> <span class="o">=</span> <span class="n">loader</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
+    <span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">module</span>
+
+
+<span class="n">reports</span> <span class="o">=</span> <span class="n">lazy_import</span><span class="p">(</span><span class="s2">"reports"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"lazy_import returned a"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">reports</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"first attribute access ..."</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">reports</span><span class="o">.</span><span class="n">TITLE</span><span class="p">)</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">lazy_import</span><span class="p">(</span><span class="s2">"broken_config"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"broken_config imported without error"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"much later, far from the import:"</span><span class="p">)</span>
+<span class="n">config</span><span class="o">.</span><span class="n">DATABASE_URL</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>lazy_import returned a _LazyModule
+first attribute access ...
+    (executing reports.py)
+Quarterly report
+broken_config imported without error
+much later, far from the import:
+    (executing broken_config.py)</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>RuntimeError: missing setting: DATABASE_URL</pre></div></figure>
+
+<h3 id="lazy-keyword">The <code>lazy</code> keyword (Python 3.15)</h3>
+<p>PEP 810, which is final and targets Python 3.15, makes lazy importing part of the language. A <code>lazy</code> soft keyword in front of <code>import</code> or <code>from ... import</code> defers loading and executing the module until the first time the imported name is used<sup class="cite">[<a href="#ref-13">13</a>]</sup>. The keyword is only allowed at module level (not inside functions, class bodies or <code>try</code> blocks), and <code>lazy from ... import *</code> is a syntax error<sup class="cite">[<a href="#ref-13">13</a>]</sup>. Python 3.15 also adds the <code>-X lazy_imports</code> option and the <code>PYTHON_LAZY_IMPORTS</code> environment variable: the value <code>all</code> makes every import lazy by default, and <code>normal</code> (the default) respects the keyword in the source<sup class="cite">[<a href="#ref-6">6</a>]</sup>. The two examples below were run on CPython 3.15.0b4, because the syntax does not exist on 3.13.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">lazy_keyword.py</span><span class="badge">Python 3.15+</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: heavy.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (executing heavy.py)"</span><span class="p">)</span>
+<span class="n">VALUE</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="kn">lazy</span><span class="w"> </span><span class="kn">import</span><span class="w"> </span><span class="nn">heavy</span>
+<span class="kn">lazy</span><span class="w"> </span><span class="kn">from</span><span class="w"> </span><span class="nn">fractions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Fraction</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"after the imports:"</span><span class="p">,</span> <span class="s2">"heavy"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">,</span> <span class="s2">"fractions"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">heavy</span><span class="o">.</span><span class="n">VALUE</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">Fraction</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"after first use:  "</span><span class="p">,</span> <span class="s2">"heavy"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">,</span> <span class="s2">"fractions"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output · CPython 3.15.0b4</span><pre>after the imports: False False
+    (executing heavy.py)
+42
+1/2
+after first use:   True True</pre></div></figure>
+
+<figure class="code"><div class="code-head"><span class="fname">lazy_in_function.py</span><span class="badge">Python 3.15+</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">def</span><span class="w"> </span><span class="nf">load_report</span><span class="p">():</span>
+    <span class="n">lazy</span> <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+    <span class="k">return</span> <span class="n">json</span></code></pre><div class="out out-error"><span class="out-label">Raises · CPython 3.15.0b4</span><pre>SyntaxError: lazy import not allowed inside functions</pre></div></figure>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Technique</th><th>Granularity</th><th>Works on</th><th>Trade-off</th></tr></thead>
+<tbody>
+<tr><td>Import inside a function</td><td>One call site</td><td>All versions</td><td>Simple and explicit; the import cost moves to the first call</td></tr>
+<tr><td>Module <code>__getattr__</code></td><td>Attributes of one package</td><td>3.7+</td><td>Invisible to users of the package; you maintain the name list</td></tr>
+<tr><td><code>LazyLoader</code></td><td>Whole module</td><td>3.5+</td><td>Load errors surface far from the import</td></tr>
+<tr><td><code>lazy import</code></td><td>One import statement</td><td>3.15+</td><td>Language-level and explicit; module level only</td></tr>
+</tbody>
+</table></div>
+</section>
+
+<section>
+<h2 id="plugins"><span class="num">7</span>Plugin discovery</h2>
+<p>The Python Packaging User Guide describes three ways for an application to discover plugins automatically: a <strong>naming convention</strong>, <strong>namespace packages</strong>, and <strong>package metadata</strong> (entry points)<sup class="cite">[<a href="#ref-14">14</a>]</sup>. All three end in a dynamic import.</p>
+
+<h3 id="naming">Naming convention with <code>pkgutil.iter_modules()</code></h3>
+<p><code>pkgutil.iter_modules()</code> yields a <code>ModuleInfo(module_finder, name, ispkg)</code> for every top-level module on <code>sys.path</code>, or for every submodule on a path list you pass in<sup class="cite">[<a href="#ref-10">10</a>]</sup>. Filtering by a name prefix gives a simple plugin system<sup class="cite">[<a href="#ref-14">14</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">naming_convention.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: myapp_plugin_csv.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">export</span><span class="p">(</span><span class="n">rows</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">","</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">row</span><span class="p">))</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">)</span>
+<span class="c1"># file: myapp_plugin_markdown.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">export</span><span class="p">(</span><span class="n">rows</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"| "</span> <span class="o">+</span> <span class="s2">" | "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">row</span><span class="p">))</span> <span class="o">+</span> <span class="s2">" |"</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">)</span>
+<span class="c1"># file: unrelated_helper.py</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pkgutil</span>
+
+<span class="n">PREFIX</span> <span class="o">=</span> <span class="s2">"myapp_plugin_"</span>
+<span class="n">plugins</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">info</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="n">PREFIX</span><span class="p">):</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">pkgutil</span><span class="o">.</span><span class="n">iter_modules</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">info</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">PREFIX</span><span class="p">)</span>
+<span class="p">}</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"found:"</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">plugins</span><span class="p">))</span>
+<span class="n">rows</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"name"</span><span class="p">,</span> <span class="s2">"qty"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"apples"</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">plugins</span><span class="p">[</span><span class="s2">"markdown"</span><span class="p">]</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="n">rows</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>found: [&#x27;csv&#x27;, &#x27;markdown&#x27;]
+| name | qty |
+| apples | 3 |</pre></div></figure>
+
+<h3 id="namespace">Namespace packages</h3>
+<p>A namespace package has no <code>__init__.py</code> and can be spread over several directories on <code>sys.path</code>. Its <code>__path__</code> lists every portion, so passing it to <code>iter_modules()</code> finds plugins that separate distributions dropped into the same namespace<sup class="cite">[<a href="#ref-10">10</a>,<a href="#ref-14">14</a>]</sup>. Here two “vendors” each ship one module into <code>myapp.plugins</code>:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">namespace_plugins.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: vendor_a/myapp/plugins/upper.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">text</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+<span class="c1"># file: vendor_b/myapp/plugins/reverse.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">transform</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">text</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pkgutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">here</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">here</span> <span class="o">/</span> <span class="s2">"vendor_a"</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">here</span> <span class="o">/</span> <span class="s2">"vendor_b"</span><span class="p">)]</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">myapp.plugins</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"portions in __path__:"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">myapp</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">__path__</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">pkgutil</span><span class="o">.</span><span class="n">iter_modules</span><span class="p">(</span><span class="n">myapp</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">__path__</span><span class="p">,</span> <span class="n">myapp</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s2">"."</span><span class="p">):</span>
+    <span class="n">plugin</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">name</span><span class="si">:</span><span class="s2">24</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">plugin</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="s1">'plugin'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>portions in __path__: 2
+myapp.plugins.upper      -&gt; PLUGIN
+myapp.plugins.reverse    -&gt; nigulp</pre></div></figure>
+
+<p><code>pkgutil.walk_packages()</code> does the same recursively, but note that it has to <em>import every package</em> it walks in order to read its <code>__path__</code>, and by default it silently ignores <code>ImportError</code>s raised by those packages<sup class="cite">[<a href="#ref-10">10</a>]</sup>.</p>
+
+<h3 id="entry-points">Entry points with <code>importlib.metadata</code></h3>
+<p>Entry points are the most widely used mechanism. They let an installed distribution advertise components it provides: each entry point has a <strong>group</strong> saying what kind of object it provides, a <strong>name</strong> identifying it within the group, and an object reference in the form <code>importable.module:object.attr</code><sup class="cite">[<a href="#ref-9">9</a>]</sup>. A plugin declares them in its <code>pyproject.toml</code><sup class="cite">[<a href="#ref-14">14</a>]</sup>:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">pyproject.toml (of the plugin distribution)</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"myapp-plugin-yaml"</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"1.0"</span>
+
+<span class="k">[project.entry-points.</span><span class="s2">"myapp.exporters"</span><span class="k">]</span>
+<span class="n">yaml</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"myapp_yaml.plugin:YamlExporter"</span></code></pre></figure>
+
+<p>When the plugin is installed, the build backend writes the entry points to an <code>entry_points.txt</code> file in the distribution's <code>*.dist-info</code> directory<sup class="cite">[<a href="#ref-9">9</a>]</sup>. The application never needs to know the plugin's package name. It asks <code>importlib.metadata.entry_points()</code> for a group; the result is an <code>EntryPoints</code> collection, and each <code>EntryPoint</code> has <code>name</code>, <code>group</code> and <code>value</code> attributes, <code>module</code> and <code>attr</code> components, a <code>dist</code> attribute and a <code>load()</code> method that imports the object<sup class="cite">[<a href="#ref-15">15</a>]</sup>. Since Python 3.12, <code>entry_points()</code> always returns an <code>EntryPoints</code> object rather than the older dictionary keyed by group<sup class="cite">[<a href="#ref-15">15</a>]</sup>.</p>
+<p>To keep the example self-contained, it builds the <code>.dist-info</code> directory that an installer would have written, in a folder that it puts on <code>sys.path</code>:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">entry_points_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: site/myapp_plugin_yaml-1.0.dist-info/METADATA</span>
+<span class="n">Metadata</span><span class="o">-</span><span class="n">Version</span><span class="p">:</span> <span class="mf">2.1</span>
+<span class="n">Name</span><span class="p">:</span> <span class="n">myapp</span><span class="o">-</span><span class="n">plugin</span><span class="o">-</span><span class="n">yaml</span>
+<span class="n">Version</span><span class="p">:</span> <span class="mf">1.0</span>
+<span class="c1"># file: site/myapp_plugin_yaml-1.0.dist-info/entry_points.txt</span>
+<span class="p">[</span><span class="n">myapp</span><span class="o">.</span><span class="n">exporters</span><span class="p">]</span>
+<span class="n">yaml</span> <span class="o">=</span> <span class="n">myapp_yaml</span><span class="o">.</span><span class="n">plugin</span><span class="p">:</span><span class="n">YamlExporter</span>
+<span class="c1"># file: site/myapp_yaml/__init__.py</span>
+<span class="c1"># file: site/myapp_yaml/plugin.py</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">YamlExporter</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rows</span><span class="p">):</span>
+        <span class="n">header</span><span class="p">,</span> <span class="o">*</span><span class="n">body</span> <span class="o">=</span> <span class="n">rows</span>
+        <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="s2">"- "</span> <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">row</span><span class="p">))</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">body</span>
+        <span class="p">)</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">importlib.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">entry_points</span>
+
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"site"</span><span class="p">))</span>
+
+<span class="k">for</span> <span class="n">ep</span> <span class="ow">in</span> <span class="n">entry_points</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">"myapp.exporters"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"name=</span><span class="si">{</span><span class="n">ep</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> value=</span><span class="si">{</span><span class="n">ep</span><span class="o">.</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  module=</span><span class="si">{</span><span class="n">ep</span><span class="o">.</span><span class="n">module</span><span class="si">!r}</span><span class="s2"> attr=</span><span class="si">{</span><span class="n">ep</span><span class="o">.</span><span class="n">attr</span><span class="si">!r}</span><span class="s2"> dist=</span><span class="si">{</span><span class="n">ep</span><span class="o">.</span><span class="n">dist</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">exporter</span> <span class="o">=</span> <span class="n">ep</span><span class="o">.</span><span class="n">load</span><span class="p">()()</span>                   <span class="c1"># load() imports, () instantiates</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">exporter</span><span class="o">.</span><span class="n">export</span><span class="p">([(</span><span class="s2">"fruit"</span><span class="p">,</span> <span class="s2">"qty"</span><span class="p">),</span> <span class="p">(</span><span class="s2">"apple"</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="p">(</span><span class="s2">"pear"</span><span class="p">,</span> <span class="mi">5</span><span class="p">)]))</span>
+
+<span class="p">(</span><span class="n">only</span><span class="p">,)</span> <span class="o">=</span> <span class="n">entry_points</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s2">"myapp.exporters"</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"yaml"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"selected by name:"</span><span class="p">,</span> <span class="n">only</span><span class="o">.</span><span class="n">value</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>name=&#x27;yaml&#x27; value=&#x27;myapp_yaml.plugin:YamlExporter&#x27;
+  module=&#x27;myapp_yaml.plugin&#x27; attr=&#x27;YamlExporter&#x27; dist=myapp-plugin-yaml
+- fruit: apple, qty: 3
+- fruit: pear, qty: 5
+selected by name: myapp_yaml.plugin:YamlExporter</pre></div></figure>
+
+<div class="note"><span class="note-title">Loading plugins safely</span>
+<p>Call <code>ep.load()</code> inside a <code>try</code> block and report failures per plugin, so that one broken plugin cannot stop the application from starting. Remember that loading an entry point executes code from the distribution that declared it.</p></div>
+</section>
+
+<section>
+<h2 id="resources"><span class="num">8</span>Package data with <code>importlib.resources</code></h2>
+<p>Dynamically loaded code often ships data files: templates, schemas, word lists. Building paths from <code>__file__</code> breaks as soon as the package is imported from a zip file. <code>importlib.resources</code> uses the import system itself to give access to resources inside packages<sup class="cite">[<a href="#ref-16">16</a>]</sup>. <code>files(anchor)</code> takes a module object or module name (the <em>anchor</em>) and returns a <code>Traversable</code> that behaves like a directory you can join paths onto and read from<sup class="cite">[<a href="#ref-16">16</a>]</sup>. When an API needs a real file on disk, <code>as_file()</code> provides a <code>pathlib.Path</code> and cleans up any temporary file it had to extract<sup class="cite">[<a href="#ref-16">16</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">resources_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: textkit/__init__.py</span>
+<span class="c1"># file: textkit/data/stopwords.txt</span>
+<span class="n">a</span>
+<span class="n">an</span>
+<span class="n">the</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.resources</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">resources</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zipfile</span>
+
+<span class="n">stopwords</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="s2">"textkit"</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"data"</span> <span class="o">/</span> <span class="s2">"stopwords.txt"</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">stopwords</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+
+<span class="c1"># Python 3.13 functional API: several path parts, encoding as a keyword.</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">resources</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="s2">"textkit"</span><span class="p">,</span> <span class="s2">"data"</span><span class="p">,</span> <span class="s2">"stopwords.txt"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">))</span>
+
+<span class="c1"># The same package layout, but imported from a zip archive.</span>
+<span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="s2">"bundle.zip"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">zf</span><span class="p">:</span>
+    <span class="n">zf</span><span class="o">.</span><span class="n">writestr</span><span class="p">(</span><span class="s2">"zipkit/__init__.py"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+    <span class="n">zf</span><span class="o">.</span><span class="n">writestr</span><span class="p">(</span><span class="s2">"zipkit/data/stopwords.txt"</span><span class="p">,</span> <span class="s2">"a</span><span class="se">\n</span><span class="s2">an</span><span class="se">\n</span><span class="s2">the</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">"bundle.zip"</span><span class="p">)</span>
+
+<span class="n">zipped</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="s2">"zipkit"</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"data"</span> <span class="o">/</span> <span class="s2">"stopwords.txt"</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">zipped</span><span class="p">)</span><span class="o">.</span><span class="vm">__module__</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">zipped</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">zipped</span><span class="o">.</span><span class="n">is_file</span><span class="p">())</span>
+<span class="k">with</span> <span class="n">resources</span><span class="o">.</span><span class="n">as_file</span><span class="p">(</span><span class="n">zipped</span><span class="p">)</span> <span class="k">as</span> <span class="n">path</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"as_file gives"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"| exists on disk:"</span><span class="p">,</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"temporary copy removed:"</span><span class="p">,</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>[&#x27;a&#x27;, &#x27;an&#x27;, &#x27;the&#x27;]
+3
+zipfile._path Path True
+as_file gives PosixPath | exists on disk: True
+temporary copy removed: True</pre></div></figure>
+
+<p>The 3.13 functional API accepts multiple path components, and requires <em>encoding</em> to be passed as a keyword argument when there is more than one<sup class="cite">[<a href="#ref-16">16</a>]</sup>.</p>
+</section>
+
+<section>
+<h2 id="security"><span class="num">9</span>Security</h2>
+<p>Importing a module <em>executes</em> it. Any string that reaches <code>import_module()</code> chooses which code runs in your process, so dynamic imports deserve the same care as <code>eval()</code>, whose documentation warns that calling it with untrusted input will lead to security vulnerabilities<sup class="cite">[<a href="#ref-8">8</a>]</sup>. MITRE catalogues the general weakness as CWE-470, “unsafe reflection”: a product uses external input to select which classes or code to use, so an attacker can select unexpected classes or methods<sup class="cite">[<a href="#ref-17">17</a>]</sup>.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">unsafe_reflection.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+
+<span class="c1"># Imagine this string arrived in a web request: ?exporter=os:system</span>
+<span class="n">user_value</span> <span class="o">=</span> <span class="s2">"os:system"</span>
+
+<span class="n">module_name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">attr</span> <span class="o">=</span> <span class="n">user_value</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">":"</span><span class="p">)</span>
+<span class="n">target</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">),</span> <span class="n">attr</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the request selected:"</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+
+<span class="c1"># Merely importing a module runs its top-level code:</span>
+<span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">redirect_stdout</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">())</span> <span class="k">as</span> <span class="n">captured</span><span class="p">:</span>
+    <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">"this"</span><span class="p">)</span>
+<span class="n">lines</span> <span class="o">=</span> <span class="n">captured</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"importing 'this' printed </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span><span class="si">}</span><span class="s2"> lines, starting: </span><span class="si">{</span><span class="n">lines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>the request selected: &lt;built-in function system&gt;
+importing &#x27;this&#x27; printed 21 lines, starting: &#x27;The Zen of Python, by Tim Peters&#x27;</pre></div></figure>
+
+<p>The <code>this</code> module prints the Zen of Python as a side effect of being imported, which is harmless; a module chosen by an attacker need not be. CWE-470's mitigations are to avoid reflection where possible, not to use user-controlled input to select code, and otherwise to restrict the choice with an allowlist or an indirect selection<sup class="cite">[<a href="#ref-17">17</a>]</sup>. In Python that usually means a dictionary from public keys to fixed import targets:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">allowlist.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+<span class="n">EXPORTERS</span> <span class="o">=</span> <span class="p">{</span>                      <span class="c1"># public key -&gt; fixed import target</span>
+    <span class="s2">"csv"</span><span class="p">:</span> <span class="s2">"csv:writer"</span><span class="p">,</span>
+    <span class="s2">"json"</span><span class="p">:</span> <span class="s2">"json:dumps"</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_exporter</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="n">EXPORTERS</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"unknown exporter </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+    <span class="n">module_name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">attr</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">":"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">),</span> <span class="n">attr</span><span class="p">)</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">get_exporter</span><span class="p">(</span><span class="s2">"json"</span><span class="p">)({</span><span class="s2">"ok"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}))</span>
+<span class="n">get_exporter</span><span class="p">(</span><span class="s2">"os:system"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&quot;ok&quot;: true}</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>ValueError: unknown exporter &#x27;os:system&#x27;</pre></div></figure>
+
+<h3 id="hijack">Search-path hijacking</h3>
+<p>The other attack goes through <code>sys.path</code>. Because the script's directory (or the current directory) is prepended to the path<sup class="cite">[<a href="#ref-3">3</a>]</sup>, a file there with the same name as a standard-library or installed module is imported in its place. This is an instance of CWE-427, an uncontrolled search path element: the search path contains a location an attacker may control<sup class="cite">[<a href="#ref-18">18</a>]</sup>. Running a script from a shared or downloaded folder is enough:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">hijack.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: random.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"!!! a local random.py ran instead of the standard library"</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">seed</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">randint</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mi">4</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">2026</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"dice roll:"</span><span class="p">,</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loaded from:"</span><span class="p">,</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>!!! a local random.py ran instead of the standard library
+dice roll: 4
+loaded from: demo</pre></div></figure>
+
+<p>The <code>-P</code> option (or a non-empty <code>PYTHONSAFEPATH</code>), added in Python 3.11, stops Python from prepending that unsafe path, and <code>-I</code> (isolated mode) implies <code>-P</code>, ignores all <code>PYTHON*</code> environment variables and leaves out the user site-packages directory<sup class="cite">[<a href="#ref-6">6</a>]</sup>. Here is the same pair of files run with <code>python -P main.py</code>:</p>
+
+<figure class="code"><div class="code-head"><span class="fname">hijack.py (run with python -P)</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: random.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"!!! a local random.py ran instead of the standard library"</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">seed</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">randint</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mi">4</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">2026</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"dice roll:"</span><span class="p">,</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loaded from:"</span><span class="p">,</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>dice roll: 1
+loaded from: python3.13</pre></div></figure>
+
+<p>A last, quieter route is <code>.pth</code> files in <code>site-packages</code>: for backward compatibility, their lines that start with <code>import</code> are executed at every startup<sup class="cite">[<a href="#ref-19">19</a>]</sup>. Python 3.15 deprecates those lines, and they are scheduled to be silently ignored in Python 3.18 and 3.19<sup class="cite">[<a href="#ref-19">19</a>]</sup>.</p>
+
+<div class="note warn"><span class="note-title">Checklist for code that imports by name</span>
+<ul>
+<li>Never pass request data, file contents or environment input straight to <code>import_module()</code>, <code>__import__()</code>, <code>pkgutil.resolve_name()</code> or <code>getattr()</code> on a module.</li>
+<li>Map public keys to fixed targets, or accept only names that you discovered yourself inside your own plugin package or entry-point group.</li>
+<li>Load files by path only from directories that only trusted users can write to.</li>
+<li>Run tools and services with <code>-P</code> or <code>-I</code> when they do not need the script directory on the path.</li>
+<li>Treat installing a plugin as trusting its author: loading it runs its code with your privileges.</li>
+</ul></div>
+</section>
+
+<section>
+<h2 id="pitfalls"><span class="num">10</span>Pitfalls</h2>
+
+<h3 id="pit-optional">Catching too much when a dependency is optional</h3>
+<p>The usual “try the fast library, else fall back” code catches <code>ModuleNotFoundError</code>. But the same exception is raised when the module <em>exists</em> and one of its own imports fails, which hides a real bug. The exception's <code>name</code> attribute tells the two cases apart.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">optional_dependency.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: fancy_parser.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">a_dependency_that_is_missing</span>      <span class="c1"># a real bug inside the module</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">optional_import</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">exc</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">name</span><span class="p">:</span>
+            <span class="k">raise</span>                       <span class="c1"># the module exists but is broken</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"tomllib:"</span><span class="p">,</span> <span class="n">optional_import</span><span class="p">(</span><span class="s2">"tomllib"</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"not installed:"</span><span class="p">,</span> <span class="n">optional_import</span><span class="p">(</span><span class="s2">"not_installed_anywhere"</span><span class="p">))</span>
+<span class="n">optional_import</span><span class="p">(</span><span class="s2">"fancy_parser"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>tomllib: True
+not installed: None</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>ModuleNotFoundError: No module named &#x27;a_dependency_that_is_missing&#x27;</pre></div></figure>
+
+<h3 id="pit-submodule">Importing a package does not import its submodules</h3>
+<p>Packages are modules with a <code>__path__</code>, and their submodules are only loaded when something imports them<sup class="cite">[<a href="#ref-1">1</a>]</sup>. Code that imports <code>"xml.etree"</code> dynamically and then reaches for <code>.ElementTree</code> works only if something else happened to import it first.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">submodule.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+<span class="n">etree</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">"xml.etree"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">etree</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"has __path__:"</span><span class="p">,</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">etree</span><span class="p">,</span> <span class="s2">"__path__"</span><span class="p">))</span>
+<span class="n">etree</span><span class="o">.</span><span class="n">ElementTree</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>xml.etree has __path__: True</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>AttributeError: module &#x27;xml.etree&#x27; has no attribute &#x27;ElementTree&#x27;</pre></div></figure>
+
+<h3 id="pit-relative">A relative name without an anchor</h3>
+
+<figure class="code"><div class="code-head"><span class="fname">relative.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+<span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">".ElementTree"</span><span class="p">)</span></code></pre><div class="out out-error"><span class="out-label">Raises</span><pre>TypeError: the &#x27;package&#x27; argument is required to perform a relative import for &#x27;.ElementTree&#x27;</pre></div></figure>
+
+<h3 id="pit-circular">Circular imports see half-built modules</h3>
+<p>Because a module is placed in <code>sys.modules</code> before its code runs<sup class="cite">[<a href="#ref-1">1</a>]</sup>, a module that is imported again while it is still executing is returned in its partly initialised state. Dynamic plugin systems hit this when a plugin imports the application module that is in the middle of loading it.</p>
+
+<figure class="code"><div class="code-head"><span class="fname">circular.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: shop/__init__.py</span>
+<span class="c1"># file: shop/app.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shop</span><span class="w"> </span><span class="kn">import</span> <span class="n">plugin_loader</span>       <span class="c1"># starts loading plugins ...</span>
+<span class="n">VERSION</span> <span class="o">=</span> <span class="s2">"2.1"</span>                      <span class="c1"># ... before this line has run</span>
+<span class="c1"># file: shop/plugin_loader.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="n">plugin</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">"shop.version_plugin"</span><span class="p">)</span>
+<span class="c1"># file: shop/version_plugin.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shop.app</span><span class="w"> </span><span class="kn">import</span> <span class="n">VERSION</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shop.app</span></code></pre><div class="out out-error"><span class="out-label">Raises</span><pre>ImportError: cannot import name &#x27;VERSION&#x27; from partially initialized module &#x27;shop.app&#x27; (most likely due to a circular import) (/tmp/demo/shop/app.py)</pre></div></figure>
+
+<p>The fix is to finish defining what plugins need before loading them, or to have plugins import the module and read <code>shop.app.VERSION</code> when they are called rather than at import time.</p>
+
+<h3 id="pit-shadow">Other traps</h3>
+<ul>
+<li><strong>Name clashes when loading by path.</strong> The <em>name</em> you pass to <code>spec_from_file_location()</code> becomes the key in <code>sys.modules</code>. Two plugin files both called <code>utils.py</code> must get different names, such as <code>"myapp_plugins.vendor_a.utils"</code>, or the second will replace the first.</li>
+<li><strong><code>find_spec()</code> is not side-effect free for dotted names.</strong> Checking <code>"pkg.sub"</code> imports <code>pkg</code> first<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</li>
+<li><strong>Reloading in threaded code.</strong> <code>importlib.reload()</code> is not thread-safe<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</li>
+<li><strong>Mutating <code>sys.path</code> globally.</strong> Inserting a directory affects every later import in the process; prefer loading by path, or remove the entry when you are done.</li>
+<li><strong>Swallowed plugin errors.</strong> <code>pkgutil.walk_packages()</code> ignores <code>ImportError</code> from packages unless you pass <em>onerror</em><sup class="cite">[<a href="#ref-10">10</a>]</sup>.</li>
+</ul>
+</section>
+
+<section>
+<h2 id="summary"><span class="num">11</span>Quick reference</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>You have</th><th>Use</th><th>Returns</th></tr></thead>
+<tbody>
+<tr><td>A module name</td><td><code>importlib.import_module(name)</code></td><td>The module (cached in <code>sys.modules</code>)</td></tr>
+<tr><td><code>"module:attr"</code></td><td><code>pkgutil.resolve_name(text)</code></td><td>The attribute</td></tr>
+<tr><td>A name, and you only want to know if it exists</td><td><code>importlib.util.find_spec(name)</code></td><td>A spec or <code>None</code></td></tr>
+<tr><td>A file path</td><td><code>spec_from_file_location</code> + <code>module_from_spec</code> + <code>exec_module</code></td><td>A new module</td></tr>
+<tr><td>An edited module</td><td><code>importlib.reload(module)</code></td><td>The same module, re-executed</td></tr>
+<tr><td>A slow import</td><td>Module <code>__getattr__</code>, <code>LazyLoader</code>, <code>lazy import</code> (3.15)</td><td>A module loaded on first use</td></tr>
+<tr><td>A plugin group</td><td><code>importlib.metadata.entry_points(group=...)</code></td><td><code>EntryPoint</code> objects; <code>.load()</code> imports</td></tr>
+<tr><td>A package directory</td><td><code>pkgutil.iter_modules(pkg.__path__)</code></td><td><code>ModuleInfo</code> tuples</td></tr>
+<tr><td>A data file in a package</td><td><code>importlib.resources.files(pkg) / "file"</code></td><td>A <code>Traversable</code></td></tr>
+</tbody>
+</table></div>
+</section>
+
+<section>
+<h2 id="exercises"><span class="num">12</span>Exercises</h2>
+<p>Each solution is a complete program that was run on CPython 3.13.17; try the exercise before opening it.</p>
+
+<div class="exercise">
+<h3 id="ex1">1. Resolve <code>"module:attribute"</code> yourself<span class="lvl">Basic</span></h3>
+<p>Write <code>load_object(ref)</code> that accepts <code>"package.module:obj.attr"</code>, imports the module part with <code>importlib.import_module()</code> and follows the dotted attribute path with <code>getattr()</code>. Raise <code>ValueError</code> if the colon or either part is missing. Check that your results match <code>pkgutil.resolve_name()</code>.</p>
+<details><summary>Show solution</summary><div class="sol">
+
+<figure class="code"><div class="code-head"><span class="fname">ex1_load_object.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pkgutil</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">load_object</span><span class="p">(</span><span class="n">ref</span><span class="p">):</span>
+    <span class="n">module_name</span><span class="p">,</span> <span class="n">sep</span><span class="p">,</span> <span class="n">attr_path</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">":"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">sep</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">module_name</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">attr_path</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"expected 'module:attr', got </span><span class="si">{</span><span class="n">ref</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">obj</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">attr_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"."</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">part</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">obj</span>
+
+
+<span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"os.path:join"</span><span class="p">,</span> <span class="s2">"json.decoder:JSONDecoder.decode"</span><span class="p">,</span> <span class="s2">"collections:OrderedDict"</span><span class="p">):</span>
+    <span class="n">mine</span> <span class="o">=</span> <span class="n">load_object</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">ref</span><span class="si">:</span><span class="s2">34</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">mine</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="n">pkgutil</span><span class="o">.</span><span class="n">resolve_name</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="n">load_object</span><span class="p">(</span><span class="s2">"json"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>os.path:join                       True
+json.decoder:JSONDecoder.decode    True
+collections:OrderedDict            True</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>ValueError: expected &#x27;module:attr&#x27;, got &#x27;json&#x27;</pre></div></figure>
+
+</div></details>
+</div>
+
+<div class="exercise">
+<h3 id="ex2">2. Which optional dependencies are available?<span class="lvl">Basic</span></h3>
+<p>Write <code>available(names)</code> that returns a dictionary mapping each top-level module name to <code>True</code> or <code>False</code> <em>without executing</em> any of those modules. Prove it with a local module that prints a message when imported: the message must not appear.</p>
+<details><summary>Show solution</summary><div class="sol">
+
+<figure class="code"><div class="code-head"><span class="fname">ex2_available.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: noisy.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"noisy.py was executed!"</span><span class="p">)</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">available</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">}</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">available</span><span class="p">([</span><span class="s2">"noisy"</span><span class="p">,</span> <span class="s2">"sqlite3"</span><span class="p">,</span> <span class="s2">"surely_not_installed"</span><span class="p">]))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"noisy imported?"</span><span class="p">,</span> <span class="s2">"noisy"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&#x27;noisy&#x27;: True, &#x27;sqlite3&#x27;: True, &#x27;surely_not_installed&#x27;: False}
+noisy imported? False</pre></div></figure>
+
+<p><code>find_spec()</code> only asks the finders for a spec, so no module code runs. For a dotted name it would import the parent package<sup class="cite">[<a href="#ref-2">2</a>]</sup>, which is why the exercise sticks to top-level names.</p>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3 id="ex3">3. A plugin folder<span class="lvl">Intermediate</span></h3>
+<p>Write <code>load_plugins(folder)</code> that loads every <code>*.py</code> file in <code>folder</code> (skipping names that start with an underscore) by path, registers each one in <code>sys.modules</code> under a unique name <code>"plugins.&lt;stem&gt;"</code>, and returns a dictionary of the plugins that define a <code>register()</code> function. A plugin that raises during loading should be reported and skipped, not crash the loader.</p>
+<details><summary>Show solution</summary><div class="sol">
+
+<figure class="code"><div class="code-head"><span class="fname">ex3_plugin_folder.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: plugins/hello.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s2">"hello plugin ready"</span>
+<span class="c1"># file: plugins/shout.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s2">"SHOUT PLUGIN READY"</span>
+<span class="c1"># file: plugins/notes.py</span>
+<span class="n">TEXT</span> <span class="o">=</span> <span class="s2">"no register() here"</span>
+<span class="c1"># file: plugins/broken.py</span>
+<span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">"broken.py needs a missing library"</span><span class="p">)</span>
+<span class="c1"># file: plugins/_private.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s2">"should be skipped"</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">load_plugins</span><span class="p">(</span><span class="n">folder</span><span class="p">):</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*.py"</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">stem</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"_"</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"plugins.</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"skipped </span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">"register"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)):</span>
+            <span class="n">found</span><span class="p">[</span><span class="n">path</span><span class="o">.</span><span class="n">stem</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
+    <span class="k">return</span> <span class="n">found</span>
+
+
+<span class="n">plugins</span> <span class="o">=</span> <span class="n">load_plugins</span><span class="p">(</span><span class="s2">"plugins"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">stem</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">plugins</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">stem</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">module</span><span class="o">.</span><span class="n">register</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span> <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"plugins."</span><span class="p">)))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>skipped broken.py: ImportError: broken.py needs a missing library
+hello: hello plugin ready
+shout: SHOUT PLUGIN READY
+[&#x27;plugins.hello&#x27;, &#x27;plugins.notes&#x27;, &#x27;plugins.shout&#x27;]</pre></div></figure>
+
+</div></details>
+</div>
+
+<div class="exercise">
+<h3 id="ex4">4. A lazy package with a deprecated alias<span class="lvl">Intermediate</span></h3>
+<p>Package <code>units</code> has submodules <code>length</code> and <code>mass</code>. Make both load lazily on attribute access, and keep an old name working: <code>units.metric</code> was renamed to <code>units.length</code>, so accessing <code>units.metric</code> should emit a <code>DeprecationWarning</code> and return the <code>length</code> module. Use only the PEP 562 hooks.</p>
+<details><summary>Show solution</summary><div class="sol">
+
+<figure class="code"><div class="code-head"><span class="fname">ex4_lazy_package.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: units/__init__.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="n">_LAZY</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"length"</span><span class="p">,</span> <span class="s2">"mass"</span><span class="p">}</span>
+<span class="n">_RENAMED</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"metric"</span><span class="p">:</span> <span class="s2">"length"</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_RENAMED</span><span class="p">:</span>
+        <span class="n">new</span> <span class="o">=</span> <span class="n">_RENAMED</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">"units.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is deprecated; use units.</span><span class="si">{</span><span class="n">new</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                      <span class="ne">DeprecationWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="sa">f</span><span class="s2">".</span><span class="si">{</span><span class="n">new</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_LAZY</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="sa">f</span><span class="s2">".</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"module </span><span class="si">{</span><span class="vm">__name__</span><span class="si">!r}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="fm">__dir__</span><span class="p">():</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">globals</span><span class="p">())</span> <span class="o">|</span> <span class="n">_LAZY</span><span class="p">)</span>
+<span class="c1"># file: units/length.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (loading units.length)"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">km</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">m</span> <span class="o">/</span> <span class="mi">1000</span>
+<span class="c1"># file: units/mass.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"    (loading units.mass)"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">kg</span><span class="p">(</span><span class="n">g</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">g</span> <span class="o">/</span> <span class="mi">1000</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">units</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loaded:"</span><span class="p">,</span> <span class="p">[</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"units.length"</span><span class="p">,</span> <span class="s2">"units.mass"</span><span class="p">)</span> <span class="k">if</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">kg</span><span class="p">(</span><span class="mi">2500</span><span class="p">))</span>
+<span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">caught</span><span class="p">:</span>
+    <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"always"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">metric</span><span class="o">.</span><span class="n">km</span><span class="p">(</span><span class="mi">1500</span><span class="p">),</span> <span class="n">units</span><span class="o">.</span><span class="n">metric</span> <span class="ow">is</span> <span class="n">units</span><span class="o">.</span><span class="n">length</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">caught</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">category</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"-"</span><span class="p">,</span> <span class="n">caught</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"loaded:"</span><span class="p">,</span> <span class="p">[</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"units.length"</span><span class="p">,</span> <span class="s2">"units.mass"</span><span class="p">)</span> <span class="k">if</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">])</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>loaded: []
+    (loading units.mass)
+2.5
+    (loading units.length)
+1.5 True
+DeprecationWarning - units.metric is deprecated; use units.length
+loaded: [&#x27;units.length&#x27;, &#x27;units.mass&#x27;]</pre></div></figure>
+
+<p>Deprecation warnings for moved or renamed attributes are the other use case that PEP 562 was designed for<sup class="cite">[<a href="#ref-12">12</a>]</sup>. Because <code>metric</code> is never stored in the module's globals, every access goes through <code>__getattr__</code> and warns.</p>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3 id="ex5">5. Accept only names you discovered<span class="lvl">Intermediate</span></h3>
+<p>A command-line tool runs <code>tool &lt;command&gt;</code>, where each command is a module in the package <code>tool.commands</code>. Write <code>load_command(name)</code> that imports only modules that <code>pkgutil.iter_modules()</code> actually found in that package, so that input such as <code>"os"</code>, <code>"..secrets"</code> or <code>"commands.greet.extra"</code> is rejected before any import happens.</p>
+<details><summary>Show solution</summary><div class="sol">
+
+<figure class="code"><div class="code-head"><span class="fname">ex5_safe_commands.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: tool/__init__.py</span>
+<span class="c1"># file: tool/commands/__init__.py</span>
+<span class="c1"># file: tool/commands/greet.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s2">"hello from greet"</span>
+<span class="c1"># file: tool/commands/version.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s2">"tool 1.0"</span>
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pkgutil</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">tool.commands</span>
+
+<span class="n">COMMANDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="n">info</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">pkgutil</span><span class="o">.</span><span class="n">iter_modules</span><span class="p">(</span><span class="n">tool</span><span class="o">.</span><span class="n">commands</span><span class="o">.</span><span class="n">__path__</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">info</span><span class="o">.</span><span class="n">ispkg</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">load_command</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">COMMANDS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"unknown command </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">; choose from </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">COMMANDS</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">tool</span><span class="o">.</span><span class="n">commands</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">for</span> <span class="n">user_input</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"greet"</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">,</span> <span class="s2">"os"</span><span class="p">,</span> <span class="s2">"..secrets"</span><span class="p">,</span> <span class="s2">"commands.greet.extra"</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">user_input</span><span class="si">!r:</span><span class="s2">24</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">load_command</span><span class="p">(</span><span class="n">user_input</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">user_input</span><span class="si">!r:</span><span class="s2">24</span><span class="si">}</span><span class="s2"> -&gt; rejected: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>&#x27;greet&#x27;                  -&gt; hello from greet
+&#x27;version&#x27;                -&gt; tool 1.0
+&#x27;os&#x27;                     -&gt; rejected: unknown command &#x27;os&#x27;; choose from [&#x27;greet&#x27;, &#x27;version&#x27;]
+&#x27;..secrets&#x27;              -&gt; rejected: unknown command &#x27;..secrets&#x27;; choose from [&#x27;greet&#x27;, &#x27;version&#x27;]
+&#x27;commands.greet.extra&#x27;   -&gt; rejected: unknown command &#x27;commands.greet.extra&#x27;; choose from [&#x27;greet&#x27;, &#x27;version&#x27;]</pre></div></figure>
+
+<p>This is the “indirect selection” mitigation from CWE-470: the user picks from a set the program built itself<sup class="cite">[<a href="#ref-17">17</a>]</sup>.</p>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3 id="ex6">6. An in-memory importer<span class="lvl">Advanced</span></h3>
+<p>Write a class that acts as both a meta path finder and a loader for modules whose source code is held in a dictionary. Append an instance to <code>sys.meta_path</code> so that a plain <code>import greetings</code> works even though no file exists. Make tracebacks name the virtual file.</p>
+<details><summary>Show solution</summary><div class="sol">
+
+<figure class="code"><div class="code-head"><span class="fname">ex6_memory_importer.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">importlib.abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DictImporter</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">MetaPathFinder</span><span class="p">,</span> <span class="n">importlib</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Loader</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sources</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sources</span> <span class="o">=</span> <span class="n">sources</span>
+
+    <span class="c1"># finder: return a spec, or None to let the next finder try</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">find_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fullname</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">fullname</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sources</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_loader</span><span class="p">(</span><span class="n">fullname</span><span class="p">,</span> <span class="bp">self</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="sa">f</span><span class="s2">"&lt;memory:</span><span class="si">{</span><span class="n">fullname</span><span class="si">}</span><span class="s2">&gt;"</span><span class="p">)</span>
+
+    <span class="c1"># loader: None means "use the default module object"</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spec</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">exec_module</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">):</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">__spec__</span><span class="o">.</span><span class="n">name</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sources</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">module</span><span class="o">.</span><span class="n">__spec__</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span> <span class="s2">"exec"</span><span class="p">)</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">module</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+
+
+<span class="n">sys</span><span class="o">.</span><span class="n">meta_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">DictImporter</span><span class="p">({</span>
+    <span class="s2">"greetings"</span><span class="p">:</span> <span class="s2">"def hello(who):</span><span class="se">\n</span><span class="s2">    return f'hello, </span><span class="si">{who}</span><span class="s2">'</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span>
+    <span class="s2">"faulty"</span><span class="p">:</span> <span class="s2">"x = 1</span><span class="se">\n</span><span class="s2">raise ValueError('bad line two')</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span>
+<span class="p">}))</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">greetings</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">greetings</span><span class="o">.</span><span class="n">hello</span><span class="p">(</span><span class="s2">"memory"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">greetings</span><span class="o">.</span><span class="n">__spec__</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">greetings</span><span class="o">.</span><span class="n">__spec__</span><span class="o">.</span><span class="n">loader</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">faulty</span>
+<span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">traceback</span><span class="o">.</span><span class="n">extract_tb</span><span class="p">(</span><span class="n">exc</span><span class="o">.</span><span class="n">__traceback__</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">  (file </span><span class="si">{</span><span class="n">frame</span><span class="o">.</span><span class="n">filename</span><span class="si">}</span><span class="s2">, line </span><span class="si">{</span><span class="n">frame</span><span class="o">.</span><span class="n">lineno</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"failed module left in sys.modules:"</span><span class="p">,</span> <span class="s2">"faulty"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>hello, memory
+&lt;memory:greetings&gt; DictImporter
+ValueError: bad line two  (file &lt;memory:faulty&gt;, line 2)
+failed module left in sys.modules: False</pre></div></figure>
+
+<p>The finder returns a <code>ModuleSpec</code> rather than a loader, which is the separation PEP 451 introduced<sup class="cite">[<a href="#ref-4">4</a>]</sup>. Because the finder is appended, the built-in, frozen and path based finders still get the first chance at every name<sup class="cite">[<a href="#ref-1">1</a>]</sup>.</p>
+</div></details>
+</div>
+</section>
+
+<section>
+<h2 id="references">References</h2>
+<ol class="refs">
+<li id="ref-1">Python Software Foundation. The Python language reference: 5. The import system [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/reference/import.html">https://docs.python.org/3/reference/import.html</a></li>
+<li id="ref-2">Python Software Foundation. The Python standard library: importlib — The implementation of import [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/importlib.html">https://docs.python.org/3/library/importlib.html</a></li>
+<li id="ref-3">Python Software Foundation. The Python standard library: sys — System-specific parameters and functions [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/sys.html">https://docs.python.org/3/library/sys.html</a></li>
+<li id="ref-4">Snow E. PEP 451 – A ModuleSpec type for the import system [Internet]. Python Software Foundation; 2013 Aug 8 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0451/">https://peps.python.org/pep-0451/</a></li>
+<li id="ref-5">van Rossum J, Moore P. PEP 302 – New import hooks [Internet]. Python Software Foundation; 2002 Dec 19 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0302/">https://peps.python.org/pep-0302/</a></li>
+<li id="ref-6">Python Software Foundation. Python setup and usage: 1. Command line and environment [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/using/cmdline.html">https://docs.python.org/3/using/cmdline.html</a></li>
+<li id="ref-7">Python Software Foundation. The Python standard library: The initialization of the sys.path module search path [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/sys_path_init.html">https://docs.python.org/3/library/sys_path_init.html</a></li>
+<li id="ref-8">Python Software Foundation. Python built-ins reference: Built-in functions [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/builtins/functions.html#import__">https://docs.python.org/3/builtins/functions.html#import__</a></li>
+<li id="ref-9">Python Packaging Authority. Entry points specification. In: Python Packaging User Guide [Internet]. Python Packaging Authority; c2013 [cited 2026 Oct 29]. Available from: <a href="https://packaging.python.org/en/latest/specifications/entry-points/">https://packaging.python.org/en/latest/specifications/entry-points/</a></li>
+<li id="ref-10">Python Software Foundation. The Python standard library: pkgutil — Package extension utility [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/pkgutil.html">https://docs.python.org/3/library/pkgutil.html</a></li>
+<li id="ref-11">Python Software Foundation. What&#x27;s new in Python 3.12 [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/whatsnew/3.12.html">https://docs.python.org/3/whatsnew/3.12.html</a></li>
+<li id="ref-12">Levkivskyi I. PEP 562 – Module __getattr__ and __dir__ [Internet]. Python Software Foundation; 2017 Sep 9 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0562/">https://peps.python.org/pep-0562/</a></li>
+<li id="ref-13">Galindo Salgado P, Méndez Bravo G, Wouters T, Viehland D, Reynoso B, Kim N, Stumbaugh T. PEP 810 – Explicit lazy imports [Internet]. Python Software Foundation; 2025 Oct 2 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0810/">https://peps.python.org/pep-0810/</a></li>
+<li id="ref-14">Python Packaging Authority. Creating and discovering plugins. In: Python Packaging User Guide [Internet]. Python Packaging Authority; c2013 [cited 2026 Oct 29]. Available from: <a href="https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/">https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/</a></li>
+<li id="ref-15">Python Software Foundation. The Python standard library: importlib.metadata — Accessing package metadata [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/importlib.metadata.html">https://docs.python.org/3/library/importlib.metadata.html</a></li>
+<li id="ref-16">Python Software Foundation. The Python standard library: importlib.resources — Package resource reading, opening and access [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/importlib.resources.html">https://docs.python.org/3/library/importlib.resources.html</a></li>
+<li id="ref-17">MITRE Corporation. CWE-470: Use of externally-controlled input to select classes or code (&#x27;unsafe reflection&#x27;). In: Common Weakness Enumeration [Internet]. Bedford (MA): MITRE Corporation; c2006 [cited 2026 Oct 29]. Available from: <a href="https://cwe.mitre.org/data/definitions/470.html">https://cwe.mitre.org/data/definitions/470.html</a></li>
+<li id="ref-18">MITRE Corporation. CWE-427: Uncontrolled search path element. In: Common Weakness Enumeration [Internet]. Bedford (MA): MITRE Corporation; c2006 [cited 2026 Oct 29]. Available from: <a href="https://cwe.mitre.org/data/definitions/427.html">https://cwe.mitre.org/data/definitions/427.html</a></li>
+<li id="ref-19">Python Software Foundation. The Python standard library: site — Site-specific configuration hook [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/site.html">https://docs.python.org/3/library/site.html</a></li>
+</ol>
+</section>
+<footer>
+<p>Citations follow the Vancouver system: sources are numbered in order of first citation, and the same number is reused for each later citation of that source. All URLs were checked on 29 October 2026. 31 of the 33 code examples were run on CPython 3.13.17; the 2 that use Python 3.15 syntax were run on CPython 3.15.0b4. Each output panel shows the program's real, unedited output.</p>
+</footer>
+</main>
+</div>
+<script>
+document.querySelectorAll("figure.code").forEach(function (fig) {
+  var btn = fig.querySelector(".copy");
+  var code = fig.querySelector("pre.src code");
+  btn.addEventListener("click", function () {
+    var text = code.innerText;
+    var done = function (msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "Copy"; }, 1600); };
+    var fallback = function () {
+      var range = document.createRange();
+      range.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      done("Selected");
+    };
+    try {
+      navigator.clipboard.writeText(text).then(function () { done("Copied"); }, fallback);
+    } catch (e) { fallback(); }
+  });
+});
+</script>
+
+<footer style="padding:1rem;font:400 .9rem/1.4 system-ui,-apple-system,Segoe UI,sans-serif">
+  <p>&copy; 2026 Nicholas Knapp. All rights reserved.</p>
+</footer>
+</body>
+</html>

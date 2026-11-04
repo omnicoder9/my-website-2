@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Python Introspection</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A technical guide to examining Python objects at runtime: type checks, dir and vars, docstrings, the inspect module, frames, annotations, sys and gc, and code objects, with tested examples, exercises with solutions and Vancouver-style references.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a reading column of ~68ch with a sticky contents rail on wide screens; code figures break slightly wider than the text. */
+:root {
+  --paper: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #18202b;
+  --muted: #566173;
+  --rule: #d8dde5;
+  --accent: #2a5ca8;
+  --accent-soft: #e3ebf7;
+  --marker: #b38600;
+  --marker-soft: #fbf1d3;
+  --code-bg: #eef1f5;
+  --out-bg: #f9fafb;
+  --err: #b42318;
+  --err-soft: #fdecea;
+  --hl-kw: #7b2fa8;
+  --hl-str: #2b7a30;
+  --hl-com: #6b7686;
+  --hl-num: #b0501a;
+  --hl-fn: #1f5fbf;
+  --hl-bi: #0b7480;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Literata", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f141b; --surface: #141b24; --ink: #e2e7ee; --muted: #9ba6b6; --rule: #273141;
+    --accent: #8ab2f2; --accent-soft: #1b2a40; --marker: #e3bd4c; --marker-soft: #2e2713;
+    --code-bg: #161e29; --out-bg: #121921; --err: #ff9b8f; --err-soft: #3a1c1a;
+    --hl-kw: #d2a8f5; --hl-str: #9ed699; --hl-com: #7f8b9c; --hl-num: #f2a46f; --hl-fn: #91b9ff; --hl-bi: #72d3dc;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f141b; --surface: #141b24; --ink: #e2e7ee; --muted: #9ba6b6; --rule: #273141;
+  --accent: #8ab2f2; --accent-soft: #1b2a40; --marker: #e3bd4c; --marker-soft: #2e2713;
+  --code-bg: #161e29; --out-bg: #121921; --err: #ff9b8f; --err-soft: #3a1c1a;
+  --hl-kw: #d2a8f5; --hl-str: #9ed699; --hl-com: #7f8b9c; --hl-num: #f2a46f; --hl-fn: #91b9ff; --hl-bi: #72d3dc;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 0.18em; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.page {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding-block: 3rem 5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+}
+.masthead { grid-area: head; max-width: 46rem; }
+.toc { grid-area: toc; }
+main { grid-area: main; }
+.page { grid-template-areas: "head" "toc" "main"; }
+@media (min-width: 1100px) {
+  .page { grid-template-columns: 14rem minmax(0, 1fr); grid-template-areas: "toc head" "toc main"; column-gap: 4rem; row-gap: 0; }
+  .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 2rem); align-self: start; max-height: calc(100vh - 4rem); overflow-y: auto; }
+}
+main { min-width: 0; max-width: 46rem; }
+
+/* Header */
+.masthead { display: grid; gap: 1rem; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); margin-bottom: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; color: var(--ink); }
+h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 700; margin: 0; letter-spacing: -0.015em; }
+h1 code { font-family: inherit; }
+.standfirst { font-size: 1.2rem; color: var(--muted); margin: 0; max-width: 40rem; }
+.keywords { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0; padding: 0; list-style: none; }
+.keywords li { font-family: var(--font-mono); font-size: 0.875rem; padding: 0.25rem 0.6rem; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.keywords li span { color: var(--muted); font-size: 0.75rem; margin-left: 0.35rem; }
+.meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); margin: 0; }
+
+h2 { font-size: 1.75rem; font-weight: 700; margin: 3.5rem 0 1rem; scroll-margin-top: 1.5rem; }
+h2 .num { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 400; color: var(--marker); margin-right: 0.6rem; vertical-align: 0.25em; }
+h3 { font-size: 1.25rem; font-weight: 500; margin: 2.25rem 0 0.75rem; scroll-margin-top: 1.5rem; }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin-bottom: 0.35rem; }
+li > ul { margin-top: 0.35rem; }
+:not(pre) > code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.08em 0.32em; border-radius: 3px; overflow-wrap: anywhere; }
+strong { font-weight: 600; }
+
+sup.cite { font-family: var(--font-mono); font-size: 0.68em; line-height: 0; margin-left: 0.1em; }
+sup.cite a { text-decoration: none; }
+sup.cite a:hover { text-decoration: underline; }
+
+/* Contents */
+.toc { font-family: var(--font-display); font-size: 0.92rem; }
+.toc h2 { font-size: 0.75rem; font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.75rem; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; counter-reset: toc; }
+.toc li { margin: 0; }
+.toc a { display: block; padding: 0.3rem 0.6rem; border-left: 2px solid var(--rule); color: var(--muted); text-decoration: none; }
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+@media (max-width: 1099px) {
+  .toc { border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.25rem; background: var(--surface); }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+}
+
+/* Code */
+figure { margin: 1.5rem 0; }
+figure.code { border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+.code-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem 0.45rem 0.9rem; border-bottom: 1px solid var(--rule); font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+.fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { padding: 0.1rem 0.45rem; border-radius: 3px; background: var(--marker-soft); color: var(--marker); font-weight: 600; }
+.copy { font: inherit; color: var(--muted); background: transparent; border: 1px solid var(--rule); border-radius: 4px; padding: 0.15rem 0.55rem; cursor: pointer; }
+.copy:hover { color: var(--ink); border-color: var(--muted); }
+pre { margin: 0; overflow-x: auto; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.6; tab-size: 4; }
+pre.src { padding: 0.9rem 1rem; }
+.out { border-top: 1px dashed var(--rule); background: var(--out-bg); padding: 0.6rem 1rem 0.8rem; }
+.out-label { display: block; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+.out pre { color: var(--ink); }
+.out-error { background: var(--err-soft); }
+.out-error .out-label, .out-error pre { color: var(--err); }
+
+.grammar { border-left: 3px solid var(--marker); background: var(--surface); padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; }
+.grammar figcaption { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+.grammar pre { font-size: 0.82rem; }
+
+code, pre { font-variant-ligatures: none; }
+td:nth-child(2) code { white-space: nowrap; }
+/* Pygments tokens */
+.src .k, .src .kn, .src .kd, .src .kr, .src .ow, .src .kp { color: var(--hl-kw); font-weight: 600; }
+.src .kc { color: var(--hl-num); font-weight: 600; }
+.src .s, .src .s1, .src .s2, .src .sa, .src .sb, .src .sd, .src .sr, .src .sc { color: var(--hl-str); }
+.src .si, .src .se { color: var(--hl-num); }
+.src .c, .src .c1, .src .ch, .src .cm { color: var(--hl-com); font-style: italic; }
+.src .m, .src .mi, .src .mf { color: var(--hl-num); }
+.src .nf, .src .nc, .src .fm, .src .nd { color: var(--hl-fn); }
+.src .nb, .src .bp, .src .ne { color: var(--hl-bi); }
+.src .nn { color: var(--ink); }
+.src .o, .src .p { color: var(--muted); }
+
+/* Callouts and tables */
+.note { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.15rem; margin: 1.5rem 0; }
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+.note .note-title { display: block; font-family: var(--font-display); font-weight: 700; margin-bottom: 0.35rem; }
+.note.warn { border-color: var(--marker); background: var(--marker-soft); }
+.table-wrap { overflow-x: auto; margin: 1.5rem 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; background: var(--code-bg); }
+
+/* Exercises */
+.exercise { border-top: 1px solid var(--rule); padding-top: 1.25rem; margin-top: 2rem; }
+.exercise h3 { margin-top: 0; }
+.exercise h3 .lvl { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 0.1rem 0.4rem; margin-left: 0.5rem; vertical-align: 0.2em; }
+details { border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); margin: 1rem 0; }
+summary { cursor: pointer; padding: 0.6rem 0.9rem; font-family: var(--font-display); font-weight: 500; color: var(--accent); }
+details[open] summary { border-bottom: 1px solid var(--rule); }
+details > .sol { padding: 0.25rem 1rem 0.5rem; }
+
+/* References */
+.refs { font-size: 0.93rem; padding-left: 2rem; }
+.refs li { margin-bottom: 0.7rem; padding-left: 0.25rem; scroll-margin-top: 1.5rem; }
+.refs li:target { background: var(--marker-soft); border-radius: 3px; }
+.refs a { overflow-wrap: anywhere; }
+footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); font-size: 0.88rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<nav aria-label="Site navigation" style="position:relative;display:flex;gap:1rem;align-items:center;padding:.8rem 1rem;margin:0;background:#111827;color:#f9fafb;font:600 0.9rem/1.2 system-ui,-apple-system,Segoe UI,sans-serif">
+  <a href="../../../index.html" style="color:#f9fafb;text-decoration:none">Home</a>
+  <a href="../../../blog.html" style="color:#f9fafb;text-decoration:none">Blog</a>
+</nav>
+
+<div class="page">
+<header class="masthead">
+<p class="eyebrow">Python fundamentals · Introspection</p>
+<h1>Introspection in Python</h1>
+<p class="standfirst">Every Python object can tell you what it is, where it came from and what it can do. This article shows how to ask: from <code>type()</code> and <code>dir()</code> through the <code>inspect</code> module, stack frames, type hints, memory and garbage-collector queries, to the code objects behind every function.</p>
+<ul class="keywords" aria-label="Topics covered">
+<li>type · isinstance<span>classes</span></li><li>dir · vars<span>attributes</span></li><li>help · __doc__<span>docs</span></li><li>inspect<span>signatures, source</span></li><li>frames<span>call stack</span></li><li>annotations<span>type hints</span></li><li>sys · gc<span>runtime</span></li><li>__code__<span>code objects</span></li>
+</ul>
+<p class="meta">Every example was run on CPython 3.13.17 and its real output is shown beneath it · References accessed 29 October 2026</p>
+</header>
+<nav class="toc" aria-label="Contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#types">Types, classes and the MRO</a></li>
+<li><a href="#attributes">Attributes: dir, vars and __dict__</a></li>
+<li><a href="#docs">Docstrings and help</a></li>
+<li><a href="#identity">Identity and callability</a></li>
+<li><a href="#inspect">The inspect module</a></li>
+<li><a href="#frames">Frames and the call stack</a></li>
+<li><a href="#annotations">Annotations and type hints</a></li>
+<li><a href="#runtime">sys and gc: the running interpreter</a></li>
+<li><a href="#code">Code objects and dis</a></li>
+<li><a href="#pitfalls">Pitfalls</a></li>
+<li><a href="#exercises">Exercises</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+<main>
+
+<section>
+<h2 id="overview"><span class="num">1</span>Overview</h2>
+<p><strong>Introspection</strong> is a program examining its own objects while it runs: asking an object for its type, its attributes, its documentation, the parameters it accepts or the source code that defined it. Python supports this unusually well because almost everything is an ordinary object. Classes, functions, modules, stack frames and compiled code all carry their metadata as attributes you can read<sup class="cite">[<a href="#ref-1">1</a>]</sup>, and functions in particular are first-class objects whose attributes describe their own parameters, defaults and code<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+<p>The standard library has three layers of tools for this. The built-in functions <code>type()</code>, <code>isinstance()</code>, <code>dir()</code>, <code>vars()</code>, <code>id()</code>, <code>callable()</code> and <code>help()</code> answer quick questions<sup class="cite">[<a href="#ref-3">3</a>]</sup>. The <code>inspect</code> module "provides several useful functions to help get information about live objects such as modules, classes, methods, functions, tracebacks, frame objects, and code objects"<sup class="cite">[<a href="#ref-4">4</a>]</sup>. The <code>sys</code> and <code>gc</code> modules expose the interpreter itself: loaded modules, object sizes and the garbage collector's reference graph<sup class="cite">[<a href="#ref-5">5</a>,<a href="#ref-6">6</a>]</sup>.</p>
+<div class="note">
+<span class="note-title">Introspection versus reflection</span>
+<p>This article is about <em>looking</em>: every technique here reads an object without changing it. Acting on what you find, such as fetching or setting attributes by a computed name, building classes at run time or dispatching on a type, is usually called reflection and is covered in the companion article on reflection. The line is blurry (for example, <code>getattr()</code> is both), so section 3 also shows how some "read-only" questions can quietly run code.</p>
+</div>
+<p>The article assumes you can write functions and classes. Sections 2 to 5 cover the built-ins, sections 6 and 7 the <code>inspect</code> module and the call stack, section 8 type hints, section 9 <code>sys</code> and <code>gc</code>, and section 10 gives a short tour of code objects. Section 11 collects the pitfalls, and section 12 has seven exercises with tested solutions.</p>
+</section>
+
+<section>
+<h2 id="types"><span class="num">2</span>Types, classes and the MRO</h2>
+<h3>type(), isinstance() and issubclass()</h3>
+<p>With one argument, <code>type(obj)</code> returns the object's type, which is the same object as <code>obj.__class__</code><sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-3">3</a>]</sup>. The documentation recommends <code>isinstance()</code> for testing a type, "because it takes subclasses into account"<sup class="cite">[<a href="#ref-3">3</a>]</sup>. <code>isinstance()</code> returns <code>True</code> for an instance of the class or of "a (direct, indirect, or virtual) subclass thereof", and it accepts a tuple of classes or a union type such as <code>int | str</code><sup class="cite">[<a href="#ref-3">3</a>]</sup>. <code>issubclass()</code> asks the same question about classes, and "a class is considered a subclass of itself"<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">types_basics.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Animal</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Dog</span><span class="p">(</span><span class="n">Animal</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="n">rex</span> <span class="o">=</span> <span class="n">Dog</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">rex</span><span class="p">),</span> <span class="nb">type</span><span class="p">(</span><span class="n">rex</span><span class="p">)</span> <span class="ow">is</span> <span class="n">Animal</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">rex</span><span class="p">,</span> <span class="n">Animal</span><span class="p">),</span> <span class="nb">isinstance</span><span class="p">(</span><span class="mf">3.5</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)),</span> <span class="nb">isinstance</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">issubclass</span><span class="p">(</span><span class="n">Dog</span><span class="p">,</span> <span class="n">Animal</span><span class="p">),</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">Dog</span><span class="p">,</span> <span class="n">Dog</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">rex</span><span class="o">.</span><span class="vm">__class__</span> <span class="ow">is</span> <span class="nb">type</span><span class="p">(</span><span class="n">rex</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">Dog</span><span class="p">),</span> <span class="nb">type</span><span class="p">(</span><span class="nb">type</span><span class="p">))</span>           <span class="c1"># classes are objects too</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="nb">int</span><span class="p">),</span> <span class="nb">type</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">int</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>&lt;class &#x27;__main__.Dog&#x27;&gt; False
+True True True
+True True
+True
+&lt;class &#x27;type&#x27;&gt; &lt;class &#x27;type&#x27;&gt;
+True False</pre></div></figure>
+<p>The last line is worth remembering: <code>bool</code> is a subclass of <code>int</code>, so <code>isinstance(True, int)</code> is true while an exact <code>type(...) is int</code> check is not. Choose the exact check only when you really mean "this class and no subclass".</p>
+
+<h3>Virtual subclasses</h3>
+<p>The word <em>virtual</em> in the <code>isinstance()</code> definition refers to abstract base classes. An ABC can claim classes that do not inherit from it, either by explicit registration with <code>register()</code> or through a <code>__subclasshook__()</code> method<sup class="cite">[<a href="#ref-7">7</a>,<a href="#ref-8">8</a>]</sup>. Several ABCs in <code>collections.abc</code> use such a hook to recognise any class that defines the required methods, so a class with <code>__len__()</code> counts as <code>Sized</code><sup class="cite">[<a href="#ref-9">9</a>]</sup>. A virtual subclass does not appear in the class's MRO, which the next example confirms.</p>
+<figure class="code"><div class="code-head"><span class="fname">virtual_subclass.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Sized</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Box</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="nb">issubclass</span><span class="p">(</span><span class="n">Box</span><span class="p">,</span> <span class="n">Sized</span><span class="p">),</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">Box</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">Sized</span> <span class="ow">in</span> <span class="n">Box</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Plugin</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="n">Plugin</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">Plugin</span><span class="p">),</span> <span class="nb">issubclass</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">Plugin</span><span class="p">),</span> <span class="n">Plugin</span> <span class="ow">in</span> <span class="nb">int</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>True False
+False
+True True False</pre></div></figure>
+
+<h3>__mro__: the method resolution order</h3>
+<p>Every class has a <code>__mro__</code> attribute, "the tuple of classes that are considered when looking for base classes during method resolution", and a <code>mro()</code> method whose result is stored there<sup class="cite">[<a href="#ref-1">1</a>]</sup>. Python computes it with the C3 linearisation, which "behaves correctly even in the presence of 'diamond' inheritance"<sup class="cite">[<a href="#ref-1">1</a>]</sup>. C3 was designed for the Dylan language<sup class="cite">[<a href="#ref-10">10</a>]</sup> and adopted in Python 2.3; it keeps each class's listed parents in order and is <em>monotonic</em>: if C1 precedes C2 in the linearisation of C, it precedes C2 in the linearisation of every subclass of C<sup class="cite">[<a href="#ref-11">11</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">mro_diamond.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">A</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hello</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"A"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">B</span><span class="p">(</span><span class="n">A</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hello</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"B"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">C</span><span class="p">(</span><span class="n">A</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hello</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"C"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">D</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="nb">print</span><span class="p">([</span><span class="n">k</span><span class="o">.</span><span class="vm">__name__</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">D</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">D</span><span class="p">()</span><span class="o">.</span><span class="n">hello</span><span class="p">())</span>                       <span class="c1"># first match in the MRO wins</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="n">mro</span><span class="p">()</span> <span class="o">==</span> <span class="nb">list</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">D</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">,</span> <span class="n">D</span><span class="o">.</span><span class="n">__base__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>[&#x27;D&#x27;, &#x27;B&#x27;, &#x27;C&#x27;, &#x27;A&#x27;, &#x27;object&#x27;]
+B
+True
+(&lt;class &#x27;__main__.B&#x27;&gt;, &lt;class &#x27;__main__.C&#x27;&gt;) B</pre></div></figure>
+<p>When no order satisfies both rules, class creation fails, and that refusal is itself useful introspection: it tells you the hierarchy is contradictory.</p>
+<figure class="code"><div class="code-head"><span class="fname">mro_conflict.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">X</span><span class="p">:</span> <span class="k">pass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Y</span><span class="p">:</span> <span class="k">pass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">P</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">):</span> <span class="k">pass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Q</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span> <span class="k">pass</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Z</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">Q</span><span class="p">):</span>          <span class="c1"># P wants X before Y, Q wants Y before X</span>
+    <span class="k">pass</span></code></pre><div class="out out-error"><span class="out-label">Raises</span><pre>TypeError: Cannot create a consistent method resolution order (MRO) for bases X, Y</pre></div></figure>
+</section>
+
+<section>
+<h2 id="attributes"><span class="num">3</span>Attributes: dir, vars and __dict__</h2>
+<p><code>dir(obj)</code> attempts "to return a list of valid attributes for that object", and without an argument it lists the names in the current local scope<sup class="cite">[<a href="#ref-3">3</a>]</sup>. <code>vars(obj)</code> returns the object's <code>__dict__</code>, the mapping that stores its writable attributes<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-3">3</a>]</sup>. The two answer different questions: <code>vars()</code> shows only what is stored on that object, while <code>dir()</code> also walks the class and its bases.</p>
+<figure class="code"><div class="code-head"><span class="fname">dir_vars.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Point</span><span class="p">:</span>
+    <span class="n">dims</span> <span class="o">=</span> <span class="mi">2</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">norm</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mf">0.5</span>
+
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">p</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="ow">is</span> <span class="n">p</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"__"</span><span class="p">)])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"dims"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="s2">"dims"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">Point</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">Point</span><span class="p">))</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>        <span class="c1"># class namespaces are read-only proxies</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">dir</span><span class="p">(</span><span class="n">p</span><span class="p">)),</span> <span class="nb">len</span><span class="p">(</span><span class="nb">dir</span><span class="p">(</span><span class="nb">object</span><span class="p">)))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&#x27;x&#x27;: 3, &#x27;y&#x27;: 4}
+True
+[&#x27;dims&#x27;, &#x27;norm&#x27;, &#x27;x&#x27;, &#x27;y&#x27;]
+False True
+mappingproxy
+33 24</pre></div></figure>
+<p>The documentation is frank about what <code>dir()</code> is for: "Because <code>dir()</code> is supplied primarily as a convenience for use at an interactive prompt, it tries to supply an interesting set of names more than it tries to supply a rigorously or consistently defined set of names, and its detailed behavior may change across releases"<sup class="cite">[<a href="#ref-3">3</a>]</sup>. A class can also define <code>__dir__()</code> to return whatever list it likes<sup class="cite">[<a href="#ref-3">3</a>]</sup>. Treat <code>dir()</code> as a hint, not a contract. Attributes produced on demand by <code>__getattr__()</code> never show up in it:</p>
+<figure class="code"><div class="code-head"><span class="fname">dir_dynamic.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>        <span class="c1"># called only when normal lookup fails</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"cfg_"</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">name</span><span class="p">[</span><span class="mi">4</span><span class="p">:]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="n">s</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">cfg_port</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"cfg_port"</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">s</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>PORT
+False</pre></div></figure>
+
+<h3>Objects without a __dict__</h3>
+<p>Not every object has a <code>__dict__</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>. A class that declares <code>__slots__</code> reserves fixed storage for the listed names and prevents the creation of a per-instance dictionary, and <code>vars()</code> raises <code>TypeError</code> for an object without one<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-3">3</a>]</sup>. Built-in values such as integers have none either. <code>dir()</code> still works, because the slots are descriptors on the class.</p>
+<figure class="code"><div class="code-head"><span class="fname">slots.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Pixel</span><span class="p">:</span>
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span>
+
+
+<span class="n">px</span> <span class="o">=</span> <span class="n">Pixel</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">px</span><span class="p">,</span> <span class="s2">"__dict__"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">([</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">px</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"__"</span><span class="p">)])</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">Pixel</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">"x"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="nb">vars</span><span class="p">(</span><span class="n">px</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>False
+[&#x27;x&#x27;, &#x27;y&#x27;]
+member_descriptor</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>TypeError: vars() argument must have __dict__ attribute</pre></div></figure>
+
+<h3>Looking can run code</h3>
+<p><code>hasattr(obj, name)</code> "is implemented by calling <code>getattr(object, name)</code> and seeing whether it raises an <code>AttributeError</code> or not"<sup class="cite">[<a href="#ref-3">3</a>]</sup>. That means it runs properties, <code>__getattr__()</code> and any other descriptor, with all their side effects. When you only want to know what is there, <code>inspect.getattr_static()</code> retrieves attributes "without triggering dynamic lookup via the descriptor protocol, <code>__getattr__()</code> or <code>__getattribute__()</code>", and <code>inspect.getmembers_static()</code> (Python 3.11+) does the same for a whole object<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">static_lookup.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Sensor</span><span class="p">:</span>
+    <span class="n">reads</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">value</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">Sensor</span><span class="o">.</span><span class="n">reads</span> <span class="o">+=</span> <span class="mi">1</span>                 <span class="c1"># a side effect on every read</span>
+        <span class="k">return</span> <span class="mi">42</span>
+
+
+<span class="n">s</span> <span class="o">=</span> <span class="n">Sensor</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">),</span> <span class="s2">"reads:"</span><span class="p">,</span> <span class="n">Sensor</span><span class="o">.</span><span class="n">reads</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">),</span> <span class="s2">"reads:"</span><span class="p">,</span> <span class="n">Sensor</span><span class="o">.</span><span class="n">reads</span><span class="p">)</span>
+<span class="n">raw</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getattr_static</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"reads:"</span><span class="p">,</span> <span class="n">Sensor</span><span class="o">.</span><span class="n">reads</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers_static</span><span class="p">(</span><span class="n">Sensor</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"__"</span><span class="p">)])</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>True reads: 1
+True reads: 2
+property reads: 2
+[&#x27;reads&#x27;, &#x27;value&#x27;]</pre></div></figure>
+</section>
+
+<section>
+<h2 id="docs"><span class="num">4</span>Docstrings and help</h2>
+<p>A docstring is "a string literal that occurs as the first statement in a module, function, class, or method definition", and it becomes the object's <code>__doc__</code> attribute<sup class="cite">[<a href="#ref-12">12</a>]</sup>. <code>inspect.getdoc()</code> returns the docstring "cleaned up with <code>cleandoc()</code>", which removes the indentation that lines up with the surrounding code<sup class="cite">[<a href="#ref-4">4</a>]</sup>. Since Python 3.13 the compiler itself strips the common leading whitespace from docstrings, which shrinks the bytecode cache<sup class="cite">[<a href="#ref-13">13</a>]</sup>, so on 3.13 <code>__doc__</code> and <code>getdoc()</code> usually agree. <code>help()</code> is "intended for interactive use" and pages its output<sup class="cite">[<a href="#ref-3">3</a>]</sup>; the <code>pydoc</code> module that powers it can render the same text to a string<sup class="cite">[<a href="#ref-14">14</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">docstrings.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pydoc</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">area</span><span class="p">(</span><span class="n">r</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Return the area of a circle.</span>
+
+<span class="sd">        r -- radius in metres</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="mf">3.14159</span> <span class="o">*</span> <span class="n">r</span> <span class="o">*</span> <span class="n">r</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">area</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">area</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"---"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pydoc</span><span class="o">.</span><span class="n">render_doc</span><span class="p">(</span><span class="n">area</span><span class="p">,</span> <span class="n">renderer</span><span class="o">=</span><span class="n">pydoc</span><span class="o">.</span><span class="n">plaintext</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>&#x27;Return the area of a circle.\n\nr -- radius in metres\n&#x27;
+Return the area of a circle.
+
+r -- radius in metres
+---
+Python Library Documentation: function area in module __main__
+
+area(r)
+    Return the area of a circle.
+
+    r -- radius in metres</pre></div></figure>
+<p>Do not rely on docstrings being present at run time. Running Python with <code>-OO</code> discards them<sup class="cite">[<a href="#ref-15">15</a>]</sup>, and code that reads <code>__doc__</code> to build, say, a command-line help screen will then see <code>None</code>.</p>
+<figure class="code"><div class="code-head"><span class="fname">docstrings_oo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">code</span> <span class="o">=</span> <span class="s1">'def f():</span><span class="se">\n</span><span class="s1">    "Say hi."</span><span class="se">\n</span><span class="s1">print(repr(f.__doc__))'</span>
+<span class="k">for</span> <span class="n">flags</span> <span class="ow">in</span> <span class="p">([],</span> <span class="p">[</span><span class="s2">"-OO"</span><span class="p">]):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">,</span> <span class="o">*</span><span class="n">flags</span><span class="p">,</span> <span class="s2">"-c"</span><span class="p">,</span> <span class="n">code</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">flags</span> <span class="ow">or</span> <span class="s2">"default"</span><span class="p">,</span> <span class="n">out</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>default &#x27;Say hi.&#x27;
+[&#x27;-OO&#x27;] None</pre></div></figure>
+</section>
+
+<section>
+<h2 id="identity"><span class="num">5</span>Identity and callability</h2>
+<p><code>id(obj)</code> returns an integer "guaranteed to be unique and constant for this object during its lifetime"; in CPython it is the object's memory address<sup class="cite">[<a href="#ref-3">3</a>]</sup>. The guarantee covers only overlapping lifetimes: "Two objects with non-overlapping lifetimes may have the same <code>id()</code> value"<sup class="cite">[<a href="#ref-3">3</a>]</sup>. Use <code>is</code> to compare identity, and never store an <code>id()</code> as a key for an object that may be freed.</p>
+<p><code>sys.getrefcount()</code> reports how many references point at an object; the number "is generally one higher than you might expect" because the call's own argument counts<sup class="cite">[<a href="#ref-5">5</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">identity.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">a</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+<span class="n">b</span> <span class="o">=</span> <span class="n">a</span>
+<span class="n">c</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">a</span> <span class="ow">is</span> <span class="n">b</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">==</span> <span class="nb">id</span><span class="p">(</span><span class="n">b</span><span class="p">),</span> <span class="n">a</span> <span class="o">==</span> <span class="n">c</span><span class="p">,</span> <span class="n">a</span> <span class="ow">is</span> <span class="n">c</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="nb">id</span><span class="p">([])</span> <span class="o">==</span> <span class="nb">id</span><span class="p">([]))</span>        <span class="c1"># two short-lived lists can share an address</span>
+
+<span class="n">token</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+<span class="n">before</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getrefcount</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+<span class="n">alias</span> <span class="o">=</span> <span class="n">token</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">before</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">getrefcount</span><span class="p">(</span><span class="n">token</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>True True True False
+True
+2 3</pre></div></figure>
+<p><code>callable(obj)</code> tells you whether an object can be called. "If this returns <code>True</code>, it is still possible that a call fails, but if it is <code>False</code>, calling <em>object</em> will never succeed"; classes are callable, and instances are callable when their class has a <code>__call__()</code> method<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">callable_check.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Greeter</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"hi </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Liar</span><span class="p">:</span>
+    <span class="fm">__call__</span> <span class="o">=</span> <span class="mi">5</span>                         <span class="c1"># present, but not a function</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="nb">callable</span><span class="p">(</span><span class="nb">len</span><span class="p">),</span> <span class="nb">callable</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span> <span class="nb">callable</span><span class="p">(</span><span class="s2">"text"</span><span class="p">),</span> <span class="nb">callable</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="mi">0</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">callable</span><span class="p">(</span><span class="n">Greeter</span><span class="p">),</span> <span class="nb">callable</span><span class="p">(</span><span class="n">Greeter</span><span class="p">()),</span> <span class="nb">callable</span><span class="p">(</span><span class="n">Liar</span><span class="p">()))</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">Liar</span><span class="p">()()</span>
+<span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>True True False True
+True True True
+TypeError: &#x27;int&#x27; object is not callable</pre></div></figure>
+</section>
+
+<section>
+<h2 id="inspect"><span class="num">6</span>The inspect module</h2>
+<h3>Predicates: what kind of object is this?</h3>
+<p><code>inspect</code> offers a family of <code>is*()</code> predicates. <code>isfunction()</code> is true for "a Python function, which includes functions created by a lambda expression"; <code>ismethod()</code> for "a bound method written in Python"; <code>isbuiltin()</code> for "a built-in function or a bound built-in method"; <code>isclass()</code> for any class; and <code>isgeneratorfunction()</code> and <code>iscoroutinefunction()</code> for <code>def</code>-with-<code>yield</code> and <code>async def</code> functions<sup class="cite">[<a href="#ref-4">4</a>]</sup>. <code>isroutine()</code> accepts any of the function or method kinds<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">predicates.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plain</span><span class="p">():</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">gen</span><span class="p">():</span>
+    <span class="k">yield</span> <span class="mi">1</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">coro</span><span class="p">():</span>
+    <span class="k">pass</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">K</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">method</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">static</span><span class="p">():</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">klass</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+
+<span class="n">tests</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"isfunction"</span><span class="p">,</span> <span class="s2">"ismethod"</span><span class="p">,</span> <span class="s2">"isbuiltin"</span><span class="p">,</span> <span class="s2">"isclass"</span><span class="p">,</span> <span class="s2">"isgeneratorfunction"</span><span class="p">,</span>
+         <span class="s2">"iscoroutinefunction"</span><span class="p">,</span> <span class="s2">"isroutine"</span><span class="p">]</span>
+<span class="n">objects</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"plain"</span><span class="p">:</span> <span class="n">plain</span><span class="p">,</span> <span class="s2">"lambda"</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"gen"</span><span class="p">:</span> <span class="n">gen</span><span class="p">,</span> <span class="s2">"coro"</span><span class="p">:</span> <span class="n">coro</span><span class="p">,</span> <span class="s2">"K"</span><span class="p">:</span> <span class="n">K</span><span class="p">,</span>
+           <span class="s2">"K.method"</span><span class="p">:</span> <span class="n">K</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="s2">"K().method"</span><span class="p">:</span> <span class="n">K</span><span class="p">()</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="s2">"K.static"</span><span class="p">:</span> <span class="n">K</span><span class="o">.</span><span class="n">static</span><span class="p">,</span>
+           <span class="s2">"K.klass"</span><span class="p">:</span> <span class="n">K</span><span class="o">.</span><span class="n">klass</span><span class="p">,</span> <span class="s2">"len"</span><span class="p">:</span> <span class="nb">len</span><span class="p">,</span> <span class="s2">"[].append"</span><span class="p">:</span> <span class="p">[]</span><span class="o">.</span><span class="n">append</span><span class="p">}</span>
+<span class="n">short</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"func"</span><span class="p">,</span> <span class="s2">"method"</span><span class="p">,</span> <span class="s2">"builtin"</span><span class="p">,</span> <span class="s2">"class"</span><span class="p">,</span> <span class="s2">"genfunc"</span><span class="p">,</span> <span class="s2">"corofunc"</span><span class="p">,</span> <span class="s2">"routine"</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">''</span><span class="si">:</span><span class="s2">12</span><span class="si">}</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">short</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">objects</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">flags</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"yes"</span> <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">inspect</span><span class="p">,</span> <span class="n">t</span><span class="p">)(</span><span class="n">obj</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"."</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tests</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s2">12</span><span class="si">}</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">flags</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>            func      method    builtin   class     genfunc   corofunc  routine  
+plain       yes       .         .         .         .         .         yes      
+lambda      yes       .         .         .         .         .         yes      
+gen         yes       .         .         .         yes       .         yes      
+coro        yes       .         .         .         .         yes       yes      
+K           .         .         .         yes       .         .         .        
+K.method    yes       .         .         .         .         .         yes      
+K().method  .         yes       .         .         .         .         yes      
+K.static    yes       .         .         .         .         .         yes      
+K.klass     .         yes       .         .         .         .         yes      
+len         .         .         yes       .         .         .         yes      
+[].append   .         .         yes       .         .         .         yes</pre></div></figure>
+<p>Two rows surprise people. <code>K.method</code> accessed on the class is a plain function, not a method; it only becomes a bound method when accessed on an instance. And <code>K.klass</code> is a method even on the class, because <code>classmethod</code> binds to the class.</p>
+
+<h3>getmembers()</h3>
+<p><code>inspect.getmembers(obj, predicate)</code> returns "all the members of an object in a list of <code>(name, value)</code> pairs sorted by name", filtered by the optional predicate<sup class="cite">[<a href="#ref-4">4</a>]</sup>. Combined with a predicate and the <code>__module__</code> attribute that every function records<sup class="cite">[<a href="#ref-1">1</a>]</sup>, it answers questions such as "which functions does this module define, as opposed to import?"</p>
+<figure class="code"><div class="code-head"><span class="fname">getmembers_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+<span class="n">funcs</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers</span><span class="p">(</span><span class="n">json</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">funcs</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">f</span><span class="o">.</span><span class="vm">__module__</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">funcs</span><span class="p">})</span>
+<span class="n">classes</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers</span><span class="p">(</span><span class="n">json</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([(</span><span class="n">name</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">])</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>[&#x27;detect_encoding&#x27;, &#x27;dump&#x27;, &#x27;dumps&#x27;, &#x27;load&#x27;, &#x27;loads&#x27;]
+{&#x27;detect_encoding&#x27;: &#x27;json&#x27;, &#x27;dump&#x27;: &#x27;json&#x27;, &#x27;dumps&#x27;: &#x27;json&#x27;, &#x27;load&#x27;: &#x27;json&#x27;, &#x27;loads&#x27;: &#x27;json&#x27;}
+[(&#x27;JSONDecodeError&#x27;, &#x27;json.decoder&#x27;), (&#x27;JSONDecoder&#x27;, &#x27;json.decoder&#x27;), (&#x27;JSONEncoder&#x27;, &#x27;json.encoder&#x27;)]</pre></div></figure>
+
+<h3>signature(): parameters as data</h3>
+<p><code>inspect.signature()</code> returns a <code>Signature</code> object for a callable and raises <code>ValueError</code> when no signature can be provided<sup class="cite">[<a href="#ref-4">4</a>]</sup>. It was introduced by PEP 362 as a single, complete description of a function's parameters<sup class="cite">[<a href="#ref-16">16</a>]</sup>. Each <code>Parameter</code> has a name, a default, an annotation and a <em>kind</em>: <code>POSITIONAL_ONLY</code>, <code>POSITIONAL_OR_KEYWORD</code>, <code>VAR_POSITIONAL</code>, <code>KEYWORD_ONLY</code> or <code>VAR_KEYWORD</code><sup class="cite">[<a href="#ref-4">4</a>]</sup>. The older <code>getfullargspec()</code> is "retained primarily for use in code that needs to maintain compatibility with the Python 2 <code>inspect</code> module API"; <code>signature()</code> is the recommended API<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">signature_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">connect</span><span class="p">(</span><span class="n">dsn</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="s2">"admin"</span><span class="p">,</span> <span class="o">*</span><span class="n">hosts</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span> <span class="n">retries</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">connect</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sig</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+    <span class="n">default</span> <span class="o">=</span> <span class="s2">"(required)"</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="n">p</span><span class="o">.</span><span class="n">empty</span> <span class="k">else</span> <span class="nb">repr</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="si">:</span><span class="s2">&lt;8</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">p</span><span class="o">.</span><span class="n">kind</span><span class="o">.</span><span class="n">name</span><span class="si">:</span><span class="s2">&lt;22</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">return_annotation</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>(dsn, /, user=&#x27;admin&#x27;, *hosts, timeout: float = 3.0, retries: int = 2, **options) -&gt; bool
+  dsn      POSITIONAL_ONLY        (required)
+  user     POSITIONAL_OR_KEYWORD  &#x27;admin&#x27;
+  hosts    VAR_POSITIONAL         (required)
+  timeout  KEYWORD_ONLY           3.0
+  retries  KEYWORD_ONLY           2
+  options  VAR_KEYWORD            (required)
+&lt;class &#x27;bool&#x27;&gt;</pre></div></figure>
+<p><code>Signature.bind()</code> maps a set of arguments onto the parameters exactly as a call would, returning a <code>BoundArguments</code> object or raising <code>TypeError</code>; <code>apply_defaults()</code> fills in the parameters that were not passed<sup class="cite">[<a href="#ref-4">4</a>]</sup>. This lets you check or log a call without making it.</p>
+<figure class="code"><div class="code-head"><span class="fname">bind_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">connect</span><span class="p">(</span><span class="n">dsn</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="s2">"admin"</span><span class="p">,</span> <span class="o">*</span><span class="n">hosts</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span> <span class="n">retries</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="o">**</span><span class="n">options</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">connect</span><span class="p">)</span>
+<span class="n">bound</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"db://prod"</span><span class="p">,</span> <span class="s2">"root"</span><span class="p">,</span> <span class="s2">"h1"</span><span class="p">,</span> <span class="s2">"h2"</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">ssl</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">bound</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+<span class="n">bound</span><span class="o">.</span><span class="n">apply_defaults</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">bound</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">sig</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">dsn</span><span class="o">=</span><span class="s2">"db://prod"</span><span class="p">)</span>            <span class="c1"># dsn is positional-only</span>
+<span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&#x27;dsn&#x27;: &#x27;db://prod&#x27;, &#x27;user&#x27;: &#x27;root&#x27;, &#x27;hosts&#x27;: (&#x27;h1&#x27;, &#x27;h2&#x27;), &#x27;timeout&#x27;: 1.5, &#x27;options&#x27;: {&#x27;ssl&#x27;: True}}
+{&#x27;dsn&#x27;: &#x27;db://prod&#x27;, &#x27;user&#x27;: &#x27;root&#x27;, &#x27;hosts&#x27;: (&#x27;h1&#x27;, &#x27;h2&#x27;), &#x27;timeout&#x27;: 1.5, &#x27;retries&#x27;: 2, &#x27;options&#x27;: {&#x27;ssl&#x27;: True}}
+TypeError: missing a required positional-only argument: &#x27;dsn&#x27;</pre></div></figure>
+<p>Functions written in C carry a signature only if their authors provided one, so <code>signature()</code> works for some built-ins and not others:</p>
+<figure class="code"><div class="code-head"><span class="fname">builtin_signatures.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="nb">len</span><span class="p">,</span> <span class="nb">print</span><span class="p">,</span> <span class="nb">dict</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="nb">max</span><span class="p">,</span> <span class="nb">iter</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">f</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">:</span><span class="s2">&lt;9</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">f</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">:</span><span class="s2">&lt;9</span><span class="si">}</span><span class="s2"> ValueError: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>len       (obj, /)
+print     (*args, sep=&#x27; &#x27;, end=&#x27;\n&#x27;, file=None, flush=False)
+dict.get  (self, key, default=None, /)
+max       ValueError: no signature found for builtin &lt;built-in function max&gt;
+iter      ValueError: no signature found for builtin &lt;built-in function iter&gt;</pre></div></figure>
+
+<h3>Source code, files and modules</h3>
+<p><code>inspect.getsource()</code> returns "the text of the source code for an object"; it raises <code>OSError</code> if the source cannot be retrieved and <code>TypeError</code> for a built-in module, class or function<sup class="cite">[<a href="#ref-4">4</a>]</sup>. <code>getsourcefile()</code>, <code>getsourcelines()</code> and <code>getmodule()</code> answer where an object lives<sup class="cite">[<a href="#ref-4">4</a>]</sup>. Decorators complicate this. <code>functools.wraps()</code> copies the wrapped function's name and docstring onto the wrapper and adds a <code>__wrapped__</code> attribute pointing back at the original<sup class="cite">[<a href="#ref-17">17</a>]</sup>. <code>inspect.signature()</code> and <code>inspect.unwrap()</code> follow that chain<sup class="cite">[<a href="#ref-4">4</a>]</sup>, so the decorated function still reports its real parameters and source.</p>
+<figure class="code"><div class="code-head"><span class="fname">source_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">logged</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">wrapper</span>
+
+
+<span class="nd">@logged</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Add two numbers."""</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">add</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"|"</span><span class="p">,</span> <span class="n">add</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">,</span> <span class="s2">"|"</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">add</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">unwrap</span><span class="p">(</span><span class="n">add</span><span class="p">)</span> <span class="ow">is</span> <span class="n">add</span><span class="o">.</span><span class="n">__wrapped__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">getsource</span><span class="p">(</span><span class="n">add</span><span class="p">))</span>
+<span class="n">lines</span><span class="p">,</span> <span class="n">start</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcelines</span><span class="p">(</span><span class="n">add</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="n">add</span><span class="p">)),</span> <span class="s2">"line"</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="s2">"|"</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmodule</span><span class="p">(</span><span class="n">add</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">inspect</span><span class="o">.</span><span class="n">getsource</span><span class="p">(</span><span class="nb">len</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>add | Add two numbers. | (a: int, b: int = 1) -&gt; int
+True
+@logged
+def add(a: int, b: int = 1) -&gt; int:
+    &quot;&quot;&quot;Add two numbers.&quot;&quot;&quot;
+    return a + b
+
+main.py line 13 | __main__
+TypeError: module, class, method, function, traceback, frame, or code object was expected, got builtin_function_or_method</pre></div></figure>
+<p>Notice that the source of a decorated function includes its decorator lines. Because <code>getsource()</code> needs a source file to read, it raises <code>OSError</code> for code that has none, such as a function created with <code>exec()</code> from a string<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+</section>
+
+<section>
+<h2 id="frames"><span class="num">7</span>Frames and the call stack</h2>
+<p>Each active function call has a <em>frame object</em> holding its code, its local and global namespaces, its current line and a link to the caller's frame (<code>f_back</code>)<sup class="cite">[<a href="#ref-1">1</a>]</sup>. <code>inspect.currentframe()</code> returns the caller's frame, but this is a CPython implementation detail: "If running in an implementation without Python stack frame support this function returns <code>None</code>"<sup class="cite">[<a href="#ref-4">4</a>]</sup>. The lower-level <code>sys._getframe()</code> "should be used for internal and specialized purposes only"<sup class="cite">[<a href="#ref-5">5</a>]</sup>.</p>
+<p>Holding on to a frame keeps all its local variables alive and "can cause your program to create reference cycles". The <code>inspect</code> documentation recommends deleting the reference in a <code>finally</code> clause<sup class="cite">[<a href="#ref-4">4</a>]</sup>:</p>
+<figure class="code"><div class="code-head"><span class="fname">caller.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">who_called_me</span><span class="p">():</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">currentframe</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">caller</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_back</span>
+        <span class="k">return</span> <span class="n">caller</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_name</span><span class="p">,</span> <span class="n">caller</span><span class="o">.</span><span class="n">f_lineno</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">del</span> <span class="n">frame</span>                         <span class="c1"># break the frame -&gt; locals cycle</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">checkout</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">who_called_me</span><span class="p">()</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">checkout</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>(&#x27;checkout&#x27;, 14)</pre></div></figure>
+<p><code>inspect.stack()</code> returns a list of <code>FrameInfo</code> records "for the caller's stack", innermost first. Each record has <code>frame</code>, <code>filename</code>, <code>lineno</code>, <code>function</code>, <code>code_context</code>, <code>index</code> and <code>positions</code> fields<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">stack_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">show_stack</span><span class="p">():</span>
+    <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">stack</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">function</span><span class="si">:</span><span class="s2">&lt;11</span><span class="si">}</span><span class="s2"> line </span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">lineno</span><span class="si">:</span><span class="s2">&lt;3</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">info</span><span class="o">.</span><span class="n">code_context</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">inner</span><span class="p">():</span>
+    <span class="n">show_stack</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">outer</span><span class="p">():</span>
+    <span class="n">inner</span><span class="p">()</span>
+
+
+<span class="n">outer</span><span class="p">()</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>show_stack  line 5   for info in inspect.stack():
+inner       line 10  show_stack()
+outer       line 14  inner()
+&lt;module&gt;    line 17  outer()</pre></div></figure>
+<p>A frame's <code>f_locals</code> lets a debugger read the variables of any function on the stack. PEP 667 made its behaviour consistent in Python 3.13: for a function frame, <code>f_locals</code> is now a write-through proxy that always reflects the current values, whereas each call to <code>locals()</code> in a function produces "an independent snapshot"<sup class="cite">[<a href="#ref-13">13</a>,<a href="#ref-18">18</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">frame_locals.py</span><span class="badge">Python 3.13+</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">demo</span><span class="p">():</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">_getframe</span><span class="p">()</span>
+    <span class="n">snapshot</span> <span class="o">=</span> <span class="nb">locals</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">f_locals</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"snapshot:"</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span> <span class="s2">"| live proxy:"</span><span class="p">,</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_locals</span><span class="p">[</span><span class="s2">"x"</span><span class="p">])</span>
+    <span class="k">del</span> <span class="n">frame</span>
+
+
+<span class="n">demo</span><span class="p">()</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>FrameLocalsProxy
+snapshot: 1 | live proxy: 2</pre></div></figure>
+</section>
+
+<section>
+<h2 id="annotations"><span class="num">8</span>Annotations and type hints</h2>
+<p>Annotations are arbitrary expressions attached to parameters, return values and variables. PEP 3107 introduced them with no fixed meaning<sup class="cite">[<a href="#ref-19">19</a>]</sup>, and PEP 484 gave them the standard meaning of type hints<sup class="cite">[<a href="#ref-20">20</a>]</sup>. They are stored in <code>__annotations__</code>, a dictionary keyed by parameter name plus <code>'return'</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>. On Python 3.10 to 3.13 the recommended way to read them is <code>inspect.get_annotations()</code><sup class="cite">[<a href="#ref-21">21</a>]</sup>; <code>typing.get_type_hints()</code> goes further, evaluating string annotations into real objects, merging class annotations along the MRO and, unless you pass <code>include_extras=True</code>, stripping <code>Annotated</code> metadata<sup class="cite">[<a href="#ref-22">22</a>]</sup>. <code>typing.get_origin()</code> and <code>typing.get_args()</code> take a generic hint apart<sup class="cite">[<a href="#ref-22">22</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">hints_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span><span class="p">,</span> <span class="n">get_type_hints</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Node</span><span class="p">:</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="nb">next</span><span class="p">:</span> <span class="s2">"Node | None"</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">LabelledNode</span><span class="p">(</span><span class="n">Node</span><span class="p">):</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">find</span><span class="p">(</span><span class="n">head</span><span class="p">:</span> <span class="n">Node</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="s2">"max steps"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">100</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Node</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">get_annotations</span><span class="p">(</span><span class="n">find</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">get_type_hints</span><span class="p">(</span><span class="n">find</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">get_type_hints</span><span class="p">(</span><span class="n">find</span><span class="p">,</span> <span class="n">include_extras</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="s2">"limit"</span><span class="p">])</span>
+<span class="n">ret</span> <span class="o">=</span> <span class="n">get_type_hints</span><span class="p">(</span><span class="n">find</span><span class="p">)[</span><span class="s2">"return"</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">get_origin</span><span class="p">(</span><span class="n">ret</span><span class="p">),</span> <span class="n">get_args</span><span class="p">(</span><span class="n">ret</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">LabelledNode</span><span class="o">.</span><span class="vm">__annotations__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">get_type_hints</span><span class="p">(</span><span class="n">LabelledNode</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&#x27;head&#x27;: &lt;class &#x27;__main__.Node&#x27;&gt;, &#x27;target&#x27;: &lt;class &#x27;int&#x27;&gt;, &#x27;limit&#x27;: typing.Annotated[int, &#x27;max steps&#x27;], &#x27;return&#x27;: typing.Optional[__main__.Node]}
+{&#x27;head&#x27;: &lt;class &#x27;__main__.Node&#x27;&gt;, &#x27;target&#x27;: &lt;class &#x27;int&#x27;&gt;, &#x27;limit&#x27;: &lt;class &#x27;int&#x27;&gt;, &#x27;return&#x27;: typing.Optional[__main__.Node]}
+typing.Annotated[int, &#x27;max steps&#x27;]
+typing.Union (&lt;class &#x27;__main__.Node&#x27;&gt;, &lt;class &#x27;NoneType&#x27;&gt;)
+{&#x27;label&#x27;: &lt;class &#x27;str&#x27;&gt;}
+{&#x27;value&#x27;: &lt;class &#x27;int&#x27;&gt;, &#x27;next&#x27;: __main__.Node | None, &#x27;label&#x27;: &lt;class &#x27;str&#x27;&gt;}</pre></div></figure>
+<p>With <code>from __future__ import annotations</code> (PEP 563), annotations are stored as strings instead of being evaluated at definition time<sup class="cite">[<a href="#ref-23">23</a>]</sup>. <code>__annotations__</code> then shows the strings; <code>inspect.get_annotations(obj, eval_str=True)</code> or <code>get_type_hints()</code> turns them back into objects<sup class="cite">[<a href="#ref-4">4</a>,<a href="#ref-22">22</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">future_annotations.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">typing</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">scale</span><span class="p">(</span><span class="n">v</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">k</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">x</span> <span class="o">*</span> <span class="n">k</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">v</span><span class="p">]</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">scale</span><span class="o">.</span><span class="vm">__annotations__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">get_annotations</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">eval_str</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">typing</span><span class="o">.</span><span class="n">get_type_hints</span><span class="p">(</span><span class="n">scale</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&#x27;v&#x27;: &#x27;list[float]&#x27;, &#x27;k&#x27;: &#x27;float&#x27;, &#x27;return&#x27;: &#x27;list[float]&#x27;}
+{&#x27;v&#x27;: list[float], &#x27;k&#x27;: &lt;class &#x27;float&#x27;&gt;, &#x27;return&#x27;: list[float]}
+{&#x27;v&#x27;: list[float], &#x27;k&#x27;: &lt;class &#x27;float&#x27;&gt;, &#x27;return&#x27;: list[float]}</pre></div></figure>
+<p>Evaluation can fail. A common case is a name imported only under <code>typing.TYPE_CHECKING</code>, which the annotations HOWTO lists among the strings that cannot be evaluated at run time and the reason to evaluate only when the caller asks<sup class="cite">[<a href="#ref-21">21</a>]</sup>:</p>
+<figure class="code"><div class="code-head"><span class="fname">hints_nameerror.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">get_type_hints</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>                         <span class="c1"># only true for static type checkers</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="n">amount</span><span class="p">:</span> <span class="n">Decimal</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">amount</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">price</span><span class="o">.</span><span class="vm">__annotations__</span><span class="p">)</span>
+<span class="n">get_type_hints</span><span class="p">(</span><span class="n">price</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>{&#x27;amount&#x27;: &#x27;Decimal&#x27;, &#x27;return&#x27;: &#x27;str&#x27;}</pre></div><div class="out out-error"><span class="out-label">Raises</span><pre>NameError: name &#x27;Decimal&#x27; is not defined</pre></div></figure>
+<div class="note">
+<span class="note-title">Python 3.14 changes this</span>
+<p>Python 3.14 implements PEP 649 and PEP 749: annotations are evaluated lazily when first requested, and the new <code>annotationlib</code> module provides <code>annotationlib.get_annotations()</code>, which supersedes <code>inspect.get_annotations()</code> (now an alias for it)<sup class="cite">[<a href="#ref-4">4</a>,<a href="#ref-21">21</a>,<a href="#ref-24">24</a>]</sup>. Code that goes through these helpers rather than touching <code>__annotations__</code> directly keeps working across versions.</p>
+</div>
+</section>
+
+<section>
+<h2 id="runtime"><span class="num">9</span>sys and gc: the running interpreter</h2>
+<h3>sys.getsizeof()</h3>
+<p><code>sys.getsizeof(obj)</code> returns an object's size in bytes. "Only the memory consumption directly attributed to the object is accounted for, not the memory consumption of objects it refers to", and the figure includes garbage-collector overhead for objects the collector manages<sup class="cite">[<a href="#ref-5">5</a>]</sup>. The numbers below are for 64-bit CPython 3.13 and will differ on other builds.</p>
+<figure class="code"><div class="code-head"><span class="fname">sizes.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="mi">30</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="mi">100</span><span class="p">,</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">,</span> <span class="s2">"é"</span><span class="p">,</span> <span class="s2">"a"</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">(),</span> <span class="p">{},</span> <span class="nb">set</span><span class="p">(),</span> <span class="nb">object</span><span class="p">()]</span>
+<span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">:</span>
+    <span class="n">label</span> <span class="o">=</span> <span class="nb">repr</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">30</span> <span class="k">else</span> <span class="nb">repr</span><span class="p">(</span><span class="n">obj</span><span class="p">)[:</span><span class="mi">26</span><span class="p">]</span> <span class="o">+</span> <span class="s2">"..."</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s2">&lt;32</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">:</span><span class="s2">&lt;7</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="si">:</span><span class="s2">&gt;5</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>0                                int        28
+1                                int        28
+1073741824                       int        32
+12676506002282294014967032...    int        40
+&#x27;&#x27;                               str        41
+&#x27;a&#x27;                              str        42
+&#x27;é&#x27;                              str        61
+&#x27;aaaaaaaaaaaaaaaaaaaaaaaaa...    str       141
+[]                               list       56
+[1, 2, 3]                        list       88
+()                               tuple      40
+{}                               dict       64
+set()                            set       216
+&lt;object object at 0x7f5a13...    object     16</pre></div></figure>
+<p>Because it is shallow, <code>getsizeof()</code> of a container reports only the container's own array of pointers. The documentation points to a recipe that walks the contents recursively<sup class="cite">[<a href="#ref-5">5</a>]</sup>; a compact version follows (exercise 5 extends it).</p>
+<figure class="code"><div class="code-head"><span class="fname">deep_size.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">deep_size</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">seen</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span> <span class="k">if</span> <span class="n">seen</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">seen</span>
+    <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">size</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">deep_size</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">seen</span><span class="p">)</span> <span class="o">+</span> <span class="n">deep_size</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">seen</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">,</span> <span class="nb">set</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">)):</span>
+        <span class="n">size</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">deep_size</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">seen</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">size</span>
+
+
+<span class="n">data</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">))</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"shallow:"</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"deep:   "</span><span class="p">,</span> <span class="n">deep_size</span><span class="p">(</span><span class="n">data</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>shallow: 184
+deep:    295980</pre></div></figure>
+
+<h3>sys.modules</h3>
+<p><code>sys.modules</code> "is a dictionary that maps module names to modules which have already been loaded". Because other code or threads can import modules while you look, the documentation says to iterate over <code>sys.modules.copy()</code> or <code>tuple(sys.modules)</code><sup class="cite">[<a href="#ref-5">5</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">modules_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"json"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"json"</span> <span class="ow">in</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"json"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">json</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">)</span> <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"json"</span><span class="p">)))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="vm">__name__</span><span class="p">]</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>False
+True True
+[&#x27;json&#x27;, &#x27;json.decoder&#x27;, &#x27;json.encoder&#x27;, &#x27;json.scanner&#x27;]
+__main__</pre></div></figure>
+
+<h3>The garbage collector's view</h3>
+<p><code>gc.get_referrers(*objs)</code> returns "the list of objects that directly refer to any of objs", and <code>gc.get_referents()</code> the objects they refer to<sup class="cite">[<a href="#ref-6">6</a>]</sup>. Both see only objects that support garbage collection, and the documentation warns that referrers may be "in a temporarily invalid state": "Avoid using <code>get_referrers()</code> for any purpose other than debugging"<sup class="cite">[<a href="#ref-6">6</a>]</sup>. Used that way, it is the quickest answer to "what is keeping this object alive?"</p>
+<figure class="code"><div class="code-head"><span class="fname">referrers.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Cache</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">find_holders</span><span class="p">(</span><span class="n">target</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">gc</span><span class="o">.</span><span class="n">get_referrers</span><span class="p">(</span><span class="n">target</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">"__name__"</span> <span class="ow">in</span> <span class="n">ref</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"module globals:"</span><span class="p">,</span> <span class="p">[</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ref</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="n">target</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="n">big</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"rows"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]}</span>
+<span class="n">holder</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">()</span>
+<span class="n">holder</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">big</span>
+<span class="n">registry</span> <span class="o">=</span> <span class="p">[</span><span class="n">big</span><span class="p">]</span>
+<span class="n">find_holders</span><span class="p">(</span><span class="n">big</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gc</span><span class="o">.</span><span class="n">get_referents</span><span class="p">(</span><span class="n">registry</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">big</span><span class="p">])</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Cache
+list
+module globals: [&#x27;big&#x27;]
+True</pre></div></figure>
+<p>Notice that on CPython 3.13 the referrer reported for <code>holder.data</code> is the <code>Cache</code> instance itself, not a separate attribute dictionary, so code that interprets referrers should be ready for both.</p>
+<p>The collector does not track every object. "As a general rule, instances of atomic types aren't tracked and instances of non-atomic types (containers, user-defined objects...) are", but type-specific optimisations exempt some containers, such as dictionaries holding only atomic values<sup class="cite">[<a href="#ref-6">6</a>]</sup>. <code>gc.is_tracked()</code> shows the result, which can change between versions:</p>
+<figure class="code"><div class="code-head"><span class="fname">tracked.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+
+<span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">"a"</span><span class="p">,</span> <span class="p">[],</span> <span class="p">{},</span> <span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[]},</span> <span class="p">(),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="nb">object</span><span class="p">()):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">obj</span><span class="si">!r:</span><span class="s2">&lt;24</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">gc</span><span class="o">.</span><span class="n">is_tracked</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>0                        False
+&#x27;a&#x27;                      False
+[]                       True
+{}                       False
+{&#x27;a&#x27;: 1}                 False
+{&#x27;a&#x27;: []}                True
+()                       False
+(1, 2)                   True
+&lt;object object at 0x7fc70e3801e0&gt; False</pre></div></figure>
+</section>
+
+<section>
+<h2 id="code"><span class="num">10</span>Code objects and dis</h2>
+<p>A function's <code>__code__</code> attribute holds its code object. "Code objects represent <em>byte-compiled</em> executable Python code, or bytecode", and unlike a function, a code object "contains no context" such as globals and is immutable<sup class="cite">[<a href="#ref-1">1</a>]</sup>. Its <code>co_*</code> attributes describe the compiled body: name, argument count, local variable names, constants, file and first line<sup class="cite">[<a href="#ref-1">1</a>]</sup>. The <code>dis</code> module disassembles it<sup class="cite">[<a href="#ref-25">25</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">code_objects.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">dis</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">hypot</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="n">sq</span> <span class="o">=</span> <span class="n">a</span> <span class="o">*</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span> <span class="o">*</span> <span class="n">b</span>
+    <span class="k">return</span> <span class="n">sq</span> <span class="o">**</span> <span class="mf">0.5</span>
+
+
+<span class="n">c</span> <span class="o">=</span> <span class="n">hypot</span><span class="o">.</span><span class="vm">__code__</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">co_name</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">co_argcount</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">co_varnames</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">co_consts</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">co_filename</span><span class="p">),</span> <span class="n">c</span><span class="o">.</span><span class="n">co_firstlineno</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">dis</span><span class="o">.</span><span class="n">dis</span><span class="p">(</span><span class="n">hypot</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>hypot 2 (&#x27;a&#x27;, &#x27;b&#x27;, &#x27;sq&#x27;) (None, 0.5)
+main.py 5 code
+  5           RESUME                   0
+
+  6           LOAD_FAST_LOAD_FAST      0 (a, a)
+              BINARY_OP                5 (*)
+              LOAD_FAST_LOAD_FAST     17 (b, b)
+              BINARY_OP                5 (*)
+              BINARY_OP                0 (+)
+              STORE_FAST               2 (sq)
+
+  7           LOAD_FAST                2 (sq)
+              LOAD_CONST               1 (0.5)
+              BINARY_OP                8 (**)
+              RETURN_VALUE</pre></div></figure>
+<p>Treat this output as version-specific: "Bytecode is an implementation detail of the CPython interpreter. No guarantees are made that bytecode will not be added, removed, or changed between versions of Python"<sup class="cite">[<a href="#ref-25">25</a>]</sup>. Instruction sets, specialisation and how to read a disassembly are the subject of the companion article on Python bytecode; for introspection, the stable parts are the <code>co_*</code> metadata and <code>dis.get_instructions()</code>, which yields structured <code>Instruction</code> records instead of text<sup class="cite">[<a href="#ref-25">25</a>]</sup>.</p>
+</section>
+
+<section>
+<h2 id="pitfalls"><span class="num">11</span>Pitfalls</h2>
+<p>One pitfall deserves a full example because it is so confusing in practice. Since <code>hasattr()</code> just catches <code>AttributeError</code><sup class="cite">[<a href="#ref-3">3</a>]</sup>, a property that fails with an <code>AttributeError</code> of its own makes a real attribute look absent:</p>
+<figure class="code"><div class="code-head"><span class="fname">hasattr_trap.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Account</span><span class="p">:</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">balance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ledger</span><span class="o">.</span><span class="n">total</span>         <span class="c1"># bug: _ledger was never set</span>
+
+
+<span class="n">acct</span> <span class="o">=</span> <span class="n">Account</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">acct</span><span class="p">,</span> <span class="s2">"balance"</span><span class="p">))</span>           <span class="c1"># False, though the attribute exists</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"balance"</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="n">acct</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">getattr_static</span><span class="p">(</span><span class="n">acct</span><span class="p">,</span> <span class="s2">"balance"</span><span class="p">))</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>False
+True
+property</pre></div></figure>
+<div class="table-wrap"><table>
+<thead><tr><th>Pitfall</th><th>Why it bites</th><th>Do this instead</th></tr></thead>
+<tbody>
+<tr><td><code>type(x) == SomeClass</code></td><td>Rejects subclasses, including <code>bool</code> for <code>int</code><sup class="cite">[<a href="#ref-3">3</a>]</sup>.</td><td><code>isinstance()</code>, or <code>type(x) is C</code> only when exactness is the point.</td></tr>
+<tr><td>Trusting <code>dir()</code> as complete</td><td>Its output is a convenience that may change between releases, can be overridden by <code>__dir__()</code>, and misses <code>__getattr__()</code> names<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</td><td>Use it to explore; test for a specific attribute directly.</td></tr>
+<tr><td><code>vars()</code> on any object</td><td>Raises <code>TypeError</code> for objects without <code>__dict__</code>, such as slotted instances<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-3">3</a>]</sup>.</td><td><code>dir()</code> or <code>inspect.getmembers_static()</code>.</td></tr>
+<tr><td><code>hasattr()</code> as a passive check</td><td>Runs properties and <code>__getattr__()</code>, and hides their <code>AttributeError</code>s<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</td><td><code>inspect.getattr_static()</code><sup class="cite">[<a href="#ref-4">4</a>]</sup>.</td></tr>
+<tr><td>Keeping <code>id()</code> values</td><td>Ids are unique only among objects alive at the same time<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</td><td>Keep the object (or a <code>weakref</code>) and compare with <code>is</code>.</td></tr>
+<tr><td>Storing frames</td><td>Creates reference cycles that keep every local alive<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</td><td><code>del frame</code> in <code>finally</code>, or <code>frame.clear()</code>.</td></tr>
+<tr><td>Reading <code>__annotations__</code> raw</td><td>May hold strings (PEP 563), and behaves differently across versions<sup class="cite">[<a href="#ref-21">21</a>,<a href="#ref-23">23</a>]</sup>.</td><td><code>inspect.get_annotations()</code> or <code>typing.get_type_hints()</code>.</td></tr>
+<tr><td><code>sys.getsizeof()</code> for total memory</td><td>Shallow by design<sup class="cite">[<a href="#ref-5">5</a>]</sup>.</td><td>A recursive walk (section 9) or a memory profiler.</td></tr>
+<tr><td>Using <code>gc.get_referrers()</code> in program logic</td><td>Referrers may be half-built; meant for debugging only<sup class="cite">[<a href="#ref-6">6</a>]</sup>.</td><td>Keep explicit registries in production code.</td></tr>
+<tr><td>Depending on bytecode or frames</td><td>Both are CPython implementation details<sup class="cite">[<a href="#ref-4">4</a>,<a href="#ref-25">25</a>]</sup>.</td><td>Guard with a fallback and pin the Python version in tests.</td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2 id="exercises"><span class="num">12</span>Exercises</h2>
+<p>Try each exercise before opening the solution. Every solution was run, and its output is shown.</p>
+
+<div class="exercise">
+<h3>Exercise 1: Describe any object<span class="lvl">built-ins · easy</span></h3>
+<p>Write <code>describe(obj)</code> that returns a one-line summary: the type's qualified name, the module it was defined in, the names in its MRO, and whether the object is callable. Try it on <code>True</code>, <code>[]</code>, <code>len</code> and a class of your own.</p>
+<details><summary>Show solution</summary><div class="sol">
+<figure class="code"><div class="code-head"><span class="fname">ex1_describe.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="bp">cls</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+    <span class="n">mro</span> <span class="o">=</span> <span class="s2">" &gt; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="vm">__name__</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2"> | MRO </span><span class="si">{</span><span class="n">mro</span><span class="si">}</span><span class="s2"> | callable=</span><span class="si">{</span><span class="nb">callable</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Celsius</span><span class="p">(</span><span class="nb">float</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">for</span> <span class="n">thing</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="p">[],</span> <span class="nb">len</span><span class="p">,</span> <span class="n">Celsius</span><span class="p">(</span><span class="mf">21.5</span><span class="p">),</span> <span class="n">Celsius</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">describe</span><span class="p">(</span><span class="n">thing</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>bool from builtins | MRO bool &gt; int &gt; object | callable=False
+list from builtins | MRO list &gt; object | callable=False
+builtin_function_or_method from builtins | MRO builtin_function_or_method &gt; object | callable=True
+Celsius from __main__ | MRO Celsius &gt; float &gt; object | callable=False
+type from builtins | MRO type &gt; object | callable=True</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 2: A module's own public API<span class="lvl">inspect · easy</span></h3>
+<p>Write <code>public_api(module)</code> that returns the sorted names of the public functions and classes a module <em>defines</em>, skipping names that start with an underscore and anything it merely imported. Run it on <code>json</code> and <code>textwrap</code>.</p>
+<details><summary>Show solution</summary><div class="sol">
+<p>Every function and class records the module it was defined in as <code>__module__</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>, so compare that with the module's name. <code>json</code> re-exports classes from its submodules, which this check correctly leaves out.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex2_public_api.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">public_api</span><span class="p">(</span><span class="n">module</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">defined_here</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="ow">or</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span> <span class="ow">and</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">==</span> <span class="n">module</span><span class="o">.</span><span class="vm">__name__</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">defined_here</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"_"</span><span class="p">))</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">public_api</span><span class="p">(</span><span class="n">json</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">public_api</span><span class="p">(</span><span class="n">textwrap</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>[&#x27;detect_encoding&#x27;, &#x27;dump&#x27;, &#x27;dumps&#x27;, &#x27;load&#x27;, &#x27;loads&#x27;]
+[&#x27;TextWrapper&#x27;, &#x27;dedent&#x27;, &#x27;fill&#x27;, &#x27;indent&#x27;, &#x27;shorten&#x27;, &#x27;wrap&#x27;]</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 3: Check argument types at call time<span class="lvl">signature · medium</span></h3>
+<p>Write a decorator <code>@checked</code> that, on each call, binds the arguments to the function's signature, applies defaults, and raises <code>TypeError</code> if any argument whose type hint is a plain class is not an instance of it. Hints that are not classes (such as <code>list[int]</code>) may be skipped. Keep the function's name and signature visible to <code>inspect</code>.</p>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>Signature.bind()</code> does the argument matching<sup class="cite">[<a href="#ref-4">4</a>]</sup>, <code>get_type_hints()</code> resolves the hints<sup class="cite">[<a href="#ref-22">22</a>]</sup>, and <code>functools.wraps()</code> keeps the metadata<sup class="cite">[<a href="#ref-17">17</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex3_checked.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_type_hints</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">checked</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+    <span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="n">hints</span> <span class="o">=</span> <span class="n">get_type_hints</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wrapper</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">bound</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">bound</span><span class="o">.</span><span class="n">apply_defaults</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">bound</span><span class="o">.</span><span class="n">arguments</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">hint</span> <span class="o">=</span> <span class="n">hints</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hint</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">hint</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">fn</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(): </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be </span><span class="si">{</span><span class="n">hint</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">wrapper</span>
+
+
+<span class="nd">@checked</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">repeat</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">times</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">" "</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">text</span><span class="p">]</span> <span class="o">*</span> <span class="n">times</span><span class="p">)</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">repeat</span><span class="p">(</span><span class="s2">"ha"</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">repeat</span><span class="p">))</span>
+<span class="k">for</span> <span class="n">call</span> <span class="ow">in</span> <span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">repeat</span><span class="p">(</span><span class="s2">"ha"</span><span class="p">,</span> <span class="s2">"3"</span><span class="p">),</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">repeat</span><span class="p">(</span><span class="mi">5</span><span class="p">)):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">call</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>ha ha ha
+(text: str, times: int = 2, sep: str = &#x27; &#x27;) -&gt; str
+TypeError: repeat(): times must be int, got str
+TypeError: repeat(): text must be str, got int</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 4: A logger that knows where it was called<span class="lvl">frames · medium</span></h3>
+<p>Write <code>log(message)</code> that prints <code>[module:function:line] message</code> using the caller's frame, without leaving a reference cycle. Calls from module level should show <code>&lt;module&gt;</code> as the function.</p>
+<details><summary>Show solution</summary><div class="sol">
+<p>The caller's frame is <code>f_back</code> of the current frame; its code object gives the function name and its globals give the module name<sup class="cite">[<a href="#ref-1">1</a>]</sup>. The <code>finally</code> clause follows the <code>inspect</code> documentation's advice<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex4_log.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">log</span><span class="p">(</span><span class="n">message</span><span class="p">):</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">currentframe</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">caller</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">f_back</span>
+        <span class="n">where</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">caller</span><span class="o">.</span><span class="n">f_globals</span><span class="p">[</span><span class="s1">'__name__'</span><span class="p">]</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">caller</span><span class="o">.</span><span class="n">f_code</span><span class="o">.</span><span class="n">co_name</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">caller</span><span class="o">.</span><span class="n">f_lineno</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">del</span> <span class="n">frame</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">checkout</span><span class="p">(</span><span class="n">cart</span><span class="p">):</span>
+    <span class="n">log</span><span class="p">(</span><span class="sa">f</span><span class="s2">"checking out </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">cart</span><span class="p">)</span><span class="si">}</span><span class="s2"> items"</span><span class="p">)</span>
+
+
+<span class="n">log</span><span class="p">(</span><span class="s2">"starting"</span><span class="p">)</span>
+<span class="n">checkout</span><span class="p">([</span><span class="s2">"apple"</span><span class="p">,</span> <span class="s2">"pear"</span><span class="p">])</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>[__main__:&lt;module&gt;:18] starting
+[__main__:checkout:15] checking out 2 items</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 5: A better deep size<span class="lvl">sys · medium</span></h3>
+<p>Extend the <code>deep_size()</code> function from section 9 so that it also counts the attributes of ordinary instances (through <code>__dict__</code>) and of slotted instances (through <code>__slots__</code>), and still handles cycles. Show that a self-referencing list does not loop forever.</p>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>getsizeof()</code> is shallow<sup class="cite">[<a href="#ref-5">5</a>]</sup>, and a slotted instance has no <code>__dict__</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>, so both storage forms need their own branch. <code>getattr_static()</code> could be used to avoid running properties, but slot values are read through their descriptors, which have no side effects.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex5_deep_size.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">deep_size</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">seen</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span> <span class="k">if</span> <span class="n">seen</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">seen</span>
+    <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">size</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">deep_size</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">seen</span><span class="p">)</span> <span class="o">+</span> <span class="n">deep_size</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">seen</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">,</span> <span class="nb">set</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">)):</span>
+        <span class="n">size</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">deep_size</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">seen</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"__dict__"</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+        <span class="n">size</span> <span class="o">+=</span> <span class="n">deep_size</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">obj</span><span class="p">),</span> <span class="n">seen</span><span class="p">)</span>
+    <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="o">.</span><span class="vm">__mro__</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s2">"__slots__"</span><span class="p">,</span> <span class="p">()):</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+                <span class="n">size</span> <span class="o">+=</span> <span class="n">deep_size</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">name</span><span class="p">),</span> <span class="n">seen</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">size</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Plain</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Slim</span><span class="p">:</span>
+    <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"items"</span><span class="p">,)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
+
+
+<span class="n">loop</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+<span class="n">loop</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">Plain</span><span class="p">()),</span> <span class="n">deep_size</span><span class="p">(</span><span class="n">Plain</span><span class="p">()))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">Slim</span><span class="p">()),</span> <span class="n">deep_size</span><span class="p">(</span><span class="n">Slim</span><span class="p">()))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">deep_size</span><span class="p">(</span><span class="n">loop</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>48 4038
+40 3696
+176</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 6: Who is holding on?<span class="lvl">gc · medium</span></h3>
+<p>Write <code>holders(obj)</code> that returns a list of human-readable descriptions of what refers to <code>obj</code>: the global names in a module, the indexes in a list, the keys in a dict, and the attribute names on an instance. Ignore the frame of <code>holders()</code> itself.</p>
+<details><summary>Show solution</summary><div class="sol">
+<p>Use <code>gc.get_referrers()</code> for debugging only, as its documentation says<sup class="cite">[<a href="#ref-6">6</a>]</sup>. As section 9 showed, the referrer for an instance attribute can be the instance itself rather than a dictionary; <code>vars()</code> reads its attributes in either case<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex6_holders.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">holders</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="n">me</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">currentframe</span><span class="p">()</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">gc</span><span class="o">.</span><span class="n">get_referrers</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">ref</span> <span class="ow">is</span> <span class="n">me</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">"__name__"</span> <span class="ow">in</span> <span class="n">ref</span> <span class="ow">and</span> <span class="s2">"__builtins__"</span> <span class="ow">in</span> <span class="n">ref</span><span class="p">:</span>
+                <span class="n">found</span> <span class="o">+=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"global </span><span class="si">{</span><span class="n">ref</span><span class="p">[</span><span class="s1">'__name__'</span><span class="p">]</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ref</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="n">obj</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">found</span> <span class="o">+=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"dict key </span><span class="si">{</span><span class="n">k</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ref</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="n">obj</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="n">found</span> <span class="o">+=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"list index </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="n">obj</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="s2">"__dict__"</span><span class="p">):</span>
+                <span class="n">found</span> <span class="o">+=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="n">obj</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">del</span> <span class="n">me</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">found</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Session</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+
+<span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"debug"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+<span class="n">s</span> <span class="o">=</span> <span class="n">Session</span><span class="p">()</span>
+<span class="n">s</span><span class="o">.</span><span class="n">settings</span> <span class="o">=</span> <span class="n">config</span>
+<span class="n">pool</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="n">config</span><span class="p">]</span>
+<span class="n">lookup</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"cfg"</span><span class="p">:</span> <span class="n">config</span><span class="p">}</span>
+<span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">holders</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">line</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Session.settings
+dict key &#x27;cfg&#x27;
+global __main__.config
+list index 1</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 7: Diff two versions of an API<span class="lvl">signature · hard</span></h3>
+<p>Write <code>api_diff(old, new)</code> for two classes that reports the public methods added, removed, and those whose signatures changed (show both signatures). Use it to compare the two <code>Client</code> classes below.</p>
+<pre class="src" style="background:var(--code-bg);border:1px solid var(--rule);border-radius:6px"><code>class ClientV1:
+    def get(self, url, timeout=10): ...
+    def post(self, url, data): ...
+    def close(self): ...
+
+class ClientV2:
+    def get(self, url, *, timeout=10.0, retries=0): ...
+    def post(self, url, data): ...
+    def stream(self, url): ...</code></pre>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>Signature</code> objects compare equal when their parameters, kinds, defaults and annotations match, so a plain <code>!=</code> finds the changes<sup class="cite">[<a href="#ref-4">4</a>]</sup>. Using <code>getmembers_static()</code> avoids running any descriptors on the classes<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex7_api_diff.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">public_methods</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers_static</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"_"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">value</span><span class="p">)}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">api_diff</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">):</span>
+    <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">public_methods</span><span class="p">(</span><span class="n">old</span><span class="p">),</span> <span class="n">public_methods</span><span class="p">(</span><span class="n">new</span><span class="p">)</span>
+    <span class="n">report</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"+ </span><span class="si">{</span><span class="n">n</span><span class="si">}{</span><span class="n">b</span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">-</span> <span class="n">a</span><span class="o">.</span><span class="n">keys</span><span class="p">())]</span>
+    <span class="n">report</span> <span class="o">+=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"- </span><span class="si">{</span><span class="n">n</span><span class="si">}{</span><span class="n">a</span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">-</span> <span class="n">b</span><span class="o">.</span><span class="n">keys</span><span class="p">())]</span>
+    <span class="n">report</span> <span class="o">+=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"~ </span><span class="si">{</span><span class="n">n</span><span class="si">}{</span><span class="n">a</span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="si">}</span><span class="s2">  -&gt;  </span><span class="si">{</span><span class="n">n</span><span class="si">}{</span><span class="n">b</span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">b</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="k">if</span> <span class="n">a</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">!=</span> <span class="n">b</span><span class="p">[</span><span class="n">n</span><span class="p">]]</span>
+    <span class="k">return</span> <span class="n">report</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ClientV1</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ClientV2</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span> <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span> <span class="o">...</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">api_diff</span><span class="p">(</span><span class="n">ClientV1</span><span class="p">,</span> <span class="n">ClientV2</span><span class="p">)))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>+ stream(self, url)
+- close(self)
+~ get(self, url, timeout=10)  -&gt;  get(self, url, *, timeout=10.0, retries=0)</pre></div></figure>
+</div></details>
+</div>
+</section>
+
+<section>
+<h2 id="references">References</h2>
+<ol class="refs">
+<li id="ref-1">Python Software Foundation. The Python language reference: 3. Data model [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/reference/datamodel.html">https://docs.python.org/3/reference/datamodel.html</a></li>
+<li id="ref-2">Ramalho L. Fluent Python: clear, concise, and effective programming. 2nd ed. Sebastopol (CA): O&#x27;Reilly Media; 2022.</li>
+<li id="ref-3">Python Software Foundation. Python built-ins reference: Built-in functions [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/builtins/functions.html">https://docs.python.org/3/builtins/functions.html</a></li>
+<li id="ref-4">Python Software Foundation. The Python standard library: inspect — Inspect live objects [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/inspect.html">https://docs.python.org/3/library/inspect.html</a></li>
+<li id="ref-5">Python Software Foundation. The Python standard library: sys — System-specific parameters and functions [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/sys.html">https://docs.python.org/3/library/sys.html</a></li>
+<li id="ref-6">Python Software Foundation. The Python standard library: gc — Garbage collector interface [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/gc.html">https://docs.python.org/3/library/gc.html</a></li>
+<li id="ref-7">Python Software Foundation. The Python standard library: abc — Abstract base classes [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/abc.html">https://docs.python.org/3/library/abc.html</a></li>
+<li id="ref-8">van Rossum G, Talin. PEP 3119 – Introducing abstract base classes [Internet]. Python Software Foundation; 2007 Apr 18 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-3119/">https://peps.python.org/pep-3119/</a></li>
+<li id="ref-9">Python Software Foundation. The Python standard library: collections.abc — Abstract base classes for containers [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/collections.abc.html">https://docs.python.org/3/library/collections.abc.html</a></li>
+<li id="ref-10">Barrett K, Cassels B, Haahr P, Moon DA, Playford K, Withington PT. A monotonic superclass linearization for Dylan. In: Proceedings of the 11th ACM SIGPLAN Conference on Object-Oriented Programming, Systems, Languages, and Applications (OOPSLA &#x27;96); 1996 Oct 6-10; San Jose (CA). New York: ACM; 1996. p. 69-82. doi:10.1145/236337.236343</li>
+<li id="ref-11">Simionato M. The Python 2.3 method resolution order [Internet]. Python Software Foundation; 2003 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/howto/mro.html">https://docs.python.org/3/howto/mro.html</a></li>
+<li id="ref-12">Goodger D, van Rossum G. PEP 257 – Docstring conventions [Internet]. Python Software Foundation; 2001 May 29 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0257/">https://peps.python.org/pep-0257/</a></li>
+<li id="ref-13">Python Software Foundation. What&#x27;s new in Python 3.13 [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/whatsnew/3.13.html">https://docs.python.org/3/whatsnew/3.13.html</a></li>
+<li id="ref-14">Python Software Foundation. The Python standard library: pydoc — Documentation generator and online help system [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/pydoc.html">https://docs.python.org/3/library/pydoc.html</a></li>
+<li id="ref-15">Python Software Foundation. Python setup and usage: 1. Command line and environment [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/using/cmdline.html">https://docs.python.org/3/using/cmdline.html</a></li>
+<li id="ref-16">Cannon B, Seo J, Selivanov Y, Hastings L. PEP 362 – Function signature object [Internet]. Python Software Foundation; 2006 Aug 21 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0362/">https://peps.python.org/pep-0362/</a></li>
+<li id="ref-17">Python Software Foundation. The Python standard library: functools — Higher-order functions and operations on callable objects [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/functools.html">https://docs.python.org/3/library/functools.html</a></li>
+<li id="ref-18">Shannon M, Gao T. PEP 667 – Consistent views of namespaces [Internet]. Python Software Foundation; 2021 Jul 30 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0667/">https://peps.python.org/pep-0667/</a></li>
+<li id="ref-19">Winter C, Lownds T. PEP 3107 – Function annotations [Internet]. Python Software Foundation; 2006 Dec 2 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-3107/">https://peps.python.org/pep-3107/</a></li>
+<li id="ref-20">van Rossum G, Lehtosalo J, Langa Ł. PEP 484 – Type hints [Internet]. Python Software Foundation; 2014 Sep 29 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0484/">https://peps.python.org/pep-0484/</a></li>
+<li id="ref-21">Python Software Foundation. Python HOWTOs: Annotations best practices [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/howto/annotations.html">https://docs.python.org/3/howto/annotations.html</a></li>
+<li id="ref-22">Python Software Foundation. The Python standard library: typing — Support for type hints [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/typing.html">https://docs.python.org/3/library/typing.html</a></li>
+<li id="ref-23">Langa Ł. PEP 563 – Postponed evaluation of annotations [Internet]. Python Software Foundation; 2017 Sep 8 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0563/">https://peps.python.org/pep-0563/</a></li>
+<li id="ref-24">Hastings L. PEP 649 – Deferred evaluation of annotations using descriptors [Internet]. Python Software Foundation; 2021 Jan 11 [cited 2026 Oct 29]. Available from: <a href="https://peps.python.org/pep-0649/">https://peps.python.org/pep-0649/</a></li>
+<li id="ref-25">Python Software Foundation. The Python standard library: dis — Disassembler for Python bytecode [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/dis.html">https://docs.python.org/3/library/dis.html</a></li>
+</ol>
+</section>
+<footer>
+<p>Citations follow the Vancouver system: sources are numbered in order of first citation, and the same number is reused for each later citation of that source. All URLs were checked on 29 October 2026. All 38 code examples were run on CPython 3.13.17.</p>
+</footer>
+</main>
+</div>
+<script>
+document.querySelectorAll("figure.code").forEach(function (fig) {
+  var btn = fig.querySelector(".copy");
+  var code = fig.querySelector("pre.src code");
+  btn.addEventListener("click", function () {
+    var text = code.innerText;
+    var done = function (msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "Copy"; }, 1600); };
+    var fallback = function () {
+      var range = document.createRange();
+      range.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      done("Selected");
+    };
+    try {
+      navigator.clipboard.writeText(text).then(function () { done("Copied"); }, fallback);
+    } catch (e) { fallback(); }
+  });
+});
+</script>
+
+<footer style="padding:1rem;font:400 .9rem/1.4 system-ui,-apple-system,Segoe UI,sans-serif">
+  <p>&copy; 2026 Nicholas Knapp. All rights reserved.</p>
+</footer>
+</body>
+</html>

@@ -8,7 +8,7 @@ The blog filter visually groups related labels while keeping every label indepen
 
 - **Biology**: Human Biology.
 - **Math**: Calculus, Linear Algebra, and Statistics.
-- **Programming Languages**: C++.
+- **Programming Languages**: C++ and Go.
 
 ## Categories
 
@@ -58,11 +58,14 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Game Theory**: Strategic interaction, game classification and representation, equilibrium concepts, mathematical methods, applications, limitations, and computational or AI uses of game theory.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Generative AI**: Systems that generate text, code, images, media, plans, or structured outputs, including RAG, conversational AI, foundation-model applications, and production GenAI workflows.
+- **Gin**: The Gin web framework for Go, including routing, middleware, handlers, request binding, validation, and response handling.
 - **Git**: Git version control, branching, repository security, history rewriting, troubleshooting, collaboration workflows, and GitHub-specific repository practices.
+- **Go**: The Go programming language, including its type system, control flow, concurrency model, standard library, architecture patterns, and backend engineering practices.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
 - **High-Performance Computing**: Accelerated, parallel, throughput-oriented, or low-level performance work involving CPUs, GPUs, memory hierarchy, numerical workloads, and performance-focused programming systems.
 - **Human Biology**: Human anatomy, physiology, neuroscience, cognition, development, genetics, health, and disease at the level of the human organism.
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
+- **IT Roles**: Information-technology careers and role families, including enterprise applications, infrastructure, governance, service management, support, and systems administration.
 - **IoT**: Internet of Things systems involving connected devices, edge hardware, telemetry, embedded networking, and device-to-cloud integration.
 - **Java**: Java language, JVM, Java standard libraries, Jakarta EE, Java tooling, Java performance, Java security, and Java ecosystem engineering.
 - **JavaScript**: JavaScript language behavior, browser and server-side runtimes, asynchronous programming, web platform integration, and JavaScript ecosystem engineering.
@@ -72,6 +75,7 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Learning**: How people learn, train, build skill, or structure knowledge, including educational frameworks and cognitive learning topics.
 - **Linear Algebra**: Vectors, matrices, linear transformations, vector spaces, eigenvalues, decompositions, and their mathematical or computational applications.
 - **Logic**: Formal and informal reasoning, propositional and first-order logic, semantics, inference, proof systems, validity, and argumentation.
+- **Mainframes**: Mainframe hardware, operating systems, storage, transaction processing, databases, programming languages, and operational workloads, especially on IBM Z and z/OS.
 - **Math**: Mathematics, statistics, logic, discrete structures, formal reasoning, and mathematically oriented problem-solving topics.
 - **Mobile App Development**: Cross-cutting mobile engineering topics beyond one platform, including architecture, security, testing, and deployment.
 - **Networks**: Computer networking concepts, protocols, observability, troubleshooting, performance, and networked system design.
@@ -84,6 +88,7 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Philosophy**: Conceptual, epistemic, metaphysical, or philosophical analysis not primarily framed as ethics.
 - **Privacy**: Digital privacy, anonymity, surveillance resistance, exposure reduction, and operational privacy practices.
 - **PostgreSQL**: PostgreSQL database topics, including SQL, schema design, indexing, transactions, MVCC, WAL, administration, operations, cloud deployments, extensions, internals, and application integration.
+- **Power Engineering**: Electrical power generation, transmission, distribution, grid analysis, protection, control, planning, and the equipment that carries electrical energy at scale.
 - **Programming & Software**: General programming-language, software-development, or software-industry topics that are not tied to one framework or language category.
 - **Programming Languages**: Articles centered on one specific programming language as a language, such as its design, ecosystem, runtime model, tradeoffs, and historical role.
 - **Python**: Python language internals, concurrency, ecosystem, idioms, and Python-specific engineering topics beyond Django alone.

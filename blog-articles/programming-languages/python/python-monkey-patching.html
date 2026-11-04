@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Python Monkey Patching</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A technical guide to monkey patching in Python: patching functions, methods, classes and modules at run time, where to patch, unittest.mock.patch, pytest monkeypatch, built-in type limits, real uses, risks and alternatives, with tested examples, exercises and Vancouver-style references.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a reading column of ~68ch with a sticky contents rail on wide screens; code figures break slightly wider than the text. */
+:root {
+  --paper: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #18202b;
+  --muted: #566173;
+  --rule: #d8dde5;
+  --accent: #2a5ca8;
+  --accent-soft: #e3ebf7;
+  --marker: #b38600;
+  --marker-soft: #fbf1d3;
+  --code-bg: #eef1f5;
+  --out-bg: #f9fafb;
+  --err: #b42318;
+  --err-soft: #fdecea;
+  --hl-kw: #7b2fa8;
+  --hl-str: #2b7a30;
+  --hl-com: #6b7686;
+  --hl-num: #b0501a;
+  --hl-fn: #1f5fbf;
+  --hl-bi: #0b7480;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Literata", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f141b; --surface: #141b24; --ink: #e2e7ee; --muted: #9ba6b6; --rule: #273141;
+    --accent: #8ab2f2; --accent-soft: #1b2a40; --marker: #e3bd4c; --marker-soft: #2e2713;
+    --code-bg: #161e29; --out-bg: #121921; --err: #ff9b8f; --err-soft: #3a1c1a;
+    --hl-kw: #d2a8f5; --hl-str: #9ed699; --hl-com: #7f8b9c; --hl-num: #f2a46f; --hl-fn: #91b9ff; --hl-bi: #72d3dc;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f141b; --surface: #141b24; --ink: #e2e7ee; --muted: #9ba6b6; --rule: #273141;
+  --accent: #8ab2f2; --accent-soft: #1b2a40; --marker: #e3bd4c; --marker-soft: #2e2713;
+  --code-bg: #161e29; --out-bg: #121921; --err: #ff9b8f; --err-soft: #3a1c1a;
+  --hl-kw: #d2a8f5; --hl-str: #9ed699; --hl-com: #7f8b9c; --hl-num: #f2a46f; --hl-fn: #91b9ff; --hl-bi: #72d3dc;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 0.18em; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.page {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding-block: 3rem 5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+}
+.masthead { grid-area: head; max-width: 46rem; }
+.toc { grid-area: toc; }
+main { grid-area: main; }
+.page { grid-template-areas: "head" "toc" "main"; }
+@media (min-width: 1100px) {
+  .page { grid-template-columns: 14rem minmax(0, 1fr); grid-template-areas: "toc head" "toc main"; column-gap: 4rem; row-gap: 0; }
+  .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 2rem); align-self: start; max-height: calc(100vh - 4rem); overflow-y: auto; }
+}
+main { min-width: 0; max-width: 46rem; }
+
+/* Header */
+.masthead { display: grid; gap: 1rem; padding-bottom: 2rem; border-bottom: 1px solid var(--rule); margin-bottom: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; color: var(--ink); }
+h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 700; margin: 0; letter-spacing: -0.015em; }
+h1 code { font-family: inherit; }
+.standfirst { font-size: 1.2rem; color: var(--muted); margin: 0; max-width: 40rem; }
+.keywords { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0; padding: 0; list-style: none; }
+.keywords li { font-family: var(--font-mono); font-size: 0.875rem; padding: 0.25rem 0.6rem; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.keywords li span { color: var(--muted); font-size: 0.75rem; margin-left: 0.35rem; }
+.meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); margin: 0; }
+
+h2 { font-size: 1.75rem; font-weight: 700; margin: 3.5rem 0 1rem; scroll-margin-top: 1.5rem; }
+h2 .num { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 400; color: var(--marker); margin-right: 0.6rem; vertical-align: 0.25em; }
+h3 { font-size: 1.25rem; font-weight: 500; margin: 2.25rem 0 0.75rem; scroll-margin-top: 1.5rem; }
+p, ul, ol { margin: 0 0 1rem; }
+li { margin-bottom: 0.35rem; }
+li > ul { margin-top: 0.35rem; }
+:not(pre) > code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.08em 0.32em; border-radius: 3px; overflow-wrap: anywhere; }
+strong { font-weight: 600; }
+
+sup.cite { font-family: var(--font-mono); font-size: 0.68em; line-height: 0; margin-left: 0.1em; }
+sup.cite a { text-decoration: none; }
+sup.cite a:hover { text-decoration: underline; }
+
+/* Contents */
+.toc { font-family: var(--font-display); font-size: 0.92rem; }
+.toc h2 { font-size: 0.75rem; font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.75rem; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; counter-reset: toc; }
+.toc li { margin: 0; }
+.toc a { display: block; padding: 0.3rem 0.6rem; border-left: 2px solid var(--rule); color: var(--muted); text-decoration: none; }
+.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+@media (max-width: 1099px) {
+  .toc { border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.25rem; background: var(--surface); }
+  .toc ol { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+}
+
+/* Code */
+figure { margin: 1.5rem 0; }
+figure.code { border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+.code-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem 0.45rem 0.9rem; border-bottom: 1px solid var(--rule); font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+.fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { padding: 0.1rem 0.45rem; border-radius: 3px; background: var(--marker-soft); color: var(--marker); font-weight: 600; }
+.copy { font: inherit; color: var(--muted); background: transparent; border: 1px solid var(--rule); border-radius: 4px; padding: 0.15rem 0.55rem; cursor: pointer; }
+.copy:hover { color: var(--ink); border-color: var(--muted); }
+pre { margin: 0; overflow-x: auto; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.6; tab-size: 4; }
+pre.src { padding: 0.9rem 1rem; }
+.out { border-top: 1px dashed var(--rule); background: var(--out-bg); padding: 0.6rem 1rem 0.8rem; }
+.out-label { display: block; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.25rem; }
+.out pre { color: var(--ink); }
+.out-error { background: var(--err-soft); }
+.out-error .out-label, .out-error pre { color: var(--err); }
+
+.grammar { border-left: 3px solid var(--marker); background: var(--surface); padding: 0.75rem 1rem; border-radius: 0 6px 6px 0; }
+.grammar figcaption { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+.grammar pre { font-size: 0.82rem; }
+
+code, pre { font-variant-ligatures: none; }
+td:nth-child(2) code { white-space: nowrap; }
+/* Pygments tokens */
+.src .k, .src .kn, .src .kd, .src .kr, .src .ow, .src .kp { color: var(--hl-kw); font-weight: 600; }
+.src .kc { color: var(--hl-num); font-weight: 600; }
+.src .s, .src .s1, .src .s2, .src .sa, .src .sb, .src .sd, .src .sr, .src .sc { color: var(--hl-str); }
+.src .si, .src .se { color: var(--hl-num); }
+.src .c, .src .c1, .src .ch, .src .cm { color: var(--hl-com); font-style: italic; }
+.src .m, .src .mi, .src .mf { color: var(--hl-num); }
+.src .nf, .src .nc, .src .fm, .src .nd { color: var(--hl-fn); }
+.src .nb, .src .bp, .src .ne { color: var(--hl-bi); }
+.src .nn { color: var(--ink); }
+.src .o, .src .p { color: var(--muted); }
+
+/* Callouts and tables */
+.note { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.15rem; margin: 1.5rem 0; }
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+.note .note-title { display: block; font-family: var(--font-display); font-weight: 700; margin-bottom: 0.35rem; }
+.note.warn { border-color: var(--marker); background: var(--marker-soft); }
+.table-wrap { overflow-x: auto; margin: 1.5rem 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--font-display); font-weight: 700; font-size: 0.85rem; background: var(--code-bg); }
+
+/* Exercises */
+.exercise { border-top: 1px solid var(--rule); padding-top: 1.25rem; margin-top: 2rem; }
+.exercise h3 { margin-top: 0; }
+.exercise h3 .lvl { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 0.1rem 0.4rem; margin-left: 0.5rem; vertical-align: 0.2em; }
+details { border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); margin: 1rem 0; }
+summary { cursor: pointer; padding: 0.6rem 0.9rem; font-family: var(--font-display); font-weight: 500; color: var(--accent); }
+details[open] summary { border-bottom: 1px solid var(--rule); }
+details > .sol { padding: 0.25rem 1rem 0.5rem; }
+
+/* References */
+.refs { font-size: 0.93rem; padding-left: 2rem; }
+.refs li { margin-bottom: 0.7rem; padding-left: 0.25rem; scroll-margin-top: 1.5rem; }
+.refs li:target { background: var(--marker-soft); border-radius: 3px; }
+.refs a { overflow-wrap: anywhere; }
+footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); font-size: 0.88rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<nav aria-label="Site navigation" style="position:relative;display:flex;gap:1rem;align-items:center;padding:.8rem 1rem;margin:0;background:#111827;color:#f9fafb;font:600 0.9rem/1.2 system-ui,-apple-system,Segoe UI,sans-serif">
+  <a href="../../../index.html" style="color:#f9fafb;text-decoration:none">Home</a>
+  <a href="../../../blog.html" style="color:#f9fafb;text-decoration:none">Blog</a>
+</nav>
+
+<div class="page">
+<header class="masthead">
+<p class="eyebrow">Python fundamentals · Monkey patching</p>
+<h1>Monkey Patching in Python</h1>
+<p class="standfirst">How to change functions, methods, classes and modules while a program is running, why Python lets you, how to do it safely in tests with <code>unittest.mock</code> and pytest, and when you should reach for something else instead.</p>
+<ul class="keywords" aria-label="Topics covered">
+<li>setattr<span>runtime</span></li><li>types.MethodType<span>instances</span></li><li>mock.patch<span>unittest</span></li><li>monkeypatch<span>pytest</span></li><li>gevent<span>real world</span></li><li>dependency injection<span>alternative</span></li>
+</ul>
+<p class="meta">Every example was run on CPython 3.13.17 (pytest 9.2, gevent 26.9, freezegun 1.5) and its real output is shown beneath it · References accessed 29 October 2026</p>
+</header>
+<nav class="toc" aria-label="Contents">
+<h2>Contents</h2>
+<ol>
+<li><a href="#what">What monkey patching is</a></li>
+<li><a href="#why">Why Python allows it</a></li>
+<li><a href="#modules">Patching functions and modules</a></li>
+<li><a href="#classes">Patching classes and methods</a></li>
+<li><a href="#where">Patch where it is looked up</a></li>
+<li><a href="#restore">Restoring originals safely</a></li>
+<li><a href="#mock">unittest.mock.patch</a></li>
+<li><a href="#pytest">pytest's monkeypatch fixture</a></li>
+<li><a href="#builtins">Why built-in types can't be patched</a></li>
+<li><a href="#uses">Real uses</a></li>
+<li><a href="#risks">Risks and alternatives</a></li>
+<li><a href="#pitfalls">Pitfalls checklist</a></li>
+<li><a href="#exercises">Exercises</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+</nav>
+<main>
+
+<section>
+<h2 id="what"><span class="num">1</span>What monkey patching is</h2>
+<p><strong>Monkey patching</strong> means changing the behaviour of existing code at run time by replacing or adding attributes on the objects that hold it: a module's functions, a class's methods, or a single instance's attributes. The source files are not edited. Instead, some code that runs later reaches into an object that was already created and rebinds one of its names.</p>
+<p>The technique is old and widely used in Python. In January 2008 Guido van Rossum posted two recipes to the python-dev mailing list that he had written for "a large project": a decorator that attaches a function to an existing class as a method, and a metaclass that copies several methods onto an existing class at once. He noted that neither recipe works on built-in types such as <code>list</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>. In the same thread Kevin Teague explained that the name grew out of "guerilla patch", and argued that the term should be kept for dynamic changes made to a class with the intent of changing or correcting the behaviour of upstream code<sup class="cite">[<a href="#ref-2">2</a>]</sup>. The gevent project, one of the best-known users of the technique, describes its own <code>gevent.monkey</code> module as code that will "carefully patch, in place, portions of the standard library"<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+<p>Three situations account for most monkey patching you will meet:</p>
+<ul>
+<li><strong>Tests</strong> replace slow, non-deterministic or external dependencies (the network, the clock, environment variables) with controlled stand-ins. Both <code>unittest.mock.patch</code> and pytest's <code>monkeypatch</code> fixture exist for this, and both undo the change afterwards<sup class="cite">[<a href="#ref-4">4</a>,<a href="#ref-5">5</a>]</sup>.</li>
+<li><strong>Libraries that change the runtime</strong>, such as gevent, swap blocking standard-library functions for cooperative versions<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</li>
+<li><strong>Hotfixes</strong> correct a bug in a third-party package without waiting for a new release.</li>
+</ul>
+<p>The rest of this article shows the mechanics first, then the tools that make it safe, and ends with the risks and the alternatives that often make patching unnecessary.</p>
+</section>
+
+<section>
+<h2 id="why"><span class="num">2</span>Why Python allows it</h2>
+<p>Python does not need any special feature to support monkey patching. It falls out of three ordinary rules of the language.</p>
+<p><strong>Namespaces are dictionaries that can be written to.</strong> A module object has a namespace implemented by a dictionary; <code>m.x</code> is equivalent to <code>m.__dict__["x"]</code>, and attribute assignment <code>m.x = 1</code> is equivalent to <code>m.__dict__["x"] = 1</code><sup class="cite">[<a href="#ref-6">6</a>]</sup>. Classes work the same way: a class has a namespace implemented by a dictionary, class attribute references are translated to lookups in it, and class attribute assignments update that dictionary<sup class="cite">[<a href="#ref-6">6</a>]</sup>. Instances also have a dictionary, and attribute assignment on an instance updates the instance's dictionary, never the class's<sup class="cite">[<a href="#ref-6">6</a>]</sup>.</p>
+<p><strong>Names are looked up when the code runs, not when it is compiled.</strong> A function that calls <code>greetings.greet()</code> fetches the attribute <code>greet</code> from the module each time that line executes, so whatever is bound to that name at that moment is what gets called.</p>
+<p><strong>Each module is imported once and then shared.</strong> The first place the import system looks is <code>sys.modules</code>, a cache of every module that has already been imported. If the name is there, that module object satisfies the import and the search stops<sup class="cite">[<a href="#ref-7">7</a>]</sup>. Every <code>import config</code> in a program therefore receives the same object, so a change made to it in one place is seen everywhere.</p>
+<figure class="code"><div class="code-head"><span class="fname">config_demo.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: config.py</span>
+<span class="n">DEBUG</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># file: worker.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">config</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">status</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s2">"verbose"</span> <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">DEBUG</span> <span class="k">else</span> <span class="s2">"quiet"</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">config</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">worker</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"before:"</span><span class="p">,</span> <span class="n">worker</span><span class="o">.</span><span class="n">status</span><span class="p">())</span>
+<span class="n">config</span><span class="o">.</span><span class="n">DEBUG</span> <span class="o">=</span> <span class="kc">True</span>                  <span class="c1"># rebinds the name in config.__dict__</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"after: "</span><span class="p">,</span> <span class="n">worker</span><span class="o">.</span><span class="n">status</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"same module object everywhere:"</span><span class="p">,</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"config"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">config</span> <span class="ow">is</span> <span class="n">worker</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"config.DEBUG is config.__dict__['DEBUG']:"</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">DEBUG</span> <span class="ow">is</span> <span class="n">config</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="s2">"DEBUG"</span><span class="p">])</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>before: quiet
+after:  verbose
+same module object everywhere: True
+config.DEBUG is config.__dict__[&#x27;DEBUG&#x27;]: True</pre></div></figure>
+<p>The file headings inside one figure (<code># file: config.py</code> and so on) mark separate files that were written to one folder; the last one was run. <code>worker</code> never changed, yet its behaviour did, because it reads <code>config.DEBUG</code> at call time from the one shared module object.</p>
+</section>
+
+<section>
+<h2 id="modules"><span class="num">3</span>Patching functions and modules</h2>
+<p>The simplest patch rebinds a module-level function. Any caller that looks the function up through the module will get the replacement.</p>
+<figure class="code"><div class="code-head"><span class="fname">patch_function.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: greetings.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"Hello, </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">welcome</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="c1"># looks up greet in this module's namespace on every call</span>
+    <span class="k">return</span> <span class="n">greet</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">+</span> <span class="s2">", welcome aboard."</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">greetings</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">shout</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"HELLO, </span><span class="si">{</span><span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">!"</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">greetings</span><span class="o">.</span><span class="n">welcome</span><span class="p">(</span><span class="s2">"Ada"</span><span class="p">))</span>
+
+<span class="n">original</span> <span class="o">=</span> <span class="n">greetings</span><span class="o">.</span><span class="n">greet</span>
+<span class="n">greetings</span><span class="o">.</span><span class="n">greet</span> <span class="o">=</span> <span class="n">shout</span>              <span class="c1"># the patch</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">greetings</span><span class="o">.</span><span class="n">welcome</span><span class="p">(</span><span class="s2">"Ada"</span><span class="p">))</span>
+
+<span class="n">greetings</span><span class="o">.</span><span class="n">greet</span> <span class="o">=</span> <span class="n">original</span>           <span class="c1"># undo it</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">greetings</span><span class="o">.</span><span class="n">welcome</span><span class="p">(</span><span class="s2">"Ada"</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Hello, Ada, welcome aboard.
+HELLO, ADA!, welcome aboard.
+Hello, Ada, welcome aboard.</pre></div></figure>
+<p>Note that <code>welcome</code> was patched indirectly. It calls <code>greet</code> through its module's global namespace, which is the same dictionary that <code>greetings.greet = shout</code> wrote to<sup class="cite">[<a href="#ref-6">6</a>]</sup>.</p>
+<p>You can also <em>add</em> names a module never had, or replace a whole module before anything imports it by putting an object into <code>sys.modules</code>. Because the import system returns whatever object it finds in that cache<sup class="cite">[<a href="#ref-7">7</a>]</sup>, the <code>unittest.mock</code> documentation uses this to stand in for a module that is not installed<sup class="cite">[<a href="#ref-8">8</a>]</sup>:</p>
+<figure class="code"><div class="code-head"><span class="fname">fake_module.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">types</span>
+
+<span class="n">fake</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">ModuleType</span><span class="p">(</span><span class="s2">"payments"</span><span class="p">)</span>
+<span class="n">fake</span><span class="o">.</span><span class="n">charge</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">amount</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"pretend charge of </span><span class="si">{</span><span class="n">amount</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"payments"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fake</span>       <span class="c1"># anything that imports payments now gets fake</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">payments</span>                      <span class="c1"># no payments.py exists anywhere</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">payments</span><span class="o">.</span><span class="n">charge</span><span class="p">(</span><span class="mf">9.5</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">payments</span> <span class="ow">is</span> <span class="n">fake</span><span class="p">)</span>
+<span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="s2">"payments"</span><span class="p">]</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>pretend charge of 9.50
+True</pre></div></figure>
+<p>A module patch is only as reliable as the way callers reach the function. Code that did <code>from greetings import greet</code> keeps its own reference and will not see the patch; section 5 deals with that in detail.</p>
+</section>
+
+<section>
+<h2 id="classes"><span class="num">4</span>Patching classes and methods</h2>
+<h3>On the class: every instance changes</h3>
+<p>Methods live in the class's dictionary, and functions stored in a class become bound methods when they are looked up through an instance<sup class="cite">[<a href="#ref-9">9</a>]</sup>. So assigning a new function to the class changes the method for every instance, including ones created before the patch.</p>
+<figure class="code"><div class="code-head"><span class="fname">patch_class.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Account</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">owner</span><span class="p">,</span> <span class="n">balance</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">owner</span> <span class="o">=</span> <span class="n">owner</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">balance</span> <span class="o">=</span> <span class="n">balance</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">owner</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">balance</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="n">acct</span> <span class="o">=</span> <span class="n">Account</span><span class="p">(</span><span class="s2">"Grace"</span><span class="p">,</span> <span class="mf">1234.5</span><span class="p">)</span>          <span class="c1"># created before the patch</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">acct</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">describe_money</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">owner</span><span class="si">}</span><span class="s2">: $</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">balance</span><span class="si">:</span><span class="s2">,.2f</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">is_rich</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>       <span class="c1"># a brand-new method</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">balance</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
+
+
+<span class="n">Account</span><span class="o">.</span><span class="n">describe</span> <span class="o">=</span> <span class="n">describe_money</span>
+<span class="n">Account</span><span class="o">.</span><span class="n">is_rich</span> <span class="o">=</span> <span class="n">is_rich</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">acct</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">acct</span><span class="o">.</span><span class="n">is_rich</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">Account</span><span class="p">(</span><span class="s2">"Linus"</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">is_rich</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Grace: 1234.5
+Grace: $1,234.50
+True
+False</pre></div></figure>
+<p>Guido van Rossum's 2008 recipe wraps the same <code>setattr</code> call in a decorator<sup class="cite">[<a href="#ref-1">1</a>]</sup>. Here it is unchanged except for formatting:</p>
+<figure class="code"><div class="code-head"><span class="fname">monkeypatch_method.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">def</span><span class="w"> </span><span class="nf">monkeypatch_method</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">func</span>
+    <span class="k">return</span> <span class="n">decorator</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Point</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span>
+
+
+<span class="nd">@monkeypatch_method</span><span class="p">(</span><span class="n">Point</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"Point(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="si">}</span><span class="s2">)"</span>
+
+
+<span class="nd">@monkeypatch_method</span><span class="p">(</span><span class="n">Point</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">length</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">**</span> <span class="mf">0.5</span>
+
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">length</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Point(3, 4) 5.0</pre></div></figure>
+<h3>On one instance: bind it yourself</h3>
+<p>Patching a single object is trickier. Functions are non-data descriptors: their <code>__get__</code> method produces a bound method only when the function is found on the <em>class</em> during a dotted lookup from an instance<sup class="cite">[<a href="#ref-9">9</a>]</sup>. A function stored in an instance's own dictionary takes precedence over the class's function, but it is not bound, so <code>self</code> is never passed<sup class="cite">[<a href="#ref-9">9</a>]</sup>. <code>types.MethodType</code> creates the bound method manually<sup class="cite">[<a href="#ref-9">9</a>,<a href="#ref-10">10</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">patch_instance.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">types</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Sensor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">20.0</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">flaky_read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: no signal"</span>
+
+
+<span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">Sensor</span><span class="p">(</span><span class="s2">"a"</span><span class="p">),</span> <span class="n">Sensor</span><span class="p">(</span><span class="s2">"b"</span><span class="p">)</span>
+
+<span class="n">a</span><span class="o">.</span><span class="n">read</span> <span class="o">=</span> <span class="n">flaky_read</span>                      <span class="c1"># plain function in the instance dict</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">a</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+<span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+
+<span class="n">a</span><span class="o">.</span><span class="n">read</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">MethodType</span><span class="p">(</span><span class="n">flaky_read</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span> <span class="c1"># bound to a only</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>                          <span class="c1"># other instances are untouched</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"in a.__dict__:"</span><span class="p">,</span> <span class="s2">"read"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">a</span><span class="p">))</span>
+
+<span class="k">del</span> <span class="n">a</span><span class="o">.</span><span class="n">read</span>                               <span class="c1"># removing the instance attribute</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>                          <span class="c1"># exposes the class method again</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>TypeError: flaky_read() missing 1 required positional argument: &#x27;self&#x27;
+a: no signal
+20.0
+in a.__dict__: True
+20.0</pre></div></figure>
+<p>Two limits are worth knowing. A class that defines <code>__slots__</code> and no <code>__dict__</code> denies its instances a per-instance dictionary<sup class="cite">[<a href="#ref-6">6</a>]</sup>, so there is nowhere to store an instance-level patch. And a <em>data</em> descriptor such as a <code>property</code> always wins over the instance dictionary<sup class="cite">[<a href="#ref-9">9</a>]</sup>, so assigning to a read-only property on an instance fails. Properties, class methods and static methods should be patched on the class instead, which is also what the <code>unittest.mock</code> documentation advises<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">property_patch.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Thermometer</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">celsius</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">celsius</span> <span class="o">=</span> <span class="n">celsius</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fahrenheit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">celsius</span> <span class="o">*</span> <span class="mi">9</span> <span class="o">/</span> <span class="mi">5</span> <span class="o">+</span> <span class="mi">32</span>
+
+
+<span class="n">t</span> <span class="o">=</span> <span class="n">Thermometer</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">t</span><span class="o">.</span><span class="n">fahrenheit</span> <span class="o">=</span> <span class="mi">0</span>                     <span class="c1"># instance patch of a property</span>
+<span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"AttributeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+
+<span class="n">Thermometer</span><span class="o">.</span><span class="n">fahrenheit</span> <span class="o">=</span> <span class="nb">property</span><span class="p">(</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="o">-</span><span class="mf">459.67</span><span class="p">)</span>   <span class="c1"># patch the class</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">fahrenheit</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>AttributeError: property &#x27;fahrenheit&#x27; of &#x27;Thermometer&#x27; object has no setter
+-459.67</pre></div></figure>
+<h3>Wrapping instead of replacing</h3>
+<p>Most real patches keep the original and call it, adding behaviour around it. <code>functools.wraps</code> copies the original's name and docstring onto the wrapper and adds a <code>__wrapped__</code> attribute that refers to the wrapped function<sup class="cite">[<a href="#ref-11">11</a>]</sup>, which gives you a clean way back to the original.</p>
+<figure class="code"><div class="code-head"><span class="fname">wrap_method.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Bank</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">transfer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">amount</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Move money between accounts."""</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"moved </span><span class="si">{</span><span class="n">amount</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">src</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">dst</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="n">calls</span> <span class="o">=</span> <span class="p">[]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">audited</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wrapper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">wrapper</span>
+
+
+<span class="n">Bank</span><span class="o">.</span><span class="n">transfer</span> <span class="o">=</span> <span class="n">audited</span><span class="p">(</span><span class="n">Bank</span><span class="o">.</span><span class="n">transfer</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">Bank</span><span class="p">()</span><span class="o">.</span><span class="n">transfer</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">,</span> <span class="mi">50</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"audit log:"</span><span class="p">,</span> <span class="n">calls</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"metadata kept:"</span><span class="p">,</span> <span class="n">Bank</span><span class="o">.</span><span class="n">transfer</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">"-"</span><span class="p">,</span> <span class="n">Bank</span><span class="o">.</span><span class="n">transfer</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">)</span>
+
+<span class="n">Bank</span><span class="o">.</span><span class="n">transfer</span> <span class="o">=</span> <span class="n">Bank</span><span class="o">.</span><span class="n">transfer</span><span class="o">.</span><span class="n">__wrapped__</span>     <span class="c1"># unpatch</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">Bank</span><span class="p">()</span><span class="o">.</span><span class="n">transfer</span><span class="p">(</span><span class="s2">"A"</span><span class="p">,</span> <span class="s2">"B"</span><span class="p">,</span> <span class="mi">75</span><span class="p">),</span> <span class="s2">"| log still:"</span><span class="p">,</span> <span class="n">calls</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>moved 50 from A to B
+audit log: [(&#x27;A&#x27;, &#x27;B&#x27;, 50)]
+metadata kept: transfer - Move money between accounts.
+moved 75 from A to B | log still: [(&#x27;A&#x27;, &#x27;B&#x27;, 50)]</pre></div></figure>
+</section>
+
+<section>
+<h2 id="where"><span class="num">5</span>Patch where it is looked up</h2>
+<p>This is the rule that trips up almost everyone. Patching changes the object that <em>one name</em> refers to, and several names can refer to the same object. The <code>unittest.mock</code> documentation puts it this way: "you patch where an object is <em>looked up</em>, which is not necessarily the same place as where it is defined"<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<p>The reason lies in how the two forms of <code>import</code> bind names. <code>import rates</code> binds the name <code>rates</code> to the module, so <code>rates.fetch_rate</code> is looked up in that module on every call. <code>from rates import fetch_rate</code> stores a reference to the function itself in the importing module's namespace at import time<sup class="cite">[<a href="#ref-12">12</a>]</sup>. Rebinding <code>rates.fetch_rate</code> later does not touch that second reference.</p>
+<figure class="code"><div class="code-head"><span class="fname">where_to_patch.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: rates.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fetch_rate</span><span class="p">():</span>
+    <span class="k">return</span> <span class="mf">1.08</span>          <span class="c1"># imagine an HTTP call here</span>
+
+
+<span class="c1"># file: invoice.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">rates</span><span class="w"> </span><span class="kn">import</span> <span class="n">fetch_rate</span>         <span class="c1"># copies the reference into invoice</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">total</span><span class="p">(</span><span class="n">eur</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">eur</span> <span class="o">*</span> <span class="n">fetch_rate</span><span class="p">(),</span> <span class="mi">2</span><span class="p">)</span>
+
+
+<span class="c1"># file: quote.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">rates</span>                         <span class="c1"># keeps a reference to the module</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">total</span><span class="p">(</span><span class="n">eur</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">eur</span> <span class="o">*</span> <span class="n">rates</span><span class="o">.</span><span class="n">fetch_rate</span><span class="p">(),</span> <span class="mi">2</span><span class="p">)</span>
+
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">invoice</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">quote</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">rates</span>
+
+<span class="n">rates</span><span class="o">.</span><span class="n">fetch_rate</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="mf">2.0</span>       <span class="c1"># patch the definition site</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"quote  :"</span><span class="p">,</span> <span class="n">quote</span><span class="o">.</span><span class="n">total</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>   <span class="c1"># looks up rates.fetch_rate -&gt; patched</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"invoice:"</span><span class="p">,</span> <span class="n">invoice</span><span class="o">.</span><span class="n">total</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span> <span class="c1"># still holds the original function</span>
+
+<span class="n">invoice</span><span class="o">.</span><span class="n">fetch_rate</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="mf">2.0</span>     <span class="c1"># patch where invoice looks it up</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"invoice:"</span><span class="p">,</span> <span class="n">invoice</span><span class="o">.</span><span class="n">total</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>quote  : 200.0
+invoice: 108.0
+invoice: 200.0</pre></div></figure>
+<p>So the target of a patch depends on the code under test, not on where the function was written. If the module did <code>from rates import fetch_rate</code>, patch <code>invoice.fetch_rate</code>; if it did <code>import rates</code>, patch <code>rates.fetch_rate</code><sup class="cite">[<a href="#ref-4">4</a>]</sup>. pytest's documentation gives the same advice for its own fixture: if your module does <code>from os import getcwd</code>, patch <code>mymodule.getcwd</code> rather than <code>os.getcwd</code><sup class="cite">[<a href="#ref-5">5</a>]</sup>. The same reasoning explains why a patch applied too late in a program's life can miss code that already grabbed a reference, which is why gevent asks to be patched "as early as possible", ideally before any other imports in the main module<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+</section>
+
+<section>
+<h2 id="restore"><span class="num">6</span>Restoring originals safely</h2>
+<p>A patch that is never undone leaks into every piece of code that runs afterwards. In tests that means one test silently changes the result of another. The minimum is a <code>try</code>/<code>finally</code>, so the original comes back even if the code in between raises.</p>
+<figure class="code"><div class="code-head"><span class="fname">try_finally.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+<span class="n">original</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span>
+<span class="n">time</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="mf">0.0</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"patched:"</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"test failed half-way"</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"caught:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+<span class="k">finally</span><span class="p">:</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">original</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"restored:"</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1_700_000_000</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>patched: 0.0
+caught: test failed half-way
+restored: True</pre></div></figure>
+<p>A reusable version is a context manager, which <code>contextlib.contextmanager</code> makes short<sup class="cite">[<a href="#ref-13">13</a>]</sup>. A careful one has to handle three cases that naive code gets wrong:</p>
+<ul>
+<li>The attribute did not exist before, so restoring means <em>deleting</em> it, not setting it back to some value.</li>
+<li>The attribute is inherited, so reading it with <code>getattr</code> and writing it back would leave a new copy in the subclass's own dictionary.</li>
+<li>The attribute is a <code>staticmethod</code> or <code>classmethod</code>. <code>getattr</code> runs the descriptor and returns the underlying function, so writing that back turns a static method into an ordinary method. <code>inspect.getattr_static</code> retrieves the attribute without triggering the descriptor protocol<sup class="cite">[<a href="#ref-14">14</a>]</sup>, and reading the object's own <code>__dict__</code> avoids both problems.</li>
+</ul>
+<figure class="code"><div class="code-head"><span class="fname">staticmethod_bug.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Tools</span><span class="p">:</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">version</span><span class="p">():</span>
+        <span class="k">return</span> <span class="s2">"1.0"</span>
+
+
+<span class="n">saved</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Tools</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">)</span>    <span class="c1"># the descriptor has already run: a plain function</span>
+<span class="n">Tools</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="s2">"patched"</span>
+<span class="n">Tools</span><span class="o">.</span><span class="n">version</span> <span class="o">=</span> <span class="n">saved</span>                <span class="c1"># "restore"</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">Tools</span><span class="o">.</span><span class="n">version</span><span class="p">())</span>               <span class="c1"># works through the class...</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">Tools</span><span class="p">()</span><span class="o">.</span><span class="n">version</span><span class="p">())</span>         <span class="c1"># ...but no longer through an instance</span>
+<span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>1.0
+TypeError: Tools.version() takes 0 positional arguments but 1 was given</pre></div></figure>
+<figure class="code"><div class="code-head"><span class="fname">patched.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+
+<span class="n">_MISSING</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+
+
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">patched</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Temporarily set target.name = value, then restore exactly what was there."""</span>
+    <span class="c1"># read the raw entry from the object's own namespace, not via getattr</span>
+    <span class="n">original</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">_MISSING</span><span class="p">)</span>
+    <span class="nb">setattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">value</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">original</span> <span class="ow">is</span> <span class="n">_MISSING</span><span class="p">:</span>
+            <span class="nb">delattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>            <span class="c1"># it was absent (or inherited): remove ours</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">original</span><span class="p">)</span>  <span class="c1"># put the raw object back</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Base</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hello</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"base hello"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Child</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">version</span><span class="p">():</span>
+        <span class="k">return</span> <span class="s2">"1.0"</span>
+
+
+<span class="k">with</span> <span class="n">patched</span><span class="p">(</span><span class="n">Child</span><span class="p">,</span> <span class="s2">"hello"</span><span class="p">,</span> <span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="s2">"patched hello"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">Child</span><span class="p">()</span><span class="o">.</span><span class="n">hello</span><span class="p">())</span>
+<span class="k">with</span> <span class="n">patched</span><span class="p">(</span><span class="n">Child</span><span class="p">,</span> <span class="s2">"version"</span><span class="p">,</span> <span class="nb">staticmethod</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="s2">"2.0"</span><span class="p">)):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">Child</span><span class="p">()</span><span class="o">.</span><span class="n">version</span><span class="p">())</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">Child</span><span class="p">()</span><span class="o">.</span><span class="n">hello</span><span class="p">(),</span> <span class="s2">"| own copy left in Child:"</span><span class="p">,</span> <span class="s2">"hello"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">Child</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">Child</span><span class="p">()</span><span class="o">.</span><span class="n">version</span><span class="p">(),</span> <span class="s2">"| still a staticmethod:"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">Child</span><span class="p">)[</span><span class="s2">"version"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># patches nest and unwind in reverse order</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="k">with</span> <span class="n">patched</span><span class="p">(</span><span class="n">math</span><span class="p">,</span> <span class="s2">"pi"</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">patched</span><span class="p">(</span><span class="n">math</span><span class="p">,</span> <span class="s2">"tau"</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">tau</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">tau</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>patched hello
+2.0
+base hello | own copy left in Child: False
+1.0 | still a staticmethod: staticmethod
+3 6
+3.141592653589793 6.283185307179586</pre></div></figure>
+<p>Another way to lose a patch, or to keep a stale one, is <code>importlib.reload</code>. Reloading re-executes the module's code and rebinds the names in its dictionary, but references held elsewhere, such as names created by <code>from module import name</code>, are not rebound<sup class="cite">[<a href="#ref-15">15</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">reload_wipes.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: shapes.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">area</span><span class="p">(</span><span class="n">r</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mf">3.14159</span> <span class="o">*</span> <span class="n">r</span> <span class="o">*</span> <span class="n">r</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">shapes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapes</span><span class="w"> </span><span class="kn">import</span> <span class="n">area</span> <span class="k">as</span> <span class="n">cached_area</span>
+
+<span class="n">shapes</span><span class="o">.</span><span class="n">area</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="mi">0</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"patched:"</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">area</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+<span class="n">importlib</span><span class="o">.</span><span class="n">reload</span><span class="p">(</span><span class="n">shapes</span><span class="p">)</span>                       <span class="c1"># re-runs shapes.py</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"after reload:"</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">area</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>          <span class="c1"># patch gone</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"old reference:"</span><span class="p">,</span> <span class="n">cached_area</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="s2">"| same object:"</span><span class="p">,</span> <span class="n">cached_area</span> <span class="ow">is</span> <span class="n">shapes</span><span class="o">.</span><span class="n">area</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>patched: 0
+after reload: 3.14159
+old reference: 3.14159 | same object: False</pre></div></figure>
+</section>
+
+<section>
+<h2 id="mock"><span class="num">7</span>unittest.mock.patch</h2>
+<p>The standard library's <code>unittest.mock</code> module packages everything in the previous section into one tool. <code>patch()</code> takes a target string in the form <code>'package.module.ClassName'</code>, imports it, replaces the named object, and restores the original afterwards; it works as a function decorator, a class decorator or a context manager<sup class="cite">[<a href="#ref-4">4</a>]</sup>. The target is imported when the decorated function runs, not when it is decorated<sup class="cite">[<a href="#ref-4">4</a>]</sup>. Unless you pass <code>new</code>, the replacement is a <code>MagicMock</code> that records how it was called<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">test_report.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: weather.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">fetch_temp</span><span class="p">(</span><span class="n">city</span><span class="p">):</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>                    <span class="c1"># stands in for a slow network call</span>
+    <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="s2">"no network in tests"</span><span class="p">)</span>
+
+<span class="c1"># file: report.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">weather</span><span class="w"> </span><span class="kn">import</span> <span class="n">fetch_temp</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">headline</span><span class="p">(</span><span class="n">city</span><span class="p">):</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">fetch_temp</span><span class="p">(</span><span class="n">city</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">city</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">temp</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> °C, </span><span class="si">{</span><span class="s1">'warm'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">temp</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">20</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">'cool'</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="c1"># file: test_report.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">unittest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">report</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">HeadlineTests</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="nd">@mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"report.fetch_temp"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="mf">23.4</span><span class="p">)</span>   <span class="c1"># where it is looked up</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_warm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fake_fetch</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">headline</span><span class="p">(</span><span class="s2">"Oslo"</span><span class="p">),</span> <span class="s2">"Oslo: 23.4 °C, warm"</span><span class="p">)</span>
+        <span class="n">fake_fetch</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span><span class="s2">"Oslo"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_cool</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"report.fetch_temp"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="mf">4.0</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">headline</span><span class="p">(</span><span class="s2">"Oslo"</span><span class="p">),</span> <span class="s2">"Oslo: 4.0 °C, cool"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_wrong_target_does_nothing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"weather.fetch_temp"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="mf">4.0</span><span class="p">)</span> <span class="k">as</span> <span class="n">fake</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertIsNot</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">fetch_temp</span><span class="p">,</span> <span class="n">fake</span><span class="p">)</span>   <span class="c1"># report kept the real one</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">verbosity</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>test_cool (__main__.HeadlineTests.test_cool) ... ok
+test_warm (__main__.HeadlineTests.test_warm) ... ok
+test_wrong_target_does_nothing (__main__.HeadlineTests.test_wrong_target_does_nothing) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+OK</pre></div></figure>
+<h3>patch.object, patch.dict and autospec</h3>
+<p><code>patch.object(target, "name")</code> patches an attribute on an object you already hold, which avoids spelling a dotted path<sup class="cite">[<a href="#ref-4">4</a>]</sup>. <code>patch.dict</code> patches a dictionary such as <code>os.environ</code> and restores it afterwards to a copy of its earlier state<sup class="cite">[<a href="#ref-4">4</a>]</sup>. With <code>autospec=True</code> the mock copies the signature of the object it replaces, so a call with the wrong arguments raises <code>TypeError</code> instead of silently passing<sup class="cite">[<a href="#ref-4">4</a>]</sup>. And by default <code>patch()</code> refuses to replace an attribute that does not exist, raising <code>AttributeError</code>; <code>create=True</code> turns that check off, which the documentation warns "can be dangerous" because tests can then pass against APIs that don't exist<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">mock_tools.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Mailer</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">to</span><span class="p">,</span> <span class="n">subject</span><span class="p">,</span> <span class="n">body</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"would really send email"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">notify</span><span class="p">(</span><span class="n">mailer</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">mailer</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s2">"Hi"</span><span class="p">)</span>           <span class="c1"># bug: forgot the body argument</span>
+
+
+<span class="c1"># patch.object without autospec: the bug goes unnoticed</span>
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="o">.</span><span class="n">object</span><span class="p">(</span><span class="n">Mailer</span><span class="p">,</span> <span class="s2">"send"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fake</span><span class="p">:</span>
+    <span class="n">notify</span><span class="p">(</span><span class="n">Mailer</span><span class="p">(),</span> <span class="s2">"ada@example.com"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"plain mock accepted:"</span><span class="p">,</span> <span class="n">fake</span><span class="o">.</span><span class="n">call_args</span><span class="p">)</span>
+
+<span class="c1"># with autospec the signature is enforced</span>
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="o">.</span><span class="n">object</span><span class="p">(</span><span class="n">Mailer</span><span class="p">,</span> <span class="s2">"send"</span><span class="p">,</span> <span class="n">autospec</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">notify</span><span class="p">(</span><span class="n">Mailer</span><span class="p">(),</span> <span class="s2">"ada@example.com"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"autospec caught it:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+
+<span class="c1"># patch.dict restores the mapping afterwards</span>
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">,</span> <span class="p">{</span><span class="s2">"APP_MODE"</span><span class="p">:</span> <span class="s2">"test"</span><span class="p">}):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"inside :"</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"APP_MODE"</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"outside:"</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"APP_MODE"</span><span class="p">))</span>
+
+<span class="c1"># a typo in the target fails loudly</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="o">.</span><span class="n">object</span><span class="p">(</span><span class="n">Mailer</span><span class="p">,</span> <span class="s2">"sned"</span><span class="p">):</span>
+        <span class="k">pass</span>
+<span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"AttributeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>plain mock accepted: call(&#x27;ada@example.com&#x27;, &#x27;Hi&#x27;)
+autospec caught it: missing a required argument: &#x27;body&#x27;
+inside : test
+outside: None
+AttributeError: &lt;class &#x27;__main__.Mailer&#x27;&gt; does not have the attribute &#x27;sned&#x27;</pre></div></figure>
+<h3>Patching in setUp: start, stop and cleanups</h3>
+<p>Every patcher also has <code>start()</code> and <code>stop()</code> methods for patching in <code>setUp</code>. The documentation cautions that you must make sure <code>stop</code> is called, which is easy to get wrong because <code>tearDown</code> does not run if <code>setUp</code> raises, and recommends <code>TestCase.addCleanup()</code><sup class="cite">[<a href="#ref-4">4</a>]</sup>. Cleanup functions run in last-in, first-out order and still run when <code>setUp</code> fails<sup class="cite">[<a href="#ref-16">16</a>]</sup>. Since Python 3.11, <code>TestCase.enterContext()</code> enters a context manager and registers its exit as a cleanup in one call<sup class="cite">[<a href="#ref-16">16</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">test_setup_patch.py</span><span class="badge">Python 3.11+</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">unittest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">stamp</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">StampTests</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">patcher</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"time.time"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="mf">1_000.0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fake_time</span> <span class="o">=</span> <span class="n">patcher</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">addCleanup</span><span class="p">(</span><span class="n">patcher</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span>            <span class="c1"># runs even if setUp fails later</span>
+        <span class="c1"># Python 3.11+: the same thing in one line</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fake_sleep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">enterContext</span><span class="p">(</span><span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"time.sleep"</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_stamp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">(</span><span class="n">stamp</span><span class="p">(</span><span class="s2">"ready"</span><span class="p">),</span> <span class="s2">"[1000] ready"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_sleep_is_fake</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">60</span><span class="p">)</span>                           <span class="c1"># returns at once</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fake_sleep</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span><span class="mi">60</span><span class="p">)</span>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">verbosity</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">exit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"time.time restored:"</span><span class="p">,</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>test_sleep_is_fake (__main__.StampTests.test_sleep_is_fake) ... ok
+test_stamp (__main__.StampTests.test_stamp) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+time.time restored: True</pre></div></figure>
+</section>
+
+<section>
+<h2 id="pytest"><span class="num">8</span>pytest's monkeypatch fixture</h2>
+<p>pytest's built-in <code>monkeypatch</code> fixture helps you "safely set/delete an attribute, dictionary item or environment variable, or to modify <code>sys.path</code> for importing"<sup class="cite">[<a href="#ref-5">5</a>]</sup>. Its methods are <code>setattr</code>, <code>delattr</code>, <code>setitem</code>, <code>delitem</code>, <code>setenv</code>, <code>delenv</code>, <code>syspath_prepend</code>, <code>chdir</code> and <code>context</code>, and "all modifications will be undone after the requesting test function or fixture has finished"<sup class="cite">[<a href="#ref-5">5</a>]</sup>. The <code>raising</code> parameter, true by default, makes <code>setattr</code> and the deletion methods raise <code>AttributeError</code> or <code>KeyError</code> if the target does not exist<sup class="cite">[<a href="#ref-5">5</a>]</sup>. <code>setattr</code> also accepts a dotted import path as a single string<sup class="cite">[<a href="#ref-17">17</a>]</sup>.</p>
+<p>The fixture grew out of Holger Krekel's 2009 argument that patching should live inside the test that needs it and be undone automatically, rather than being spread across <code>setUp</code> and <code>tearDown</code><sup class="cite">[<a href="#ref-18">18</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">test_settings.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: settings.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">DEFAULTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"theme"</span><span class="p">:</span> <span class="s2">"light"</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">config_path</span><span class="p">():</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"APP_HOME"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">".app"</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"config.toml"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">theme</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">DEFAULTS</span><span class="p">[</span><span class="s2">"theme"</span><span class="p">]</span>
+
+<span class="c1"># file: test_settings.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">settings</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_env_var_wins</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setenv</span><span class="p">(</span><span class="s2">"APP_HOME"</span><span class="p">,</span> <span class="s2">"/srv/app"</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">config_path</span><span class="p">()</span> <span class="o">==</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/srv/app/config.toml"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_falls_back_to_home</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">delenv</span><span class="p">(</span><span class="s2">"APP_HOME"</span><span class="p">,</span> <span class="n">raising</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>          <span class="c1"># fine if it is unset</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="s2">"home"</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/home/test"</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">config_path</span><span class="p">()</span> <span class="o">==</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/home/test/.app/config.toml"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_dict_item</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setitem</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">DEFAULTS</span><span class="p">,</span> <span class="s2">"theme"</span><span class="p">,</span> <span class="s2">"dark"</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">theme</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"dark"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_dotted_string_and_context</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">monkeypatch</span><span class="o">.</span><span class="n">context</span><span class="p">()</span> <span class="k">as</span> <span class="n">m</span><span class="p">:</span>
+        <span class="n">m</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="s2">"settings.theme"</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="s2">"solarized"</span><span class="p">)</span>    <span class="c1"># dotted-path form</span>
+        <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">theme</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"solarized"</span>
+    <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">theme</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"light"</span>                      <span class="c1"># undone at block end</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_typo_is_caught</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">AttributeError</span><span class="p">):</span>
+        <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="s2">"them"</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="s2">"x"</span><span class="p">)</span>  <span class="c1"># raising=True default</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_everything_was_undone</span><span class="p">():</span>
+    <span class="k">assert</span> <span class="n">settings</span><span class="o">.</span><span class="n">theme</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"light"</span>
+    <span class="k">assert</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">!=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/home/test"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>......                                                                   [100%]
+6 passed in 0.01s</pre></div></figure>
+<p>pytest's documentation adds two cautions. Patching built-in functions such as <code>open</code> or <code>compile</code> is not recommended because it can break pytest's own internals, and patching standard-library functions that pytest itself uses can break pytest too; when that is unavoidable, <code>monkeypatch.context()</code> limits the patch to a block<sup class="cite">[<a href="#ref-5">5</a>,<a href="#ref-17">17</a>]</sup>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Need</th><th><code>unittest.mock</code></th><th>pytest <code>monkeypatch</code></th></tr></thead>
+<tbody>
+<tr><td>Replace an attribute</td><td><code>patch("pkg.mod.name")</code>, <code>patch.object(obj, "name")</code></td><td><code>setattr(obj, "name", value)</code> or <code>setattr("pkg.mod.name", value)</code></td></tr>
+<tr><td>Dictionary or environment</td><td><code>patch.dict(os.environ, {...})</code></td><td><code>setitem</code>, <code>setenv</code>, <code>delenv</code></td></tr>
+<tr><td>Record and assert calls</td><td>Built in: the replacement is a <code>MagicMock</code></td><td>Not built in; pass your own fake, or a <code>Mock</code></td></tr>
+<tr><td>Signature checking</td><td><code>autospec=True</code></td><td>Not built in</td></tr>
+<tr><td>Missing target</td><td><code>AttributeError</code> unless <code>create=True</code></td><td><code>AttributeError</code>/<code>KeyError</code> unless <code>raising=False</code></td></tr>
+<tr><td>Undo</td><td>End of decorator or <code>with</code> block, or <code>stop()</code></td><td>End of the test or fixture, or end of <code>context()</code></td></tr>
+</tbody></table></div>
+<p>Sources: <code>unittest.mock</code> documentation<sup class="cite">[<a href="#ref-4">4</a>]</sup>; pytest monkeypatch documentation<sup class="cite">[<a href="#ref-5">5</a>,<a href="#ref-17">17</a>]</sup>.</p>
+</section>
+
+<section>
+<h2 id="builtins"><span class="num">9</span>Why built-in types can't be patched</h2>
+<p>Try to add a method to <code>str</code> and Python refuses. Types implemented in C, the "static types", are created with the <code>Py_TPFLAGS_IMMUTABLETYPE</code> flag, which means their attributes "cannot be set nor deleted"; <code>PyType_Ready</code> applies the flag to static types automatically, and the flag exists since Python 3.10<sup class="cite">[<a href="#ref-19">19</a>]</sup>. The same applies to classes in C extension modules such as <code>datetime</code>. The <code>unittest.mock</code> documentation notes that "datetime.date is written in C, so you cannot just monkey-patch out the static <code>datetime.date.today()</code> method"<sup class="cite">[<a href="#ref-8">8</a>]</sup>, and Guido van Rossum's 2008 recipes did not work on built-in types either<sup class="cite">[<a href="#ref-1">1</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">immutable_types.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+
+<span class="n">IMMUTABLE</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span>           <span class="c1"># value of Py_TPFLAGS_IMMUTABLETYPE in CPython</span>
+
+
+<span class="k">for</span> <span class="n">target</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[(</span><span class="nb">str</span><span class="p">,</span> <span class="s2">"shout"</span><span class="p">),</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="s2">"__add__"</span><span class="p">),</span> <span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">,</span> <span class="s2">"today"</span><span class="p">)]:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="k">lambda</span> <span class="o">*</span><span class="n">a</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Mine</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+
+<span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="p">,</span> <span class="n">Mine</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">:</span><span class="s2">&lt;6</span><span class="si">}</span><span class="s2"> immutable flag set: </span><span class="si">{</span><span class="nb">bool</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">__flags__</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">IMMUTABLE</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>TypeError: cannot set &#x27;shout&#x27; attribute of immutable type &#x27;str&#x27;
+TypeError: cannot set &#x27;__add__&#x27; attribute of immutable type &#x27;int&#x27;
+TypeError: cannot set &#x27;today&#x27; attribute of immutable type &#x27;datetime.date&#x27;
+str    immutable flag set: True
+list   immutable flag set: True
+date   immutable flag set: True
+Mine   immutable flag set: False</pre></div></figure>
+<p>The way around it is the rule from section 5: do not patch the type, patch the <em>name</em> the code under test uses to reach it. The <code>unittest.mock</code> documentation patches <code>date</code> inside the module under test with a mock whose <code>today()</code> returns a fixed date while calls to the constructor still build real dates<sup class="cite">[<a href="#ref-8">8</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">fake_today.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: billing.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">is_overdue</span><span class="p">(</span><span class="n">due</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">due</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">billing</span>
+
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"billing.date"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fake_date</span><span class="p">:</span>
+    <span class="n">fake_date</span><span class="o">.</span><span class="n">today</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">31</span><span class="p">)</span>
+    <span class="n">fake_date</span><span class="o">.</span><span class="n">side_effect</span> <span class="o">=</span> <span class="k">lambda</span> <span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">:</span> <span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="o">*</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>   <span class="c1"># constructor still works</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">billing</span><span class="o">.</span><span class="n">is_overdue</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">15</span><span class="p">)))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">billing</span><span class="o">.</span><span class="n">is_overdue</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">15</span><span class="p">)))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">billing</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2020</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">17</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>True
+False
+2020-05-17</pre></div></figure>
+<p>Built-in <em>functions</em> are a different case. They are attributes of the ordinary <code>builtins</code> module, for example <code>builtins.open</code><sup class="cite">[<a href="#ref-20">20</a>]</sup>, and a module's attributes can be rebound, so <code>mock.patch("builtins.input")</code> works, but it changes <code>input</code> for the whole process. The narrower form patches the built-in "within a module": <code>mock.patch("mymodule.input")</code> puts a module-level name in front of the built-in for that one module, and <code>patch()</code> adds <code>create=True</code> for you in this case<sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">patch_input.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ask_age</span><span class="p">():</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">"Age? "</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
+
+<span class="c1"># narrow: only this module (__main__) sees the fake input</span>
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"__main__.input"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="s2">"41"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fake_input</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"next year:"</span><span class="p">,</span> <span class="n">ask_age</span><span class="p">())</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"prompt shown:"</span><span class="p">,</span> <span class="n">fake_input</span><span class="o">.</span><span class="n">call_args</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"builtins.input untouched:"</span><span class="p">,</span> <span class="n">builtins</span><span class="o">.</span><span class="n">input</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">fake_input</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"module-level shadow removed:"</span><span class="p">,</span> <span class="s2">"input"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">globals</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>next year: 42
+prompt shown: (&#x27;Age? &#x27;,)
+builtins.input untouched: True
+module-level shadow removed: True</pre></div></figure>
+</section>
+
+<section>
+<h2 id="uses"><span class="num">10</span>Real uses</h2>
+<h3>gevent: changing the runtime</h3>
+<p>gevent provides cooperative concurrency on top of greenlets. Its <code>patch_all()</code> function replaces blocking parts of the standard library, such as <code>socket</code>, <code>time.sleep</code> and <code>threading</code>, with cooperative versions. Every patch flag except <code>sys</code> is on by default<sup class="cite">[<a href="#ref-3">3</a>]</sup>. Because it rebinds names in modules, it must run before other code takes its own references: the documentation says the main module should begin with the patch "ideally before any other imports", and warns that patching too late can lead to unreliable behaviour or errors<sup class="cite">[<a href="#ref-3">3</a>]</sup>. <code>is_module_patched()</code> and <code>get_original()</code> let you check what was patched and reach the original objects<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">gevent_demo.py</span><span class="badge">gevent 26.9</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">gevent</span><span class="w"> </span><span class="kn">import</span> <span class="n">monkey</span>
+<span class="n">monkey</span><span class="o">.</span><span class="n">patch_all</span><span class="p">()</span>                   <span class="c1"># first, before anything else is imported</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">socket</span>                        <span class="c1"># noqa: E402</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>                          <span class="c1"># noqa: E402</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">gevent</span>                        <span class="c1"># noqa: E402</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"socket patched:"</span><span class="p">,</span> <span class="n">monkey</span><span class="o">.</span><span class="n">is_module_patched</span><span class="p">(</span><span class="s2">"socket"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"time.sleep is now:"</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">+</span> <span class="s2">"."</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"original sleep:"</span><span class="p">,</span> <span class="n">monkey</span><span class="o">.</span><span class="n">get_original</span><span class="p">(</span><span class="s2">"time"</span><span class="p">,</span> <span class="s2">"sleep"</span><span class="p">))</span>
+
+<span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+<span class="n">gevent</span><span class="o">.</span><span class="n">joinall</span><span class="p">([</span><span class="n">gevent</span><span class="o">.</span><span class="n">spawn</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)])</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"ten 0.5 s sleeps took </span><span class="si">{</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>socket patched: True
+time.sleep is now: gevent.hub.sleep
+original sleep: &lt;built-in function sleep&gt;
+ten 0.5 s sleeps took 0.5 s</pre></div></figure>
+<p>Ten calls to what looks like the blocking <code>time.sleep</code> finished in the time of one, because each call now yields to the gevent event loop.</p>
+<h3>freezegun: patching every reference at once</h3>
+<p>FreezeGun lets tests "travel through time by mocking the datetime module": while it is active, <code>datetime.datetime.now()</code>, <code>datetime.date.today()</code>, <code>time.time()</code> and related functions return a frozen time<sup class="cite">[<a href="#ref-21">21</a>]</sup>. Since it cannot patch the C types themselves, its source walks every module in <code>sys.modules</code> and rebinds any attribute that refers to a real <code>datetime</code>/<code>date</code> class or time function to the fake, recording each change so it can be undone<sup class="cite">[<a href="#ref-21">21</a>]</sup>. That is the "patch where it is looked up" rule, applied to every module at once.</p>
+<figure class="code"><div class="code-head"><span class="fname">freeze_demo.py</span><span class="badge">freezegun 1.5</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: receipts.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>            <span class="c1"># a from-import that a naive patch would miss</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">header</span><span class="p">():</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"Receipt dated </span><span class="si">{</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="si">:</span><span class="s2">%d %b %Y</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">freezegun</span><span class="w"> </span><span class="kn">import</span> <span class="n">freeze_time</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">receipts</span>
+
+<span class="k">with</span> <span class="n">freeze_time</span><span class="p">(</span><span class="s2">"2012-01-14"</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">receipts</span><span class="o">.</span><span class="n">header</span><span class="p">())</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"receipts.date is now:"</span><span class="p">,</span> <span class="n">receipts</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"afterwards:"</span><span class="p">,</span> <span class="n">receipts</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">+</span> <span class="s2">"."</span> <span class="o">+</span> <span class="n">receipts</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Receipt dated 14 Jan 2012
+receipts.date is now: FakeDate
+afterwards: datetime.date</pre></div></figure>
+<h3>Test doubles</h3>
+<p>The most common use by far is the one in sections 7 and 8: replacing network calls, clocks, random number generators and environment variables during a test, with the change undone automatically<sup class="cite">[<a href="#ref-4">4</a>,<a href="#ref-5">5</a>]</sup>.</p>
+<h3>Hotfixes to third-party code</h3>
+<p>When a dependency has a bug and the fix has not been released, a small patch module applied at start-up can correct it. Python even provides a start-up hook: after setting up <code>sys.path</code>, the <code>site</code> module tries to import a module named <code>sitecustomize</code>, "which can perform arbitrary site-specific customizations"<sup class="cite">[<a href="#ref-22">22</a>]</sup>. A responsible hotfix checks that it is patching the version it was written for, so it switches itself off once the upstream fix arrives. This also addresses Kevin Teague's concern that a patch should fail loudly if the method it targets disappears in a later release<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">hotfix.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: vendorlib.py</span>
+<span class="n">__version__</span> <span class="o">=</span> <span class="s2">"2.3.1"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">mean</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>        <span class="c1"># bug: crashes on an empty list</span>
+
+<span class="c1"># file: hotfixes.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">vendorlib</span>
+
+<span class="n">FIXED_IN</span> <span class="o">=</span> <span class="s2">"2.3.2"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">vendorlib</span><span class="o">.</span><span class="n">__version__</span> <span class="o">!=</span> <span class="s2">"2.3.1"</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">"vendorlib </span><span class="si">{</span><span class="n">vendorlib</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">: mean() hotfix not applied, "</span>
+                      <span class="sa">f</span><span class="s2">"remove it if the bug was fixed in </span><span class="si">{</span><span class="n">FIXED_IN</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">vendorlib</span><span class="p">,</span> <span class="s2">"mean"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"vendorlib.mean is gone; hotfix needs updating"</span><span class="p">)</span>
+    <span class="n">original</span> <span class="o">=</span> <span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">wraps</span><span class="p">(</span><span class="n">original</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mean</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">0.0</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">original</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="n">mean</span>
+
+
+<span class="n">_apply</span><span class="p">()</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hotfixes</span>                              <span class="c1"># noqa: F401  (applies the patch)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">vendorlib</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">9</span><span class="p">]))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span><span class="p">([]))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"patched:"</span><span class="p">,</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span> <span class="s2">"__wrapped__"</span><span class="p">))</span>
+
+<span class="c1"># simulate upgrading vendorlib and starting again: the hotfix stands down</span>
+<span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="n">vendorlib</span><span class="o">.</span><span class="n">mean</span><span class="o">.</span><span class="n">__wrapped__</span>
+<span class="n">vendorlib</span><span class="o">.</span><span class="n">__version__</span> <span class="o">=</span> <span class="s2">"2.4.0"</span>
+<span class="n">hotfixes</span><span class="o">.</span><span class="n">_apply</span><span class="p">()</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>5.0
+0.0
+patched: True
+/tmp/tmp6ejel5uk/main.py:11: UserWarning: vendorlib 2.4.0: mean() hotfix not applied, remove it if the bug was fixed in 2.3.2
+  hotfixes._apply()</pre></div></figure>
+</section>
+
+<section>
+<h2 id="risks"><span class="num">11</span>Risks and alternatives</h2>
+<h3>What can go wrong</h3>
+<ul>
+<li><strong>The change is global.</strong> Modules are shared through <code>sys.modules</code><sup class="cite">[<a href="#ref-7">7</a>]</sup>, so a patch made for one caller affects every caller in the process, including other threads and other libraries.</li>
+<li><strong>It depends on import order.</strong> Code that took its own reference with <code>from module import name</code> before the patch keeps the original<sup class="cite">[<a href="#ref-12">12</a>]</sup>; this is why gevent insists on patching first<sup class="cite">[<a href="#ref-3">3</a>]</sup>.</li>
+<li><strong>It couples you to private details.</strong> A patch assumes a function's name, signature and role. If upstream renames or refactors it, the patch may stop working with no error at all. <code>autospec=True</code> and <code>raising=True</code> exist to catch some of these cases in tests<sup class="cite">[<a href="#ref-4">4</a>,<a href="#ref-5">5</a>]</sup>.</li>
+<li><strong>It surprises readers.</strong> Someone reading <code>vendorlib.mean</code> sees one implementation; another one runs. Tracebacks point into code that is not in the file they are looking at.</li>
+<li><strong>Patches collide.</strong> Two libraries patching the same function, or a patch restored out of order, leave the program in a state neither intended. The term "guerilla patch" came from exactly this kind of interference between dynamic modifications<sup class="cite">[<a href="#ref-2">2</a>]</sup>.</li>
+<li><strong>Some things cannot be patched at all</strong>: attributes of built-in and C-extension types<sup class="cite">[<a href="#ref-19">19</a>]</sup>, and instances whose class uses <code>__slots__</code> without <code>__dict__</code><sup class="cite">[<a href="#ref-6">6</a>]</sup>.</li>
+</ul>
+<h3>Alternatives to try first</h3>
+<p><strong>Dependency injection.</strong> Instead of letting code reach for a global collaborator that a test then patches, pass the collaborator in. Martin Fowler describes this as giving an object its dependencies from outside rather than having it look them up or construct them itself<sup class="cite">[<a href="#ref-23">23</a>]</sup>. Default arguments keep the call site as simple as before.</p>
+<figure class="code"><div class="code-head"><span class="fname">inject_clock.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timezone</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">greeting</span><span class="p">(</span><span class="n">now</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The clock is a parameter, so tests need no patching."""</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">now</span> <span class="ow">or</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"Good morning"</span> <span class="k">if</span> <span class="n">now</span><span class="o">.</span><span class="n">hour</span> <span class="o">&lt;</span> <span class="mi">12</span> <span class="k">else</span> <span class="s2">"Good afternoon"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">retry</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">attempts</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">attempts</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">op</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ConnectionError</span><span class="p">:</span>
+            <span class="n">sleep</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">i</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="s2">"gave up"</span><span class="p">)</span>
+
+
+<span class="c1"># tests just pass fakes in</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">greeting</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">29</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="n">tzinfo</span><span class="o">=</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">greeting</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">29</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="n">tzinfo</span><span class="o">=</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)))</span>
+
+<span class="n">waits</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">outcomes</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">([</span><span class="ne">ConnectionError</span><span class="p">,</span> <span class="ne">ConnectionError</span><span class="p">,</span> <span class="s2">"ok"</span><span class="p">])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">flaky</span><span class="p">():</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">outcomes</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="ne">ConnectionError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ConnectionError</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">retry</span><span class="p">(</span><span class="n">flaky</span><span class="p">,</span> <span class="n">sleep</span><span class="o">=</span><span class="n">waits</span><span class="o">.</span><span class="n">append</span><span class="p">),</span> <span class="s2">"after waiting"</span><span class="p">,</span> <span class="n">waits</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>Good morning
+Good afternoon
+ok after waiting [1, 2]</pre></div></figure>
+<p><strong>Use the hooks a library provides.</strong> Many APIs are designed to be replaced. <code>sys.excepthook</code>, for example, is documented as customisable "by assigning another three-argument function to <code>sys.excepthook</code>"<sup class="cite">[<a href="#ref-24">24</a>]</sup>. Assigning a documented hook is not really monkey patching; it is the intended interface.</p>
+<p><strong>Extend without modifying.</strong> Subclass the class and override the method, or wrap the object in your own class. To add behaviour for a type you do not own, including built-in types that cannot be patched, <code>functools.singledispatch</code> lets you register a new implementation of a generic function for that type<sup class="cite">[<a href="#ref-11">11</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">singledispatch_instead.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">singledispatch</span>
+
+
+<span class="nd">@singledispatch</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="nd">@describe</span><span class="o">.</span><span class="n">register</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>            <span class="c1"># "adds a method" to str without touching str</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"text of length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="nd">@describe</span><span class="o">.</span><span class="n">register</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"list of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="si">}</span><span class="s2"> items: "</span> <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">describe</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">obj</span><span class="p">)</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">describe</span><span class="p">(</span><span class="s2">"monkey"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">describe</span><span class="p">([</span><span class="s2">"a"</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">]))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>text of length 6
+list of 2 items: text of length 1, object of type float</pre></div></figure>
+<p><strong>Fix it upstream.</strong> A hotfix is a debt. Report the bug, link the issue next to the patch, and remove the patch when the fixed version ships.</p>
+</section>
+
+<section>
+<h2 id="pitfalls"><span class="num">12</span>Pitfalls checklist</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>The patch "has no effect"</td><td>Code under test did <code>from x import f</code>; you patched <code>x.f</code><sup class="cite">[<a href="#ref-4">4</a>]</sup></td><td>Patch the name in the module that uses it</td></tr>
+<tr><td><code>TypeError: ... missing 1 required positional argument</code></td><td>Plain function assigned to an instance, so it is not bound<sup class="cite">[<a href="#ref-9">9</a>]</sup></td><td><code>types.MethodType(func, obj)</code>, or patch the class</td></tr>
+<tr><td><code>TypeError: cannot set ... attribute of immutable type</code></td><td>Target is a built-in or C type<sup class="cite">[<a href="#ref-19">19</a>]</sup></td><td>Patch the module-level name, subclass, or use <code>singledispatch</code></td></tr>
+<tr><td>Static method breaks after "restoring"</td><td>Saved with <code>getattr</code>, which unwrapped the descriptor<sup class="cite">[<a href="#ref-14">14</a>]</sup></td><td>Save from <code>vars(cls)</code> or <code>inspect.getattr_static</code></td></tr>
+<tr><td>One test changes another's result</td><td>Patch never undone</td><td><code>with</code>/decorator, <code>addCleanup</code>, or the pytest fixture<sup class="cite">[<a href="#ref-5">5</a>,<a href="#ref-16">16</a>]</sup></td></tr>
+<tr><td>Test passes but the real API has no such method</td><td><code>create=True</code> or <code>raising=False</code> hid a typo<sup class="cite">[<a href="#ref-4">4</a>]</sup></td><td>Leave the checks on; use <code>autospec=True</code></td></tr>
+<tr><td>Patch vanished</td><td>Module was reloaded<sup class="cite">[<a href="#ref-15">15</a>]</sup></td><td>Re-apply after reload, or avoid reloading</td></tr>
+<tr><td>gevent code still blocks</td><td>Patched after other modules took references<sup class="cite">[<a href="#ref-3">3</a>]</sup></td><td>Patch first thing in the main module</td></tr>
+<tr><td>pytest crashes mysteriously</td><td>Patched <code>open</code>, <code>compile</code> or a stdlib function pytest uses<sup class="cite">[<a href="#ref-5">5</a>]</sup></td><td>Patch your module's reference, or use <code>monkeypatch.context()</code></td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2 id="exercises"><span class="num">13</span>Exercises</h2>
+<p>Try each one before opening the solution. Every solution was run, and its output is shown.</p>
+
+<div class="exercise">
+<h3>1. Predict the output<span class="lvl">Beginner</span></h3>
+<p>Without running it, decide what the three <code>print</code> calls show. Then explain the middle line.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex1_predict.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: units.py</span>
+<span class="n">FACTOR</span> <span class="o">=</span> <span class="mf">2.54</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">to_cm</span><span class="p">(</span><span class="n">inches</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">inches</span> <span class="o">*</span> <span class="n">FACTOR</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">units</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">units</span><span class="w"> </span><span class="kn">import</span> <span class="n">FACTOR</span><span class="p">,</span> <span class="n">to_cm</span>
+
+<span class="n">units</span><span class="o">.</span><span class="n">FACTOR</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">to_cm</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">FACTOR</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">to_cm</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span></code></pre></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>units.to_cm(1)</code> and <code>to_cm(1)</code> are the <em>same</em> function object, and that function reads <code>FACTOR</code> from the <code>units</code> module's namespace at call time, so both print <code>100</code>. The middle line prints <code>2.54</code> because <code>from units import FACTOR</code> copied the float into <code>main</code>'s namespace at import time; rebinding <code>units.FACTOR</code> does not touch that copy<sup class="cite">[<a href="#ref-12">12</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex1_predict.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: units.py</span>
+<span class="n">FACTOR</span> <span class="o">=</span> <span class="mf">2.54</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">to_cm</span><span class="p">(</span><span class="n">inches</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">inches</span> <span class="o">*</span> <span class="n">FACTOR</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">units</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">units</span><span class="w"> </span><span class="kn">import</span> <span class="n">FACTOR</span><span class="p">,</span> <span class="n">to_cm</span>
+
+<span class="n">units</span><span class="o">.</span><span class="n">FACTOR</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">to_cm</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">FACTOR</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">to_cm</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>100
+2.54
+100</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>2. Count calls on one instance<span class="lvl">Beginner</span></h3>
+<p>Patch only <code>conn_a</code> so that each call to its <code>query</code> method is counted in <code>conn_a.calls</code>, while still running the original query. <code>conn_b</code> must be unaffected.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex2_start.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Connection</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sql</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> ran </span><span class="si">{</span><span class="n">sql</span><span class="si">!r}</span><span class="s2">"</span>
+
+
+<span class="n">conn_a</span><span class="p">,</span> <span class="n">conn_b</span> <span class="o">=</span> <span class="n">Connection</span><span class="p">(</span><span class="s2">"a"</span><span class="p">),</span> <span class="n">Connection</span><span class="p">(</span><span class="s2">"b"</span><span class="p">)</span>
+<span class="c1"># your patch here</span></code></pre></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p>Save the bound original, then bind a new function to that one instance with <code>types.MethodType</code><sup class="cite">[<a href="#ref-9">9</a>,<a href="#ref-10">10</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex2_solution.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">types</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Connection</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sql</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> ran </span><span class="si">{</span><span class="n">sql</span><span class="si">!r}</span><span class="s2">"</span>
+
+
+<span class="n">conn_a</span><span class="p">,</span> <span class="n">conn_b</span> <span class="o">=</span> <span class="n">Connection</span><span class="p">(</span><span class="s2">"a"</span><span class="p">),</span> <span class="n">Connection</span><span class="p">(</span><span class="s2">"b"</span><span class="p">)</span>
+
+<span class="n">original</span> <span class="o">=</span> <span class="n">conn_a</span><span class="o">.</span><span class="n">query</span>          <span class="c1"># bound method of conn_a</span>
+<span class="n">conn_a</span><span class="o">.</span><span class="n">calls</span> <span class="o">=</span> <span class="mi">0</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">counting_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sql</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">calls</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">original</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
+
+
+<span class="n">conn_a</span><span class="o">.</span><span class="n">query</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">MethodType</span><span class="p">(</span><span class="n">counting_query</span><span class="p">,</span> <span class="n">conn_a</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">conn_a</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">"SELECT 1"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">conn_a</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">"SELECT 2"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">conn_b</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">"SELECT 3"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"conn_a.calls ="</span><span class="p">,</span> <span class="n">conn_a</span><span class="o">.</span><span class="n">calls</span><span class="p">,</span> <span class="s2">"| conn_b has calls:"</span><span class="p">,</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">conn_b</span><span class="p">,</span> <span class="s2">"calls"</span><span class="p">))</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>a ran &#x27;SELECT 1&#x27;
+a ran &#x27;SELECT 2&#x27;
+b ran &#x27;SELECT 3&#x27;
+conn_a.calls = 2 | conn_b has calls: False</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>3. Fix the test<span class="lvl">Intermediate</span></h3>
+<p>This test is meant to run without a network, but it calls the real function. Find the bug and fix it with one change.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex3_broken.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: geo.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">lookup</span><span class="p">(</span><span class="n">ip</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="s2">"real network call"</span><span class="p">)</span>
+
+<span class="c1"># file: firewall.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">geo</span><span class="w"> </span><span class="kn">import</span> <span class="n">lookup</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">allowed</span><span class="p">(</span><span class="n">ip</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">lookup</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">"XX"</span>
+
+<span class="c1"># file: test_firewall.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">unittest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">firewall</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">T</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="nd">@mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"geo.lookup"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="s2">"NO"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fake</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">firewall</span><span class="o">.</span><span class="n">allowed</span><span class="p">(</span><span class="s2">"10.0.0.1"</span><span class="p">))</span>
+
+
+<span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">verbosity</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">exit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>test_allowed (__main__.T.test_allowed) ... ERROR
+
+======================================================================
+ERROR: test_allowed (__main__.T.test_allowed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File &quot;/usr/lib/python3.13/unittest/mock.py&quot;, line 1432, in patched
+    return func(*newargs, **newkeywargs)
+  File &quot;/tmp/tmpf7ptfcpe/test_firewall.py&quot;, line 10, in test_allowed
+    self.assertTrue(firewall.allowed(&quot;10.0.0.1&quot;))
+                    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File &quot;/tmp/tmpf7ptfcpe/firewall.py&quot;, line 5, in allowed
+    return lookup(ip) != &quot;XX&quot;
+           ~~~~~~^^^^
+  File &quot;/tmp/tmpf7ptfcpe/geo.py&quot;, line 2, in lookup
+    raise ConnectionError(&quot;real network call&quot;)
+ConnectionError: real network call
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (errors=1)</pre></div></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>firewall</code> did <code>from geo import lookup</code>, so it looks the function up in its own namespace. Patch <code>firewall.lookup</code><sup class="cite">[<a href="#ref-4">4</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex3_solution.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: geo.py</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">lookup</span><span class="p">(</span><span class="n">ip</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="s2">"real network call"</span><span class="p">)</span>
+
+<span class="c1"># file: firewall.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">geo</span><span class="w"> </span><span class="kn">import</span> <span class="n">lookup</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">allowed</span><span class="p">(</span><span class="n">ip</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">lookup</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">"XX"</span>
+
+<span class="c1"># file: test_firewall.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">unittest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">firewall</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">T</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="nd">@mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"firewall.lookup"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="s2">"NO"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fake</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">firewall</span><span class="o">.</span><span class="n">allowed</span><span class="p">(</span><span class="s2">"10.0.0.1"</span><span class="p">))</span>
+        <span class="n">fake</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span><span class="s2">"10.0.0.1"</span><span class="p">)</span>
+
+
+<span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">verbosity</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">exit</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>test_allowed (__main__.T.test_allowed) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>4. A patch that refuses to guess<span class="lvl">Intermediate</span></h3>
+<p>Write a decorator <code>replaces(cls)</code> that installs the decorated function as a method of <code>cls</code>, like Guido van Rossum's <code>monkeypatch_method</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>, but raises <code>AttributeError</code> if <code>cls</code> has no attribute of that name already. Give the new function access to the original as <code>new_func.original</code>.</p>
+<details><summary>Show solution</summary><div class="sol">
+<p>Check with <code>hasattr</code> before patching; read the raw original from the class namespace so descriptors are not unwrapped<sup class="cite">[<a href="#ref-14">14</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex4_solution.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">replaces</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">; refusing to add it"</span><span class="p">)</span>
+        <span class="n">func</span><span class="o">.</span><span class="n">original</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getattr_static</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">func</span>
+    <span class="k">return</span> <span class="n">decorator</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Parser</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">","</span><span class="p">)</span>
+
+
+<span class="nd">@replaces</span><span class="p">(</span><span class="n">Parser</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">part</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parse</span><span class="o">.</span><span class="n">original</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">)]</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">Parser</span><span class="p">()</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"a, b ,c"</span><span class="p">))</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="nd">@replaces</span><span class="p">(</span><span class="n">Parser</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prase</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>            <span class="c1"># typo</span>
+        <span class="k">return</span> <span class="p">[]</span>
+<span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"AttributeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>[&#x27;a&#x27;, &#x27;b&#x27;, &#x27;c&#x27;]
+AttributeError: Parser has no &#x27;prase&#x27;; refusing to add it</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>5. pytest: environment and home directory<span class="lvl">Intermediate</span></h3>
+<p>Write two pytest tests for <code>cache_dir()</code> below, one where <code>XDG_CACHE_HOME</code> is set and one where it is not. Neither may depend on the real environment or on who runs the tests.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex5_start.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">cache_dir</span><span class="p">():</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"XDG_CACHE_HOME"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="k">if</span> <span class="n">base</span> <span class="k">else</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">".cache"</span></code></pre></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p>Use <code>setenv</code> and <code>delenv(..., raising=False)</code> for the variable, and <code>setattr</code> on <code>Path.home</code><sup class="cite">[<a href="#ref-5">5</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">test_cache.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: paths.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">cache_dir</span><span class="p">():</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"XDG_CACHE_HOME"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="k">if</span> <span class="n">base</span> <span class="k">else</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">".cache"</span>
+
+<span class="c1"># file: test_cache.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">paths</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_uses_xdg</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setenv</span><span class="p">(</span><span class="s2">"XDG_CACHE_HOME"</span><span class="p">,</span> <span class="s2">"/tmp/xdg"</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">paths</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">()</span> <span class="o">==</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/tmp/xdg"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_falls_back_to_home</span><span class="p">(</span><span class="n">monkeypatch</span><span class="p">):</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">delenv</span><span class="p">(</span><span class="s2">"XDG_CACHE_HOME"</span><span class="p">,</span> <span class="n">raising</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">monkeypatch</span><span class="o">.</span><span class="n">setattr</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="s2">"home"</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/users/ci"</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="n">paths</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">()</span> <span class="o">==</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/users/ci/.cache"</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>..                                                                       [100%]
+2 passed in 0.01s</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>6. Freeze "today" without freezegun<span class="lvl">Intermediate</span></h3>
+<p><code>age()</code> below uses <code>date.today()</code>. Test it as if today were 1 March 2026, using only <code>unittest.mock</code>. Why can't you just set <code>datetime.date.today = ...</code>?</p>
+<figure class="code"><div class="code-head"><span class="fname">ex6_start.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: people.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">age</span><span class="p">(</span><span class="n">born</span><span class="p">):</span>
+    <span class="n">today</span> <span class="o">=</span> <span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">today</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="n">born</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="p">((</span><span class="n">today</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">today</span><span class="o">.</span><span class="n">day</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">born</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">born</span><span class="o">.</span><span class="n">day</span><span class="p">))</span></code></pre></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>datetime.date</code> is a C type with the immutable flag, so setting its attribute raises <code>TypeError</code><sup class="cite">[<a href="#ref-8">8</a>,<a href="#ref-19">19</a>]</sup>. Patch the name <code>people.date</code> instead, and keep the constructor working through <code>side_effect</code><sup class="cite">[<a href="#ref-8">8</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex6_solution.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="c1"># file: people.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">age</span><span class="p">(</span><span class="n">born</span><span class="p">):</span>
+    <span class="n">today</span> <span class="o">=</span> <span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">today</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="n">born</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="p">((</span><span class="n">today</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">today</span><span class="o">.</span><span class="n">day</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">born</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">born</span><span class="o">.</span><span class="n">day</span><span class="p">))</span>
+
+<span class="c1"># file: main.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">people</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">today</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"TypeError:"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"people.date"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fake</span><span class="p">:</span>
+    <span class="n">fake</span><span class="o">.</span><span class="n">today</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">people</span><span class="o">.</span><span class="n">age</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">1990</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">28</span><span class="p">)))</span>   <span class="c1"># birthday passed</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">people</span><span class="o">.</span><span class="n">age</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">1990</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>    <span class="c1"># birthday not yet</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>TypeError: cannot set &#x27;today&#x27; attribute of immutable type &#x27;datetime.date&#x27;
+36
+35</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>7. Find the restore bug<span class="lvl">Advanced</span></h3>
+<p>After <code>temporarily</code> has run, <code>Loud.label("x")</code> should print <code>Loud:X</code> but does not. Nothing raises. Explain why and fix <code>temporarily</code>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex7_broken.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="k">class</span><span class="w"> </span><span class="nc">Formatter</span><span class="p">:</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">label</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">s</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Loud</span><span class="p">(</span><span class="n">Formatter</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">temporarily</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+    <span class="n">saved</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">action</span><span class="p">()</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">saved</span><span class="p">)</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"before:"</span><span class="p">,</span> <span class="n">Loud</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"x"</span><span class="p">))</span>
+<span class="n">temporarily</span><span class="p">(</span><span class="n">Formatter</span><span class="p">,</span> <span class="s2">"label"</span><span class="p">,</span> <span class="nb">classmethod</span><span class="p">(</span><span class="k">lambda</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="s2">"fake"</span><span class="p">),</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"after: "</span><span class="p">,</span> <span class="n">Loud</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"x"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"stored:"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">Formatter</span><span class="p">)[</span><span class="s2">"label"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>before: Loud:X
+after:  Formatter:X
+stored: method</pre></div></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p><code>getattr(Formatter, "label")</code> runs the <code>classmethod</code> descriptor and returns a method already bound to <code>Formatter</code>, not the <code>classmethod</code> object<sup class="cite">[<a href="#ref-6">6</a>,<a href="#ref-9">9</a>]</sup>. Writing that back stores a bound method in the class, so every subclass now calls it with <code>cls</code> fixed to <code>Formatter</code>. Save the raw attribute with <code>inspect.getattr_static</code>, which does not run the descriptor protocol<sup class="cite">[<a href="#ref-14">14</a>]</sup>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex7_solution.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Formatter</span><span class="p">:</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">label</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">s</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Loud</span><span class="p">(</span><span class="n">Formatter</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">temporarily</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+    <span class="n">saved</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getattr_static</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>     <span class="c1"># the classmethod object itself</span>
+    <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">action</span><span class="p">()</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">saved</span><span class="p">)</span>
+
+
+<span class="n">temporarily</span><span class="p">(</span><span class="n">Formatter</span><span class="p">,</span> <span class="s2">"label"</span><span class="p">,</span> <span class="nb">classmethod</span><span class="p">(</span><span class="k">lambda</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="s2">"fake"</span><span class="p">),</span>
+            <span class="k">lambda</span><span class="p">:</span> <span class="nb">print</span><span class="p">(</span><span class="s2">"during:"</span><span class="p">,</span> <span class="n">Loud</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"x"</span><span class="p">)))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"after: "</span><span class="p">,</span> <span class="n">Loud</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"x"</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"stored:"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">Formatter</span><span class="p">)[</span><span class="s2">"label"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>during: fake
+after:  Loud:X
+stored: classmethod</pre></div></figure>
+</div></details>
+</div>
+
+<div class="exercise">
+<h3>8. Refactor away the patch<span class="lvl">Advanced</span></h3>
+<p>The test below needs to patch <code>random.random</code> to make <code>roll()</code> predictable. Refactor <code>roll</code> with dependency injection<sup class="cite">[<a href="#ref-23">23</a>]</sup> so the test needs no patching, while existing callers that pass no arguments keep working.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex8_start.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest</span><span class="w"> </span><span class="kn">import</span> <span class="n">mock</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">roll</span><span class="p">(</span><span class="n">sides</span><span class="o">=</span><span class="mi">6</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">*</span> <span class="n">sides</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+
+<span class="k">with</span> <span class="n">mock</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="s2">"random.random"</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="mf">0.99</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">roll</span><span class="p">())</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>6</pre></div></figure>
+<details><summary>Show solution</summary><div class="sol">
+<p>Accept the source of randomness as a parameter with a sensible default. The test now passes a plain function or a seeded <code>random.Random</code>.</p>
+<figure class="code"><div class="code-head"><span class="fname">ex8_solution.py</span><button class="copy" type="button">Copy</button></div><pre class="src"><code><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">roll</span><span class="p">(</span><span class="n">sides</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">rng</span><span class="p">()</span> <span class="o">*</span> <span class="n">sides</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="n">roll</span><span class="p">(</span><span class="n">rng</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="mf">0.99</span><span class="p">))</span>                 <span class="c1"># deterministic, no patching</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">roll</span><span class="p">(</span><span class="n">rng</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">))</span>
+<span class="n">seeded</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([</span><span class="n">roll</span><span class="p">(</span><span class="n">rng</span><span class="o">=</span><span class="n">seeded</span><span class="o">.</span><span class="n">random</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)])</span>
+<span class="nb">print</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">roll</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mi">6</span><span class="p">)</span>                       <span class="c1"># old call sites unchanged</span></code></pre><div class="out out-ok"><span class="out-label">Output</span><pre>6
+1
+[4, 1, 2, 2, 5]
+True</pre></div></figure>
+</div></details>
+</div>
+</section>
+
+<section>
+<h2 id="references">References</h2>
+<ol class="refs">
+<li id="ref-1">van Rossum G. Monkeypatching idioms -- elegant or ugly? [Internet]. Message to: python-dev mailing list. 2008 Jan 15 [cited 2026 Oct 29]. Available from: <a href="https://mail.python.org/pipermail/python-dev/2008-January/076194.html">https://mail.python.org/pipermail/python-dev/2008-January/076194.html</a></li>
+<li id="ref-2">Teague K. Re: Monkeypatching idioms -- elegant or ugly? [Internet]. Message to: python-dev mailing list. 2008 Jan 31 [cited 2026 Oct 29]. Available from: <a href="https://mail.python.org/pipermail/python-dev/2008-January/076655.html">https://mail.python.org/pipermail/python-dev/2008-January/076655.html</a></li>
+<li id="ref-3">gevent contributors. gevent.monkey – Make the standard library cooperative [Internet]. gevent documentation; c2009 [cited 2026 Oct 29]. Available from: <a href="https://docs.gevent.org/api/gevent.monkey.html">https://docs.gevent.org/api/gevent.monkey.html</a></li>
+<li id="ref-4">Python Software Foundation. The Python standard library: unittest.mock — mock object library [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/unittest.mock.html">https://docs.python.org/3/library/unittest.mock.html</a></li>
+<li id="ref-5">pytest-dev team. How to monkeypatch/mock modules and environments [Internet]. pytest documentation; c2015 [cited 2026 Oct 29]. Available from: <a href="https://docs.pytest.org/en/stable/how-to/monkeypatch.html">https://docs.pytest.org/en/stable/how-to/monkeypatch.html</a></li>
+<li id="ref-6">Python Software Foundation. The Python language reference: 3. Data model [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/reference/datamodel.html">https://docs.python.org/3/reference/datamodel.html</a></li>
+<li id="ref-7">Python Software Foundation. The Python language reference: 5. The import system [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/reference/import.html#the-module-cache">https://docs.python.org/3/reference/import.html#the-module-cache</a></li>
+<li id="ref-8">Python Software Foundation. The Python standard library: unittest.mock — getting started [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/unittest.mock-examples.html">https://docs.python.org/3/library/unittest.mock-examples.html</a></li>
+<li id="ref-9">Python Software Foundation. Python HOWTOs: Descriptor guide [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/howto/descriptor.html">https://docs.python.org/3/howto/descriptor.html</a></li>
+<li id="ref-10">Python Software Foundation. The Python standard library: types — Dynamic type creation and names for built-in types [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/types.html#types.MethodType">https://docs.python.org/3/library/types.html#types.MethodType</a></li>
+<li id="ref-11">Python Software Foundation. The Python standard library: functools — Higher-order functions and operations on callable objects [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/functools.html">https://docs.python.org/3/library/functools.html</a></li>
+<li id="ref-12">Python Software Foundation. The Python language reference: 7. Simple statements [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/reference/simple_stmts.html#the-import-statement">https://docs.python.org/3/reference/simple_stmts.html#the-import-statement</a></li>
+<li id="ref-13">Python Software Foundation. The Python standard library: contextlib — Utilities for with-statement contexts [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/contextlib.html#contextlib.contextmanager">https://docs.python.org/3/library/contextlib.html#contextlib.contextmanager</a></li>
+<li id="ref-14">Python Software Foundation. The Python standard library: inspect — Inspect live objects [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/inspect.html#inspect.getattr_static">https://docs.python.org/3/library/inspect.html#inspect.getattr_static</a></li>
+<li id="ref-15">Python Software Foundation. The Python standard library: importlib — The implementation of import [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/importlib.html#importlib.reload">https://docs.python.org/3/library/importlib.html#importlib.reload</a></li>
+<li id="ref-16">Python Software Foundation. The Python standard library: unittest — Unit testing framework [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/unittest.html">https://docs.python.org/3/library/unittest.html</a></li>
+<li id="ref-17">pytest-dev team. API reference: MonkeyPatch [Internet]. pytest documentation; c2015 [cited 2026 Oct 29]. Available from: <a href="https://docs.pytest.org/en/stable/reference/reference.html#pytest.MonkeyPatch">https://docs.pytest.org/en/stable/reference/reference.html#pytest.MonkeyPatch</a></li>
+<li id="ref-18">Krekel H. Monkeypatching in unit tests, done right [Internet]. tetamap; 2009 Mar 3 [cited 2026 Oct 29]. Available from: <a href="https://tetamap.wordpress.com/2009/03/03/monkeypatching-in-unit-tests-done-right/">https://tetamap.wordpress.com/2009/03/03/monkeypatching-in-unit-tests-done-right/</a></li>
+<li id="ref-19">Python Software Foundation. The Python/C API reference manual: Type object structures [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/c-api/typeobj.html#c.Py_TPFLAGS_IMMUTABLETYPE">https://docs.python.org/3/c-api/typeobj.html#c.Py_TPFLAGS_IMMUTABLETYPE</a></li>
+<li id="ref-20">Python Software Foundation. The Python standard library: builtins — Built-in objects [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/builtins.html">https://docs.python.org/3/library/builtins.html</a></li>
+<li id="ref-21">Pulec S, et al. FreezeGun: let your Python tests travel through time [Internet]. GitHub; 2012 [cited 2026 Oct 29]. Available from: <a href="https://github.com/spulec/freezegun">https://github.com/spulec/freezegun</a></li>
+<li id="ref-22">Python Software Foundation. The Python standard library: site — Site-specific configuration hook [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/site.html">https://docs.python.org/3/library/site.html</a></li>
+<li id="ref-23">Fowler M. Inversion of control containers and the dependency injection pattern [Internet]. martinfowler.com; 2004 Jan 23 [cited 2026 Oct 29]. Available from: <a href="https://martinfowler.com/articles/injection.html">https://martinfowler.com/articles/injection.html</a></li>
+<li id="ref-24">Python Software Foundation. The Python standard library: sys — System-specific parameters and functions [Internet]. Python Software Foundation; c2001 [cited 2026 Oct 29]. Available from: <a href="https://docs.python.org/3/library/sys.html#sys.excepthook">https://docs.python.org/3/library/sys.html#sys.excepthook</a></li>
+</ol>
+</section>
+<footer>
+<p>Citations follow the Vancouver system: sources are numbered in order of first citation, and the same number is reused for each later citation of that source. All URLs were checked on 29 October 2026. All 40 code examples were run on CPython 3.13.17.</p>
+</footer>
+</main>
+</div>
+<script>
+document.querySelectorAll("figure.code").forEach(function (fig) {
+  var btn = fig.querySelector(".copy");
+  var code = fig.querySelector("pre.src code");
+  btn.addEventListener("click", function () {
+    var text = code.innerText;
+    var done = function (msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "Copy"; }, 1600); };
+    var fallback = function () {
+      var range = document.createRange();
+      range.selectNodeContents(code);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      done("Selected");
+    };
+    try {
+      navigator.clipboard.writeText(text).then(function () { done("Copied"); }, fallback);
+    } catch (e) { fallback(); }
+  });
+});
+</script>
+
+<footer style="padding:1rem;font:400 .9rem/1.4 system-ui,-apple-system,Segoe UI,sans-serif">
+  <p>&copy; 2026 Nicholas Knapp. All rights reserved.</p>
+</footer>
+</body>
+</html>
