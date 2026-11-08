@@ -133,6 +133,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1513,6 +1533,240 @@ class GatewayRouteTest {
   When selecting or diagnosing a Spring Cloud component, follow the responsibility chain: Which control plane owns the data? How is it discovered and authenticated? Which version and release train define compatibility? What happens when that control plane is unavailable? Which cache or registry can become stale? Which layer owns the timeout, retry, circuit breaker, and fallback? Which event or administrative action is auditable? Those questions determine whether Spring Cloud simplifies the system or merely adds another distributed layer.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">23. Enterprise scenarios</h2>
+<p>Spring Cloud adds a control plane: configuration servers, registries, gateways, and buses. Each one is another distributed component that can be slow, stale, or unavailable. The scenarios below are composites, with illustrative figures. Section 24 reproduces the resilience mechanics with Resilience4j 2.4.0, the library behind Spring Cloud CircuitBreaker's default implementation<a class="citation" href="#ref-26">[26]</a><a class="citation" href="#ref-27">[27]</a>.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">E-commerce · Black Friday · checkout → order → inventory call chain</p>
+<h3 id="scenario-retry-storm">23.1 A retry storm that turned a slowdown into an outage</h3>
+<p><strong>Situation.</strong> The gateway, the checkout service, and the order service were each configured to retry failed calls three times, with no backoff.</p>
+<p><strong>What went wrong.</strong> When inventory slowed under load, every user request became 27 inventory calls (Exercise 2). The extra traffic pushed inventory from slow to down, and it could not recover while the retries continued.</p>
+<p><strong>Fix.</strong> Retry at one layer only, with exponential backoff, jitter, and an overall deadline. Retry only idempotent operations, and put a circuit breaker in front of the dependency so that a failing service gets room to recover (Exercise 1)<a class="citation" href="#ref-26">[26]</a><a class="citation" href="#ref-38">[38]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Insurance · 140 services · Config Server backed by one Git repository</p>
+<h3 id="scenario-config">23.2 Config Server as a single point of failure</h3>
+<p><strong>Situation.</strong> All services imported configuration from Config Server with <code>spring.config.import=configserver:</code>, and the Config Server cloned its Git repository on demand.</p>
+<p><strong>What went wrong.</strong> During a Git hosting outage, the Config Server could not serve configuration. Pods that the cluster rescheduled failed to start, and the outage spread to services whose own code was healthy.</p>
+<p><strong>Fix.</strong> Run several Config Server instances with a local clone and <code>force-pull</code> disabled<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-7">[7]</a>. Decide deliberately between <code>optional:configserver:</code> with safe defaults and a fail-fast start with client retry<a class="citation" href="#ref-10">[10]</a>. Keep secrets in a secret store or encrypted<a class="citation" href="#ref-9">[9]</a>, and test a cold start with the Config Server down.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Travel booking · bus-driven refresh · Kafka binder</p>
+<h3 id="scenario-bus">23.3 A refresh broadcast that changed every instance at once</h3>
+<p><strong>Situation.</strong> A configuration commit triggered a webhook, and Spring Cloud Bus broadcast a refresh event to every instance<a class="citation" href="#ref-29">[29]</a><a class="citation" href="#ref-33">[33]</a>.</p>
+<p><strong>What went wrong.</strong> A typo in a connection-pool size reached all 300 instances within seconds. Every <code>@RefreshScope</code> bean was rebuilt at the same moment, and the database saw a burst of reconnections<a class="citation" href="#ref-11">[11]</a>.</p>
+<p><strong>Fix.</strong> Validate configuration in CI before it is merged. Address refresh events to one service or instance first, as a canary<a class="citation" href="#ref-32">[32]</a>. Treat structural settings such as pool sizes and URLs as deployment changes, rolled out with a rolling restart, rather than live refreshes.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · reporting service shares a gateway with payments</p>
+<h3 id="scenario-bulkhead">23.4 A slow report that starved payments</h3>
+<p><strong>Situation.</strong> A reporting backend began taking 30 seconds per request, and every gateway route shared one connection pool and the same timeouts<a class="citation" href="#ref-18">[18]</a><a class="citation" href="#ref-20">[20]</a>.</p>
+<p><strong>What went wrong.</strong> Report requests piled up and held connections and threads, so payment requests queued behind them. A non-critical feature took down a critical one.</p>
+<p><strong>Fix.</strong> Isolate dependencies: give each one its own concurrency limit (a bulkhead), timeout, and circuit breaker, and reject excess calls immediately rather than queuing them (Exercise 3)<a class="citation" href="#ref-38">[38]</a>.</p>
+</div>
+
+<h2 id="exercises">24. Exercises</h2>
+<p>Exercises 1 and 3 use Resilience4j 2.4.0 directly, so that the state machine is visible without a running Spring Cloud stack. Exercise 2 is plain Java. All three were compiled and run on OpenJDK 21.0.13, and the output shown is real. Exercise 4 is a design exercise.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">24.1 Watch a circuit breaker open and close<span class="xp-lvl">resilience · medium</span></h3>
+<p>Protect a failing pricing service with a circuit breaker that opens at a 50% failure rate after at least 5 calls. Count how many of 12 requests during the outage reach the backend, then let the service recover and watch the breaker close.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The breaker records outcomes in a sliding window. Once enough calls have failed, it opens, and further calls fail at once with <code>CallNotPermittedException</code> without touching the backend. After the wait duration, the next call moves it to half-open, and the trial calls decide whether it closes<a class="citation" href="#ref-27">[27]</a><a class="citation" href="#ref-38">[38]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.scloud;
+
+import io.github.resilience4j.circuitbreaker.*;
+import java.time.Duration;
+import java.util.function.Supplier;
+
+public class Ex1Breaker {
+    static boolean pricingUp = false;
+    static int backendCalls = 0;
+
+    static String pricing() {
+        backendCalls++;
+        if (!pricingUp) throw new IllegalStateException("pricing: 503");
+        return "live price";
+    }
+
+    public static void main(String[] args) throws Exception {
+        CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+            .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED).slidingWindowSize(10)
+            .minimumNumberOfCalls(5).failureRateThreshold(50)
+            .waitDurationInOpenState(Duration.ofMillis(300)).permittedNumberOfCallsInHalfOpenState(2)
+            .build();
+        CircuitBreaker cb = CircuitBreaker.of("pricing", config);
+        cb.getEventPublisher().onStateTransition(e -&gt; System.out.println("  transition: " + e.getStateTransition()));
+        Supplier&lt;String&gt; guarded = CircuitBreaker.decorateSupplier(cb, Ex1Breaker::pricing);
+
+        for (int i = 1; i &lt;= 12; i++) call(guarded, i);
+        System.out.println("backend calls during the outage: " + backendCalls + " of 12 requests");
+        Thread.sleep(400);                       // wait duration elapses; the next call moves to HALF_OPEN
+        pricingUp = true;
+        for (int i = 13; i &lt;= 15; i++) call(guarded, i);
+    }
+
+    static void call(Supplier&lt;String&gt; guarded, int i) {
+        String result;
+        try { result = guarded.get(); }
+        catch (CallNotPermittedException e) { result = "fallback: cached price (short-circuited)"; }
+        catch (IllegalStateException e) { result = "fallback: cached price (" + e.getMessage() + ")"; }
+        System.out.printf("request %2d -&gt; %s%n", i, result);
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Resilience4j 2.4.0, OpenJDK 21.0.13</span><pre>request  1 -&gt; fallback: cached price (pricing: 503)
+request  2 -&gt; fallback: cached price (pricing: 503)
+request  3 -&gt; fallback: cached price (pricing: 503)
+request  4 -&gt; fallback: cached price (pricing: 503)
+  transition: State transition from CLOSED to OPEN
+request  5 -&gt; fallback: cached price (pricing: 503)
+request  6 -&gt; fallback: cached price (short-circuited)
+request  7 -&gt; fallback: cached price (short-circuited)
+request  8 -&gt; fallback: cached price (short-circuited)
+request  9 -&gt; fallback: cached price (short-circuited)
+request 10 -&gt; fallback: cached price (short-circuited)
+request 11 -&gt; fallback: cached price (short-circuited)
+request 12 -&gt; fallback: cached price (short-circuited)
+backend calls during the outage: 5 of 12 requests
+  transition: State transition from OPEN to HALF_OPEN
+request 13 -&gt; live price
+  transition: State transition from HALF_OPEN to CLOSED
+request 14 -&gt; live price
+request 15 -&gt; live price</pre></div>
+<p>With Spring Cloud CircuitBreaker, the same settings go under <code>resilience4j.circuitbreaker.instances.pricing.*</code>, and <code>CircuitBreakerFactory.create("pricing").run(call, fallback)</code> applies them. Its metrics show up through Micrometer<a class="citation" href="#ref-26">[26]</a><a class="citation" href="#ref-28">[28]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">24.2 Measure retry amplification<span class="xp-lvl">resilience · easy</span></h3>
+<p>Simulate a call chain of gateway → checkout → order → inventory in which inventory always fails. Count the inventory calls one user request causes when every layer retries, and compare other placements of the retries.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Retries multiply across layers: three layers with three attempts each make 3 × 3 × 3 = 27 calls.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.scloud;
+
+import java.util.function.Supplier;
+
+public class Ex2RetryStorm {
+    static int inventoryCalls;
+
+    static &lt;T&gt; T withRetries(int attempts, Supplier&lt;T&gt; call) {
+        RuntimeException last = null;
+        for (int i = 0; i &lt; attempts; i++) {
+            try { return call.get(); } catch (RuntimeException e) { last = e; }
+        }
+        throw last;
+    }
+
+    static String inventory() { inventoryCalls++; throw new IllegalStateException("inventory overloaded"); }
+
+    static void run(String label, int gatewayTries, int orderTries, int checkoutTries) {
+        inventoryCalls = 0;
+        try {
+            withRetries(gatewayTries, () -&gt;              // gateway -&gt; checkout -&gt; order -&gt; inventory
+                withRetries(checkoutTries, () -&gt;
+                    withRetries(orderTries, Ex2RetryStorm::inventory)));
+        } catch (IllegalStateException expected) { }
+        System.out.printf("%-34s inventory calls per user request: %d%n", label, inventoryCalls);
+    }
+
+    public static void main(String[] args) {
+        run("3 attempts at every layer:", 3, 3, 3);
+        run("3 attempts at the edge only:", 3, 1, 1);
+        run("retry once, close to the failure:", 1, 2, 1);
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>3 attempts at every layer:         inventory calls per user request: 27
+3 attempts at the edge only:       inventory calls per user request: 3
+retry once, close to the failure:  inventory calls per user request: 2</pre></div>
+<p>In production, add exponential backoff with jitter so that retries from many clients do not arrive in synchronized waves, and use a retry budget or a deadline propagated from the edge so that a request stops retrying once the user has given up.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">24.3 Contain a slow dependency with a bulkhead<span class="xp-lvl">isolation · medium</span></h3>
+<p>Allow at most 5 concurrent calls to a reporting service that takes 300 ms, and send it 20 simultaneous requests. Excess requests must fail immediately instead of waiting.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>A semaphore bulkhead with <code>maxWaitDuration(Duration.ZERO)</code> rejects calls that exceed the limit with <code>BulkheadFullException</code><a class="citation" href="#ref-38">[38]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.scloud;
+
+import io.github.resilience4j.bulkhead.*;
+import java.time.Duration;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class Ex3Bulkhead {
+    public static void main(String[] args) throws Exception {
+        Bulkhead reports = Bulkhead.of("reports", BulkheadConfig.custom()
+            .maxConcurrentCalls(5).maxWaitDuration(Duration.ZERO).build());
+        AtomicInteger ok = new AtomicInteger(), rejected = new AtomicInteger();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i &lt; 20; i++) {
+                pool.submit(() -&gt; {
+                    start.await();
+                    try {
+                        reports.executeCallable(() -&gt; { Thread.sleep(300); return "report"; });   // slow dependency
+                        ok.incrementAndGet();
+                    } catch (BulkheadFullException e) { rejected.incrementAndGet(); }
+                    return null;
+                });
+            }
+            start.countDown();
+        }
+        System.out.println("20 concurrent report requests: " + ok + " served, " + rejected + " rejected immediately");
+        System.out.println("peak calls inside the bulkhead: at most " + reports.getBulkheadConfig().getMaxConcurrentCalls());
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Resilience4j 2.4.0, OpenJDK 21.0.13</span><pre>20 concurrent report requests: 5 served, 15 rejected immediately
+peak calls inside the bulkhead: at most 5</pre></div>
+<p>Map <code>BulkheadFullException</code> to 503 with a <code>Retry-After</code> header, or to a degraded response. The point is that the rest of the service keeps its threads and connections.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">24.4 Plan a configuration change<span class="xp-lvl">design · medium</span></h3>
+<p>You need to change a feature flag, a downstream timeout, and the database URL across 40 instances of a service that uses Config Server and Spring Cloud Bus. Which of these should be refreshed live, and how would you roll each one out?</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<ul>
+<li><strong>Feature flag:</strong> a good candidate for a live refresh, because it is read per request. Bind it with <code>@ConfigurationProperties</code>, which are rebound on refresh, and send the refresh to one instance before broadcasting it<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-31">[31]</a><a class="citation" href="#ref-32">[32]</a>.</li>
+<li><strong>Downstream timeout:</strong> refreshable only if the client is created per use or lives in a refresh-scoped bean. A client built once at startup keeps its old timeout, so test the refresh before relying on it.</li>
+<li><strong>Database URL:</strong> roll out as a deployment change with a rolling restart and readiness probes. Rebuilding a connection pool in place on 40 instances at once risks connection storms and half-migrated state.</li>
+</ul>
+<p>In every case, validate the change before it is merged, and keep it in version control so that rollback is a revert<a class="citation" href="#ref-7">[7]</a>.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">25. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Why are Spring Cloud release trains named by year, such as 2025.1?</summary><div class="xp-body"><p>Since 2020.0 the trains use calendar versioning. Earlier trains were named alphabetically after London Underground stations, such as Hoxton and Greenwich. Each train pins compatible versions of the individual projects and targets specific Spring Boot generations<a class="citation" href="#ref-1">[1]</a><a class="citation" href="#ref-2">[2]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@RefreshScope</code> actually do on refresh?</summary><div class="xp-body"><p>It discards the cached bean instance, and the scoped proxy creates a new one, with the new configuration, the next time it is used<a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>Which load-balancing algorithm does Spring Cloud LoadBalancer use by default?</summary><div class="xp-body"><p>Round robin. A random balancer is also provided, and instance suppliers can add health checks, zone preference, or caching<a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+<details class="xp-details"><summary>Which Netflix OSS components are no longer part of Spring Cloud?</summary><div class="xp-body"><p>Ribbon, Hystrix, and Zuul were replaced by Spring Cloud LoadBalancer, Spring Cloud CircuitBreaker (with Resilience4j), and Spring Cloud Gateway. Eureka is still supported<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>What do you lose by using the Kubernetes service registry instead of Eureka?</summary><div class="xp-body"><p>Less than you might expect. Kubernetes Services already give stable DNS names and load balancing, and Spring Cloud Kubernetes exposes Kubernetes endpoints through the same <code>DiscoveryClient</code> abstraction<a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+<details class="xp-details"><summary>What are a circuit breaker's three main states?</summary><div class="xp-body"><p>Closed (calls flow and outcomes are recorded), open (calls fail fast), and half-open (a few trial calls decide whether to close again). Resilience4j also has disabled, forced-open, and metrics-only states<a class="citation" href="#ref-38">[38]</a>.</p></div></details>
+<details class="xp-details"><summary>How does the Config Server know which configuration to return?</summary><div class="xp-body"><p>From the application name, profiles, and label (for a Git backend, a branch, tag, or commit) in the request path <code>/{application}/{profile}/{label}</code><a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>How does Spring Cloud Stream pick binding names for a <code>Function&lt;String,String&gt;</code> bean called <code>uppercase</code>?</summary><div class="xp-body"><p><code>uppercase-in-0</code> for the input and <code>uppercase-out-0</code> for the output, where the index identifies the input or output for multi-argument functions<a class="citation" href="#ref-36">[36]</a>.</p></div></details>
+<details class="xp-details"><summary>Which HTTP client does Spring now recommend in place of OpenFeign for new projects?</summary><div class="xp-body"><p>HTTP interface clients backed by <code>RestClient</code> or <code>WebClient</code>. Spring Cloud OpenFeign is considered feature-complete<a class="citation" href="#ref-23">[23]</a><a class="citation" href="#ref-25">[25]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Spring Cloud Train Reference Documentation [Internet]. Release train 2025.1.2. Spring; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-cloud-release/reference/index.html">https://docs.spring.io/spring-cloud-release/reference/index.html</a></li>
@@ -1551,7 +1805,9 @@ class GatewayRouteTest {
 <li id="ref-34">Spring team. Spring Cloud Stream [Internet]. Version 5.0.2. Spring; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-cloud-stream/reference/index.html">https://docs.spring.io/spring-cloud-stream/reference/index.html</a></li>
 <li id="ref-35">Spring team. Spring Cloud Stream Binding Properties [Internet]. Version 5.0.2. Spring; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-cloud-stream/reference/spring-cloud-stream/binding-properties.html">https://docs.spring.io/spring-cloud-stream/reference/spring-cloud-stream/binding-properties.html</a></li>
 <li id="ref-36">Spring team. Functional Binding Names [Internet]. Spring Cloud Stream 5.0.2; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-cloud-stream/reference/spring-cloud-stream/functional-binding-names.html">https://docs.spring.io/spring-cloud-stream/reference/spring-cloud-stream/functional-binding-names.html</a></li>
-<li id="ref-37">Spring team. Apache Kafka Binder Overview [Internet]. Spring Cloud Stream 5.0.2; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-cloud-stream/reference/kafka/kafka-binder/overview.html">https://docs.spring.io/spring-cloud-stream/reference/kafka/kafka-binder/overview.html</a></li>
+<li id="ref-37">Spring team. Apache Kafka Binder Overview [Internet]. Spring Cloud Stream 5.0.2; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-cloud-stream/reference/kafka/kafka-binder/overview.html">https://docs.spring.io/spring-cloud-stream/reference/kafka/kafka-binder/overview.html</a></li><!-- xp-refs:start -->
+<li id="ref-38">Resilience4j contributors. Resilience4j documentation: CircuitBreaker, Retry, and Bulkhead [Internet]. Resilience4j 2.4.0; 2026 [cited 2026 Nov 8]. Available from: <a href="https://resilience4j.readme.io/docs/circuitbreaker">https://resilience4j.readme.io/docs/circuitbreaker</a></li><!-- xp-refs:end -->
+
 </ol>
 </main>
 
@@ -1580,7 +1836,7 @@ class GatewayRouteTest {
 <li><a href="#anti-patterns">Anti-patterns</a></li>
 <li><a href="#selection">Selection guide</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

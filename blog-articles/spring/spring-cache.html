@@ -299,6 +299,26 @@
     .codecard code,pre code{font-size:12.5px}
   }
 </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line-strong);border-left:5px solid var(--ember);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim)}
+.xp-exercise{border-top:1px solid var(--line-strong);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line-strong);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--ember)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line-strong)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line-strong);border-radius:0 0 10px 10px;background:var(--bg-2);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--ember)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <div class="progress" id="progress"></div>
@@ -353,7 +373,10 @@
         <li><a href="#metrics">Monitoring &amp; Micrometer metrics</a></li>
         <li><a href="#tuning">Performance testing &amp; tuning</a></li>
         <li><a href="#pitfalls">Common pitfalls</a></li>
-        <li><a href="#references">References</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->        <li><a href="#references">References</a></li>
       </ol>
     </nav>
   </details>
@@ -1242,6 +1265,244 @@ public MeterBinder cacheMetrics(CacheManager caffeineManager, MeterRegistry regi
       <p>The final pitfall is using the tool at all when you should not. Caching adds a moving part, a consistency liability, and an operational surface to everything it touches. Data that is cheap to compute, changes constantly, or is read rarely does not deserve a cache &mdash; the invalidation tax exceeds the read dividend. The most senior instinct in this whole topic is knowing when <em>not</em> to cache.</p>
     </section>
 
+<!-- xp:start -->
+    <section class="sec" id="enterprise-scenarios">
+      <p class="kicker"><span class="num">21</span><span class="bar"></span> Incidents</p>
+      <h2>Enterprise scenarios</h2>
+
+      <p>Caching incidents rarely look like caching incidents. They show up as wrong prices, another customer's data, or a database that falls over after a deployment. The scenarios below are composites, with illustrative figures. Section 22 reproduces three of the mechanisms with Spring Framework 7.0.8 and Caffeine 3.2.4.</p>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Bank · shared cache name · customer data shown on an account page</p>
+        <h3 id="scenario-keys">Two methods, one cache, one key</h3>
+        <p><strong>Situation.</strong> To keep configuration short, a team used one cache called <code>entities</code> for several lookups, each annotated with <code>@Cacheable("entities")</code> and taking a single <code>long</code> ID.</p>
+        <p><strong>What went wrong.</strong> The default key is built from the method's arguments only, not from the method's name<sup class="cite"><a href="#ref-3">3</a></sup>. Customer 42 and account 42 shared a key. Most of the time the result was a <code>ClassCastException</code>. When both methods returned the same type, it was another record's data (Exercise 1).</p>
+        <p><strong>Fix.</strong> Give each kind of value its own cache name, or an explicit key that includes the type. Treat cache names and key formats as part of the data model, especially in a shared Redis instance<sup class="cite"><a href="#ref-10">10</a></sup>.</p>
+      </div>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Retail · in-memory price cache · promotion leaked to all customers</p>
+        <h3 id="scenario-mutable">A local change that became global</h3>
+        <p><strong>Situation.</strong> A promotion service fetched the cached price list and applied a discount to it in place for one customer segment.</p>
+        <p><strong>What went wrong.</strong> In-memory caches such as <code>ConcurrentMapCache</code> and Caffeine store references. The discounted list was the cached object itself, so every customer saw the promotional prices until the entry expired (Exercise 2).</p>
+        <p><strong>Fix.</strong> Cache immutable values, such as records and unmodifiable collections, or copy on read. <code>ConcurrentMapCacheManager</code> can store serialized copies with <code>setStoreByValue(true)</code><sup class="cite"><a href="#ref-2">2</a></sup>. Remote caches such as Redis serialize by nature, which hides this bug until someone switches to a local cache<sup class="cite"><a href="#ref-11">11</a></sup>.</p>
+      </div>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Marketplace · product cache · crawler traffic</p>
+        <h3 id="scenario-eviction">A crawler that flushed the hot set</h3>
+        <p><strong>Situation.</strong> A product-page cache used a simple LRU policy with 10,000 entries. A search-engine crawler began walking the entire catalogue.</p>
+        <p><strong>What went wrong.</strong> Each crawled product evicted a popular one, so the hit ratio fell and database load rose, although real customers' behaviour had not changed.</p>
+        <p><strong>Fix.</strong> Use a scan-resistant policy. Caffeine's W-TinyLFU admits a new entry only if it is likely to be used more often than the one it would evict (Exercise 3)<sup class="cite"><a href="#ref-6">6</a>,<a href="#ref-7">7</a></sup>. Monitor hit ratio and eviction counts per cache with Micrometer<sup class="cite"><a href="#ref-21">21</a></sup>.</p>
+      </div>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Travel · Redis cache · deployment day</p>
+        <h3 id="scenario-serialization">A deployment that emptied the cache</h3>
+        <p><strong>Situation.</strong> Cached values were stored in Redis with JDK serialization. A release added a field to the cached class.</p>
+        <p><strong>What went wrong.</strong> New pods could not deserialize entries written by old pods, and old pods could not read new ones. During the rolling update both versions were live, every read failed or missed, and the database took the full load at peak time<sup class="cite"><a href="#ref-19">19</a></sup>.</p>
+        <p><strong>Fix.</strong> Use a versioned, tolerant format such as JSON, put a version in the key prefix, and treat a deserialization failure as a cache miss with a <code>CacheErrorHandler</code><sup class="cite"><a href="#ref-2">2</a>,<a href="#ref-11">11</a></sup>.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="exercises">
+      <p class="kicker"><span class="num">22</span><span class="bar"></span> Practice</p>
+      <h2>Exercises</h2>
+
+      <p>Each solution is a self-contained program, compiled and run with Spring Framework 7.0.8 and Caffeine 3.2.4 on OpenJDK 21.0.13. The output shown is real.</p>
+
+      <div class="xp-exercise">
+        <h3 id="exercise-1">22.1 A key collision<span class="xp-lvl">keys · easy</span></h3>
+        <p>Cache a customer lookup and an account lookup in the same cache, both by <code>long</code> ID. Call both for ID 42, then fix the account lookup with an explicit key.</p>
+        <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+          <p>The default <code>SimpleKeyGenerator</code> uses the argument itself when there is exactly one, so both methods produce the key <code>42</code><sup class="cite"><a href="#ref-3">3</a></sup>.</p>
+<div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">Ex1KeyCollision.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active" data-lang="java"><code class="language-java">package lab.scache;
+
+import org.springframework.cache.annotation.*;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.context.annotation.*;
+
+public class Ex1KeyCollision {
+    record Customer(long id, String name) {}
+    record Account(long id, String iban) {}
+
+    public static class Lookups {
+        @Cacheable("entities") public Customer customer(long id) { return new Customer(id, "Ana Silva"); }
+        @Cacheable("entities") public Account account(long id) { return new Account(id, "DE89370400440532013000"); }
+        @Cacheable(cacheNames = "entities", key = "'account:' + #id") public Account accountFixed(long id) { return new Account(id, "DE89370400440532013000"); }
+    }
+
+    @Configuration @EnableCaching
+    static class Config {
+        @Bean ConcurrentMapCacheManager cacheManager() { return new ConcurrentMapCacheManager(); }
+        @Bean Lookups lookups() { return new Lookups(); }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Lookups l = ctx.getBean(Lookups.class);
+            System.out.println("customer(42): " + l.customer(42));
+            try { System.out.println("account(42):  " + l.account(42)); }
+            catch (ClassCastException e) { System.out.println("account(42):  ClassCastException: " + e.getMessage().replaceAll(" \\(.*", "")); }
+            System.out.println("accountFixed(42): " + l.accountFixed(42));
+        }
+    }
+}</code></pre>
+      </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>customer(42): Customer[id=42, name=Ana Silva]
+account(42):  ClassCastException: class lab.scache.Ex1KeyCollision$Customer cannot be cast to class lab.scache.Ex1KeyCollision$Account
+accountFixed(42): Account[id=42, iban=DE89370400440532013000]</pre></div>
+        </div></details>
+      </div>
+
+      <div class="xp-exercise">
+        <h3 id="exercise-2">22.2 Mutating a cached value<span class="xp-lvl">correctness · easy</span></h3>
+        <p>Fetch a cached price list, change its prices locally, and fetch it again, first with a cache that stores references and then with one that stores copies.</p>
+        <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+          <p>With store-by-value, the cache manager serializes values on the way in and deserializes a fresh copy on every read, so callers cannot share state<sup class="cite"><a href="#ref-2">2</a></sup>.</p>
+<div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">Ex2SharedMutable.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active" data-lang="java"><code class="language-java">package lab.scache;
+
+import java.io.Serializable;
+import java.util.*;
+import org.springframework.cache.annotation.*;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.context.annotation.*;
+
+public class Ex2SharedMutable {
+    public static class PriceList implements Serializable {
+        public final List&lt;Long&gt; prices = new ArrayList&lt;&gt;(List.of(4990L, 1290L, 899L));
+    }
+
+    public static class Catalog {
+        @Cacheable("prices") public PriceList prices(String region) { return new PriceList(); }
+    }
+
+    @Configuration @EnableCaching static class ByReference {
+        @Bean ConcurrentMapCacheManager cacheManager() { return new ConcurrentMapCacheManager(); }
+        @Bean Catalog catalog() { return new Catalog(); }
+    }
+    @Configuration @EnableCaching static class ByValue {
+        @Bean ConcurrentMapCacheManager cacheManager() { var m = new ConcurrentMapCacheManager(); m.setStoreByValue(true); return m; }
+        @Bean Catalog catalog() { return new Catalog(); }
+    }
+
+    static void run(String label, Class&lt;?&gt; config) {
+        try (var ctx = new AnnotationConfigApplicationContext(config)) {
+            Catalog c = ctx.getBean(Catalog.class);
+            PriceList forPromo = c.prices("EU");
+            forPromo.prices.replaceAll(p -&gt; p * 80 / 100);          // one caller applies a 20% promotion locally
+            System.out.println(label + "next caller sees " + c.prices("EU").prices);
+        }
+    }
+
+    public static void main(String[] args) {
+        run("store by reference: ", ByReference.class);
+        run("store by value:     ", ByValue.class);
+    }
+}</code></pre>
+      </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>store by reference: next caller sees [3992, 1032, 719]
+store by value:     next caller sees [4990, 1290, 899]</pre></div>
+          <p>Copies cost CPU on every hit. Immutable value types give the same safety for free.</p>
+        </div></details>
+      </div>
+
+      <div class="xp-exercise">
+        <h3 id="exercise-3">22.3 LRU versus W-TinyLFU<span class="xp-lvl">eviction · medium</span></h3>
+        <p>Replay one million requests (70% from a skewed popularity distribution, 30% one-off keys like a crawler) through an LRU cache and through Caffeine, at three sizes, and compare hit ratios.</p>
+        <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+          <p>LRU admits every new key, so one-off keys push out popular ones. W-TinyLFU keeps a compact frequency sketch and admits a candidate only if it is used more often than the eviction victim<sup class="cite"><a href="#ref-6">6</a>,<a href="#ref-7">7</a>,<a href="#ref-8">8</a></sup>.</p>
+<div class="codecard">
+        <div class="codecard__bar">
+          <div class="codecard__dots"><i></i><i></i><i></i></div>
+          <span class="codecard__name">Ex3HitRatio.java</span>
+          <button class="copybtn">Copy</button>
+        </div>
+        <pre class="codepane is-active" data-lang="java"><code class="language-java">package lab.scache;
+
+import com.github.benmanes.caffeine.cache.*;
+import java.util.*;
+
+public class Ex3HitRatio {
+    /** Zipf-like keys (a few hot products, a long tail) mixed with one-off scans, like a crawler. */
+    static long[] workload(int n, long seed) {
+        Random r = new Random(seed);
+        long[] keys = new long[n];
+        double[] cdf = new double[100_000];
+        double sum = 0;
+        for (int k = 0; k &lt; cdf.length; k++) { sum += 1.0 / Math.pow(k + 1, 0.9); cdf[k] = sum; }
+        long scan = 1_000_000;
+        for (int i = 0; i &lt; n; i++) {
+            if (i % 10 &lt; 3) { keys[i] = scan++; continue; }                       // 30%: never-repeated keys
+            int idx = Arrays.binarySearch(cdf, r.nextDouble() * sum);
+            keys[i] = idx &gt;= 0 ? idx : -idx - 1;
+        }
+        return keys;
+    }
+
+    static double lru(long[] keys, int size) {
+        Map&lt;Long, Boolean&gt; m = new LinkedHashMap&lt;&gt;(size, 0.75f, true) {
+            protected boolean removeEldestEntry(Map.Entry&lt;Long, Boolean&gt; e) { return size() &gt; size; }
+        };
+        int hits = 0;
+        for (long k : keys) { if (m.get(k) != null) hits++; else m.put(k, true); }
+        return 100.0 * hits / keys.length;
+    }
+
+    static double caffeine(long[] keys, int size) {
+        Cache&lt;Long, Boolean&gt; c = Caffeine.newBuilder().maximumSize(size).executor(Runnable::run).recordStats().build();
+        for (long k : keys) c.get(k, x -&gt; true);
+        return 100 * c.stats().hitRate();
+    }
+
+    public static void main(String[] args) {
+        long[] keys = workload(1_000_000, 42);
+        System.out.println("cache size   LRU hit ratio   Caffeine (W-TinyLFU) hit ratio");
+        for (int size : new int[] {100, 1_000, 10_000})
+            System.out.printf("%,10d   %12.1f%%   %12.1f%%%n", size, lru(keys, size), caffeine(keys, size));
+    }
+}</code></pre>
+      </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>cache size   LRU hit ratio   Caffeine (W-TinyLFU) hit ratio
+       100            9.1%           15.5%
+     1,000           21.1%           30.3%
+    10,000           37.0%           46.1%</pre></div>
+          <p>The absolute numbers depend on the synthetic workload. The gap is the point: at every size, the frequency-aware policy keeps more of the hot set. <code>executor(Runnable::run)</code> makes Caffeine's maintenance synchronous, so the run is repeatable.</p>
+        </div></details>
+      </div>
+    </section>
+
+    <section class="sec" id="trivia">
+      <p class="kicker"><span class="num">23</span><span class="bar"></span> Recall</p>
+      <h2>Trivia</h2>
+
+      <p>Short questions with answers.</p>
+      <div class="xp-trivia">
+        <details class="xp-details"><summary>Who said there are only two hard things in computer science?</summary><div class="xp-body"><p>Phil Karlton: cache invalidation and naming things. The "off-by-one errors" ending is a later joke.</p></div></details>
+        <details class="xp-details"><summary>What does <code>@CachePut</code> do differently from <code>@Cacheable</code>?</summary><div class="xp-body"><p>It always runs the method and stores the result, so it updates the cache rather than skipping the call<sup class="cite"><a href="#ref-3">3</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What does <code>@CacheEvict(beforeInvocation = true)</code> change?</summary><div class="xp-body"><p>The entry is evicted before the method runs, so it is evicted even if the method throws<sup class="cite"><a href="#ref-3">3</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What is the difference between <code>condition</code> and <code>unless</code>?</summary><div class="xp-body"><p><code>condition</code> is evaluated before the call and can prevent caching altogether. <code>unless</code> is evaluated after the call and can refer to <code>#result</code><sup class="cite"><a href="#ref-3">3</a>,<a href="#ref-4">4</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>Which cache provider does Spring Boot pick when several are available?</summary><div class="xp-body"><p>The first one found in a fixed order, starting with Generic, JCache, Hazelcast, Couchbase, Infinispan, Redis, and Caffeine. Set <code>spring.cache.type</code> to choose explicitly<sup class="cite"><a href="#ref-5">5</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What is Redis's default eviction policy?</summary><div class="xp-body"><p><code>noeviction</code>: writes fail when memory is full. Cache deployments usually choose <code>allkeys-lru</code> or <code>allkeys-lfu</code><sup class="cite"><a href="#ref-12">12</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What is probabilistic early expiration?</summary><div class="xp-body"><p>A stampede defence in which each reader may refresh an entry slightly before it expires, with a probability that rises as expiry approaches, so that refreshes are spread out<sup class="cite"><a href="#ref-19">19</a>,<a href="#ref-20">20</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>Why is Kafka log compaction useful for cache invalidation?</summary><div class="xp-body"><p>It keeps the latest record for each key, so a new instance can rebuild a complete, current view of the invalidations without replaying all history<sup class="cite"><a href="#ref-24">24</a>,<a href="#ref-25">25</a></sup>.</p></div></details>
+      </div>
+    </section>
+
+
+<!-- xp:end -->
     <!-- ===================== CONCLUSION ===================== -->
     <section class="sec" id="conclusion">
       <p class="kicker"><span class="num">&#9633;</span><span class="bar"></span> Closing</p>

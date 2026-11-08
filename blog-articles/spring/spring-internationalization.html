@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1095,6 +1115,299 @@ void formatsWeight(
   When localized output is wrong, trace four independent decisions: Which locale and time zone were resolved? Which message codes and bundle candidates were searched? Which arguments were passed to <code>MessageFormat</code>? Which formatter or serializer produced each typed value? Separating those layers turns internationalization from scattered string handling into a predictable application subsystem.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">20. Enterprise scenarios</h2>
+<p>Internationalization bugs reach customers directly: the wrong language, a broken sentence, a misread date, an amount formatted for the wrong country. They are also hard to spot in a test suite that runs only in English. The scenarios below are composites from global commerce and banking products, with illustrative figures. Section 21 runs each mechanism with Spring Framework 7.0.8.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">E-commerce · Japanese customers · servers moved to a new region</p>
+<h3 id="scenario-fallback">20.1 Japanese customers suddenly received French emails</h3>
+<p><strong>Situation.</strong> The application had no Japanese bundle, so Japanese customers saw the English base messages. After a data-center move, the new hosts ran with a French system locale.</p>
+<p><strong>What went wrong.</strong> <code>ResourceBundleMessageSource</code> falls back to the <em>system locale</em> before the base bundle, by default<a class="citation" href="#ref-3">[3]</a>. Japanese customers began receiving French order confirmations, and nothing in the code had changed.</p>
+<p><strong>Fix.</strong> Set <code>fallbackToSystemLocale(false)</code> (Spring Boot exposes this as <code>spring.messages.fallback-to-system-locale</code>)<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-6">[6]</a>, so that unsupported locales get the base bundle, and pin the JVM's default locale in the container image (Exercise 1).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">French-language portal · validation messages · customer complaints</p>
+<h3 id="scenario-apostrophe">20.2 "Ladresse nest pas valide"</h3>
+<p><strong>Situation.</strong> French messages contained apostrophes, such as <code>L'adresse {0} n'est pas valide.</code></p>
+<p><strong>What went wrong.</strong> When arguments are passed, the message goes through <code>java.text.MessageFormat</code>, where a single quote starts a quoted section. The apostrophes disappeared, and the text between them was not substituted. Messages without arguments were printed literally and looked fine, so testers missed the bug<a class="citation" href="#ref-9">[9]</a>.</p>
+<p><strong>Fix.</strong> Write apostrophes as <code>''</code> in every bundle, and set <code>alwaysUseMessageFormat(true)</code> so that all messages are parsed consistently and the bug shows up everywhere, not only when arguments are present (Exercise 2). Add a test that renders every key in every bundle.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Marketplace · cart summaries · 14 languages</p>
+<h3 id="scenario-plural">20.3 "You have 1 items"</h3>
+<p><strong>Situation.</strong> Messages were built with string concatenation: <code>"You have " + n + " items"</code>.</p>
+<p><strong>Fix.</strong> Put plural rules in the message, with <code>choice</code> format, so that translators control each language's grammar (Exercise 3). Languages with more plural forms, such as Polish, Russian, and Arabic, need ICU's <code>PluralFormat</code>, because <code>ChoiceFormat</code> only compares numbers with thresholds<a class="citation" href="#ref-9">[9]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · statements and payment confirmations in five markets</p>
+<h3 id="scenario-format">20.4 1.234 or 1,234?</h3>
+<p><strong>Situation.</strong> Amounts were formatted with <code>String.format("%,.2f")</code> using the server's locale.</p>
+<p><strong>What went wrong.</strong> German customers read 1,234.56 as roughly one euro. Swiss customers expected an apostrophe as the thousands separator. A CSV parser on the French side split amounts at a narrow no-break space it had never seen before.</p>
+<p><strong>Fix.</strong> Format numbers, currencies, and dates with the <em>customer's</em> locale, resolved per request<a class="citation" href="#ref-10">[10]</a><a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-12">[12]</a> (Exercise 4). Treat currency as data, separate from the locale. Machine-readable exports should use a locale-neutral format (ISO 8601 dates, plain decimals), whatever the user's locale (Exercise 5)<a class="citation" href="#ref-28">[28]</a><a class="citation" href="#ref-29">[29]</a>.</p>
+</div>
+
+<h2 id="exercises">21. Exercises</h2>
+<p>Each solution is a self-contained program, compiled and run with Spring Framework 7.0.8 on OpenJDK 21.0.13, using the bundles below. Exercise 4 drives a controller through standalone <code>MockMvc</code>. The output shown is real.</p>
+  <div class="code-wrap">
+    <span class="lang">Properties · i18n/messages.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>order.confirmed=Order {0} is confirmed.
+cart.items=Your cart has {0,choice,0#no items|1#one item|1&lt;{0,number,integer} items}.
+address.invalid=The address {0} is invalid.</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Properties · i18n/messages_de.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>order.confirmed=Bestellung {0} ist bestätigt.
+cart.items=Ihr Warenkorb enthält {0,choice,0#keine Artikel|1#einen Artikel|1&lt;{0,number,integer} Artikel}.</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Properties · i18n/messages_de_CH.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>order.confirmed=Bestellung {0} ist bestätigt (Schweiz).</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Properties · i18n/messages_fr.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>order.confirmed=La commande {0} est confirmée.
+address.invalid=L'adresse {0} n'est pas valide.</code></pre>
+  </div>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">21.1 Which bundle answers?<span class="xp-lvl">MessageSource · easy</span></h3>
+<p>On a JVM whose default locale is French, resolve <code>order.confirmed</code> for <code>de-CH</code>, <code>de-AT</code>, and <code>ja-JP</code>, with <code>fallbackToSystemLocale</code> on and off.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Lookup goes from the most specific bundle to the least: <code>de_CH</code>, then <code>de</code>. If nothing matches, the system locale's bundle is tried before the base bundle, unless that fallback is disabled<a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-7">[7]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.i18n;
+
+import java.util.Locale;
+import org.springframework.context.support.ResourceBundleMessageSource;
+
+public class Ex1Fallback {
+    static ResourceBundleMessageSource source(boolean fallbackToSystemLocale) {
+        ResourceBundleMessageSource ms = new ResourceBundleMessageSource();
+        ms.setBasename("i18n/messages");
+        ms.setDefaultEncoding("UTF-8");
+        ms.setFallbackToSystemLocale(fallbackToSystemLocale);
+        return ms;
+    }
+
+    public static void main(String[] args) {
+        Locale.setDefault(Locale.FRENCH);                       // the server's JVM happens to run with a French locale
+        for (boolean systemFallback : new boolean[] {true, false}) {
+            ResourceBundleMessageSource ms = source(systemFallback);
+            System.out.println("fallbackToSystemLocale=" + systemFallback);
+            for (Locale l : new Locale[] {Locale.forLanguageTag("de-CH"), Locale.forLanguageTag("de-AT"), Locale.forLanguageTag("ja-JP")})
+                System.out.printf("  %-6s %s%n", l.toLanguageTag(), ms.getMessage("order.confirmed", new Object[] {"A-17"}, l));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>fallbackToSystemLocale=true
+  de-CH  Bestellung A-17 ist bestätigt (Schweiz).
+  de-AT  Bestellung A-17 ist bestätigt.
+  ja-JP  La commande A-17 est confirmée.
+fallbackToSystemLocale=false
+  de-CH  Bestellung A-17 ist bestätigt (Schweiz).
+  de-AT  Bestellung A-17 ist bestätigt.
+  ja-JP  Order A-17 is confirmed.</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">21.2 The apostrophe trap<span class="xp-lvl">MessageFormat · easy</span></h3>
+<p>Resolve the French <code>address.invalid</code> message with an argument, without one, and without one but with <code>alwaysUseMessageFormat</code>. Then fix the bundle.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>In <code>MessageFormat</code>, <code>'</code> quotes literal text, so <code>'adresse {0} n'</code> becomes a quoted literal, and the apostrophes vanish<a class="citation" href="#ref-9">[9]</a>. Without arguments, Spring returns the raw text, which hides the problem. The fix in the bundle is <code>L''adresse {0} n''est pas valide.</code></p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.i18n;
+
+import java.util.Locale;
+import org.springframework.context.support.ResourceBundleMessageSource;
+
+public class Ex2Apostrophe {
+    public static void main(String[] args) {
+        ResourceBundleMessageSource ms = new ResourceBundleMessageSource();
+        ms.setBasename("i18n/messages");
+        ms.setDefaultEncoding("UTF-8");
+        Locale fr = Locale.FRENCH;
+        System.out.println("with an argument:    " + ms.getMessage("address.invalid", new Object[] {"12 rue X"}, fr));
+        System.out.println("without arguments:   " + ms.getMessage("address.invalid", null, fr));
+        ms.setAlwaysUseMessageFormat(true);
+        System.out.println("alwaysUseMessageFormat, no args: " + ms.getMessage("address.invalid", null, fr));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>with an argument:    Ladresse {0} nest pas valide.
+without arguments:   L'adresse {0} n'est pas valide.
+alwaysUseMessageFormat, no args: Ladresse {0} nest pas valide.</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">21.3 Plurals and number formats inside messages<span class="xp-lvl">messages · easy</span></h3>
+<p>Render <code>cart.items</code> for 0, 1, 2, and 1,500 items, in English and German.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>{0,choice,0#…|1#…|1&lt;…}</code> selects the text by number, and the nested <code>{0,number,integer}</code> formats the count with the locale's grouping separator<a class="citation" href="#ref-9">[9]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.i18n;
+
+import java.util.Locale;
+import org.springframework.context.support.ResourceBundleMessageSource;
+
+public class Ex3Plurals {
+    public static void main(String[] args) {
+        ResourceBundleMessageSource ms = new ResourceBundleMessageSource();
+        ms.setBasename("i18n/messages");
+        ms.setDefaultEncoding("UTF-8");
+        ms.setFallbackToSystemLocale(false);
+        for (Locale l : new Locale[] {Locale.ENGLISH, Locale.GERMAN})
+            for (int n : new int[] {0, 1, 2, 1500})
+                System.out.printf("%-2s %5d -&gt; %s%n", l, n, ms.getMessage("cart.items", new Object[] {n}, l));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>en     0 -&gt; Your cart has no items.
+en     1 -&gt; Your cart has one item.
+en     2 -&gt; Your cart has 2 items.
+en  1500 -&gt; Your cart has 1,500 items.
+de     0 -&gt; Ihr Warenkorb enthält keine Artikel.
+de     1 -&gt; Ihr Warenkorb enthält einen Artikel.
+de     2 -&gt; Ihr Warenkorb enthält 2 Artikel.
+de  1500 -&gt; Ihr Warenkorb enthält 1.500 Artikel.</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">21.4 Resolve the locale from <code>Accept-Language</code><span class="xp-lvl">web · medium</span></h3>
+<p>Support English, German, and French, with English as the default. Resolve requests with <code>de-AT</code> preferred, with <code>fr-CA</code>, with Japanese, and with no header, and check the response's character set.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>AcceptHeaderLocaleResolver</code> with supported locales matches by language when there is no exact match, so <code>de-AT</code> becomes <code>de</code>, and an unsupported language falls back to the default. A <code>Locale</code> controller parameter receives the resolved locale<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-12">[12]</a>. A <code>String</code> returned as <code>text/plain</code> is encoded as ISO-8859-1 unless you declare a charset, which cannot represent most of the world's scripts, so declare <code>charset=UTF-8</code>, or return JSON.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.i18n;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+import java.util.*;
+import org.springframework.context.MessageSource;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver;
+
+public class Ex4AcceptLanguage {
+    @RestController
+    static class Orders {
+        final MessageSource messages;
+        Orders(MessageSource m) { messages = m; }
+        @GetMapping("/orders/{id}/status-default")
+        String statusDefaultCharset(@PathVariable String id, Locale locale) { return status(id, locale); }
+
+        @GetMapping(value = "/orders/{id}/status", produces = "text/plain;charset=UTF-8")
+        String status(@PathVariable String id, Locale locale) {               // resolved by the LocaleResolver
+            return locale.toLanguageTag() + " | " + messages.getMessage("order.confirmed", new Object[] {id}, locale);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        ResourceBundleMessageSource ms = new ResourceBundleMessageSource();
+        ms.setBasename("i18n/messages"); ms.setDefaultEncoding("UTF-8"); ms.setFallbackToSystemLocale(false);
+        AcceptHeaderLocaleResolver resolver = new AcceptHeaderLocaleResolver();
+        resolver.setSupportedLocales(List.of(Locale.ENGLISH, Locale.GERMAN, Locale.FRENCH));
+        resolver.setDefaultLocale(Locale.ENGLISH);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Orders(ms)).setLocaleResolver(resolver).build();
+        for (String header : new String[] {"de-AT,de;q=0.9,en;q=0.5", "fr-CA", "ja-JP,ja;q=0.9", ""}) {
+            var req = get("/orders/A-17/status");
+            if (!header.isEmpty()) req.header("Accept-Language", header);
+            var res = mvc.perform(req).andReturn().getResponse();
+            System.out.printf("%-26s -&gt; %s%n", header.isEmpty() ? "(no header)" : header, res.getContentAsString());
+        }
+        var plain = mvc.perform(get("/orders/A-17/status-default")).andReturn().getResponse();
+        var utf8 = mvc.perform(get("/orders/A-17/status")).andReturn().getResponse();
+        System.out.println("Content-Type without produces: " + plain.getContentType() + "; with produces: " + utf8.getContentType());
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>de-AT,de;q=0.9,en;q=0.5    -&gt; de | Bestellung A-17 ist bestätigt.
+fr-CA                      -&gt; fr | La commande A-17 est confirmée.
+ja-JP,ja;q=0.9             -&gt; en | Order A-17 is confirmed.
+(no header)                -&gt; en | Order A-17 is confirmed.
+Content-Type without produces: text/plain;charset=ISO-8859-1; with produces: text/plain;charset=UTF-8</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">21.5 One amount, five locales<span class="xp-lvl">formatting · easy</span></h3>
+<p>Format EUR 1,234,567.891 and 1 December 2026 for <code>en-US</code>, <code>de-DE</code>, <code>de-CH</code>, <code>fr-FR</code>, and <code>hi-IN</code>, and list the separator characters each format uses.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Separators differ: commas, periods, a right single quotation mark (U+2019) in Switzerland, and a narrow no-break space (U+202F) in French, which naive parsers do not expect<a class="citation" href="#ref-28">[28]</a><a class="citation" href="#ref-29">[29]</a>. Note the <code>hi-IN</code> amount. India groups as 12,34,567, but <code>java.text.DecimalFormat</code> supports only one grouping size, so it prints Western grouping. ICU4J's formatter handles lakh grouping correctly.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.i18n;
+
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.time.LocalDate;
+import java.time.format.*;
+import java.util.*;
+
+public class Ex5Numbers {
+    public static void main(String[] args) {
+        BigDecimal amount = new BigDecimal("1234567.891");
+        LocalDate due = LocalDate.of(2026, 12, 1);
+        for (String tag : new String[] {"en-US", "de-DE", "de-CH", "fr-FR", "hi-IN"}) {
+            Locale l = Locale.forLanguageTag(tag);
+            NumberFormat money = NumberFormat.getCurrencyInstance(l);
+            money.setCurrency(Currency.getInstance("EUR"));                     // currency is data, not a locale default
+            String formatted = money.format(amount);
+            String dateText = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(l).format(due);
+            String separators = formatted.chars().filter(c -&gt; !Character.isLetterOrDigit(c) &amp;&amp; c != '€' &amp;&amp; c != '-')
+                    .distinct().mapToObj(c -&gt; String.format("U+%04X", c)).reduce((a, b) -&gt; a + " " + b).orElse("");
+            System.out.printf("%-6s %-18s %-14s separators: %s%n", tag, formatted, dateText, separators);
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>en-US  €1,234,567.89      Dec 1, 2026    separators: U+002C U+002E
+de-DE  1.234.567,89 €     01.12.2026     separators: U+002E U+002C U+00A0
+de-CH  EUR 1’234’567.89   01.12.2026     separators: U+00A0 U+2019 U+002E
+fr-FR  1 234 567,89 €     1 déc. 2026    separators: U+202F U+002C U+00A0
+hi-IN  €1,234,567.89      1 दिस॰ 2026    separators: U+002C U+002E</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">22. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Why is "i18n" spelled that way?</summary><div class="xp-body"><p>The 18 stands for the eighteen letters between the "i" and the "n" of "internationalization". "L10n" (localization) and "g11n" (globalization) follow the same pattern.</p></div></details>
+<details class="xp-details"><summary>Which bean name must a <code>MessageSource</code> have for the context to use it?</summary><div class="xp-body"><p><code>messageSource</code>. The application context looks it up by that name, and otherwise delegates to an empty source<a class="citation" href="#ref-1">[1]</a><a class="citation" href="#ref-2">[2]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>ReloadableResourceBundleMessageSource</code> add?</summary><div class="xp-body"><p>It loads bundles from any Spring resource location, not just the class path, can reload them on a cache interval without a restart, and reads encodings explicitly<a class="citation" href="#ref-4">[4]</a>.</p></div></details>
+<details class="xp-details"><summary>What encoding does <code>ResourceBundle</code> use for <code>.properties</code> files since Java 9?</summary><div class="xp-body"><p>UTF-8, falling back to ISO-8859-1 if the file is not valid UTF-8. Before Java 9, properties bundles were ISO-8859-1 only, hence the old <code>native2ascii</code> tool<a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>Where does Spring keep the current locale outside a controller?</summary><div class="xp-body"><p>In <code>LocaleContextHolder</code>, a thread-bound holder that <code>DispatcherServlet</code> populates for each request. Like any <code>ThreadLocal</code>, it does not follow <code>@Async</code> calls automatically<a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>How can users switch language with a URL parameter?</summary><div class="xp-body"><p><code>LocaleChangeInterceptor</code> (for example <code>?lang=de</code>), combined with a resolver that can store the choice, such as <code>CookieLocaleResolver</code> or <code>SessionLocaleResolver</code><a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-14">[14]</a><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+<details class="xp-details"><summary>How are validation messages localized?</summary><div class="xp-body"><p>Point <code>LocalValidatorFactoryBean.setValidationMessageSource</code> at your <code>MessageSource</code>, or use Spring's error codes, so that constraint messages resolve per locale<a class="citation" href="#ref-31">[31]</a><a class="citation" href="#ref-32">[32]</a><a class="citation" href="#ref-33">[33]</a>.</p></div></details>
+<details class="xp-details"><summary>What do <code>@NumberFormat</code> and <code>@DateTimeFormat</code> do?</summary><div class="xp-body"><p>They tell Spring's formatting conversion service how to parse and print a field in data binding, for example <code>@NumberFormat(style = CURRENCY)</code>, and they respect the request locale<a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-26">[26]</a><a class="citation" href="#ref-27">[27]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the WebFlux equivalent of <code>LocaleResolver</code>?</summary><div class="xp-body"><p><code>LocaleContextResolver</code>, with <code>AcceptHeaderLocaleContextResolver</code> as the default implementation<a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-21">[21]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>MessageSourceAccessor</code> simplify?</summary><div class="xp-body"><p>It wraps a <code>MessageSource</code> with a default locale, usually the current <code>LocaleContextHolder</code> locale, so that callers can write <code>accessor.getMessage("key")</code><a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Additional Capabilities of the ApplicationContext: Internationalization using MessageSource [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html">https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html</a></li>
@@ -1155,7 +1468,7 @@ void formatsWeight(
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

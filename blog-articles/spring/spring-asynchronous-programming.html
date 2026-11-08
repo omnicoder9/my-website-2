@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1162,6 +1182,349 @@ void rejectsWhenPoolAndQueueAreFull()
   When an async workflow surprises you, trace it through five ownership boundaries: Which proxy intercepted the call? Which executor admitted it? Which queue and worker ran it? Which thread-local and transactional context was available? Which future, rejection path, or durable record owned completion and failure? Those questions turn <code>@Async</code> from apparent background magic into an explicit concurrency architecture.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">18. Enterprise scenarios</h2>
+<p><code>@Async</code> looks like a one-word performance fix. In production, it is a thread-pool design decision, an error-handling decision, and a context-propagation decision, all hidden behind an annotation. The scenarios below are composites from retail, banking, and SaaS teams, with illustrative figures. Section 19 runs each mechanism on Spring Framework 7.0.8.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail · order-confirmation emails · Black Friday</p>
+<h3 id="scenario-unbounded">18.1 Thread creation and queue growth without limits</h3>
+<p><strong>Situation.</strong> A non-Boot Spring application used <code>@EnableAsync</code> with no executor bean, and a Boot service relied on the auto-configured task executor's defaults.</p>
+<p><strong>What went wrong.</strong> With no executor configured, <code>@Async</code> falls back to a <code>SimpleAsyncTaskExecutor</code>, which starts a new thread for every task<a class="citation" href="#ref-1">[1]</a><a class="citation" href="#ref-5">[5]</a> (Exercise 1 shows its thread names). During a traffic spike, the first service created thousands of threads and failed with "unable to create native thread". The second service queued 2 million confirmation emails in memory, because its executor had an unbounded queue, and ran out of heap.</p>
+<p><strong>Fix.</strong> Define the executor explicitly, with a bounded queue, a chosen rejection behavior, named threads, and graceful shutdown<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-12">[12]</a> (Exercise 2). Decide what rejection means for the business: retry later, write to an outbox, or tell the caller. For I/O-bound tasks on JDK 21 and later, virtual threads with an explicit concurrency limit are an alternative<a class="citation" href="#ref-19">[19]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · push notifications · a three-week silent failure</p>
+<h3 id="scenario-silent">18.2 Notifications that failed without anyone knowing</h3>
+<p><strong>Situation.</strong> Fraud-alert notifications were sent from <code>@Async</code> methods. Some returned <code>CompletableFuture</code>, and callers ignored the result.</p>
+<p><strong>What went wrong.</strong> After an SMS provider changed its API, every send failed. The failures were captured in futures that no one read, and nothing showed up in dashboards. Customers stopped receiving fraud alerts for three weeks. For <code>void</code> methods, exceptions go to the <code>AsyncUncaughtExceptionHandler</code>. For future-returning methods, they go into the future<a class="citation" href="#ref-7">[7]</a><a class="citation" href="#ref-9">[9]</a>.</p>
+<p><strong>Fix.</strong> Register a handler that counts failures and alerts on them, and either observe every returned future or return <code>void</code> on purpose (Exercise 3). Better still, turn important side effects into durable messages with retries and a dead-letter queue, rather than fire-and-forget calls.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Multi-tenant SaaS · audit log written asynchronously</p>
+<h3 id="scenario-context">18.3 Audit entries recorded under no tenant</h3>
+<p><strong>Situation.</strong> The current tenant and the authenticated user lived in <code>ThreadLocal</code>s: a tenant holder, the MDC, and Spring Security's <code>SecurityContextHolder</code>.</p>
+<p><strong>What went wrong.</strong> The audit writer ran on an async pool thread, where those <code>ThreadLocal</code>s were empty, or, worse, left over from a previous task. Audit records showed no tenant, and in one case another tenant's id. That was a compliance finding<a class="citation" href="#ref-16">[16]</a>.</p>
+<p><strong>Fix.</strong> Propagate context deliberately with a <code>TaskDecorator</code> that captures, restores, and cleans up (Exercise 4). Spring's <code>ContextPropagatingTaskDecorator</code><a class="citation" href="#ref-14">[14]</a><a class="citation" href="#ref-15">[15]</a>, and Spring Security's delegating executors<a class="citation" href="#ref-16">[16]</a>, do this for registered context types. Pass critical identifiers, such as the tenant id, as explicit method arguments as well.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">E-commerce · search indexing triggered from <code>@Transactional</code> code</p>
+<h3 id="scenario-tx">18.4 The index was updated before the order existed</h3>
+<p><strong>Situation.</strong> <code>placeOrder()</code> was <code>@Transactional</code>, and it called an <code>@Async</code> indexer, passing the new order's id.</p>
+<p><strong>What went wrong.</strong> The async thread ran outside the caller's transaction, because transaction state is thread-bound<a class="citation" href="#ref-17">[17]</a> (Exercise 5). It often queried the database <em>before</em> the order had committed, found nothing, and indexed stale data. When the transaction rolled back, the index kept an order that did not exist.</p>
+<p><strong>Fix.</strong> Trigger asynchronous work after the commit: publish an event and handle it with <code>@TransactionalEventListener(phase = AFTER_COMMIT)</code> combined with <code>@Async</code><a class="citation" href="#ref-22">[22]</a>, or use an outbox, which is also durable. Never assume that an async method can see uncommitted data.</p>
+</div>
+
+<h2 id="exercises">19. Exercises</h2>
+<p>Each solution is a self-contained Spring application with a <code>main</code> method. The code was compiled and run with Spring Framework 7.0.8 (managed by the Spring Boot 4.1.0 BOM) and H2 2.4.240 on OpenJDK 21.0.13. The output shown is real.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">19.1 Which thread ran it?<span class="xp-lvl">proxies · easy</span></h3>
+<p>Call an <code>@Async</code> method through the bean, and again from another method of the same bean. Print the thread that runs each call.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>@Async</code> is applied by a proxy, created by <code>AsyncAnnotationBeanPostProcessor</code><a class="citation" href="#ref-6">[6]</a>. The self-invocation never reaches the proxy, so it runs synchronously on <code>main</code>. The thread name also shows the default executor when none is configured: <code>SimpleAsyncTaskExecutor</code>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.async;
+
+import java.util.concurrent.CompletableFuture;
+import org.springframework.context.annotation.*;
+import org.springframework.scheduling.annotation.*;
+import org.springframework.stereotype.Service;
+
+public class Ex1SelfInvocation {
+    @Configuration @EnableAsync @Import(ReportService.class)
+    static class Config {}
+
+    @Service
+    static class ReportService {
+        public CompletableFuture&lt;String&gt; generateAll() {
+            return render("monthly");                       // this.render(): no proxy, runs on the caller's thread
+        }
+        @Async
+        public CompletableFuture&lt;String&gt; render(String name) {
+            return CompletableFuture.completedFuture(name + " rendered on " + Thread.currentThread().getName());
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            ReportService svc = ctx.getBean(ReportService.class);
+            System.out.println("caller thread:      " + Thread.currentThread().getName());
+            System.out.println("via proxy:          " + svc.render("weekly").get());
+            System.out.println("via self-invocation: " + svc.generateAll().get());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>caller thread:      main
+via proxy:          weekly rendered on SimpleAsyncTaskExecutor-1
+via self-invocation: monthly rendered on main</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">19.2 A bounded mail executor<span class="xp-lvl">executors · medium</span></h3>
+<p>Configure a dedicated executor with 2 threads and a queue of 3, and submit 8 slow mail sends. How many are accepted, what happens to the rest, and which threads ran the accepted ones?</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Two tasks run, three wait in the queue, and the remaining three are rejected with <code>TaskRejectedException</code><a class="citation" href="#ref-11">[11]</a>. This is exactly the behavior you want to choose deliberately, rather than discover in production. <code>setWaitForTasksToCompleteOnShutdown</code> and <code>setAwaitTerminationSeconds</code> let queued mail finish during a graceful shutdown.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.async;
+
+import java.util.*;
+import java.util.concurrent.*;
+import org.springframework.context.annotation.*;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.scheduling.annotation.*;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.stereotype.Service;
+
+public class Ex2BoundedExecutor {
+    @Configuration @EnableAsync @Import(Mailer.class)
+    static class Config {
+        @Bean(name = "mailExecutor", initMethod = "initialize", destroyMethod = "shutdown")
+        ThreadPoolTaskExecutor mailExecutor() {
+            ThreadPoolTaskExecutor ex = new ThreadPoolTaskExecutor();
+            ex.setCorePoolSize(2);
+            ex.setMaxPoolSize(2);
+            ex.setQueueCapacity(3);                          // bounded: memory cannot grow without limit
+            ex.setThreadNamePrefix("mail-");
+            ex.setWaitForTasksToCompleteOnShutdown(true);    // finish queued mail on shutdown...
+            ex.setAwaitTerminationSeconds(10);               // ...but not forever
+            return ex;
+        }
+    }
+
+    @Service
+    static class Mailer {
+        @Async("mailExecutor")
+        public CompletableFuture&lt;String&gt; send(int n) throws InterruptedException {
+            Thread.sleep(200);
+            return CompletableFuture.completedFuture("mail " + n + " by " + Thread.currentThread().getName());
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Mailer mailer = ctx.getBean(Mailer.class);
+            List&lt;CompletableFuture&lt;String&gt;&gt; accepted = new ArrayList&lt;&gt;();
+            int rejected = 0;
+            for (int i = 1; i &lt;= 8; i++) {
+                try { accepted.add(mailer.send(i)); }
+                catch (TaskRejectedException e) { rejected++; }        // 2 running + 3 queued; the rest are refused
+            }
+            System.out.println("accepted " + accepted.size() + ", rejected " + rejected);
+            accepted.forEach(f -&gt; System.out.println("  " + f.join()));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>accepted 5, rejected 3
+  mail 1 by mail-1
+  mail 2 by mail-2
+  mail 3 by mail-2
+  mail 4 by mail-1
+  mail 5 by mail-1</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">19.3 Where do async exceptions go?<span class="xp-lvl">errors · easy</span></h3>
+<p>One <code>@Async</code> method returns <code>void</code> and throws. Another returns <code>CompletableFuture</code> and throws. Make both failures visible.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Implement <code>AsyncConfigurer.getAsyncUncaughtExceptionHandler()</code> for <code>void</code> methods<a class="citation" href="#ref-7">[7]</a><a class="citation" href="#ref-9">[9]</a>. For future-returning methods, the exception completes the future exceptionally, so the caller must <code>join</code> it, compose on it, or attach a handler.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.async;
+
+import java.lang.reflect.Method;
+import java.util.concurrent.*;
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
+import org.springframework.context.annotation.*;
+import org.springframework.scheduling.annotation.*;
+import org.springframework.stereotype.Service;
+
+public class Ex3LostExceptions {
+    static final CountDownLatch handled = new CountDownLatch(1);
+
+    @Configuration @EnableAsync @Import(Notifier.class)
+    static class Config implements AsyncConfigurer {
+        @Override public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+            return (Throwable ex, Method method, Object... params) -&gt; {
+                System.out.println("handler: " + method.getName() + " failed: " + ex.getMessage());   // alert, count, dead-letter
+                handled.countDown();
+            };
+        }
+    }
+
+    @Service
+    static class Notifier {
+        @Async public void sendSms(String to) { throw new IllegalStateException("SMS gateway 503 for " + to); }
+        @Async public CompletableFuture&lt;Void&gt; sendEmail(String to) { throw new IllegalStateException("SMTP refused " + to); }
+    }
+
+    public static void main(String[] args) throws Exception {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Notifier n = ctx.getBean(Notifier.class);
+            n.sendSms("+4915112345678");                             // void: only the handler can see the failure
+            handled.await(5, TimeUnit.SECONDS);
+            CompletableFuture&lt;Void&gt; f = n.sendEmail("ana@example.com"); // future: the caller must look
+            try { f.join(); } catch (CompletionException e) { System.out.println("future: " + e.getCause().getMessage()); }
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>handler: sendSms failed: SMS gateway 503 for +4915112345678
+future: SMTP refused ana@example.com</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">19.4 Carry the tenant across threads<span class="xp-lvl">context · medium</span></h3>
+<p>Set a tenant in a <code>ThreadLocal</code>, and read it from <code>@Async</code> methods on two executors, one plain and one with a <code>TaskDecorator</code> that propagates the tenant.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The decorator runs on the submitting thread, where it captures the value, and returns a <code>Runnable</code> that installs the value on the worker and restores the worker's previous state afterwards<a class="citation" href="#ref-14">[14]</a>. Restoring, not just clearing, keeps pooled threads clean.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.async;
+
+import java.util.concurrent.CompletableFuture;
+import org.springframework.context.annotation.*;
+import org.springframework.core.task.TaskDecorator;
+import org.springframework.scheduling.annotation.*;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.stereotype.Service;
+
+public class Ex4ContextPropagation {
+    static final ThreadLocal&lt;String&gt; TENANT = new ThreadLocal&lt;&gt;();
+
+    /** Captures the submitting thread's tenant and restores it around the task. */
+    static final TaskDecorator TENANT_PROPAGATION = runnable -&gt; {
+        String tenant = TENANT.get();
+        return () -&gt; {
+            String previous = TENANT.get();
+            TENANT.set(tenant);
+            try { runnable.run(); } finally { if (previous == null) TENANT.remove(); else TENANT.set(previous); }
+        };
+    };
+
+    static ThreadPoolTaskExecutor pool(String prefix, TaskDecorator decorator) {
+        ThreadPoolTaskExecutor ex = new ThreadPoolTaskExecutor();
+        ex.setCorePoolSize(1); ex.setThreadNamePrefix(prefix);
+        if (decorator != null) ex.setTaskDecorator(decorator);
+        return ex;
+    }
+
+    @Configuration @EnableAsync @Import(AuditWriter.class)
+    static class Config {
+        @Bean(initMethod = "initialize", destroyMethod = "shutdown") ThreadPoolTaskExecutor plain() { return pool("plain-", null); }
+        @Bean(initMethod = "initialize", destroyMethod = "shutdown") ThreadPoolTaskExecutor decorated() { return pool("decorated-", TENANT_PROPAGATION); }
+    }
+
+    @Service
+    static class AuditWriter {
+        @Async("plain") public CompletableFuture&lt;String&gt; writePlain() { return CompletableFuture.completedFuture("tenant=" + TENANT.get()); }
+        @Async("decorated") public CompletableFuture&lt;String&gt; writeDecorated() { return CompletableFuture.completedFuture("tenant=" + TENANT.get()); }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            AuditWriter w = ctx.getBean(AuditWriter.class);
+            TENANT.set("acme");
+            System.out.println("without decorator: " + w.writePlain().join());
+            System.out.println("with decorator:    " + w.writeDecorated().join());
+            TENANT.remove();
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>without decorator: tenant=null
+with decorator:    tenant=acme</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">19.5 Does the transaction follow <code>@Async</code>?<span class="xp-lvl">transactions · easy</span></h3>
+<p>From a <code>@Transactional</code> method, call an <code>@Async</code> method, and report whether a transaction is active in each.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Spring binds the transaction to the calling thread, so the async method runs without it<a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-18">[18]</a>. If it needs a transaction, it must start its own, and it cannot see the caller's uncommitted changes.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.async;
+
+import java.util.concurrent.CompletableFuture;
+import javax.sql.DataSource;
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.embedded.*;
+import org.springframework.scheduling.annotation.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.*;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+public class Ex5AsyncAndTransactions {
+    @Configuration @EnableAsync @EnableTransactionManagement @Import({Orders.class, Indexer.class})
+    static class Config {
+        @Bean DataSource ds() { return new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true).build(); }
+        @Bean PlatformTransactionManager tm(DataSource ds) { return new DataSourceTransactionManager(ds); }
+    }
+
+    @Service
+    static class Indexer {
+        @Async public CompletableFuture&lt;String&gt; index(String orderId) {
+            return CompletableFuture.completedFuture("async: tx active = " + TransactionSynchronizationManager.isActualTransactionActive()
+                    + " on " + Thread.currentThread().getName().replaceAll("-\\d+$", ""));
+        }
+    }
+
+    @Service
+    static class Orders {
+        private final Indexer indexer;
+        Orders(Indexer indexer) { this.indexer = indexer; }
+        @Transactional public String place(String id) {
+            String caller = "caller: tx active = " + TransactionSynchronizationManager.isActualTransactionActive();
+            return caller + " | " + indexer.index(id).join();
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            System.out.println(ctx.getBean(Orders.class).place("o-1"));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>caller: tx active = true | async: tx active = false on SimpleAsyncTaskExecutor</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">20. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Which executor does <code>@Async</code> use when none is configured?</summary><div class="xp-body"><p>Without Spring Boot, Spring looks for a unique <code>TaskExecutor</code> bean, or one named <code>taskExecutor</code>, and otherwise falls back to <code>SimpleAsyncTaskExecutor</code>, which creates a thread per task<a class="citation" href="#ref-5">[5]</a>. Spring Boot auto-configures an <code>applicationTaskExecutor</code>, or a virtual-thread executor when virtual threads are enabled.</p></div></details>
+<details class="xp-details"><summary>Which return types may an <code>@Async</code> method have?</summary><div class="xp-body"><p><code>void</code>, <code>Future</code>, <code>CompletableFuture</code>, or <code>ListenableFuture</code>, which is deprecated<a class="citation" href="#ref-8">[8]</a>. Any other return type is lost, because the proxy returns before the method has run.</p></div></details>
+<details class="xp-details"><summary>How do you choose a specific executor for one method?</summary><div class="xp-body"><p>Give its bean name as the annotation's value: <code>@Async("mailExecutor")</code>. A class-level <code>@Async</code> applies to every public method of the class<a class="citation" href="#ref-8">[8]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>ThreadPoolTaskExecutor</code>'s <code>queueCapacity</code> default to?</summary><div class="xp-body"><p><code>Integer.MAX_VALUE</code>, an effectively unbounded queue, so <code>maxPoolSize</code> is never reached and the queue absorbs every burst. Set it explicitly<a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>What is a <code>TaskDecorator</code>?</summary><div class="xp-body"><p>A callback that wraps each <code>Runnable</code> before it is executed. It is used for context propagation, timing, and MDC handling<a class="citation" href="#ref-14">[14]</a>.</p></div></details>
+<details class="xp-details"><summary>Do <code>@Async</code> and <code>@Transactional</code> on the same method work together?</summary><div class="xp-body"><p>Yes. The async interceptor hands the call to another thread, and the transaction interceptor then starts a <em>new</em> transaction on that thread. It never joins the caller's transaction<a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+<details class="xp-details"><summary>What does Spring MVC offer for asynchronous request handling?</summary><div class="xp-body"><p>Returning a <code>Callable</code>, a <code>DeferredResult</code>, a <code>CompletableFuture</code>, or <code>ResponseBodyEmitter</code>/<code>SseEmitter</code> from a controller frees the servlet container thread while the work completes elsewhere<a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-21">[21]</a>.</p></div></details>
+<details class="xp-details"><summary>Can <code>@EventListener</code> methods run asynchronously?</summary><div class="xp-body"><p>Yes: add <code>@Async</code>. Exceptions then go to the async exception handler, not to the publisher, and the listener cannot return a follow-up event<a class="citation" href="#ref-22">[22]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>VirtualThreadTaskExecutor</code> do?</summary><div class="xp-body"><p>It runs each task on a new virtual thread (Spring 6.1+, JDK 21+), which is cheap enough to create per task for I/O-bound work. Bound the downstream concurrency separately<a class="citation" href="#ref-19">[19]</a>.</p></div></details>
+<details class="xp-details"><summary>Why should async thread pools have meaningful thread-name prefixes?</summary><div class="xp-body"><p>Thread dumps, profilers, and logs show thread names, and <code>mail-3</code> tells you which pool is saturated, where <code>pool-7-thread-3</code> does not<a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Task Execution and Scheduling [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/integration/scheduling.html">https://docs.spring.io/spring-framework/reference/integration/scheduling.html</a></li>
@@ -1209,7 +1572,7 @@ void rejectsWhenPoolAndQueueAreFull()
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

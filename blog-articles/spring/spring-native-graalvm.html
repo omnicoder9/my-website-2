@@ -133,6 +133,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -910,6 +930,180 @@ jobs:
   When a native application fails, trace the build-time and runtime contracts separately: Which beans and conditions existed during AOT processing? Which code and data were reachable to Native Image? Which dynamic operation required metadata? Which native test exercised it? Which performance objective justified the target? That discipline turns native compilation from a packaging trick into a controlled application architecture.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">19. Enterprise scenarios</h2>
+<p>Native images move work and decisions from run time to build time. Most native-image incidents are a decision that was made at build time and then assumed to still be open at run time. The scenarios below are composites, with illustrative figures. Section 20 reproduces two of the mechanisms with Spring Framework 7.0.8's AOT engine on the JVM.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · payment-file exporters loaded by class name · native rollout</p>
+<h3 id="scenario-reflection">19.1 A plug-in that existed only on the JVM</h3>
+<p><strong>Situation.</strong> Exporters for SEPA, SWIFT, and BACS formats were chosen by a configured class name and created with <code>Class.forName</code>. They were tested on the JVM, and then the service was built as a native image.</p>
+<p><strong>What went wrong.</strong> Native Image analyses reachability in a closed world. It could not see a class named only in configuration, so it left the class and its XSD resources out, and the first SEPA export in production failed with <code>ClassNotFoundException</code><a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-9">[9]</a>.</p>
+<p><strong>Fix.</strong> Register reflection and resource hints in a <code>RuntimeHintsRegistrar</code>, and test them with <code>RuntimeHintsPredicates</code> on the JVM (Exercise 1)<a class="citation" href="#ref-14">[14]</a><a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-19">[19]</a>. Better still, replace the string lookup with a registry of known beans, so that nothing depends on reflection.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">SaaS · one image promoted from staging to EU and US regions</p>
+<h3 id="scenario-build-time">19.2 A profile chosen when the image was built</h3>
+<p><strong>Situation.</strong> A team built one native image and set <code>SPRING_PROFILES_ACTIVE=us</code> in the US deployment, expecting the US payment gateway bean.</p>
+<p><strong>What went wrong.</strong> AOT processing fixes the bean model at build time, including which <code>@Profile</code> and <code>@Conditional</code> beans exist. The image had been built with the EU profile active, and changing the profile at run time did not bring back the beans it had excluded (Exercise 2)<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-15">[15]</a>.</p>
+<p><strong>Fix.</strong> Keep run-time variation in property values, not in which beans exist. If you need different bean sets, build one image per variant. Run the JVM build with AOT (<code>-Dspring.aot.enabled=true</code>) in CI, which surfaces these restrictions without a full native build<a class="citation" href="#ref-5">[5]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · high-throughput routing API · native for "performance"</p>
+<h3 id="scenario-throughput">19.3 Fast start, lower throughput</h3>
+<p><strong>Situation.</strong> A long-running routing service was moved to a native image because it started in 0.1 seconds instead of 4.</p>
+<p><strong>What went wrong.</strong> The service ran for weeks at a time, so start-up time did not matter. Without the JIT's profile-driven optimizations, peak throughput fell by about a quarter, and the serial garbage collector in the free edition added longer pauses under load<a class="citation" href="#ref-25">[25]</a><a class="citation" href="#ref-26">[26]</a>.</p>
+<p><strong>Fix.</strong> Choose native images for scale-to-zero, short-lived jobs, CLI tools, and memory-constrained density. For long-running, throughput-bound services, prefer the JVM, possibly with CDS or AOT cache for start-up. Profile-guided optimization narrows the gap where native is required<a class="citation" href="#ref-23">[23]</a><a class="citation" href="#ref-24">[24]</a>, and benchmarking both under realistic load settles the question.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Insurance · native build in CI · 22-minute pipeline</p>
+<h3 id="scenario-ci">19.4 Native builds on every commit</h3>
+<p><strong>Situation.</strong> Every pull request ran a full native compile, which needed 10 GB of memory and took most of the pipeline time.</p>
+<p><strong>What went wrong.</strong> Developers stopped waiting for CI, and failures that a JVM AOT test would have found in seconds were reported 20 minutes later.</p>
+<p><strong>Fix.</strong> Run JVM tests and runtime-hint tests on every commit. Run native tests (<code>nativeTest</code> or <code>-PnativeTest</code>) on the main branch or nightly, on runners sized for them<a class="citation" href="#ref-21">[21]</a>. Use the GraalVM build report to see what grew<a class="citation" href="#ref-11">[11]</a>.</p>
+</div>
+
+<h2 id="exercises">20. Exercises</h2>
+<p>The solutions run on the JVM, because they exercise Spring's AOT engine and hint model rather than the native compiler. They were compiled and run with Spring Framework 7.0.8 on OpenJDK 21.0.13; GraalVM was not used. The output shown is real. Exercise 3 is a design exercise.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">20.1 Register and test runtime hints<span class="xp-lvl">hints · medium</span></h3>
+<p>A plug-in class is created reflectively from its configured name, and it loads an XSD from <code>exporters/</code>. Write a registrar that makes both available in a native image, and test it on the JVM.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>A registrar contributes hints that Spring AOT writes out as reachability metadata. <code>RuntimeHintsPredicates</code> checks whether a given hint set covers an invocation or resource, which makes it a natural unit test<a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-18">[18]</a><a class="citation" href="#ref-19">[19]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.snative;
+
+import org.springframework.aot.hint.*;
+import org.springframework.aot.hint.predicate.RuntimeHintsPredicates;
+
+public class Ex1Hints {
+    /** A plug-in chosen by name in configuration, so static analysis cannot see it. */
+    public static class SepaExporter { public SepaExporter() {} public String export() { return "pain.001 XML"; } }
+
+    static Object loadPlugin(String className) throws Exception {
+        return Class.forName(className).getDeclaredConstructor().newInstance();
+    }
+
+    static class PluginHints implements RuntimeHintsRegistrar {
+        @Override public void registerHints(RuntimeHints hints, ClassLoader cl) {
+            hints.reflection().registerType(SepaExporter.class, MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS);
+            hints.resources().registerPattern("exporters/*.xsd");
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("on the JVM: " + ((SepaExporter) loadPlugin("lab.snative.Ex1Hints$SepaExporter")).export());
+
+        var ctor = RuntimeHintsPredicates.reflection().onConstructorInvocation(SepaExporter.class.getConstructor());
+        var xsd = RuntimeHintsPredicates.resource().forResource("exporters/sepa.xsd");
+        RuntimeHints none = new RuntimeHints();
+        RuntimeHints registered = new RuntimeHints();
+        new PluginHints().registerHints(registered, Ex1Hints.class.getClassLoader());
+        System.out.println("without hints: constructor reachable=" + ctor.test(none) + ", xsd included=" + xsd.test(none));
+        System.out.println("with hints:    constructor reachable=" + ctor.test(registered) + ", xsd included=" + xsd.test(registered));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>on the JVM: pain.001 XML
+without hints: constructor reachable=false, xsd included=false
+with hints:    constructor reachable=true, xsd included=true</pre></div>
+<p>Activate the registrar with <code>@ImportRuntimeHints(PluginHints.class)</code> on a configuration class. For types serialized by Jackson, <code>@RegisterReflectionForBinding</code> is shorter<a class="citation" href="#ref-16">[16]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">20.2 See what AOT fixes at build time<span class="xp-lvl">aot · medium</span></h3>
+<p>A configuration defines an Adyen gateway for the <code>eu</code> profile, and a Stripe gateway otherwise. Run Spring's AOT generator with <code>eu</code> active, list the generated source files, and check which beans the generated code registers.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>ApplicationContextAotGenerator</code> refreshes the context for AOT, evaluates conditions, and writes Java code that registers the surviving bean definitions directly<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-7">[7]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.snative;
+
+import org.springframework.aot.generate.*;
+import org.springframework.aot.hint.RuntimeHints;
+import org.springframework.context.annotation.*;
+import org.springframework.context.aot.ApplicationContextAotGenerator;
+import org.springframework.javapoet.ClassName;
+
+public class Ex2Aot {
+    interface PaymentGateway { String name(); }
+    static class StripeGateway implements PaymentGateway { public String name() { return "stripe"; } }
+    static class AdyenGateway implements PaymentGateway { public String name() { return "adyen"; } }
+
+    @Configuration
+    static class Config {
+        @Bean @Profile("eu") PaymentGateway adyen() { return new AdyenGateway(); }
+        @Bean @Profile("!eu") PaymentGateway stripe() { return new StripeGateway(); }
+    }
+
+    public static void main(String[] args) {
+        var ctx = new AnnotationConfigApplicationContext();
+        ctx.getEnvironment().setActiveProfiles("eu");              // the profile active at BUILD time
+        ctx.register(Config.class);
+        InMemoryGeneratedFiles files = new InMemoryGeneratedFiles();
+        var generation = new DefaultGenerationContext(new ClassNameGenerator(ClassName.get(Ex2Aot.class)), files, new RuntimeHints());
+        new ApplicationContextAotGenerator().processAheadOfTime(ctx, generation);
+        generation.writeGeneratedContent();
+
+        var sources = files.getGeneratedFiles(GeneratedFiles.Kind.SOURCE);
+        sources.keySet().stream().sorted().forEach(f -&gt; System.out.println("generated: " + f));
+        StringBuilder code = new StringBuilder();
+        for (String path : sources.keySet()) {
+            try { code.append(files.getGeneratedFileContent(GeneratedFiles.Kind.SOURCE, path)); }
+            catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+        }
+        System.out.println("registers adyen bean:  " + code.toString().contains("\"adyen\""));
+        System.out.println("registers stripe bean: " + code.toString().contains("\"stripe\""));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>generated: lab/snative/Ex2Aot__ApplicationContextInitializer.java
+generated: lab/snative/Ex2Aot__BeanDefinitions.java
+generated: lab/snative/Ex2Aot__BeanFactoryRegistrations.java
+generated: lab/snative/Ex2Aot__EnvironmentPostProcessor.java
+generated: org/springframework/context/event/DefaultEventListenerFactory__BeanDefinitions.java
+generated: org/springframework/context/event/EventListenerMethodProcessor__BeanDefinitions.java
+registers adyen bean:  true
+registers stripe bean: false</pre></div>
+<p>The Stripe bean is absent from the generated code, so no run-time profile can bring it back. Spring Boot's <code>processAot</code> build step does the same thing for a full application, and writes the code under <code>target/spring-aot</code> or <code>build/generated/aotSources</code><a class="citation" href="#ref-5">[5]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">20.3 Decide: JVM or native?<span class="xp-lvl">design · easy</span></h3>
+<p>For each workload, choose a JVM deployment or a native image, and give the deciding factor: (a) a nightly batch job that runs for 3 minutes; (b) a checkout API at 4,000 requests per second, deployed weekly; (c) a function that scales to zero between webhook bursts; (d) a service that loads customer scripts at run time.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<ul>
+<li><strong>(a)</strong> Either works. Native removes start-up and warm-up from a short job, but a 3-minute job gains little; choose on memory and build cost.</li>
+<li><strong>(b)</strong> The JVM. Peak throughput and GC choice matter more than start-up, and the JIT adapts to the real traffic<a class="citation" href="#ref-25">[25]</a>.</li>
+<li><strong>(c)</strong> Native. Every cold start is user-visible latency, and the smaller memory footprint lowers cost<a class="citation" href="#ref-1">[1]</a>.</li>
+<li><strong>(d)</strong> The JVM. Loading code at run time contradicts the closed-world assumption<a class="citation" href="#ref-2">[2]</a>.</li>
+</ul>
+</div></details>
+</div>
+
+<h2 id="trivia">21. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What happened to the Spring Native project?</summary><div class="xp-body"><p>It was an experimental add-on, and was superseded by native support built into Spring Framework 6 and Spring Boot 3, released in November 2022<a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-4">[4]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the "closed-world assumption"?</summary><div class="xp-body"><p>The native-image builder assumes that all code that can run is known at build time. Classes it does not find reachable are not included<a class="citation" href="#ref-2">[2]</a>.</p></div></details>
+<details class="xp-details"><summary>Where does Native Image look for reachability metadata?</summary><div class="xp-body"><p>In <code>META-INF/native-image/</code> on the class path, where Spring AOT writes its generated hints, and in the shared GraalVM Reachability Metadata Repository for third-party libraries<a class="citation" href="#ref-9">[9]</a>.</p></div></details>
+<details class="xp-details"><summary>What does the tracing agent do?</summary><div class="xp-body"><p>It runs the application on a JVM, records reflection, resource, proxy, and serialization use, and writes metadata files. Its coverage is limited to the paths you exercise<a class="citation" href="#ref-20">[20]</a>.</p></div></details>
+<details class="xp-details"><summary>Can you use AOT-generated code without building a native image?</summary><div class="xp-body"><p>Yes. Run the application on the JVM with <code>-Dspring.aot.enabled=true</code> to use the generated initializers, which can speed up start-up a little and catches AOT problems early<a class="citation" href="#ref-5">[5]</a>.</p></div></details>
+<details class="xp-details"><summary>When are static initializers run in a native image?</summary><div class="xp-body"><p>By default at run time. Classes can be initialized at build time, which bakes their state into the image heap, but that is unsafe for state such as random seeds or timestamps<a class="citation" href="#ref-22">[22]</a>.</p></div></details>
+<details class="xp-details"><summary>How does Spring handle CGLIB proxies in a native image?</summary><div class="xp-body"><p>Native images cannot generate classes at run time, so CGLIB proxies for <code>@Configuration</code> classes and scoped beans must be generated during AOT processing instead<a class="citation" href="#ref-8">[8]</a><a class="citation" href="#ref-15">[15]</a>.</p></div></details>
+<details class="xp-details"><summary>How do you build a native container image without a local GraalVM installation?</summary><div class="xp-body"><p>With Cloud Native Buildpacks: <code>mvn -Pnative spring-boot:build-image</code> or <code>gradle bootBuildImage</code>, which compile inside a builder image<a class="citation" href="#ref-12">[12]</a><a class="citation" href="#ref-13">[13]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. GraalVM Native Images [Internet]. Spring Boot 4.1.0 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-boot/reference/packaging/native-image/index.html">https://docs.spring.io/spring-boot/reference/packaging/native-image/index.html</a></li>
@@ -962,7 +1156,7 @@ jobs:
 <li><a href="#anti-patterns">Anti-patterns</a></li>
 <li><a href="#selection">Selection guide</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

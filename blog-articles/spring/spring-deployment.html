@@ -133,6 +133,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1160,6 +1180,236 @@ wait "$PID"</code></pre>
   When a deployment fails, identify which layer owns the failing contract: Did the archive contain the correct server and launcher? Did the external container satisfy the Servlet baseline? Did the image run Java as PID 1 with the required files and user permissions? Did Kubernetes schedule the requested resources, expose the correct port, and receive a successful readiness response? Did termination deliver <code>SIGTERM</code> and provide enough drain time? Following ownership across those boundaries turns deployment from environment-specific guesswork into a testable system.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">21. Enterprise scenarios</h2>
+<p>Most deployment incidents happen at the boundaries: between the application and its probes, the proxy in front of it, the container's memory limit, and the rollout controller. The scenarios below are composites, with illustrative figures. Section 22 reproduces two of the mechanisms with Spring Boot 4.1.0.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Payments API · Kubernetes · 502 errors on every deployment</p>
+<h3 id="scenario-shutdown">21.1 Errors that appeared only during rollouts</h3>
+<p><strong>Situation.</strong> Graceful shutdown was enabled, yet each rolling update produced a burst of 502 responses from the ingress.</p>
+<p><strong>What went wrong.</strong> Kubernetes sends SIGTERM and removes the pod from the Service's endpoints at the same time, and the two happen independently<a class="citation" href="#ref-32">[32]</a>. For a second or two, the ingress kept routing new connections to a pod that had already stopped accepting them (Exercise 1).</p>
+<p><strong>Fix.</strong> Add a short <code>preStop</code> sleep so that endpoint removal propagates before shutdown begins, keep <code>server.shutdown=graceful</code> with a <code>timeout-per-shutdown-phase</code><a class="citation" href="#ref-31">[31]</a>, and make <code>terminationGracePeriodSeconds</code> longer than the sum of both.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Insurance portal · TLS terminated at the load balancer · broken redirects</p>
+<h3 id="scenario-proxy">21.2 Redirects to <code>http://</code> and internal host names</h3>
+<p><strong>Situation.</strong> After a move to Kubernetes, login redirects and <code>Location</code> headers pointed to <code>http://orders-7f9c:8080/…</code>.</p>
+<p><strong>What went wrong.</strong> TLS ended at the load balancer, so the application saw plain HTTP and the pod's host name. It built absolute URLs from what it saw.</p>
+<p><strong>Fix.</strong> Set <code>server.forward-headers-strategy</code> to <code>native</code> or <code>framework</code>, so that <code>X-Forwarded-*</code> or <code>Forwarded</code> headers are applied (Exercise 2)<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-34">[34]</a>. Trust these headers only from your own proxies, and make the proxy overwrite any values the client sends.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · 120 services · cascading restarts during a database failover</p>
+<h3 id="scenario-probes">21.3 A liveness probe that checked the database</h3>
+<p><strong>Situation.</strong> Every service's liveness probe called a health endpoint that included the database check.</p>
+<p><strong>What went wrong.</strong> During a 40-second database failover, every liveness probe failed, and Kubernetes restarted all the pods. They came back cold, competed for connections, and turned a 40-second blip into a 15-minute outage.</p>
+<p><strong>Fix.</strong> Liveness should answer only "is this process broken beyond repair?". External dependencies belong, if anywhere, in readiness, which takes the pod out of rotation without restarting it. Spring Boot's dedicated <code>liveness</code> and <code>readiness</code> groups exist for this reason<a class="citation" href="#ref-26">[26]</a><a class="citation" href="#ref-30">[30]</a>. Use a startup probe for slow-starting applications, rather than a long initial delay.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail · Java service in a 1 GiB container · OOMKilled weekly</p>
+<h3 id="scenario-memory">21.4 A heap that fit, and a container that did not</h3>
+<p><strong>Situation.</strong> The JVM ran with <code>-Xmx1g</code> in a container whose memory limit was 1 GiB.</p>
+<p><strong>What went wrong.</strong> The heap is only part of a JVM's memory. Metaspace, thread stacks, the code cache, direct buffers, and GC structures pushed the process past the limit, and the kernel killed it without a Java stack trace.</p>
+<p><strong>Fix.</strong> Size the heap as a fraction of the container's memory with <code>-XX:MaxRAMPercentage</code> (commonly 60–75%), set memory requests equal to limits for predictable scheduling<a class="citation" href="#ref-28">[28]</a>, and watch the process's resident memory rather than only the heap.</p>
+</div>
+
+<h2 id="exercises">22. Exercises</h2>
+<p>Exercises 1 and 2 are self-contained programs, compiled and run with Spring Boot 4.1.0 (Spring Framework 7.0.8, Tomcat 11.0.22) on OpenJDK 21.0.13. The output shown is real; timings will differ on your machine. Exercises 3 and 4 are configuration exercises.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">22.1 Watch a graceful shutdown<span class="xp-lvl">lifecycle · medium</span></h3>
+<p>Start a Boot application on a random port with an endpoint that takes 1.5 seconds. While a request is in flight, close the context as SIGTERM would, then try a new request. Log the availability state changes.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>On close, Boot publishes <code>REFUSING_TRAFFIC</code>, and the web server stops accepting new connections, but it lets in-flight requests finish within the shutdown-phase timeout<a class="citation" href="#ref-26">[26]</a><a class="citation" href="#ref-31">[31]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sdeploy;
+
+import java.net.URI;
+import java.net.http.*;
+import java.util.concurrent.CompletableFuture;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.availability.AvailabilityChangeEvent;
+import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.event.EventListener;
+import org.springframework.web.bind.annotation.*;
+
+@SpringBootApplication
+@RestController
+public class Ex1Graceful {
+    static final long T0 = System.nanoTime();
+    static void log(String s) { System.out.printf("[%4d ms] %s%n", (System.nanoTime() - T0) / 1_000_000, s); }
+
+    @GetMapping("/export") String export() throws InterruptedException { Thread.sleep(1_500); return "export done"; }
+
+    @EventListener void availability(AvailabilityChangeEvent&lt;?&gt; e) { log("availability: " + e.getState()); }
+
+    public static void main(String[] args) throws Exception {
+        ConfigurableApplicationContext ctx = SpringApplication.run(Ex1Graceful.class,
+            "--server.port=0", "--spring.jpa.open-in-view=false", "--server.shutdown=graceful", "--spring.lifecycle.timeout-per-shutdown-phase=10s");
+        int port = ((WebServerApplicationContext) ctx).getWebServer().getPort();
+        HttpClient http = HttpClient.newHttpClient();
+        log("in-flight request started");
+        CompletableFuture&lt;HttpResponse&lt;String&gt;&gt; inFlight = http.sendAsync(
+            HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/export")).build(), HttpResponse.BodyHandlers.ofString());
+        Thread.sleep(300);
+        log("SIGTERM received: closing the context");
+        Thread closer = Thread.ofPlatform().start(ctx::close);
+        Thread.sleep(200);
+        try {
+            http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/export")).build(), HttpResponse.BodyHandlers.ofString());
+            log("new request was accepted");
+        } catch (java.io.IOException e) { log("new request during shutdown: refused (" + e.getClass().getSimpleName() + ")"); }
+        HttpResponse&lt;String&gt; r = inFlight.get();
+        log("in-flight request finished: " + r.statusCode() + " " + r.body());
+        closer.join();
+        log("context closed");
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>[3909 ms] availability: CORRECT
+[3910 ms] availability: ACCEPTING_TRAFFIC
+[4023 ms] in-flight request started
+[4334 ms] SIGTERM received: closing the context
+[4335 ms] availability: REFUSING_TRAFFIC
+[4538 ms] new request during shutdown: refused (ConnectException)
+[5669 ms] in-flight request finished: 200 export done
+[5717 ms] context closed</pre></div>
+<p>The refused connection is the 502 from Scenario 21.1. Graceful shutdown protects requests that have already arrived; only a <code>preStop</code> delay protects the ones the load balancer is still sending.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">22.2 Correct URLs behind a TLS-terminating proxy<span class="xp-lvl">networking · easy</span></h3>
+<p>A controller returns <code>201 Created</code> with a <code>Location</code> built from the current request. Simulate a request that reached the pod over plain HTTP after a proxy terminated HTTPS for <code>api.example.com</code>, and compare the header with and without forwarded-header support.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>ForwardedHeaderFilter</code> is what <code>server.forward-headers-strategy=framework</code> registers. It wraps the request so that the scheme, host, and port reflect the forwarded headers<a class="citation" href="#ref-5">[5]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sdeploy;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.filter.ForwardedHeaderFilter;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.http.ResponseEntity;
+
+public class Ex2Forwarded {
+    @RestController
+    static class Orders {
+        @PostMapping("/orders") ResponseEntity&lt;Void&gt; create() {
+            return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(42).toUri()).build();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        // The pod sees plain HTTP on 8080; the client used HTTPS on the public host name.
+        var request = post("/orders").header("Host", "orders-7f9c:8080")
+            .header("X-Forwarded-Proto", "https").header("X-Forwarded-Host", "api.example.com").header("X-Forwarded-Port", "443");
+        MockMvc plain = MockMvcBuilders.standaloneSetup(new Orders()).build();
+        MockMvc proxied = MockMvcBuilders.standaloneSetup(new Orders()).addFilters(new ForwardedHeaderFilter()).build();
+        System.out.println("without forwarded-header support: Location = " + plain.perform(request).andReturn().getResponse().getHeader("Location"));
+        System.out.println("with ForwardedHeaderFilter:       Location = " + proxied.perform(request).andReturn().getResponse().getHeader("Location"));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>without forwarded-header support: Location = http://orders-7f9c:8080/orders/42
+with ForwardedHeaderFilter:       Location = https://api.example.com/orders/42</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">22.3 Write the probes and shutdown settings<span class="xp-lvl">kubernetes · medium</span></h3>
+<p>A service takes up to 60 seconds to start and has requests that can take 20 seconds. Write the probe, lifecycle, and Spring settings for a zero-downtime rollout.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>(This is a configuration exercise; the manifests were not applied to a cluster.)</p>
+  <div class="code-wrap">
+    <span class="lang">YAML · deployment.yaml (excerpt)</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>spec:
+  strategy:
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 25% }
+  template:
+    spec:
+      terminationGracePeriodSeconds: 45        # &gt; preStop (10) + shutdown phase (25)
+      containers:
+        - name: app
+          lifecycle:
+            preStop:
+              sleep: { seconds: 10 }           # let endpoint removal propagate
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 15               # up to 75 s to start
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            periodSeconds: 5</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Properties · application.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>server.shutdown=graceful
+spring.lifecycle.timeout-per-shutdown-phase=25s
+management.endpoint.health.probes.enabled=true</code></pre>
+  </div>
+<p>The startup probe holds off liveness checks until the application is up<a class="citation" href="#ref-30">[30]</a>. <code>maxUnavailable: 0</code> keeps full capacity during the rollout<a class="citation" href="#ref-27">[27]</a><a class="citation" href="#ref-35">[35]</a>. The grace period must exceed the <code>preStop</code> delay plus the shutdown phase, or the kubelet sends SIGKILL mid-request<a class="citation" href="#ref-32">[32]</a>. On older clusters without the <code>sleep</code> action, use <code>exec: { command: ["sleep", "10"] }</code>, which needs a shell utility in the image.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">22.4 A cache-friendly image<span class="xp-lvl">containers · easy</span></h3>
+<p>Each release of a service changes only its own code, but every image push uploads 180 MB. Write a Dockerfile that lets the registry and nodes reuse the dependency layers.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>(This is a configuration exercise; the image was not built here.) Extract the jar's layers with the <code>tools</code> jar mode, and copy them from the least to the most frequently changed<a class="citation" href="#ref-15">[15]</a><a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Dockerfile</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>FROM eclipse-temurin:21-jre AS builder
+WORKDIR /builder
+COPY target/app.jar application.jar
+RUN java -Djarmode=tools -jar application.jar extract --layers --destination extracted
+
+FROM eclipse-temurin:21-jre
+WORKDIR /application
+RUN useradd --system --uid 10001 app
+COPY --from=builder /builder/extracted/dependencies/ ./
+COPY --from=builder /builder/extracted/spring-boot-loader/ ./
+COPY --from=builder /builder/extracted/snapshot-dependencies/ ./
+COPY --from=builder /builder/extracted/application/ ./
+USER 10001
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=70", "-jar", "application.jar"]</code></pre>
+  </div>
+<p>Only the last <code>COPY</code> layer changes for a code-only release. Buildpacks (<code>spring-boot:build-image</code>) produce the same layering without a Dockerfile<a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-22">[22]</a>.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">23. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>How does an executable Spring Boot jar load the jars nested inside it?</summary><div class="xp-body"><p>Through its own launcher and class loader, which read nested jars directly from <code>BOOT-INF/lib</code> without unpacking them. The JDK's standard class loaders cannot do this<a class="citation" href="#ref-14">[14]</a>.</p></div></details>
+<details class="xp-details"><summary>Which embedded server does <code>spring-boot-starter-webmvc</code> use by default?</summary><div class="xp-body"><p>Tomcat. Jetty is available as an alternative starter<a class="citation" href="#ref-3">[3]</a>.</p></div></details>
+<details class="xp-details"><summary>What happened to Undertow support in Spring Boot 4?</summary><div class="xp-body"><p>It was removed, because Undertow does not yet support Servlet 6.1, which Spring Boot 4 requires<a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+<details class="xp-details"><summary>What does a WAR deployment need that an executable jar does not?</summary><div class="xp-body"><p>A class that extends <code>SpringBootServletInitializer</code>, so that the external container can bootstrap the application, and the embedded server dependency marked as <code>provided</code><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+<details class="xp-details"><summary>Which Boot property enables graceful shutdown?</summary><div class="xp-body"><p><code>server.shutdown=graceful</code>, which is the default since Spring Boot 3.4. <code>spring.lifecycle.timeout-per-shutdown-phase</code> bounds the wait<a class="citation" href="#ref-31">[31]</a>.</p></div></details>
+<details class="xp-details"><summary>What signal does Kubernetes send when the grace period expires?</summary><div class="xp-body"><p>SIGKILL, which the JVM cannot catch, so shutdown hooks do not run<a class="citation" href="#ref-32">[32]</a>.</p></div></details>
+<details class="xp-details"><summary>Why should images run as a non-root user?</summary><div class="xp-body"><p>A process that escapes the application, for example through a remote-code-execution flaw, then holds fewer privileges inside the container and on the node. Buildpack images run as a non-root user by default<a class="citation" href="#ref-21">[21]</a>.</p></div></details>
+<details class="xp-details"><summary>Are Kubernetes Secrets encrypted?</summary><div class="xp-body"><p>Not by default. They are base64-encoded and stored unencrypted in etcd unless encryption at rest is configured, so access control matters<a class="citation" href="#ref-29">[29]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Packaging Spring Boot Applications [Internet]. Spring Boot 4.1.0 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-boot/reference/packaging/index.html">https://docs.spring.io/spring-boot/reference/packaging/index.html</a></li>
@@ -1223,7 +1473,7 @@ wait "$PID"</code></pre>
 <li><a href="#selection">Selection guide</a></li>
 <li><a href="#anti-patterns">Anti-patterns</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

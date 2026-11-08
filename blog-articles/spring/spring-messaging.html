@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1324,6 +1344,269 @@ class OrderKafkaIntegrationTest {
   When messaging behavior surprises you, trace the ownership transitions: Did the producer receive broker confirmation? Which exchange, destination, topic, or partition received the message? Which consumer instance obtained it? When was it acknowledged or its offset committed? Which local effects committed first? What caused retry or redelivery? Which recovery destination now owns the failure? Those questions reveal the true distributed protocol beneath Spring’s deliberately uniform APIs.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">16. Enterprise scenarios</h2>
+<p>Messaging moves failure from "the call failed" to "the message was lost, duplicated, reordered, or stuck", and those failures surface hours later in another team's data. The scenarios below are composites, with illustrative figures. Section 17 reproduces the core patterns with Spring Framework 7.0.8, H2, and the Kafka 4.2.1 client library.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">E-commerce · order service publishes OrderPlaced to Kafka · missing shipments</p>
+<h3 id="scenario-dual-write">16.1 Orders without events</h3>
+<p><strong>Situation.</strong> The order service committed the order to its database and then called <code>KafkaTemplate.send</code><a class="citation" href="#ref-28">[28]</a>.</p>
+<p><strong>What went wrong.</strong> When a pod was killed between the commit and the send, or the send failed after the commit, the order existed but no event did. Warehouses never shipped about 0.02% of orders, and reconciliation found them days later.</p>
+<p><strong>Fix.</strong> Write the event to an outbox table in the same transaction as the order, and publish from the outbox with a relay or change data capture (Exercise 1). The relay delivers at least once, so consumers must be idempotent<a class="citation" href="#ref-2">[2]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · RabbitMQ payment events · consumer restarts</p>
+<h3 id="scenario-duplicates">16.2 A redelivered message that paid twice</h3>
+<p><strong>Situation.</strong> A ledger consumer applied each payment and then acknowledged the message.</p>
+<p><strong>What went wrong.</strong> During a rolling restart, consumers were stopped after applying messages but before their acknowledgements reached the broker. RabbitMQ redelivered those messages, as at-least-once delivery requires, and the ledger applied them again<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-25">[25]</a>.</p>
+<p><strong>Fix.</strong> Give every message a stable ID, record processed IDs in the same transaction as the effect, and skip duplicates (Exercise 2). Business keys, such as a payment ID with a unique constraint, work as well.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Brokerage · account events on Kafka · partitions added during peak load</p>
+<h3 id="scenario-ordering">16.3 Events applied out of order</h3>
+<p><strong>Situation.</strong> Account events were keyed by account ID, so each account's events landed on one partition in order. To scale consumers during a market spike, an operator increased the topic from 6 to 8 partitions.</p>
+<p><strong>What went wrong.</strong> The key-to-partition mapping depends on the partition count (Exercise 3). New events for some accounts went to a different partition while older events were still queued on the old one, and a "close position" was processed before its "open position"<a class="citation" href="#ref-7">[7]</a><a class="citation" href="#ref-27">[27]</a>.</p>
+<p><strong>Fix.</strong> Size partitions for future peak load up front. When you must repartition, migrate to a new topic, draining the old one first, and make consumers detect out-of-order events with per-key sequence numbers.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · Spring Kafka listener · one malformed message</p>
+<h3 id="scenario-poison">16.4 A poison message that stopped a partition</h3>
+<p><strong>Situation.</strong> A partner sent a message with a malformed date, and the listener's deserializer threw.</p>
+<p><strong>What went wrong.</strong> The listener retried the same record indefinitely, and consumer lag on that partition grew to 4 million messages before anyone noticed.</p>
+<p><strong>Fix.</strong> Wrap the deserializer in <code>ErrorHandlingDeserializer</code><a class="citation" href="#ref-32">[32]</a>, and configure <code>DefaultErrorHandler</code> with a bounded backoff and a <code>DeadLetterPublishingRecoverer</code><a class="citation" href="#ref-31">[31]</a>. Classify exceptions such as validation failures as not retryable, and alert on dead-letter volume and on consumer lag.</p>
+</div>
+
+<h2 id="exercises">17. Exercises</h2>
+<p>The solutions are self-contained programs, compiled and run with Spring Framework 7.0.8, H2 2.4.240, and the Kafka 4.2.1 client library on OpenJDK 21.0.13. A list stands in for the broker, so no broker is needed. The output shown is real. Exercises 1 and 2 share this helper and schema:</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smsg;
+
+import javax.sql.DataSource;
+import org.springframework.jdbc.support.JdbcTransactionManager;
+import org.springframework.jdbc.datasource.embedded.*;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/** Shared in-memory database and transaction template for the exercises. */
+final class MsgLab {
+    static DataSource database() {
+        return new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true)
+            .addScript("classpath:smsg-schema.sql").build();
+    }
+    static TransactionTemplate tx(DataSource ds) { return new TransactionTemplate(new JdbcTransactionManager(ds)); }
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">SQL · smsg-schema.sql</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>CREATE TABLE orders (id VARCHAR(20) PRIMARY KEY, total_cents BIGINT);
+CREATE TABLE outbox (seq BIGINT AUTO_INCREMENT PRIMARY KEY, topic VARCHAR(40), msg_key VARCHAR(40), payload VARCHAR(200), sent BOOLEAN DEFAULT FALSE);
+CREATE TABLE processed_message (message_id VARCHAR(40) PRIMARY KEY);
+CREATE TABLE ledger (order_id VARCHAR(20), cents BIGINT);</code></pre>
+  </div>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">17.1 Transactional outbox<span class="xp-lvl">reliability · medium</span></h3>
+<p>Place two orders, each followed by a simulated crash right after the database commit. Publish the first by dual write and the second through an outbox. After a "restart", run the relay and compare the database with the broker.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The outbox row commits or rolls back with the order, so an event can be delayed but not lost.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smsg;
+
+import java.util.*;
+import org.springframework.jdbc.core.simple.JdbcClient;
+
+public class Ex1Outbox {
+    static final List&lt;String&gt; broker = new ArrayList&lt;&gt;();        // stands in for Kafka or RabbitMQ
+    static boolean crashAfterCommit = true;
+
+    /** Dual write: commit the order, then publish. A crash in between loses the event. */
+    static void placeOrderDualWrite(JdbcClient db, String id) {
+        db.sql("INSERT INTO orders VALUES (?, 4990)").param(id).update();
+        if (crashAfterCommit) throw new IllegalStateException("process killed before publish");
+        broker.add("OrderPlaced " + id);
+    }
+
+    /** Outbox: the order and its event commit atomically; a relay publishes later. */
+    static void placeOrderOutbox(JdbcClient db, org.springframework.transaction.support.TransactionTemplate tx, String id) {
+        tx.executeWithoutResult(s -&gt; {
+            db.sql("INSERT INTO orders VALUES (?, 4990)").param(id).update();
+            db.sql("INSERT INTO outbox (topic, msg_key, payload) VALUES ('orders', ?, ?)").params(id, "OrderPlaced " + id).update();
+        });
+        if (crashAfterCommit) throw new IllegalStateException("process killed before publish");
+    }
+
+    /** Relay (in production: a scheduled poller or Debezium reading the table's change log). */
+    static int relay(JdbcClient db) {
+        var pending = db.sql("SELECT seq, payload FROM outbox WHERE sent = FALSE ORDER BY seq").query((rs, n) -&gt; Map.entry(rs.getLong(1), rs.getString(2))).list();
+        for (var e : pending) {
+            broker.add(e.getValue());                                       // publish, wait for the broker's ack...
+            db.sql("UPDATE outbox SET sent = TRUE WHERE seq = ?").param(e.getKey()).update();   // ...then mark sent
+        }
+        return pending.size();
+    }
+
+    public static void main(String[] args) {
+        var ds = MsgLab.database();
+        JdbcClient db = JdbcClient.create(ds);
+        try { placeOrderDualWrite(db, "A-1"); } catch (IllegalStateException e) { System.out.println("dual write: " + e.getMessage()); }
+        try { placeOrderOutbox(db, MsgLab.tx(ds), "B-1"); } catch (IllegalStateException e) { System.out.println("outbox:     " + e.getMessage()); }
+        System.out.println("after restart, relay published " + relay(db) + " pending event(s)");
+        System.out.println("orders in database: " + db.sql("SELECT id FROM orders ORDER BY id").query(String.class).list());
+        System.out.println("events on broker:   " + broker);
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>dual write: process killed before publish
+outbox:     process killed before publish
+after restart, relay published 1 pending event(s)
+orders in database: [A-1, B-1]
+events on broker:   [OrderPlaced B-1]</pre></div>
+<p>Order A-1 has no event and never will. If the relay crashes after publishing but before marking the row sent, it publishes again on restart. That is why the outbox pairs with idempotent consumers.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">17.2 Idempotent consumer<span class="xp-lvl">reliability · easy</span></h3>
+<p>Deliver the same payment message twice, as a broker does after a consumer crashes before acknowledging. Make the second delivery a no-op.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Insert the message ID into a table with a primary key, in the same transaction as the ledger entry. A duplicate violates the key, Spring translates it to <code>DuplicateKeyException</code>, and the whole transaction rolls back.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smsg;
+
+import javax.sql.DataSource;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.support.TransactionTemplate;
+
+public class Ex2Idempotent {
+    record Message(String id, String orderId, long cents) {}
+
+    static String naive(JdbcClient db, Message m) {
+        db.sql("INSERT INTO ledger VALUES (?, ?)").params(m.orderId(), m.cents()).update();
+        return "applied";
+    }
+
+    /** Record the message id and apply the effect in one transaction. */
+    static String idempotent(JdbcClient db, TransactionTemplate tx, Message m) {
+        try {
+            tx.executeWithoutResult(s -&gt; {
+                db.sql("INSERT INTO processed_message VALUES (?)").param(m.id()).update();
+                db.sql("INSERT INTO ledger VALUES (?, ?)").params(m.orderId(), m.cents()).update();
+            });
+            return "applied";
+        } catch (DuplicateKeyException e) {
+            return "duplicate, skipped";
+        }
+    }
+
+    static long balance(JdbcClient db) { return db.sql("SELECT COALESCE(SUM(cents), 0) FROM ledger").query(Long.class).single(); }
+
+    public static void main(String[] args) {
+        Message m = new Message("msg-7c1e", "A-1", 4990);
+        // At-least-once delivery: the consumer applied the message, then crashed before acknowledging it.
+        DataSource ds1 = MsgLab.database(); JdbcClient db1 = JdbcClient.create(ds1);
+        System.out.println("naive:      " + naive(db1, m) + ", redelivery " + naive(db1, m) + " -&gt; ledger total " + balance(db1));
+        DataSource ds2 = MsgLab.database(); JdbcClient db2 = JdbcClient.create(ds2); TransactionTemplate tx = MsgLab.tx(ds2);
+        System.out.println("idempotent: " + idempotent(db2, tx, m) + ", redelivery " + idempotent(db2, tx, m) + " -&gt; ledger total " + balance(db2));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>naive:      applied, redelivery applied -&gt; ledger total 9980
+idempotent: applied, redelivery duplicate, skipped -&gt; ledger total 4990</pre></div>
+<p>Prune the processed-message table after a period longer than the broker's maximum redelivery window. In a listener, acknowledge the message only after this transaction commits.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">17.3 Keys, partitions, and ordering<span class="xp-lvl">kafka · easy</span></h3>
+<p>Using the Kafka client's own hash function, compute the partitions that several account keys map to with 6 and with 8 partitions.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>For a record with a key, the default partitioner takes the murmur2 hash of the serialized key modulo the partition count. The same key always maps to the same partition, until the count changes<a class="citation" href="#ref-7">[7]</a><a class="citation" href="#ref-29">[29]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smsg;
+
+import java.nio.charset.StandardCharsets;
+import org.apache.kafka.common.utils.Utils;
+
+public class Ex3Partitions {
+    /** The default partitioner's rule for records that have a key. */
+    static int partition(String key, int partitions) {
+        return Utils.toPositive(Utils.murmur2(key.getBytes(StandardCharsets.UTF_8))) % partitions;
+    }
+
+    public static void main(String[] args) {
+        String[] keys = {"account-1001", "account-1004", "account-1005", "account-1001"};
+        for (int n : new int[] {6, 8}) {
+            StringBuilder line = new StringBuilder(String.format("%2d partitions:", n));
+            for (String k : keys) line.append(String.format("  %s-&gt;p%-2d", k, partition(k, n)));
+            System.out.println(line);
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · kafka-clients 4.2.1, OpenJDK 21.0.13</span><pre> 6 partitions:  account-1001-&gt;p3   account-1004-&gt;p5   account-1005-&gt;p3   account-1001-&gt;p3 
+ 8 partitions:  account-1001-&gt;p3   account-1004-&gt;p3   account-1005-&gt;p1   account-1001-&gt;p3</pre></div>
+<p><code>account-1004</code> and <code>account-1005</code> move after the change, which is the reordering in Scenario 16.3. Records without a key are spread with the sticky partitioner instead, and have no ordering guarantee.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">17.4 Configure error handling for a Kafka listener<span class="xp-lvl">spring kafka · medium</span></h3>
+<p>Configure a listener so that transient failures are retried three times with exponential backoff, validation errors go straight to a dead-letter topic, and malformed payloads never block the partition.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>(This configuration compiles against Spring for Apache Kafka 4.1.0 but was not run against a broker.)</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>@Bean
+DefaultErrorHandler errorHandler(KafkaTemplate&lt;Object, Object&gt; template) {
+    var recoverer = new DeadLetterPublishingRecoverer(template);          // publishes to &lt;topic&gt;-dlt by default
+    var backoff = new ExponentialBackOffWithMaxRetries(3);
+    backoff.setInitialInterval(500);
+    backoff.setMultiplier(2.0);
+    var handler = new DefaultErrorHandler(recoverer, backoff);
+    handler.addNotRetryableExceptions(ValidationException.class, DeserializationException.class);
+    return handler;
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Properties · application.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>spring.kafka.consumer.key-deserializer=org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+spring.kafka.consumer.properties.spring.deserializer.value.delegate.class=org.springframework.kafka.support.serializer.JacksonJsonDeserializer</code></pre>
+  </div>
+<p><code>ErrorHandlingDeserializer</code> turns a deserialization failure into a header, so that the error handler can send the raw bytes to the dead-letter topic instead of failing in the poll loop<a class="citation" href="#ref-31">[31]</a><a class="citation" href="#ref-32">[32]</a>. Dead-letter records carry headers with the original topic, partition, offset, and exception, which you need for replay.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">18. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What is the difference between a JMS queue and a JMS topic?</summary><div class="xp-body"><p>A queue delivers each message to one consumer (point-to-point). A topic delivers each message to every subscriber (publish-subscribe)<a class="citation" href="#ref-9">[9]</a>.</p></div></details>
+<details class="xp-details"><summary>Why is <code>JmsTemplate</code> without a caching connection factory slow?</summary><div class="xp-body"><p>It opens and closes a connection, session, and producer for every send. Use <code>CachingConnectionFactory</code> or a pooled factory<a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+<details class="xp-details"><summary>Which RabbitMQ exchange type routes by exact routing key?</summary><div class="xp-body"><p>The direct exchange. Topic exchanges match wildcard patterns, fanout exchanges ignore the key, and headers exchanges match on headers<a class="citation" href="#ref-21">[21]</a>.</p></div></details>
+<details class="xp-details"><summary>What are RabbitMQ publisher confirms?</summary><div class="xp-body"><p>Broker acknowledgements to the publisher that a message has been accepted, and persisted for durable queues. Without them, a publisher cannot know whether a message was lost on the way<a class="citation" href="#ref-25">[25]</a>.</p></div></details>
+<details class="xp-details"><summary>What does a Kafka consumer group guarantee?</summary><div class="xp-body"><p>Each partition is consumed by at most one member of the group at a time, so adding consumers beyond the partition count leaves the extra ones idle<a class="citation" href="#ref-27">[27]</a>.</p></div></details>
+<details class="xp-details"><summary>Does Kafka's exactly-once semantics cover writes to your database?</summary><div class="xp-body"><p>No. It covers read-process-write cycles within Kafka, through transactions and idempotent producers. Side effects in external systems still need idempotence<a class="citation" href="#ref-34">[34]</a><a class="citation" href="#ref-35">[35]</a>.</p></div></details>
+<details class="xp-details"><summary>What does STOMP's <code>/user/queue/…</code> prefix do in Spring?</summary><div class="xp-body"><p>It targets a destination unique to one user's sessions. Spring's <code>UserDestinationMessageHandler</code> translates it to a session-specific destination<a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>Which RFC defines the WebSocket protocol?</summary><div class="xp-body"><p>RFC 6455, published in 2011<a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+<details class="xp-details"><summary>What is a dead-letter exchange?</summary><div class="xp-body"><p>The exchange to which RabbitMQ republishes messages that were rejected without requeue, expired, or overflowed a queue length limit<a class="citation" href="#ref-23">[23]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Integration [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/integration.html">https://docs.spring.io/spring-framework/reference/integration.html</a></li>
@@ -1383,7 +1666,7 @@ class OrderKafkaIntegrationTest {
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

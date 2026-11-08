@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1304,6 +1324,317 @@ class NotificationConfigurationTest {
   When annotation behavior is surprising, trace the bean definition rather than reading one annotation in isolation: How was the class discovered? Which profiles and conditions registered it? What name, type, scope, qualifiers, primary flag, lazy flag, and dependencies were attached? Which post-processors injected or proxied it? Which web infrastructure later detected it? That sequence reveals the container model beneath Spring’s concise annotation syntax.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">24. Enterprise scenarios</h2>
+<p>Core annotations decide which object gets injected where, how many instances exist, and when configuration is read. In large applications, mistakes show up as startup failures after an innocent dependency upgrade, or worse, as the wrong bean quietly doing the work. The scenarios below are composites, with illustrative figures. Section 25 runs each mechanism on Spring Framework 7.0.8.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Payments platform · a second gateway arrives in a shared library</p>
+<h3 id="scenario-ambiguity">24.1 A library upgrade broke 40 services at startup</h3>
+<p><strong>Situation.</strong> Services injected the only <code>PaymentGateway</code> bean by type. A shared library's new version added a second implementation as a <code>@Bean</code>.</p>
+<p><strong>What went wrong.</strong> Every service that injected <code>PaymentGateway</code> by type failed at startup with <code>NoUniqueBeanDefinitionException</code><a class="citation" href="#ref-18">[18]</a>. The quick fix, adding <code>@Primary</code> to the old bean in each service, then silently routed a refunds module to the wrong gateway, because refunds were meant to use the new provider.</p>
+<p><strong>Fix.</strong> Libraries should not register beans of widely used types unconditionally. Applications should make choices explicit with <code>@Qualifier</code> (or custom qualifier annotations) where the choice matters, and use <code>@Primary</code> only for a true default<a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-21">[21]</a> (Exercise 1).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Insurance · startup-time optimization · <code>proxyBeanMethods = false</code></p>
+<h3 id="scenario-lite">24.2 Two connection pools after a startup optimization</h3>
+<p><strong>Situation.</strong> To speed up startup, a team switched every configuration class to <code>@Configuration(proxyBeanMethods = false)</code>, which is Spring Boot's own convention.</p>
+<p><strong>What went wrong.</strong> One class built a repository by <em>calling</em> another <code>@Bean</code> method directly. Without the CGLIB proxy, that is a plain Java call, which created a second connection pool that the container did not manage: it held 20 extra database connections and was never closed on shutdown<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-14">[14]</a>.</p>
+<p><strong>Fix.</strong> In lite mode, declare dependencies as <code>@Bean</code> method parameters instead of calling other bean methods (Exercise 2). Turn the switch on per class, after checking for such calls, not in bulk.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Pricing service · request-specific calculator injected into a singleton</p>
+<h3 id="scenario-prototype">24.3 A prototype bean that behaved like a singleton</h3>
+<p><strong>Situation.</strong> A stateful <code>PriceCalculation</code> was declared <code>@Scope("prototype")</code> so that each quote would get a fresh instance, and it was constructor-injected into a singleton service.</p>
+<p><strong>What went wrong.</strong> A prototype is created once per <em>injection</em>, not once per use. The singleton received one instance at startup, and every quote shared its mutable state. Under concurrent load, quotes picked up each other's discounts<a class="citation" href="#ref-27">[27]</a><a class="citation" href="#ref-28">[28]</a>.</p>
+<p><strong>Fix.</strong> Inject an <code>ObjectProvider&lt;PriceCalculation&gt;</code> and call <code>getObject()</code> for each use (Exercise 3), or, better, make the calculation a stateless function and pass the state as arguments.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · moving a module out of Spring Boot</p>
+<h3 id="scenario-value">24.4 <code>@Value</code> stopped converting durations</h3>
+<p><strong>Situation.</strong> A library extracted from a Boot application used <code>@Value("${carrier.timeout:2s}") Duration timeout</code>, and was then embedded in a plain Spring application.</p>
+<p><strong>What went wrong.</strong> Startup failed with "no matching editors or conversion strategy found". Spring Boot registers <code>ApplicationConversionService</code>, which understands values such as <code>2s</code> for <code>Duration</code>, but a plain application context does not<a class="citation" href="#ref-23">[23]</a><a class="citation" href="#ref-24">[24]</a>. In another service, a missing required placeholder surfaced only on the first deployment to a new region.</p>
+<p><strong>Fix.</strong> Bind configuration into typed, validated objects, such as <code>@ConfigurationProperties</code> in Boot. In plain Spring, register a conversion service explicitly (Exercise 4). Give optional values defaults, give required ones none, and test startup against each environment's configuration in CI<a class="citation" href="#ref-25">[25]</a>.</p>
+</div>
+
+<h2 id="exercises">25. Exercises</h2>
+<p>Each solution is a self-contained Spring application with a <code>main</code> method, compiled and run with Spring Framework 7.0.8 (Spring Boot 4.1.0 BOM) on OpenJDK 21.0.13. The output shown is real. Spring's own warning lines that repeat a failure, beginning "Exception encountered during context initialization", were removed from it.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">25.1 Two candidates for one injection point<span class="xp-lvl">autowiring · easy</span></h3>
+<p>Register two <code>PaymentGateway</code> beans, and inject the type into a constructor. Read the error, then make <code>stripe</code> the default while a refunds service explicitly uses <code>adyen</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Resolution by type finds two candidates and fails, naming both. <code>@Primary</code> breaks the tie for unqualified injection points, and <code>@Qualifier("adyen")</code> selects by bean name, and takes precedence over <code>@Primary</code><a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.ann;
+
+import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
+import org.springframework.beans.factory.UnsatisfiedDependencyException;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.*;
+import org.springframework.stereotype.Service;
+
+public class Ex1Ambiguity {
+    interface PaymentGateway { String name(); }
+
+    @Configuration
+    static class Gateways {
+        @Bean PaymentGateway stripe() { return () -&gt; "stripe"; }
+        @Bean PaymentGateway adyen() { return () -&gt; "adyen"; }
+    }
+    @Configuration
+    static class GatewaysWithPrimary {
+        @Bean @Primary PaymentGateway stripe() { return () -&gt; "stripe"; }
+        @Bean PaymentGateway adyen() { return () -&gt; "adyen"; }
+    }
+
+    @Service static class Checkout {
+        final PaymentGateway gw;
+        Checkout(PaymentGateway gw) { this.gw = gw; }
+    }
+    @Service static class Refunds {
+        final PaymentGateway gw;
+        Refunds(@Qualifier("adyen") PaymentGateway gw) { this.gw = gw; }   // explicit choice beats @Primary
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Gateways.class, Checkout.class)) {
+        } catch (UnsatisfiedDependencyException e) {
+            Throwable root = e.getMostSpecificCause();
+            System.out.println("two candidates: " + root.getClass().getSimpleName() + ": " + root.getMessage());
+        }
+        try (var ctx = new AnnotationConfigApplicationContext(GatewaysWithPrimary.class, Checkout.class, Refunds.class)) {
+            System.out.println("with @Primary: checkout uses " + ctx.getBean(Checkout.class).gw.name()
+                    + ", refunds (@Qualifier) uses " + ctx.getBean(Refunds.class).gw.name());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>two candidates: NoUniqueBeanDefinitionException: No qualifying bean of type 'lab.ann.Ex1Ambiguity$PaymentGateway' available: expected single matching bean but found 2: stripe,adyen
+with @Primary: checkout uses stripe, refunds (@Qualifier) uses adyen</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">25.2 Full mode against lite mode<span class="xp-lvl">configuration · medium</span></h3>
+<p>Build two repositories from a <code>ConnectionPool</code> bean, once in a regular <code>@Configuration</code> class and once with <code>proxyBeanMethods = false</code>, both by calling <code>pool()</code> directly and by injecting the pool as a parameter. Which repositories share the container's singleton pool?</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>In full mode, Spring subclasses the configuration class with CGLIB and intercepts <code>@Bean</code> method calls, returning the singleton. In lite mode there is no subclass, so <code>pool()</code> is an ordinary method call that constructs a new object. Parameter injection works in both modes<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-15">[15]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.ann;
+
+import org.springframework.context.annotation.*;
+
+public class Ex2ProxyBeanMethods {
+    static class ConnectionPool { }
+    record Repo(ConnectionPool pool) {}
+
+    @Configuration                                         // proxyBeanMethods = true (default)
+    static class Full {
+        @Bean ConnectionPool pool() { return new ConnectionPool(); }
+        @Bean Repo orders() { return new Repo(pool()); }   // intercepted: returns the singleton
+        @Bean Repo invoices() { return new Repo(pool()); }
+    }
+
+    @Configuration(proxyBeanMethods = false)               // "lite" mode
+    static class Lite {
+        @Bean ConnectionPool pool() { return new ConnectionPool(); }
+        @Bean Repo orders() { return new Repo(pool()); }   // plain Java call: a NEW pool every time
+        @Bean Repo invoices(ConnectionPool pool) { return new Repo(pool); }   // the correct lite-mode style
+    }
+
+    static void report(Class&lt;?&gt; config) {
+        try (var ctx = new AnnotationConfigApplicationContext(config)) {
+            ConnectionPool singleton = ctx.getBean(ConnectionPool.class);
+            System.out.printf("%-4s orders shares pool: %-5b invoices shares pool: %-5b config class: %s%n",
+                config.getSimpleName(), ctx.getBean("orders", Repo.class).pool() == singleton,
+                ctx.getBean("invoices", Repo.class).pool() == singleton,
+                ctx.getBean(config).getClass().getSimpleName().contains("$$") ? "CGLIB subclass" : "plain");
+        }
+    }
+
+    public static void main(String[] args) { report(Full.class); report(Lite.class); }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>Full orders shares pool: true  invoices shares pool: true  config class: CGLIB subclass
+Lite orders shares pool: false invoices shares pool: true  config class: plain</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">25.3 A fresh prototype for every use<span class="xp-lvl">scopes · easy</span></h3>
+<p>Inject a prototype-scoped <code>PriceCalculation</code> into one singleton directly, and into another through <code>ObjectProvider</code>. Does each call get a new instance?</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Prototype scope means "a new instance whenever the container is asked", and direct injection asks only once<a class="citation" href="#ref-28">[28]</a>. <code>ObjectProvider.getObject()</code> asks again on every call. A scoped proxy (<code>proxyMode = TARGET_CLASS</code>) is another option<a class="citation" href="#ref-27">[27]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.ann;
+
+import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.*;
+import org.springframework.stereotype.Component;
+
+public class Ex3PrototypeInSingleton {
+    @Component @Scope("prototype")
+    static class PriceCalculation { final String id = UUID.randomUUID().toString().substring(0, 8); }
+
+    @Component
+    static class NaiveService {
+        private final PriceCalculation calc;                       // injected once, at construction
+        NaiveService(PriceCalculation calc) { this.calc = calc; }
+        String next() { return calc.id; }
+    }
+
+    @Component
+    static class ProviderService {
+        private final ObjectProvider&lt;PriceCalculation&gt; calcs;      // asks the container each time
+        ProviderService(ObjectProvider&lt;PriceCalculation&gt; calcs) { this.calcs = calcs; }
+        String next() { return calcs.getObject().id; }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(PriceCalculation.class, NaiveService.class, ProviderService.class)) {
+            NaiveService naive = ctx.getBean(NaiveService.class);
+            ProviderService provider = ctx.getBean(ProviderService.class);
+            System.out.println("naive:    same instance every call = " + naive.next().equals(naive.next()));
+            System.out.println("provider: same instance every call = " + provider.next().equals(provider.next()));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>naive:    same instance every call = true
+provider: same instance every call = false</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">25.4 <code>@Value</code> with defaults, conversion, and a required key<span class="xp-lvl">configuration · medium</span></h3>
+<p>Inject a <code>Duration</code> (<code>500ms</code>), an <code>int</code> with a default, a comma-separated <code>List</code>, and a required endpoint. Start the context three times: in plain Spring, with Spring Boot's conversion service, and with the endpoint missing.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>${key:default}</code> supplies defaults<a class="citation" href="#ref-24">[24]</a>, and a placeholder configurer resolves the keys against the <code>Environment</code><a class="citation" href="#ref-25">[25]</a>. Converting <code>"500ms"</code> to a <code>Duration</code> needs a converter that plain Spring does not register, which is why the first run fails, while Boot's <code>ApplicationConversionService</code> handles it. A missing key without a default fails fast, at startup.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.ann;
+
+import java.time.Duration;
+import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.*;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
+import org.springframework.core.env.*;
+import org.springframework.stereotype.Component;
+
+public class Ex4ValueDefaults {
+    @Configuration
+    static class Placeholders {
+        @Bean static PropertySourcesPlaceholderConfigurer pspc() { return new PropertySourcesPlaceholderConfigurer(); }
+    }
+
+    @Component
+    static class PspClient {
+        @Value("${psp.timeout:2s}") Duration timeout;                  // default + type conversion
+        @Value("${psp.retries:3}") int retries;
+        @Value("${psp.regions:eu-west,us-east}") List&lt;String&gt; regions; // comma-separated to List
+        @Value("${psp.endpoint}") String endpoint;                     // no default: required
+    }
+
+    static void start(String label, Map&lt;String, Object&gt; props, boolean bootConversion) {
+        try (var ctx = new AnnotationConfigApplicationContext()) {
+            ctx.getEnvironment().getPropertySources().addFirst(new MapPropertySource("test", props));
+            if (bootConversion)                                          // what Spring Boot registers for you
+                ctx.getBeanFactory().setConversionService(org.springframework.boot.convert.ApplicationConversionService.getSharedInstance());
+            ctx.register(Placeholders.class, PspClient.class);
+            ctx.refresh();
+            PspClient c = ctx.getBean(PspClient.class);
+            System.out.println(label + ": timeout=" + c.timeout + " retries=" + c.retries + " regions=" + c.regions + " endpoint=" + c.endpoint);
+        } catch (Exception e) {
+            Throwable t = e; while (t.getCause() != null) t = t.getCause();
+            System.out.println(label + ": startup failed: " + t.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        Map&lt;String, Object&gt; full = Map.of("psp.endpoint", "https://psp.example/v2", "psp.timeout", "500ms");
+        start("plain Spring          ", full, false);
+        start("with Boot conversion  ", full, true);
+        start("endpoint missing      ", Map.of("psp.timeout", "500ms"), true);
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>plain Spring          : startup failed: Cannot convert value of type 'java.lang.String' to required type 'java.time.Duration': no matching editors or conversion strategy found
+with Boot conversion  : timeout=PT0.5S retries=3 regions=[eu-west, us-east] endpoint=https://psp.example/v2
+endpoint missing      : startup failed: Could not resolve placeholder 'psp.endpoint' in value "${psp.endpoint}"</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">25.5 Ordered plugins<span class="xp-lvl">collections · easy</span></h3>
+<p>Three <code>CheckoutStep</code> components carry <code>@Order</code> values of 30, 10, and 20. Inject them all as a <code>List</code> and as a <code>Map</code>, and print each.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Collection injection gathers every bean of the type. A <code>List</code> is sorted by <code>@Order</code> or <code>Ordered</code>, and a <code>Map</code> is keyed by bean name<a class="citation" href="#ref-18">[18]</a>. <code>@Order</code> affects injection order only, not the order in which beans are created. Use <code>@DependsOn</code> for that<a class="citation" href="#ref-31">[31]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.ann;
+
+import java.util.*;
+import org.springframework.context.annotation.*;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
+public class Ex5OrderedPlugins {
+    interface CheckoutStep { String name(); }
+    @Component @Order(30) static class Fraud implements CheckoutStep { public String name() { return "fraud-check"; } }
+    @Component @Order(10) static class Stock implements CheckoutStep { public String name() { return "reserve-stock"; } }
+    @Component @Order(20) static class Tax implements CheckoutStep { public String name() { return "compute-tax"; } }
+
+    @Component
+    static class Pipeline {
+        final List&lt;CheckoutStep&gt; steps; final Map&lt;String, CheckoutStep&gt; byName;
+        Pipeline(List&lt;CheckoutStep&gt; steps, Map&lt;String, CheckoutStep&gt; byName) { this.steps = steps; this.byName = byName; }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Fraud.class, Stock.class, Tax.class, Pipeline.class)) {
+            Pipeline p = ctx.getBean(Pipeline.class);
+            System.out.println("List (sorted by @Order): " + p.steps.stream().map(CheckoutStep::name).toList());
+            System.out.println("Map keys (bean names):   " + new TreeSet&lt;&gt;(p.byName.keySet()));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>List (sorted by @Order): [reserve-stock, compute-tax, fraud-check]
+Map keys (bean names):   [ex5OrderedPlugins.Fraud, ex5OrderedPlugins.Stock, ex5OrderedPlugins.Tax]</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">26. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What do <code>@Service</code>, <code>@Repository</code>, and <code>@Controller</code> add to <code>@Component</code>?</summary><div class="xp-body"><p>All three are meta-annotated with <code>@Component</code>, so scanning picks them up. <code>@Repository</code> also enables persistence-exception translation into Spring's <code>DataAccessException</code> hierarchy, and <code>@Controller</code> marks web handlers<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-8">[8]</a><a class="citation" href="#ref-9">[9]</a>.</p></div></details>
+<details class="xp-details"><summary>Is <code>@Autowired</code> needed on a single constructor?</summary><div class="xp-body"><p>No. Since Spring 4.3, a class with one constructor is autowired through it implicitly<a class="citation" href="#ref-16">[16]</a><a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the default bean name for <code>@Bean PaymentGateway stripe()</code>?</summary><div class="xp-body"><p><code>stripe</code>, the method name. For a scanned <code>@Component class StripeGateway</code>, it is <code>stripeGateway</code>, and nested classes get prefixed names, as in Exercise 5's <code>ex5OrderedPlugins.Fraud</code><a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-15">[15]</a>.</p></div></details>
+<details class="xp-details"><summary>Why must <code>PropertySourcesPlaceholderConfigurer</code> and other <code>BeanFactoryPostProcessor</code> <code>@Bean</code> methods be <code>static</code>?</summary><div class="xp-body"><p>They must be created before the other beans, and an instance method would force early creation of the whole configuration class, which then misses later processing such as autowiring<a class="citation" href="#ref-15">[15]</a>.</p></div></details>
+<details class="xp-details"><summary>Can generic types act as qualifiers?</summary><div class="xp-body"><p>Yes. <code>Repository&lt;Order&gt;</code> and <code>Repository&lt;Invoice&gt;</code> are distinguished by their type arguments during injection, without any qualifier annotation<a class="citation" href="#ref-22">[22]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@Lazy</code> on an injection point do?</summary><div class="xp-body"><p>It injects a lazy-resolution proxy, so the real bean is created only when it is first used. That can break a startup-time circular dependency, or defer an expensive bean<a class="citation" href="#ref-29">[29]</a><a class="citation" href="#ref-30">[30]</a>.</p></div></details>
+<details class="xp-details"><summary>What do <code>@Profile("!prod")</code> and <code>@Profile("eu &amp; payments")</code> mean?</summary><div class="xp-body"><p>Profile expressions: "active unless <code>prod</code> is active", and "active only when both are active". They also support <code>|</code> and parentheses<a class="citation" href="#ref-26">[26]</a>.</p></div></details>
+<details class="xp-details"><summary>Does <code>@Order</code> control the order in which singletons are created?</summary><div class="xp-body"><p>No. It orders injected collections and some callbacks. Creation order follows dependencies, plus <code>@DependsOn</code><a class="citation" href="#ref-31">[31]</a><a class="citation" href="#ref-32">[32]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between <code>@Controller</code> and <code>@RestController</code>?</summary><div class="xp-body"><p><code>@RestController</code> is <code>@Controller</code> plus <code>@ResponseBody</code>: return values are written to the response body by message converters, instead of being resolved as view names<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+<details class="xp-details"><summary>Which component processes <code>@Autowired</code> and <code>@Value</code>?</summary><div class="xp-body"><p><code>AutowiredAnnotationBeanPostProcessor</code>, which annotation-based contexts register automatically<a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. The IoC Container [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/core/beans.html">https://docs.spring.io/spring-framework/reference/core/beans.html</a></li>
@@ -1367,7 +1698,7 @@ class NotificationConfigurationTest {
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

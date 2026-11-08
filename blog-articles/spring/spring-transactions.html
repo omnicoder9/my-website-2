@@ -283,6 +283,26 @@
       pre,table,.callout { break-inside:avoid; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1363,6 +1383,603 @@ class TransferIntegrationTest {
     When a transaction surprises you, trace it mechanically: Which manager was selected? Did the invocation enter through an interceptor? Was there already a physical transaction? Which propagation decision was made? Which isolation and timeout actually applied? Which resource was bound? Who marked rollback-only? Did an exception escape? Did commit itself fail? Answering those questions turns transactional behavior from annotation folklore into an explicit execution model.
   </p>
 
+<!-- xp:start -->
+  <h2 id="enterprise-scenarios">16. Enterprise scenarios</h2>
+
+  <p>
+    Every rule in section 14 comes from a failure that has happened somewhere. The five scenarios below are composites of incident patterns from insurance, commerce, banking, and SaaS platforms. The volumes are illustrative, but the mechanics are the ones Spring actually implements. Three of them have a runnable counterpart in section 17.
+  </p>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Insurance · claims adjudication · regulator-mandated audit trail</p>
+  <h3 id="scenario-audit">16.1 Audit rows vanish when a claim is rejected</h3>
+  <p>
+    <strong>Situation.</strong> A regulator requires that every adjudication decision is recorded, including decisions on claims whose processing later fails. The team annotated an <code>audit</code> method with <code>REQUIRES_NEW</code> so that the audit row would commit independently, and called it from <code>reject</code> in the same class.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> A compliance review found about 4,000 rejected claims with no audit entry. The call <code>this.audit(…)</code> never passes through the Spring proxy, so its <code>REQUIRES_NEW</code> metadata was never read<a class="citation" href="#ref-12">[12]</a>. The audit insert joined the outer transaction and rolled back with it. Unit tests passed, because they mocked the repository and never exercised a real transaction.
+  </p>
+  <p>
+    <strong>Fix.</strong> Move the independently durable work to its own bean, so that the call crosses a proxy (Exercise 1). Then add an integration test that forces the outer transaction to roll back and asserts that the audit row survives. That test is the only reliable guard against a refactoring that inlines the call again.
+  </p>
+  <ul>
+    <li>Propagation is a property of the <em>call path through the proxy</em>, not of the method. If you need self-invocation to work, use AspectJ weaving (<code>mode = AdviceMode.ASPECTJ</code>). Otherwise, design for proxies.</li>
+    <li>Audit trails that must survive rollbacks are rare and important. Give them a dedicated, tested component.</li>
+  </ul>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Commerce · ~30 million orders/month · Kafka-driven fulfilment</p>
+  <h3 id="scenario-outbox">16.2 Ghost orders and missing orders: the dual-write problem</h3>
+  <p>
+    <strong>Situation.</strong> <code>OrderService.place</code> inserted the order and called <code>kafkaTemplate.send("orders", …)</code> inside one <code>@Transactional</code> method. A warehouse system consumed the topic and picked stock.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> When the database commit failed after the send, for example on a serialization failure under <code>SERIALIZABLE</code><a class="citation" href="#ref-5">[5]</a>, the warehouse shipped orders that did not exist. The team then moved the send to an <code>AFTER_COMMIT</code> listener<a class="citation" href="#ref-22">[22]</a>. Ghost orders stopped, but every pod restart during a deployment lost a handful of messages: the commit had happened and the send had not. Two independent resources cannot be updated atomically by ordering the calls cleverly.
+  </p>
+  <p>
+    <strong>Fix.</strong> Use a <em>transactional outbox</em>. Write the event to an <code>outbox</code> table in the same database transaction as the order, so that either both commit or neither does. A separate relay publishes the outbox rows and marks them sent. Consumers deduplicate by event id, because the relay guarantees at-least-once delivery, not exactly-once.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>@Transactional
+public long place(PlaceOrder cmd) {
+    long id = orders.insert(cmd);
+    outbox.insert(new OutboxEvent(UUID.randomUUID(), "orders", id, toJson(cmd)));  // same tx
+    return id;
+}
+
+// Relay, on every pod: each poll claims a batch that no other pod can see.
+@Scheduled(fixedDelay = 200)
+public void relay() {
+    tx.executeWithoutResult(status -&gt; {
+        List&lt;OutboxEvent&gt; batch = jdbc.query("""
+            SELECT * FROM outbox WHERE sent_at IS NULL
+            ORDER BY created_at LIMIT 500 FOR UPDATE SKIP LOCKED""", outboxMapper);
+        for (OutboxEvent e : batch) {
+            kafka.send(e.topic(), e.key(), e.payload()).join();       // wait for broker ack
+        }
+        jdbc.batchUpdate("UPDATE outbox SET sent_at = now() WHERE id = ?",
+                         batch, batch.size(), (ps, e) -&gt; ps.setObject(1, e.id()));
+    });
+}</code></pre>
+  </div>
+  <ul>
+    <li><code>AFTER_COMMIT</code> callbacks are fine for best-effort side effects such as cache eviction. They are not durable: a crash between the commit and the callback loses the work.</li>
+    <li>At high volume, replace the poller with change data capture (for example Debezium reading the write-ahead log). The transactional contract is the same.</li>
+  </ul>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Banking · monthly interest posting · 2.4 million accounts</p>
+  <h3 id="scenario-batch">16.3 A 47-minute transaction fails at 92%</h3>
+  <p>
+    <strong>Situation.</strong> Interest posting ran as a single <code>@Transactional</code> method over every account.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> The transaction held row locks on millions of accounts, which blocked online payments for the whole run. Read replicas fell 20 minutes behind, because the replicas could not apply the changes until the commit arrived. When a node was evicted at 92%, the rollback took nearly as long as the forward work, and the rerun started from zero.
+  </p>
+  <p>
+    <strong>Fix.</strong> Commit in chunks with <code>TransactionTemplate</code><a class="citation" href="#ref-20">[20]</a>. Each chunk updates up to 1,000 accounts <em>and</em> advances a checkpoint row in the same transaction, so a restart resumes exactly where the last commit left off. An <code>interest_posted</code> guard makes each chunk idempotent, and a per-chunk timeout bounds how long any lock is held (Exercise 4).
+  </p>
+  <ul>
+    <li>A transaction should cover one invariant, here "this chunk's interest and its checkpoint", not one job.</li>
+    <li>Chunking changes the consistency model. Readers can see a month half-posted, so publish the "interest run complete" status only after the final chunk.</li>
+    <li>For large jobs, Spring Batch provides this chunk/checkpoint/restart model ready-made.</li>
+  </ul>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">SaaS · Black-Friday load test · HikariCP pool of 20</p>
+  <h3 id="scenario-pool">16.4 <code>REQUIRES_NEW</code> exhausts the connection pool</h3>
+  <p>
+    <strong>Situation.</strong> Each checkout request runs in a <code>REQUIRED</code> transaction and calls a <code>REQUIRES_NEW</code> audit method. The pool holds 20 connections, and Tomcat runs 200 threads.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> At 20 concurrent checkouts, every connection belonged to a suspended outer transaction, and all 20 threads waited for a 21st connection for their inner transaction. Nothing could finish, and nothing could release a connection. After HikariCP's default 30-second <code>connectionTimeout</code>, every request failed with <code>SQLTransientConnectionException</code>. This is a pool deadlock, and it can be reproduced with a load test.
+  </p>
+  <p>
+    <strong>Fix.</strong> Size the pool so that at least one thread can always complete. The HikariCP pool-sizing guide gives the minimum as <em>T<sub>max</sub> × (C<sub>m</sub> − 1) + 1</em>, where <em>T<sub>max</sub></em> is the maximum number of threads that use the pool concurrently and <em>C<sub>m</sub></em> is the maximum number of connections a single thread holds at once<a class="citation" href="#ref-24">[24]</a>. That is better still with a bulkhead that caps concurrent checkouts below the pool size. Remove nesting from hot paths where you can: the outbox pattern in 16.2 replaces most "audit in a new transaction" designs.
+  </p>
+  <ul>
+    <li>Every <code>REQUIRES_NEW</code> needs a second connection while the first is still held. Count connections per request during code review.</li>
+    <li>Alert on <code>hikaricp_connections_pending</code>. A non-zero pending count at moderate load is an early sign of this problem.</li>
+  </ul>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Marketplace · read replicas · 85% of queries are reads</p>
+  <h3 id="scenario-routing">16.5 Routing <code>readOnly</code> transactions to replicas</h3>
+  <p>
+    <strong>Situation.</strong> To offload the primary database, a team routes every <code>@Transactional(readOnly = true)</code> method to a replica pool.
+  </p>
+  <p>
+    <strong>How it works.</strong> An <code>AbstractRoutingDataSource</code> chooses the target from <code>TransactionSynchronizationManager.isCurrentTransactionReadOnly()</code>. It must be wrapped in <code>LazyConnectionDataSourceProxy</code>. The transaction manager acquires the connection <em>before</em> it binds the read-only flag, so without the lazy proxy, every transaction is routed while the flag is still <code>false</code>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>@Bean
+DataSource dataSource(DataSource primary, DataSource replica) {
+    AbstractRoutingDataSource routing = new AbstractRoutingDataSource() {
+        @Override protected Object determineCurrentLookupKey() {
+            return TransactionSynchronizationManager.isCurrentTransactionReadOnly() ? "replica" : "primary";
+        }
+    };
+    routing.setTargetDataSources(Map.of("primary", primary, "replica", replica));
+    routing.setDefaultTargetDataSource(primary);
+    routing.afterPropertiesSet();
+    return new LazyConnectionDataSourceProxy(routing);    // defer routing until first statement
+}</code></pre>
+  </div>
+  <p>
+    Recent Spring versions, including 7.0.8, also provide this routing built in: <code>LazyConnectionDataSourceProxy.setReadOnlyDataSource(replica)</code> sends read-only transactions to the replica without a custom routing class.
+  </p>
+  <p>
+    <strong>What went wrong next.</strong> The routing worked, and then users began reporting that edits "did not save". A <code>POST</code> committed to the primary, and the redirect's <code>GET</code> ran on a replica that was still 300 ms behind. Read-only methods that follow a write in the same user flow need read-your-writes consistency. Pin them to the primary, for example with a request attribute set after any write, or with a session-scoped "recent writer" flag that expires after the maximum replica lag.
+  </p>
+  </div>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <p>
+    Try each exercise before opening the solution. Exercises 1–5 are runnable. They share the small configuration below: an in-memory H2 database, a <code>JdbcTemplate</code>, and a <code>DataSourceTransactionManager</code>. They were run with <code>spring-context</code>, <code>spring-jdbc</code> 7.0.8, and H2 2.3.232 on OpenJDK 21.0.13, and the output shown is real.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab;
+
+import javax.sql.DataSource;
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.embedded.*;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+/** Shared infrastructure: an in-memory H2 database and a JDBC transaction manager. */
+@Configuration(proxyBeanMethods = false)
+@EnableTransactionManagement
+public class Db {
+    @Bean DataSource dataSource() {
+        return new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true)
+            .addScript("classpath:schema.sql").build();
+    }
+    @Bean JdbcTemplate jdbc(DataSource ds) { return new JdbcTemplate(ds); }
+    @Bean PlatformTransactionManager transactionManager(DataSource ds) { return new DataSourceTransactionManager(ds); }
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">SQL · schema.sql</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>CREATE TABLE claim_audit (claim_id BIGINT, decision VARCHAR(20));
+CREATE TABLE claim (id BIGINT PRIMARY KEY, status VARCHAR(20));
+CREATE TABLE orders (id BIGINT PRIMARY KEY, sku VARCHAR(20));
+CREATE TABLE line_item (order_id BIGINT, sku VARCHAR(20));
+CREATE TABLE account (id BIGINT PRIMARY KEY, balance_cents BIGINT, interest_posted BOOLEAN DEFAULT FALSE);
+CREATE TABLE batch_checkpoint (job VARCHAR(40) PRIMARY KEY, last_id BIGINT);</code></pre>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-1">17.1 Predict the audit count<span class="xp-lvl">proxies · easy</span></h3>
+  <p>
+    <code>BrokenClaimService.reject</code> calls its own <code>REQUIRES_NEW</code> method <code>audit</code> and then throws. <code>FixedClaimService</code> calls the same logic on a separate <code>AuditLog</code> bean. Before running the program, predict how many audit rows each one leaves behind.
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    The broken version leaves 0 rows. Self-invocation bypasses the proxy, so the insert joins the outer transaction and is rolled back with it. The fixed version leaves 1 row, because the call to <code>auditLog.record</code> enters the proxy, which suspends the outer transaction and commits a new one<a class="citation" href="#ref-12">[12]</a><a class="citation" href="#ref-15">[15]</a>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab;
+
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.*;
+
+public class Ex1SelfInvocation {
+
+    @Service
+    static class BrokenClaimService {
+        private final JdbcTemplate jdbc;
+        BrokenClaimService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+
+        @Transactional
+        public void reject(long claimId) {
+            audit(claimId, "REJECTED");                 // this.audit(): bypasses the proxy
+            throw new IllegalStateException("policy lapsed");
+        }
+
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public void audit(long claimId, String decision) {
+            jdbc.update("INSERT INTO claim_audit VALUES (?, ?)", claimId, decision);
+        }
+    }
+
+    @Service
+    static class AuditLog {
+        private final JdbcTemplate jdbc;
+        AuditLog(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+
+        @Transactional(propagation = Propagation.REQUIRES_NEW)
+        public void record(long claimId, String decision) {
+            jdbc.update("INSERT INTO claim_audit VALUES (?, ?)", claimId, decision);
+        }
+    }
+
+    @Service
+    static class FixedClaimService {
+        private final AuditLog auditLog;
+        FixedClaimService(AuditLog auditLog) { this.auditLog = auditLog; }
+
+        @Transactional
+        public void reject(long claimId) {
+            auditLog.record(claimId, "REJECTED");       // crosses a proxy: new physical transaction
+            throw new IllegalStateException("policy lapsed");
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(
+                Db.class, BrokenClaimService.class, AuditLog.class, FixedClaimService.class)) {
+            JdbcTemplate jdbc = ctx.getBean(JdbcTemplate.class);
+            String count = "SELECT COUNT(*) FROM claim_audit WHERE claim_id = ?";
+
+            try { ctx.getBean(BrokenClaimService.class).reject(1); } catch (IllegalStateException ignored) {}
+            System.out.println("broken: audit rows for claim 1 = " + jdbc.queryForObject(count, Integer.class, 1));
+
+            try { ctx.getBean(FixedClaimService.class).reject(2); } catch (IllegalStateException ignored) {}
+            System.out.println("fixed:  audit rows for claim 2 = " + jdbc.queryForObject(count, Integer.class, 2));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.3.232, OpenJDK 21.0.13</span><pre>broken: audit rows for claim 1 = 0
+fixed:  audit rows for claim 2 = 1</pre></div>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-2">17.2 The order that should not exist<span class="xp-lvl">rollback rules · easy</span></h3>
+  <p>
+    A fraud check throws the checked exception <code>FraudCheckException</code> after the order row has been inserted. Show that, under the default rules, the order is committed anyway. Then make it roll back without changing the exception type.
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    By default, Spring rolls back only on <code>RuntimeException</code> and <code>Error</code>. A checked exception commits whatever has been written<a class="citation" href="#ref-11">[11]</a>. Declare <code>rollbackFor</code> on the method, or set <code>@EnableTransactionManagement(rollbackOn = RollbackOn.ALL_EXCEPTIONS)</code> once for the whole application on Spring Framework 6.2 and later<a class="citation" href="#ref-10">[10]</a>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+public class Ex2CheckedException {
+
+    static class FraudCheckException extends Exception {
+        FraudCheckException(String m) { super(m); }
+    }
+
+    @Service
+    static class OrderService {
+        private final JdbcTemplate jdbc;
+        OrderService(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+
+        @Transactional
+        public void placeDefault(long id) throws FraudCheckException {
+            jdbc.update("INSERT INTO orders VALUES (?, 'SKU-1')", id);
+            throw new FraudCheckException("score 0.97");
+        }
+
+        @Transactional(rollbackFor = FraudCheckException.class)
+        public void placeExplicit(long id) throws FraudCheckException {
+            jdbc.update("INSERT INTO orders VALUES (?, 'SKU-1')", id);
+            throw new FraudCheckException("score 0.97");
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Db.class, OrderService.class)) {
+            OrderService svc = ctx.getBean(OrderService.class);
+            JdbcTemplate jdbc = ctx.getBean(JdbcTemplate.class);
+
+            try { svc.placeDefault(10); } catch (FraudCheckException ignored) {}
+            try { svc.placeExplicit(11); } catch (FraudCheckException ignored) {}
+
+            System.out.println("order 10 (default rules) exists = "
+                + (jdbc.queryForObject("SELECT COUNT(*) FROM orders WHERE id = 10", Integer.class) == 1));
+            System.out.println("order 11 (rollbackFor)   exists = "
+                + (jdbc.queryForObject("SELECT COUNT(*) FROM orders WHERE id = 11", Integer.class) == 1));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.3.232, OpenJDK 21.0.13</span><pre>order 10 (default rules) exists = true
+order 11 (rollbackFor)   exists = false</pre></div>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-3">17.3 "Skip bad lines" that skips everything<span class="xp-lvl">propagation · medium</span></h3>
+  <p>
+    An order importer adds line items in a loop, catches <code>IllegalArgumentException</code> for discontinued SKUs, and carries on. With <code>REQUIRED</code> on the inner method, the import of three lines, one of them bad, ends in an exception and zero rows. Explain why, then change one annotation so that the two good lines are kept.
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    The inner method joins the outer transaction. When it throws, its interceptor marks the <em>shared</em> transaction rollback-only. Catching the exception does not undo that mark. When the outer method returns normally and Spring attempts the commit, it finds the mark, rolls back, and throws <code>UnexpectedRollbackException</code><a class="citation" href="#ref-16">[16]</a>. With <code>NESTED</code>, each inner call runs inside a JDBC savepoint. A failure rolls back only to that savepoint, and the outer transaction stays healthy<a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-18">[18]</a>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab;
+
+import java.util.List;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.*;
+
+public class Ex3UnexpectedRollback {
+
+    @Service
+    static class LineItems {
+        private final JdbcTemplate jdbc;
+        LineItems(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+
+        @Transactional                                    // REQUIRED: joins the caller
+        public void addJoined(long orderId, String sku) { insert(orderId, sku); }
+
+        @Transactional(propagation = Propagation.NESTED)  // savepoint inside the caller
+        public void addNested(long orderId, String sku) { insert(orderId, sku); }
+
+        private void insert(long orderId, String sku) {
+            if (sku.startsWith("DISCONTINUED")) throw new IllegalArgumentException(sku);
+            jdbc.update("INSERT INTO line_item VALUES (?, ?)", orderId, sku);
+        }
+    }
+
+    @Service
+    static class Importer {
+        private final LineItems items;
+        Importer(LineItems items) { this.items = items; }
+
+        @Transactional
+        public void importJoined(long orderId, List&lt;String&gt; skus) {
+            for (String sku : skus) {
+                try { items.addJoined(orderId, sku); }
+                catch (IllegalArgumentException skip) { /* "skip bad line" */ }
+            }
+        }
+
+        @Transactional
+        public void importNested(long orderId, List&lt;String&gt; skus) {
+            for (String sku : skus) {
+                try { items.addNested(orderId, sku); }
+                catch (IllegalArgumentException skip) { /* rolled back to savepoint only */ }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Db.class, LineItems.class, Importer.class)) {
+            Importer importer = ctx.getBean(Importer.class);
+            JdbcTemplate jdbc = ctx.getBean(JdbcTemplate.class);
+            List&lt;String&gt; skus = List.of("A-1", "DISCONTINUED-9", "B-2");
+
+            try {
+                importer.importJoined(1, skus);
+            } catch (RuntimeException e) {
+                System.out.println("joined: " + e.getClass().getSimpleName());
+            }
+            System.out.println("joined: rows kept = "
+                + jdbc.queryForObject("SELECT COUNT(*) FROM line_item WHERE order_id = 1", Integer.class));
+
+            importer.importNested(2, skus);
+            System.out.println("nested: rows kept = "
+                + jdbc.queryForObject("SELECT COUNT(*) FROM line_item WHERE order_id = 2", Integer.class));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.3.232, OpenJDK 21.0.13</span><pre>joined: UnexpectedRollbackException
+joined: rows kept = 0
+nested: rows kept = 2</pre></div>
+  <p>
+    <code>REQUIRES_NEW</code> would also keep the good lines, but each line would then commit on its own. If the import later fails, the lines remain without an order. <code>NESTED</code> keeps "all good lines or nothing" semantics.
+  </p>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-4">17.4 A restartable, chunked interest run<span class="xp-lvl">programmatic · medium</span></h3>
+  <p>
+    Implement scenario 16.3 for 10,050 accounts. Post 1% interest in chunks of 1,000 using <code>TransactionTemplate</code>, and simulate a crash in the chunk that ends at account 7,000. Restart, and show that every account received interest exactly once.
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    Each chunk reads the checkpoint, updates the next range, and writes the new checkpoint, all in one transaction. A crash rolls back the in-progress chunk, including its checkpoint, so the restart repeats exactly that chunk. The <code>NOT interest_posted</code> predicate is a second guard: it keeps the run correct even if someone resets the checkpoint by hand.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab;
+
+import java.util.List;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+public class Ex4ChunkedBatch {
+    static final String JOB = "interest-2026-11";
+
+    /** Posts 1% interest in chunks; each chunk commits its rows and its checkpoint together. */
+    static int run(JdbcTemplate jdbc, TransactionTemplate tx, int chunkSize, long crashAfterId) {
+        int chunks = 0;
+        while (true) {
+            Integer posted = tx.execute(status -&gt; {
+                Long from = jdbc.queryForObject(
+                    "SELECT COALESCE(MAX(last_id), 0) FROM batch_checkpoint WHERE job = ?", Long.class, JOB);
+                List&lt;Long&gt; ids = jdbc.queryForList(
+                    "SELECT id FROM account WHERE id &gt; ? ORDER BY id LIMIT ?", Long.class, from, chunkSize);
+                if (ids.isEmpty()) return 0;
+                long last = ids.get(ids.size() - 1);
+                jdbc.update("UPDATE account SET balance_cents = balance_cents + balance_cents / 100,"
+                    + " interest_posted = TRUE WHERE id &gt; ? AND id &lt;= ? AND NOT interest_posted", from, last);
+                if (last &gt; crashAfterId) throw new IllegalStateException("node killed during chunk ending " + last);
+                jdbc.update("MERGE INTO batch_checkpoint KEY (job) VALUES (?, ?)", JOB, last);
+                return ids.size();
+            });
+            if (posted == 0) return chunks;
+            chunks++;
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Db.class)) {
+            JdbcTemplate jdbc = ctx.getBean(JdbcTemplate.class);
+            TransactionTemplate tx = new TransactionTemplate(ctx.getBean(PlatformTransactionManager.class));
+            tx.setTimeout(30);
+            jdbc.update("INSERT INTO account (id, balance_cents) SELECT X, 100000 FROM SYSTEM_RANGE(1, 10050)");
+
+            try { run(jdbc, tx, 1_000, 6_500); }
+            catch (IllegalStateException e) { System.out.println("first run:  " + e.getMessage()); }
+            System.out.println("posted before restart = "
+                + jdbc.queryForObject("SELECT COUNT(*) FROM account WHERE interest_posted", Integer.class));
+
+            int chunks = run(jdbc, tx, 1_000, Long.MAX_VALUE);
+            System.out.println("restart committed " + chunks + " more chunks");
+            System.out.println("posted = " + jdbc.queryForObject("SELECT COUNT(*) FROM account WHERE interest_posted", Integer.class)
+                + ", every balance = 101000: " + jdbc.queryForObject(
+                    "SELECT COUNT(*) = 0 FROM account WHERE balance_cents &lt;&gt; 101000", Boolean.class));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.3.232, OpenJDK 21.0.13</span><pre>first run:  node killed during chunk ending 7000
+posted before restart = 6000
+restart committed 5 more chunks
+posted = 10050, every balance = 101000: true</pre></div>
+  <p>
+    Six chunks committed before the crash. The restart repeated the failed seventh chunk and then committed four more, the last of them only 50 accounts.
+  </p>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-5">17.5 No confirmation email for a rolled-back order<span class="xp-lvl">events · medium</span></h3>
+  <p>
+    Place two orders. The second fails after the insert. Use an application event so that a confirmation email is "sent" only for the order that actually committed.
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    Publish the event inside the transaction and handle it with <code>@TransactionalEventListener</code>, whose default phase is <code>AFTER_COMMIT</code>. Spring holds the event in a transaction synchronization and delivers it only if the commit succeeds<a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-22">[22]</a>. A plain <code>@EventListener</code> would fire immediately, including for order 101.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+public class Ex5AfterCommit {
+    record OrderPlaced(long id) {}
+
+    @Service
+    static class Orders {
+        private final JdbcTemplate jdbc;
+        private final ApplicationEventPublisher events;
+        Orders(JdbcTemplate jdbc, ApplicationEventPublisher events) { this.jdbc = jdbc; this.events = events; }
+
+        @Transactional
+        public void place(long id, boolean failAfterInsert) {
+            jdbc.update("INSERT INTO orders VALUES (?, 'SKU-7')", id);
+            events.publishEvent(new OrderPlaced(id));   // queued until the transaction completes
+            if (failAfterInsert) throw new IllegalStateException("inventory reservation failed");
+        }
+    }
+
+    @Component
+    static class ConfirmationEmails {
+        final List&lt;Long&gt; sent = new ArrayList&lt;&gt;();
+
+        @TransactionalEventListener                     // default phase = AFTER_COMMIT
+        void on(OrderPlaced e) { sent.add(e.id()); }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Db.class, Orders.class, ConfirmationEmails.class)) {
+            Orders orders = ctx.getBean(Orders.class);
+            orders.place(100, false);
+            try { orders.place(101, true); } catch (IllegalStateException ignored) {}
+            System.out.println("emails sent for orders = " + ctx.getBean(ConfirmationEmails.class).sent);
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.3.232, OpenJDK 21.0.13</span><pre>emails sent for orders = [100]</pre></div>
+  <p>
+    Remember the limit from 16.2: if the process dies between the commit and the listener, the email is never sent. Where a missed email matters, write it to the outbox.
+  </p>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-6">17.6 Size the pool<span class="xp-lvl">capacity · hard</span></h3>
+  <p>
+    A payments API runs 8 pods, each with up to 64 request threads. A request holds one connection for its <code>REQUIRED</code> transaction, opens a <code>REQUIRES_NEW</code> transaction for idempotency-key bookkeeping, and inside that, on a retry path, opens another <code>REQUIRES_NEW</code> transaction for a ledger note. The database accepts 400 connections. What is the deadlock-free minimum pool size per pod, can this design fit, and what would you change?
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    Each thread can hold <em>C<sub>m</sub></em> = 3 connections at once: outer, then idempotency, then ledger. With <em>T<sub>max</sub></em> = 64, the minimum is 64 × (3 − 1) + 1 = <strong>129 per pod</strong><a class="citation" href="#ref-24">[24]</a>, or 1,032 across 8 pods, against a limit of 400. It does not fit.
+  </p>
+  <ul>
+    <li>Cap concurrency instead of threads. With a bulkhead of 16 concurrent payments per pod, the minimum is 16 × 2 + 1 = 33, or 264 in total, which leaves headroom for deployments, when old and new pods overlap.</li>
+    <li>Flatten the nesting. Write the ledger note into the outer transaction or the outbox, which gives <em>C<sub>m</sub></em> = 2. Better still, make idempotency bookkeeping part of the main transaction with a unique constraint on the key, which gives <em>C<sub>m</sub></em> = 1.</li>
+    <li>Consider whether a pooler such as PgBouncer is needed in transaction mode. It changes the arithmetic on the database side but not inside each JVM.</li>
+  </ul>
+  </div></details>
+  </div>
+
+  <h2 id="trivia">18. Trivia</h2>
+
+  <p>
+    Short questions with answers. Most of them are interview staples, and all of them have caused real production incidents.
+  </p>
+
+  <div class="xp-trivia">
+  <details class="xp-details"><summary>What is the default propagation of <code>@Transactional</code>?</summary><div class="xp-body"><p><code>REQUIRED</code>: join the current transaction or start one if none exists<a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+  <details class="xp-details"><summary>Which exceptions roll back a transaction by default?</summary><div class="xp-body"><p><code>RuntimeException</code> and <code>Error</code>. Checked exceptions commit<a class="citation" href="#ref-11">[11]</a>, a convention inherited from EJB container-managed transactions. Spring 6.2 added <code>rollbackOn = RollbackOn.ALL_EXCEPTIONS</code> to change the default globally<a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+  <details class="xp-details"><summary>Does <code>@Transactional</code> work on a <code>protected</code> or package-private method?</summary><div class="xp-body"><p>Yes, with class-based (CGLIB) proxies, since Spring Framework 6.0. Before that, only public methods were intercepted. It never works on <code>private</code> methods, because a subclass proxy cannot override them. Verified on 7.0.8 while preparing this article.</p></div></details>
+  <details class="xp-details"><summary>A <code>SERIALIZABLE</code> method is called from inside an existing <code>READ_COMMITTED</code> transaction. Which isolation applies?</summary><div class="xp-body"><p><code>READ_COMMITTED</code>. Isolation and timeout are applied only when a <em>new</em> physical transaction begins, and a joining participant's settings are ignored. Set <code>validateExistingTransaction = true</code> on the transaction manager to make the mismatch an error instead.</p></div></details>
+  <details class="xp-details"><summary>What is the difference between <code>NOT_SUPPORTED</code> and <code>NEVER</code>?</summary><div class="xp-body"><p><code>NOT_SUPPORTED</code> suspends any current transaction and runs without one. <code>NEVER</code> throws an exception if a transaction exists<a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+  <details class="xp-details"><summary>What does <code>readOnly = true</code> actually do with <code>DataSourceTransactionManager</code>?</summary><div class="xp-body"><p>It calls <code>Connection.setReadOnly(true)</code>, which is a driver hint, and exposes the flag through <code>TransactionSynchronizationManager</code> (useful for replica routing, see 16.5). Only with <code>enforceReadOnly = true</code> does it also issue <code>SET TRANSACTION READ ONLY</code>, so that the database rejects writes.</p></div></details>
+  <details class="xp-details"><summary>Why doesn't a transaction follow an <code>@Async</code> call?</summary><div class="xp-body"><p>Spring binds transactional resources to the current thread with <code>ThreadLocal</code>s in <code>TransactionSynchronizationManager</code>. A task on another thread finds no bound connection and starts its own transaction or none.</p></div></details>
+  <details class="xp-details"><summary>Do Spring TestContext tests commit their data?</summary><div class="xp-body"><p>No. A test method annotated with <code>@Transactional</code> runs in a test-managed transaction that is <em>rolled back</em> by default. Use <code>@Commit</code> or <code>@Rollback(false)</code> to keep the data<a class="citation" href="#ref-23">[23]</a>. Beware: code that runs <code>REQUIRES_NEW</code> or on other threads commits for real.</p></div></details>
+  <details class="xp-details"><summary>A <code>@TransactionalEventListener</code> event is published with no transaction active. Is the listener called?</summary><div class="xp-body"><p>No. The event is silently dropped unless the listener sets <code>fallbackExecution = true</code><a class="citation" href="#ref-22">[22]</a>. Verified on 7.0.8 while preparing this article.</p></div></details>
+  <details class="xp-details"><summary>Which propagation needs JDBC savepoint support?</summary><div class="xp-body"><p><code>NESTED</code>. <code>DataSourceTransactionManager</code> implements it with JDBC 3.0 savepoints<a class="citation" href="#ref-18">[18]</a>. JTA transaction managers generally do not support it.</p></div></details>
+  <details class="xp-details"><summary>What happened to <code>ChainedTransactionManager</code>?</summary><div class="xp-body"><p>Spring Data deprecated it in version 2.5 (2021). It commits several transaction managers one after another, and a failure part-way through leaves some committed and others not, which is the dual-write problem from 16.2. The recommended replacements are an outbox or a properly coordinated JTA transaction.</p></div></details>
+  <details class="xp-details"><summary>Which interface do imperative and reactive transaction managers share?</summary><div class="xp-body"><p><code>TransactionManager</code>, a marker interface that <code>PlatformTransactionManager</code> and <code>ReactiveTransactionManager</code> both extend<a class="citation" href="#ref-6">[6]</a>. The interceptor picks the imperative or reactive path from the method's return type.</p></div></details>
+  </div>
+
+
+<!-- xp:end -->
   <h2 id="references">References</h2>
   <ol class="references">
     <li id="ref-1">Spring team. Spring Framework versions [Internet]. GitHub; 2026 [cited 2026 Jul 31]. Available from: <a href="https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions">https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions</a></li>
@@ -1387,7 +2004,9 @@ class TransferIntegrationTest {
     <li id="ref-20">Spring team. TransactionTemplate class [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/support/TransactionTemplate.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/support/TransactionTemplate.html</a></li>
     <li id="ref-21">Spring team. TransactionSynchronization interface [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/support/TransactionSynchronization.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/support/TransactionSynchronization.html</a></li>
     <li id="ref-22">Spring team. TransactionalEventListener annotation [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/event/TransactionalEventListener.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/event/TransactionalEventListener.html</a></li>
-    <li id="ref-23">Spring team. Transaction management in tests [Internet]. Spring Framework Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html">https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html</a></li>
+    <li id="ref-23">Spring team. Transaction management in tests [Internet]. Spring Framework Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html">https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html</a></li><!-- xp-refs:start -->
+    <li id="ref-24">Wooldridge B. About pool sizing [Internet]. HikariCP wiki, GitHub; 2025 [cited 2026 Nov 7]. Available from: <a href="https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing">https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing</a></li><!-- xp-refs:end -->
+
   </ol>
 </main>
 
@@ -1409,6 +2028,10 @@ class TransferIntegrationTest {
     <li><a href="#diagnostics">Diagnostics</a></li>
     <li><a href="#practices">Expert practices</a></li>
     <li><a href="#summary">Summary</a></li>
+<!-- xp-toc:start -->    <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+    <li><a href="#exercises">Exercises</a></li>
+    <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
     <li><a href="#references">References</a></li>
   </ol>
 </aside>

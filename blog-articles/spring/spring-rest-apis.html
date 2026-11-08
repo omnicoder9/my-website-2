@@ -20,6 +20,26 @@
     .pipeline{display:grid;gap:.65rem;margin:1.35rem 0}.pipeline div{padding:.8rem 1rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:8px;background:color-mix(in srgb,var(--panel) 92%,var(--accent))}.pipeline b{display:inline-block;min-width:2.1rem;color:var(--accent)}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.75rem;margin:1.25rem 0}.card{border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;background:color-mix(in srgb,var(--panel) 96%,var(--line))}.card strong{display:block;margin-bottom:.2rem}.references{padding-left:1.4rem;font-size:.92rem;overflow-wrap:anywhere}.references li{margin:.85rem 0}footer{max-width:var(--max);margin:0 auto;padding:0 1.5rem 3rem;color:var(--muted);text-align:center;font-size:.85rem}
     @media(max-width:950px){.layout{grid-template-columns:1fr}aside{position:static;max-height:none;order:-1}}@media print{body{background:#fff;color:#000;font-size:10.5pt}.layout{display:block;max-width:none;padding:0}main{border:0;box-shadow:none;padding:0}aside,.copy{display:none}a{color:#000;text-decoration:none}h2,h3{break-after:avoid}pre,table,.callout{break-inside:avoid}}
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header><div class="hero"><span class="eyebrow">Spring Framework Web MVC</span><h1>REST APIs in Spring</h1><p class="subtitle">An expert guide to REST constraints, HTTP methods and status codes, content negotiation, JSON and XML conversion, HATEOAS, <code>ResponseEntity</code>, response headers, conditional requests, error bodies, and production API design.</p><div class="meta"><span>Spring Framework 7.0.8</span><span>Spring HATEOAS 3.1.1</span><span>HTTP Semantics: RFC 9110</span><span id="word-count">Long-form technical article</span><span>Vancouver references</span></div></div></header>
@@ -703,6 +723,295 @@ public final class OrderController {
 <p>A robust Spring REST API aligns three systems:</p>
 <ul><li>REST supplies architectural constraints: stateless messages, cacheability, uniform interfaces, layered systems, and hypermedia.</li><li>HTTP supplies method semantics, status codes, representation metadata, caching, preconditions, and standard headers.</li><li>Spring MVC supplies request dispatch, annotated mappings, body conversion, negotiation, validation, exception handling, conditional requests, and response construction.</li><li><code>@RestController</code> makes return values response bodies through message conversion.</li><li><code>consumes</code> constrains request content; <code>produces</code> participates in response negotiation.</li><li>JSON and XML are representations of resources, not distinct resources by default.</li><li><code>ResponseEntity</code> expresses status, headers, and body as one protocol-level return value.</li><li>ETag, Last-Modified, Cache-Control, Vary, Location, Allow, and Retry-After carry semantics that do not belong in arbitrary payload fields.</li><li>Spring HATEOAS adds links and representation models for discoverable application-state transitions.</li><li>RFC 9457 problem details give errors a standard JSON/XML envelope without redefining HTTP status semantics.</li></ul>
 <p>Diagnose API behavior by tracing one request: Which resource is targeted? What semantics does the method declare? What request media type was received? Which response types are acceptable? Which mapping and converter were selected? What status and body contract applies? Which validators, cache directives, and links were emitted? Answering those questions turns a controller endpoint into an explicit HTTP protocol rather than an accidental serialization surface.</p>
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">16. Enterprise scenarios</h2>
+<p>A public or partner API is a contract that outlives the code behind it. Most REST incidents come from concurrency, error shapes, pagination, and versioning decisions made too late. The scenarios below are composites, with illustrative figures. Section 17 reproduces each fix with Spring Framework 7.0.8 and <code>MockMvc</code>.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Telecom · customer-care API · addresses reverted silently</p>
+<h3 id="scenario-lost-update">16.1 Two agents, one address, one lost update</h3>
+<p><strong>Situation.</strong> Two call-center agents opened the same customer, and each changed the address and saved with <code>PUT</code>.</p>
+<p><strong>What went wrong.</strong> The second <code>PUT</code> overwrote the first without any error. Bills went to the old address for weeks, and the audit log showed two "successful" updates.</p>
+<p><strong>Fix.</strong> Return an <code>ETag</code> with each representation, and require <code>If-Match</code> on updates. Answer 412 Precondition Failed when the version is stale, and 428 Precondition Required when the header is missing (Exercise 1)<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-18">[18]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Open banking · 60 partner integrations · inconsistent error bodies</p>
+<h3 id="scenario-errors">16.2 Every endpoint failed differently</h3>
+<p><strong>Situation.</strong> Some endpoints returned <code>{"error": "..."}</code>, others <code>{"message": ..., "code": ...}</code>, and validation failures returned an HTML error page.</p>
+<p><strong>What went wrong.</strong> Each partner wrote string-matching code per endpoint. When a message was reworded, payment retries broke for three partners at once.</p>
+<p><strong>Fix.</strong> Use RFC 9457 problem details everywhere<a class="citation" href="#ref-24">[24]</a>: a stable <code>type</code> URI per error class, a human-readable <code>detail</code>, and extension members such as field errors. Spring MVC supports this through <code>ProblemDetail</code> and <code>ResponseEntityExceptionHandler</code> (Exercise 2)<a class="citation" href="#ref-25">[25]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Marketplace · order export API · partners missing orders</p>
+<h3 id="scenario-pagination">16.3 Offset pagination over a moving table</h3>
+<p><strong>Situation.</strong> Partners synchronized orders with <code>?page=N&amp;size=500</code>, sorted by newest first.</p>
+<p><strong>What went wrong.</strong> New orders arriving between page requests shifted every offset, so partners saw some orders twice and skipped others. Deep pages also became slow, because the database had to count past every skipped row.</p>
+<p><strong>Fix.</strong> Use cursor (keyset) pagination: return an opaque token encoding the last sort key, and continue with <code>WHERE id &lt; :cursor</code> (Exercise 3). Sort by a unique, stable key, and use a tie-breaker when the sort column is not unique.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · mobile apps cannot be force-upgraded · breaking change needed</p>
+<h3 id="scenario-versioning">16.4 A breaking change for clients you cannot update</h3>
+<p><strong>Situation.</strong> The customer resource had to split <code>name</code> into <code>givenName</code> and <code>familyName</code>, but old app versions would be in use for years.</p>
+<p><strong>What went wrong.</strong> The first attempt changed the field in place, and older apps crashed on launch.</p>
+<p><strong>Fix.</strong> Prefer additive changes. When a breaking change is unavoidable, version the API explicitly, and keep old versions running until their usage falls to zero. Spring Framework 7 supports versioning by header, path, query parameter, or media type through <code>ApiVersionConfigurer</code> and a <code>version</code> attribute on mappings (Exercise 4)<a class="citation" href="#ref-27">[27]</a>.</p>
+</div>
+
+<h2 id="exercises">17. Exercises</h2>
+<p>Each solution is a self-contained program, compiled and run with Spring Framework 7.0.8 (Jackson 3.1.4) on OpenJDK 21.0.13. Exercise 3 uses H2 2.4.240. The output shown is real.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">17.1 Optimistic concurrency with <code>If-Match</code><span class="xp-lvl">http semantics · medium</span></h3>
+<p>Two clients read an address and both try to save a change. Make the second save fail, and require clients to send <code>If-Match</code> at all.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The ETag carries the resource version. A <code>PUT</code> with a stale <code>If-Match</code> value gets 412, which tells the client to reload and merge<a class="citation" href="#ref-5">[5]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.srest;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.http.*;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.*;
+
+public class Ex1IfMatch {
+    record Address(String street, long version) {}
+
+    @RestController @RequestMapping("/customers/{id}/address")
+    static class AddressApi {
+        final ConcurrentHashMap&lt;Long, Address&gt; store = new ConcurrentHashMap&lt;&gt;();
+        { store.put(1L, new Address("Hauptstr. 1", 1)); }
+
+        @GetMapping ResponseEntity&lt;Address&gt; get(@PathVariable long id) {
+            Address a = store.get(id);
+            return ResponseEntity.ok().eTag("\"" + a.version() + "\"").body(a);
+        }
+
+        @PutMapping ResponseEntity&lt;Address&gt; put(@PathVariable long id, @RequestHeader(value = "If-Match", required = false) String ifMatch,
+                                                @RequestBody String street) {
+            if (ifMatch == null) return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).build();       // 428
+            Address current = store.get(id);
+            if (!ifMatch.equals("\"" + current.version() + "\"")) return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).build();  // 412
+            Address next = new Address(street, current.version() + 1);
+            store.put(id, next);
+            return ResponseEntity.ok().eTag("\"" + next.version() + "\"").body(next);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new AddressApi()).build();
+        String etag = mvc.perform(get("/customers/1/address")).andReturn().getResponse().getHeader("ETag");
+        System.out.println("agent A and agent B both read the address, ETag " + etag);
+        var a = mvc.perform(put("/customers/1/address").header("If-Match", etag).content("Bahnhofstr. 5")).andReturn().getResponse();
+        System.out.println("agent A saves:            " + a.getStatus() + " " + a.getContentAsString() + " ETag " + a.getHeader("ETag"));
+        var b = mvc.perform(put("/customers/1/address").header("If-Match", etag).content("Gartenweg 9")).andReturn().getResponse();
+        System.out.println("agent B saves stale copy: " + b.getStatus() + " Precondition Failed");
+        var c = mvc.perform(put("/customers/1/address").content("Gartenweg 9")).andReturn().getResponse();
+        System.out.println("client without If-Match:  " + c.getStatus() + " Precondition Required");
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>agent A and agent B both read the address, ETag "1"
+agent A saves:            200 {"street":"Bahnhofstr. 5","version":2} ETag "2"
+agent B saves stale copy: 412 Precondition Failed
+client without If-Match:  428 Precondition Required</pre></div>
+<p>With JPA, use the entity's <code>@Version</code> as the ETag, so the database check and the HTTP check agree. <code>ShallowEtagHeaderFilter</code> saves bandwidth on <code>GET</code>, but cannot protect updates, because it hashes the response after the work is done<a class="citation" href="#ref-21">[21]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">17.2 Problem details for validation and domain errors<span class="xp-lvl">errors · medium</span></h3>
+<p>Return RFC 9457 bodies for an invalid transfer request, including which fields failed, and for an "insufficient funds" domain error with its own type URI and extra data.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Extending <code>ResponseEntityExceptionHandler</code> gives problem-detail bodies for Spring MVC's own exceptions, and <code>@ExceptionHandler</code> methods can return a <code>ProblemDetail</code> directly<a class="citation" href="#ref-24">[24]</a><a class="citation" href="#ref-25">[25]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.srest;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import java.net.URI;
+import org.springframework.http.*;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+public class Ex2Problem {
+    record TransferRequest(@NotBlank String fromIban, @NotBlank String toIban, @Positive long cents) {}
+    static class InsufficientFunds extends RuntimeException {}
+
+    @RestController static class Transfers {
+        @PostMapping("/transfers") ResponseEntity&lt;Void&gt; create(@Valid @RequestBody TransferRequest r) {
+            throw new InsufficientFunds();
+        }
+    }
+
+    @RestControllerAdvice static class Errors extends ResponseEntityExceptionHandler {     // RFC 9457 bodies for MVC's own exceptions
+        @ExceptionHandler ProblemDetail insufficient(InsufficientFunds e) {
+            ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, "Balance is lower than the transfer amount.");
+            p.setType(URI.create("https://api.example.com/problems/insufficient-funds"));
+            p.setTitle("Insufficient funds");
+            p.setProperty("balanceCents", 1200);
+            return p;
+        }
+
+        @Override   // the default 400 body says only "Invalid request content."; add the field errors
+        protected ResponseEntity&lt;Object&gt; handleMethodArgumentNotValid(MethodArgumentNotValidException ex, HttpHeaders headers,
+                                                                      HttpStatusCode status, WebRequest request) {
+            ex.getBody().setProperty("errors", ex.getFieldErrors().stream()
+                .map(f -&gt; f.getField() + ": " + f.getDefaultMessage()).sorted().toList());
+            return super.handleMethodArgumentNotValid(ex, headers, status, request);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        var validator = new LocalValidatorFactoryBean(); validator.afterPropertiesSet();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Transfers()).setControllerAdvice(new Errors()).setValidator(validator).build();
+        for (String body : new String[] {
+                "{\"fromIban\":\"DE89370400440532013000\",\"toIban\":\"\",\"cents\":-5}",
+                "{\"fromIban\":\"DE89370400440532013000\",\"toIban\":\"FR1420041010050500013M02606\",\"cents\":5000}" }) {
+            var r = mvc.perform(post("/transfers").contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().getResponse();
+            System.out.println(r.getStatus() + " " + r.getContentType());
+            System.out.println("  " + r.getContentAsString());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>400 application/problem+json
+  {"detail":"Invalid request content.","instance":"/transfers","status":400,"title":"Bad Request","errors":["cents: must be greater than 0","toIban: must not be blank"]}
+422 application/problem+json
+  {"detail":"Balance is lower than the transfer amount.","instance":"/transfers","status":422,"title":"Insufficient funds","type":"https://api.example.com/problems/insufficient-funds","balanceCents":1200}</pre></div>
+<p>In Spring Boot, <code>spring.mvc.problemdetails.enabled=true</code> registers such a handler for you. Document each <code>type</code> URI, and treat the set of types as part of the API contract.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">17.3 Offset versus cursor pagination<span class="xp-lvl">pagination · easy</span></h3>
+<p>Page through 10 events, newest first and 4 per page, while a new event arrives between the first and second requests. Compare offset paging with cursor paging.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The new row shifts every offset by one. A cursor names the last row seen, so new rows do not move it.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.srest;
+
+import java.util.List;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.embedded.*;
+
+public class Ex3Cursor {
+    public static void main(String[] args) {
+        JdbcClient db = JdbcClient.create(new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true).build());
+        db.sql("CREATE TABLE event (id BIGINT PRIMARY KEY)").update();
+        for (int i = 1; i &lt;= 10; i++) db.sql("INSERT INTO event VALUES (?)").param(i * 10).update();
+
+        // Newest first, 4 per page. A new event arrives between the client's page requests.
+        List&lt;Long&gt; p1 = db.sql("SELECT id FROM event ORDER BY id DESC LIMIT 4 OFFSET 0").query(Long.class).list();
+        db.sql("INSERT INTO event VALUES (110)").update();
+        List&lt;Long&gt; p2 = db.sql("SELECT id FROM event ORDER BY id DESC LIMIT 4 OFFSET 4").query(Long.class).list();
+        System.out.println("offset paging: page 1 " + p1 + ", page 2 " + p2 + "  &lt;- 70 shown twice");
+
+        db.sql("DELETE FROM event WHERE id = 110").update();
+        List&lt;Long&gt; k1 = db.sql("SELECT id FROM event ORDER BY id DESC LIMIT 4").query(Long.class).list();
+        db.sql("INSERT INTO event VALUES (110)").update();
+        long cursor = k1.get(k1.size() - 1);                                   // returned to the client as an opaque token
+        List&lt;Long&gt; k2 = db.sql("SELECT id FROM event WHERE id &lt; ? ORDER BY id DESC LIMIT 4").param(cursor).query(Long.class).list();
+        System.out.println("cursor paging: page 1 " + k1 + ", page 2 " + k2 + "  &lt;- no duplicates, no gaps");
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>offset paging: page 1 [100, 90, 80, 70], page 2 [70, 60, 50, 40]  &lt;- 70 shown twice
+cursor paging: page 1 [100, 90, 80, 70], page 2 [60, 50, 40, 30]  &lt;- no duplicates, no gaps</pre></div>
+<p>Encode the cursor, for example as Base64 JSON, so that clients treat it as opaque, and return the next page's link or token in the response<a class="citation" href="#ref-3">[3]</a>. Spring Data's <code>ScrollPosition</code> and <code>Window</code> provide keyset scrolling for repositories.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">17.4 Header-based API versioning<span class="xp-lvl">versioning · easy</span></h3>
+<p>Serve version 1.0 and version 2.0 of a customer representation from the same path, selected by an <code>API-Version</code> header, with 1.0 as the default.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Spring Framework 7 resolves the version from the request, validates it against the supported versions, and matches it against each mapping's <code>version</code> attribute<a class="citation" href="#ref-27">[27]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.srest;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import org.springframework.context.annotation.*;
+import org.springframework.mock.web.MockServletContext;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
+import org.springframework.web.servlet.config.annotation.*;
+
+public class Ex4Versioning {
+    record CustomerV1(String name) {}
+    record CustomerV2(String givenName, String familyName) {}
+
+    @RestController static class Customers {
+        @GetMapping(path = "/customers/1", version = "1.0") CustomerV1 v1() { return new CustomerV1("Ana Silva"); }
+        @GetMapping(path = "/customers/1", version = "2.0") CustomerV2 v2() { return new CustomerV2("Ana", "Silva"); }
+    }
+
+    @Configuration @EnableWebMvc
+    static class Config implements WebMvcConfigurer {
+        @Override public void configureApiVersioning(ApiVersionConfigurer c) {
+            c.useRequestHeader("API-Version").setDefaultVersion("1.0");
+        }
+        @Bean Customers customers() { return new Customers(); }
+    }
+
+    public static void main(String[] args) throws Exception {
+        var ctx = new AnnotationConfigWebApplicationContext();
+        ctx.setServletContext(new MockServletContext());
+        ctx.register(Config.class);
+        ctx.refresh();
+        MockMvc mvc = MockMvcBuilders.webAppContextSetup(ctx).build();
+        for (String v : new String[] {null, "1.0", "2.0", "3.0"}) {
+            var req = get("/customers/1");
+            if (v != null) req.header("API-Version", v);
+            var r = mvc.perform(req).andReturn().getResponse();
+            System.out.printf("API-Version %-5s -&gt; %d %s%n", v == null ? "(none)" : v, r.getStatus(), r.getContentAsString());
+        }
+        ctx.close();
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>API-Version (none) -&gt; 200 {"name":"Ana Silva"}
+API-Version 1.0   -&gt; 200 {"name":"Ana Silva"}
+API-Version 2.0   -&gt; 200 {"givenName":"Ana","familyName":"Silva"}
+API-Version 3.0   -&gt; 400</pre></div>
+<p>An unsupported version gets 400. A version such as <code>"1.1+"</code> matches 1.1 and later, which lets an endpoint carry forward unchanged to new versions. Deprecation can be announced with the <code>Deprecation</code> and <code>Sunset</code> response headers.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">18. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Where was REST first defined?</summary><div class="xp-body"><p>In Chapter 5 of Roy Fielding's doctoral dissertation, published in 2000<a class="citation" href="#ref-4">[4]</a>.</p></div></details>
+<details class="xp-details"><summary>Which HTTP methods are idempotent?</summary><div class="xp-body"><p><code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code>, <code>TRACE</code>, <code>PUT</code>, and <code>DELETE</code>. <code>POST</code> and <code>PATCH</code> are not idempotent in general<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What status code should a successful <code>POST</code> that creates a resource return?</summary><div class="xp-body"><p>201 Created, with a <code>Location</code> header pointing to the new resource<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-14">[14]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between 401 and 403?</summary><div class="xp-body"><p>401 Unauthorized means that the request lacks valid authentication credentials. 403 Forbidden means that the server understood who the client is but refuses the action<a class="citation" href="#ref-5">[5]</a>.</p></div></details>
+<details class="xp-details"><summary>What did RFC 9110 rename status code 422 to?</summary><div class="xp-body"><p>"Unprocessable Content", previously "Unprocessable Entity" in WebDAV. Spring's <code>HttpStatus.UNPROCESSABLE_CONTENT</code> follows the new name<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-8">[8]</a>.</p></div></details>
+<details class="xp-details"><summary>Which media type do problem-detail bodies use?</summary><div class="xp-body"><p><code>application/problem+json</code>, or <code>application/problem+xml</code><a class="citation" href="#ref-24">[24]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>Cache-Control: no-cache</code> mean?</summary><div class="xp-body"><p>Not "do not cache", but "revalidate with the server before using a stored copy". <code>no-store</code> forbids storing the response at all<a class="citation" href="#ref-20">[20]</a>.</p></div></details>
+<details class="xp-details"><summary>What does HATEOAS stand for?</summary><div class="xp-body"><p>Hypermedia as the Engine of Application State: clients discover available actions from links in responses rather than from out-of-band knowledge<a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-4">[4]</a>.</p></div></details>
+<details class="xp-details"><summary>Which HTTP message converter handles JSON in Spring Framework 7?</summary><div class="xp-body"><p><code>JacksonJsonHttpMessageConverter</code>, based on Jackson 3. The Jackson 2 converter is deprecated<a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Spring Framework versions [Internet]. GitHub; 2026 [cited 2026 Jul 31]. Available from: <a href="https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions">https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions</a></li>
@@ -730,10 +1039,12 @@ public final class OrderController {
 <li id="ref-23">Spring team. WebMvcLinkBuilder class [Internet]. Spring HATEOAS 3.1.1 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-hateoas/docs/current/api/org/springframework/hateoas/server/mvc/WebMvcLinkBuilder.html">https://docs.spring.io/spring-hateoas/docs/current/api/org/springframework/hateoas/server/mvc/WebMvcLinkBuilder.html</a></li>
 <li id="ref-24">Nottingham M, Wilde E, Dalal S. Problem Details for HTTP APIs. RFC 9457 [Internet]. IETF; 2023 [cited 2026 Jul 31]. Available from: <a href="https://datatracker.ietf.org/doc/html/rfc9457">https://datatracker.ietf.org/doc/html/rfc9457</a></li>
 <li id="ref-25">Spring team. Error responses [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html">https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html</a></li>
-<li id="ref-26">Spring team. MockMvc [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/testing/mockmvc.html">https://docs.spring.io/spring-framework/reference/testing/mockmvc.html</a></li>
+<li id="ref-26">Spring team. MockMvc [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/testing/mockmvc.html">https://docs.spring.io/spring-framework/reference/testing/mockmvc.html</a></li><!-- xp-refs:start -->
+<li id="ref-27">Spring team. API versioning [Internet]. Spring Framework 7.0.8 reference; 2026 [cited 2026 Nov 8]. Available from: <a href="https://docs.spring.io/spring-framework/reference/web/webmvc-versioning.html">https://docs.spring.io/spring-framework/reference/web/webmvc-versioning.html</a></li><!-- xp-refs:end -->
+
 </ol>
 </main>
-<aside aria-label="Table of contents"><h2>Contents</h2><ol><li><a href="#rest">REST principles</a></li><li><a href="#http-methods">HTTP methods</a></li><li><a href="#status-codes">Status codes</a></li><li><a href="#spring-mvc">Spring MVC</a></li><li><a href="#negotiation">Content negotiation</a></li><li><a href="#converters">JSON and XML</a></li><li><a href="#response-entity">ResponseEntity</a></li><li><a href="#headers">Headers</a></li><li><a href="#hateoas">HATEOAS</a></li><li><a href="#errors">Error bodies</a></li><li><a href="#worked-example">Worked example</a></li><li><a href="#testing">Testing</a></li><li><a href="#diagnostics">Diagnostics</a></li><li><a href="#practices">Expert practices</a></li><li><a href="#summary">Summary</a></li><li><a href="#references">References</a></li></ol></aside>
+<aside aria-label="Table of contents"><h2>Contents</h2><ol><li><a href="#rest">REST principles</a></li><li><a href="#http-methods">HTTP methods</a></li><li><a href="#status-codes">Status codes</a></li><li><a href="#spring-mvc">Spring MVC</a></li><li><a href="#negotiation">Content negotiation</a></li><li><a href="#converters">JSON and XML</a></li><li><a href="#response-entity">ResponseEntity</a></li><li><a href="#headers">Headers</a></li><li><a href="#hateoas">HATEOAS</a></li><li><a href="#errors">Error bodies</a></li><li><a href="#worked-example">Worked example</a></li><li><a href="#testing">Testing</a></li><li><a href="#diagnostics">Diagnostics</a></li><li><a href="#practices">Expert practices</a></li><li><a href="#summary">Summary</a></li><!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li></ol></aside>
 </div>
 <footer>Prepared as a self-contained technical reference. Official Spring, IETF, W3C, and Spring HATEOAS sources were verified on 31 July 2026.</footer>
 <script>document.querySelectorAll('.copy').forEach(button=>{button.addEventListener('click',async()=>{const code=button.parentElement.querySelector('code').innerText;try{await navigator.clipboard.writeText(code);const prior=button.textContent;button.textContent='Copied';setTimeout(()=>button.textContent=prior,1200)}catch{button.textContent='Select manually'}})});const text=document.querySelector('main').innerText;const words=text.trim().split(/\s+/).length;const minutes=Math.ceil(words/210);document.getElementById('word-count').textContent=`${words.toLocaleString()} words · approximately ${minutes} min`;</script>

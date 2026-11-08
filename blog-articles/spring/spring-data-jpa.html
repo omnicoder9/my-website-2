@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1189,6 +1209,423 @@ class PurchaseOrderRepositoryTest {
   When a repository operation surprises you, trace it from the signature inward: Which repository fragment supplied the method? Was the query derived, named, JPQL, native, Specification-based, or Querydsl-based? Which return type selected the execution strategy? Did pagination add a count query? Which sort paths and joins were generated? Did the operation return managed entities, projections, or stale state after a bulk query? That sequence turns Spring Data JPA from proxy magic into an explicit persistence execution model.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">17. Enterprise scenarios</h2>
+<p>Spring Data JPA removes boilerplate. What it cannot remove is the persistence context, lazy loading, and SQL. Most production problems come from SQL that the code no longer shows. The scenarios below are composites from commerce, logistics, SaaS, and banking systems, with illustrative figures. Section 18 makes the hidden SQL visible, by counting the statements that Hibernate 7.4 prepares, in a Spring Boot 4.1 application.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">B2B commerce · customer dashboard · 50 customers per page</p>
+<h3 id="scenario-nplus1">17.1 One page view, 51 queries</h3>
+<p><strong>Situation.</strong> A dashboard listed customers with their order totals using <code>repository.findAll()</code> and a lazy <code>@OneToMany</code>.</p>
+<p><strong>What went wrong.</strong> Each customer's <code>orders</code> collection was loaded by a separate query the first time it was touched: one query for the customers, plus one for each customer. On large accounts, the page took seconds and used a large share of the database's connection time.</p>
+<p><strong>Fix.</strong> Fetch what each use case needs, with <code>@EntityGraph(attributePaths = …)</code> or a <code>join fetch</code> query<a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-11">[11]</a>, or use a DTO projection. Disable open-session-in-view, so that lazy loading cannot happen silently during rendering. Assert statement counts in tests (Exercise 1).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · shipment ingestion · client-generated UUIDs</p>
+<h3 id="scenario-isnew">17.2 Twice as many statements as inserts</h3>
+<p><strong>Situation.</strong> Shipments arrived with UUIDs that clients generated, and were saved with <code>repository.save()</code>.</p>
+<p><strong>What went wrong.</strong> <code>save()</code> decides between <code>persist</code> and <code>merge</code> by asking whether the entity is new. With an assigned id and no <code>@Version</code> field, Spring Data concludes that it is <em>not</em> new and merges, which means a <code>SELECT</code> before every <code>INSERT</code><a class="citation" href="#ref-7">[7]</a>. Ingestion throughput halved.</p>
+<p><strong>Fix.</strong> Implement <code>Persistable.isNew()</code>, add a <code>@Version</code> attribute, or let the database generate ids (Exercise 2). Batch inserts with JDBC batching (<code>hibernate.jdbc.batch_size</code>) and an id strategy that supports batching.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">SaaS · audit-log browser · 400 million rows</p>
+<h3 id="scenario-paging">17.3 The count query that took longer than the page</h3>
+<p><strong>Situation.</strong> An audit-log screen returned <code>Page&lt;AuditEvent&gt;</code> for infinite scrolling.</p>
+<p><strong>What went wrong.</strong> A <code>Page</code> runs a second, <code>count(*)</code>, query to compute the total<a class="citation" href="#ref-22">[22]</a>. On a table of hundreds of millions of rows, the count took 9 seconds, while the 50-row page took 20 ms, and nobody looked at the total anyway.</p>
+<p><strong>Fix.</strong> Return a <code>Slice</code>, which fetches one extra row to answer "is there more?" without counting<a class="citation" href="#ref-21">[21]</a> (Exercise 3). For deep pagination, use keyset ("seek") pagination on an indexed column instead of offsets.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Subscription billing · nightly expiry job · stale reads</p>
+<h3 id="scenario-bulk">17.4 Expired in the database, active in memory</h3>
+<p><strong>Situation.</strong> A job loaded subscriptions, ran an <code>@Modifying</code> bulk update to expire them, and then re-read them to send notices.</p>
+<p><strong>What went wrong.</strong> Bulk JPQL updates go straight to the database and bypass the persistence context. The entities already loaded still said <code>ACTIVE</code>, so the job sent "your subscription is active" emails to 30,000 expired customers.</p>
+<p><strong>Fix.</strong> Use <code>@Modifying(clearAutomatically = true)</code>, and <code>flushAutomatically</code> if there are pending changes, or run bulk operations in their own transaction before loading entities<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-23">[23]</a> (Exercise 4).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail bank · balance adjustments from a teller app and a batch job</p>
+<h3 id="scenario-version">17.5 A lost update to an account balance</h3>
+<p><strong>Situation.</strong> A teller withdrawal and an interest batch both loaded account 7, changed its balance, and saved it.</p>
+<p><strong>What went wrong.</strong> Without a version check, the second save overwrote the first, and the withdrawal disappeared from the balance. Reconciliation found it three days later.</p>
+<p><strong>Fix.</strong> Add a <code>@Version</code> attribute. The second writer then fails with <code>ObjectOptimisticLockingFailureException</code>, and can reload and retry (Exercise 5). For money, prefer computing changes in the database (<code>balance = balance + :delta</code>), or ledger entries, over read-modify-write.</p>
+</div>
+
+<h2 id="exercises">18. Exercises</h2>
+<p>Each solution is a Spring Boot 4.1.0 application (Spring Data JPA 4.1.0, Hibernate ORM 7.4.1, H2 2.4.240, OpenJDK 21.0.13) that runs from its <code>main</code> method. Statement counts come from Hibernate's <code>Statistics.getPrepareStatementCount()</code>, with <code>hibernate.generate_statistics=true</code>. Each exercise lives in its own package, and its repository is a nested interface, which needs <code>@EnableJpaRepositories(considerNestedRepositories = true)</code>. The output shown is real.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">18.1 Count the N+1<span class="xp-lvl">fetching · medium</span></h3>
+<p>Create 50 customers with 3 orders each. Sum all the order totals, first through <code>findAll()</code> and the lazy collection, then through a repository method that uses an <code>@EntityGraph</code>. Count the SQL statements for each.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>@EntityGraph(attributePaths = "orders")</code> turns the lazy association into a join, for this query only<a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-11">[11]</a>. The totals are identical, and only the number of round trips differs.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.jpa.nplus1;
+
+import jakarta.persistence.*;
+import java.util.*;
+import org.hibernate.SessionFactory;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.transaction.support.TransactionTemplate;
+
+@SpringBootApplication
+@EnableJpaRepositories(considerNestedRepositories = true)          // the repository is a nested interface here
+public class Ex1NPlusOne {
+    @Entity(name = "Customer") @Table(name = "customer")
+    public static class Customer {
+        @Id Long id; String name;
+        @OneToMany(mappedBy = "customer") List&lt;PurchaseOrder&gt; orders = new ArrayList&lt;&gt;();   // LAZY by default
+        protected Customer() {}
+        Customer(Long id, String name) { this.id = id; this.name = name; }
+    }
+    @Entity(name = "PurchaseOrder") @Table(name = "purchase_order")
+    public static class PurchaseOrder {
+        @Id Long id; long cents;
+        @ManyToOne(fetch = FetchType.LAZY) Customer customer;
+        protected PurchaseOrder() {}
+        PurchaseOrder(Long id, long cents, Customer c) { this.id = id; this.cents = cents; this.customer = c; }
+    }
+
+    public interface Customers extends JpaRepository&lt;Customer, Long&gt; {
+        @EntityGraph(attributePaths = "orders")
+        @Query("select c from Customer c")
+        List&lt;Customer&gt; findAllWithOrders();
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new SpringApplicationBuilder(Ex1NPlusOne.class).web(WebApplicationType.NONE)
+                .properties("spring.jpa.properties.hibernate.generate_statistics=true", "spring.jpa.open-in-view=false").run(args)) {
+            var em = ctx.getBean(EntityManagerFactory.class);
+            var stats = em.unwrap(SessionFactory.class).getStatistics();
+            var tx = ctx.getBean(TransactionTemplate.class);
+            Customers repo = ctx.getBean(Customers.class);
+            tx.executeWithoutResult(s -&gt; {
+                EntityManager m = ctx.getBean(EntityManager.class);
+                for (long c = 1; c &lt;= 50; c++) {
+                    Customer cu = new Customer(c, "customer-" + c); m.persist(cu);
+                    for (long o = 1; o &lt;= 3; o++) m.persist(new PurchaseOrder(c * 10 + o, 1000 * o, cu));
+                }
+            });
+            stats.clear();
+            long total = tx.execute(s -&gt; repo.findAll().stream().mapToLong(c -&gt; c.orders.stream().mapToLong(o -&gt; o.cents).sum()).sum());
+            System.out.println("findAll + lazy orders:  " + stats.getPrepareStatementCount() + " SQL statements, total=" + total);
+            stats.clear();
+            total = tx.execute(s -&gt; repo.findAllWithOrders().stream().mapToLong(c -&gt; c.orders.stream().mapToLong(o -&gt; o.cents).sum()).sum());
+            System.out.println("@EntityGraph fetch:     " + stats.getPrepareStatementCount() + " SQL statement,  total=" + total);
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1</span><pre>findAll + lazy orders:  51 SQL statements, total=300000
+@EntityGraph fetch:     1 SQL statement,  total=300000</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">18.2 Why <code>save()</code> issued a <code>SELECT</code><span class="xp-lvl">persistence · medium</span></h3>
+<p>Save 100 new entities that have assigned UUID ids, once as a plain entity, and once with <code>Persistable</code>. Count the statements in each case.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>SimpleJpaRepository.save</code> calls <code>persist</code> for new entities and <code>merge</code> otherwise<a class="citation" href="#ref-7">[7]</a>. For a non-primitive id with no version attribute, "new" means "id is null", so an assigned UUID looks like an existing row, and <code>merge</code> must <code>SELECT</code> it first. <code>Persistable.isNew()</code>, with a transient flag cleared in <code>@PostPersist</code> and <code>@PostLoad</code>, gives the right answer.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.jpa.isnew;
+
+import jakarta.persistence.*;
+import java.util.*;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.data.domain.Persistable;
+
+@SpringBootApplication
+@EnableJpaRepositories(considerNestedRepositories = true)
+public class Ex2IsNew {
+    /** Assigned UUID id, no @Version: Spring Data cannot tell that it is new. */
+    @Entity(name = "Shipment") public static class Shipment {
+        @Id UUID id = UUID.randomUUID(); String carrier;
+        protected Shipment() {}
+        Shipment(String carrier) { this.carrier = carrier; }
+    }
+    /** Same, but implements Persistable: isNew() is answered explicitly. */
+    @Entity(name = "Parcel") public static class Parcel implements Persistable&lt;UUID&gt; {
+        @Id UUID id = UUID.randomUUID(); String carrier;
+        @Transient boolean isNew = true;
+        protected Parcel() {}
+        Parcel(String carrier) { this.carrier = carrier; }
+        public UUID getId() { return id; }
+        public boolean isNew() { return isNew; }
+        @PostPersist @PostLoad void markNotNew() { isNew = false; }
+    }
+    public interface Shipments extends JpaRepository&lt;Shipment, UUID&gt; {}
+    public interface Parcels extends JpaRepository&lt;Parcel, UUID&gt; {}
+
+    static ConfigurableApplicationContext boot(Class&lt;?&gt; app) {
+        return new SpringApplicationBuilder(app).web(WebApplicationType.NONE)
+            .properties("spring.jpa.properties.hibernate.generate_statistics=true", "spring.jpa.open-in-view=false").run();
+    }
+    static Statistics stats(ConfigurableApplicationContext ctx) {
+        return ctx.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = boot(Ex2IsNew.class)) {
+            Statistics st = stats(ctx);
+            st.clear();
+            for (int i = 0; i &lt; 100; i++) ctx.getBean(Shipments.class).save(new Shipment("dhl"));
+            System.out.println("100 x save(Shipment):  " + st.getPrepareStatementCount() + " SQL statements (merge: SELECT then INSERT)");
+            st.clear();
+            for (int i = 0; i &lt; 100; i++) ctx.getBean(Parcels.class).save(new Parcel("dhl"));
+            System.out.println("100 x save(Parcel):    " + st.getPrepareStatementCount() + " SQL statements (persist: INSERT only)");
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1</span><pre>100 x save(Shipment):  200 SQL statements (merge: SELECT then INSERT)
+100 x save(Parcel):    100 SQL statements (persist: INSERT only)</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">18.3 <code>Page</code> against <code>Slice</code><span class="xp-lvl">paging · easy</span></h3>
+<p>Query the first 50 audit events for a tenant, once as a <code>Page</code> and once as a <code>Slice</code>. How many queries does each run, and what does each know?</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>A <code>Page</code> runs the content query plus a count query, which gives it <code>getTotalElements()</code><a class="citation" href="#ref-22">[22]</a>. A <code>Slice</code> asks for <em>size + 1</em> rows, and uses the extra row only to set <code>hasNext()</code><a class="citation" href="#ref-21">[21]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.jpa.paging;
+
+import jakarta.persistence.*;
+import java.util.*;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.data.domain.*;
+
+@SpringBootApplication
+@EnableJpaRepositories(considerNestedRepositories = true)
+public class Ex3PageVsSlice {
+    @Entity(name = "AuditEvent") public static class AuditEvent {
+        @Id Long id; String tenant;
+        protected AuditEvent() {}
+        AuditEvent(Long id, String tenant) { this.id = id; this.tenant = tenant; }
+    }
+    public interface Events extends JpaRepository&lt;AuditEvent, Long&gt; {
+        Page&lt;AuditEvent&gt; findByTenant(String tenant, Pageable p);
+        Slice&lt;AuditEvent&gt; findSliceByTenant(String tenant, Pageable p);
+    }
+
+    static ConfigurableApplicationContext boot(Class&lt;?&gt; app) {
+        return new SpringApplicationBuilder(app).web(WebApplicationType.NONE)
+            .properties("spring.jpa.properties.hibernate.generate_statistics=true", "spring.jpa.open-in-view=false").run();
+    }
+    static Statistics stats(ConfigurableApplicationContext ctx) {
+        return ctx.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = boot(Ex3PageVsSlice.class)) {
+            Events repo = ctx.getBean(Events.class);
+            List&lt;AuditEvent&gt; all = new ArrayList&lt;&gt;();
+            for (long i = 1; i &lt;= 5_000; i++) all.add(new AuditEvent(i, i % 5 == 0 ? "globex" : "acme"));
+            repo.saveAll(all);
+            Statistics st = stats(ctx);
+            Pageable firstPage = PageRequest.of(0, 50, Sort.by("id").descending());
+            st.clear();
+            Page&lt;AuditEvent&gt; page = repo.findByTenant("acme", firstPage);
+            System.out.println("Page:  " + st.getPrepareStatementCount() + " queries, content=" + page.getNumberOfElements()
+                    + ", totalElements=" + page.getTotalElements() + ", hasNext=" + page.hasNext());
+            st.clear();
+            Slice&lt;AuditEvent&gt; slice = repo.findSliceByTenant("acme", firstPage);
+            System.out.println("Slice: " + st.getPrepareStatementCount() + " query,   content=" + slice.getNumberOfElements()
+                    + ", hasNext=" + slice.hasNext() + " (fetched 51 rows to know)");
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1</span><pre>Page:  2 queries, content=50, totalElements=4000, hasNext=true
+Slice: 1 query,   content=50, hasNext=true (fetched 51 rows to know)</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">18.4 A bulk update and the persistence context<span class="xp-lvl">modifying queries · medium</span></h3>
+<p>Within one transaction, load a subscription, run an <code>@Modifying</code> update that expires all active subscriptions, and read the subscription again. Repeat with <code>clearAutomatically = true</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The second <code>findById</code> is answered from the persistence context's first-level cache, which the bulk update never touched. Clearing the context after the update forces a fresh read<a class="citation" href="#ref-11">[11]</a>. Clearing also detaches every other managed entity, so flush any pending changes first (<code>flushAutomatically</code>).</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.jpa.bulk;
+
+import jakarta.persistence.*;
+import java.util.*;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+
+@SpringBootApplication
+@EnableJpaRepositories(considerNestedRepositories = true)
+public class Ex4BulkUpdate {
+    @Entity(name = "Subscription") public static class Subscription {
+        @Id Long id; String status;
+        protected Subscription() {}
+        Subscription(Long id, String status) { this.id = id; this.status = status; }
+    }
+    public interface Subscriptions extends JpaRepository&lt;Subscription, Long&gt; {
+        @Modifying @Query("update Subscription s set s.status = 'EXPIRED' where s.status = 'ACTIVE'")
+        int expireAll();
+        @Modifying(clearAutomatically = true) @Query("update Subscription s set s.status = 'EXPIRED' where s.status = 'ACTIVE'")
+        int expireAllAndClear();
+    }
+
+    static ConfigurableApplicationContext boot(Class&lt;?&gt; app) {
+        return new SpringApplicationBuilder(app).web(WebApplicationType.NONE)
+            .properties("spring.jpa.properties.hibernate.generate_statistics=true", "spring.jpa.open-in-view=false").run();
+    }
+    static Statistics stats(ConfigurableApplicationContext ctx) {
+        return ctx.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = boot(Ex4BulkUpdate.class)) {
+            Subscriptions repo = ctx.getBean(Subscriptions.class);
+            TransactionTemplate tx = ctx.getBean(TransactionTemplate.class);
+            repo.saveAll(List.of(new Subscription(1L, "ACTIVE"), new Subscription(2L, "ACTIVE")));
+            System.out.println(tx.&lt;String&gt;execute(s -&gt; {
+                Subscription loaded = repo.findById(1L).orElseThrow();       // now managed in the persistence context
+                int n = repo.expireAll();                                    // SQL UPDATE bypasses the context
+                return "plain @Modifying:   updated " + n + " rows, but findById sees " + repo.findById(1L).orElseThrow().status;
+            }));
+            repo.saveAll(List.of(new Subscription(1L, "ACTIVE"), new Subscription(2L, "ACTIVE")));
+            System.out.println(tx.&lt;String&gt;execute(s -&gt; {
+                repo.findById(1L).orElseThrow();
+                int n = repo.expireAllAndClear();
+                return "clearAutomatically: updated " + n + " rows, and findById sees " + repo.findById(1L).orElseThrow().status;
+            }));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1</span><pre>plain @Modifying:   updated 2 rows, but findById sees ACTIVE
+clearAutomatically: updated 2 rows, and findById sees EXPIRED</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">18.5 Optimistic locking with <code>@Version</code><span class="xp-lvl">concurrency · easy</span></h3>
+<p>Load the same account twice, as a teller and as a batch job would. Save the teller's change, then try to save the batch's change, which was based on the old balance.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Hibernate adds <code>where version = ?</code> to the update. When the row has already moved on, no row matches, and Spring translates the failure into <code>ObjectOptimisticLockingFailureException</code><a class="citation" href="#ref-23">[23]</a>. The teller's withdrawal survives.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.jpa.locking;
+
+import jakarta.persistence.*;
+import java.util.*;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+
+@SpringBootApplication
+@EnableJpaRepositories(considerNestedRepositories = true)
+public class Ex5OptimisticLock {
+    @Entity(name = "Account") public static class Account {
+        @Id Long id; long balanceCents;
+        @Version long version;
+        protected Account() {}
+        Account(Long id, long cents) { this.id = id; this.balanceCents = cents; }
+    }
+    public interface Accounts extends JpaRepository&lt;Account, Long&gt; {}
+
+    static ConfigurableApplicationContext boot(Class&lt;?&gt; app) {
+        return new SpringApplicationBuilder(app).web(WebApplicationType.NONE)
+            .properties("spring.jpa.properties.hibernate.generate_statistics=true", "spring.jpa.open-in-view=false").run();
+    }
+    static Statistics stats(ConfigurableApplicationContext ctx) {
+        return ctx.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = boot(Ex5OptimisticLock.class)) {
+            Accounts repo = ctx.getBean(Accounts.class);
+            repo.save(new Account(7L, 10_000));
+            Account seenByTeller = repo.findById(7L).orElseThrow();        // two detached copies, version 0
+            Account seenByBatch = repo.findById(7L).orElseThrow();
+            seenByTeller.balanceCents -= 2_500;
+            repo.save(seenByTeller);                                        // version 0 -&gt; 1
+            seenByBatch.balanceCents += 300;                                // computed from a stale balance
+            try { repo.save(seenByBatch); }
+            catch (ObjectOptimisticLockingFailureException e) {
+                System.out.println("second writer rejected: " + e.getClass().getSimpleName());
+            }
+            Account now = repo.findById(7L).orElseThrow();
+            System.out.println("balance=" + now.balanceCents + " version=" + now.version);
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1</span><pre>second writer rejected: ObjectOptimisticLockingFailureException
+balance=7500 version=1</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">19. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Are Spring Data repository methods transactional by default?</summary><div class="xp-body"><p>Yes. <code>SimpleJpaRepository</code> is annotated <code>@Transactional(readOnly = true)</code> at class level, and its write methods override that with <code>@Transactional</code>. Custom query methods inherit the read-only default<a class="citation" href="#ref-23">[23]</a>.</p></div></details>
+<details class="xp-details"><summary>What does a derived query method such as <code>findByTenantAndStatusOrderByCreatedAtDesc</code> do?</summary><div class="xp-body"><p>Spring Data parses the method name into a query when the repository is created, so a misspelled property fails at startup, not at run time<a class="citation" href="#ref-8">[8]</a><a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+<details class="xp-details"><summary>Why are nested repository interfaces ignored by default?</summary><div class="xp-body"><p>Repository scanning considers only top-level interfaces, unless <code>considerNestedRepositories = true</code> is set, as in this section's exercises.</p></div></details>
+<details class="xp-details"><summary>What is the default fetch type of <code>@ManyToOne</code> and of <code>@OneToMany</code>?</summary><div class="xp-body"><p><code>@ManyToOne</code> and <code>@OneToOne</code> are <em>eager</em> by default, while the collection associations are lazy. Mark <code>@ManyToOne</code> associations <code>LAZY</code> explicitly, as in Exercise 1, to avoid surprise joins.</p></div></details>
+<details class="xp-details"><summary>What is the difference between <code>@Query</code> and <code>@NativeQuery</code>?</summary><div class="xp-body"><p><code>@Query</code> takes JPQL by default. <code>@NativeQuery</code> is shorthand for <code>@Query(nativeQuery = true)</code>, and passes SQL to the database unchanged<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+<details class="xp-details"><summary>What are Specifications for?</summary><div class="xp-body"><p>Building queries dynamically from composable predicates, through JPA Criteria, for search screens with optional filters, without string concatenation<a class="citation" href="#ref-13">[13]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>JpaRepository</code> add over <code>CrudRepository</code>?</summary><div class="xp-body"><p>JPA-specific operations: <code>flush</code>, <code>saveAndFlush</code>, batch deletes in a single query, <code>getReferenceById</code>, and <code>List</code> return types<a class="citation" href="#ref-4">[4]</a><a class="citation" href="#ref-6">[6]</a>.</p></div></details>
+<details class="xp-details"><summary>Why is <code>spring.jpa.open-in-view</code> worth disabling?</summary><div class="xp-body"><p>Open-in-view keeps the persistence context open for the whole web request, so that lazy loading "works" in views and serializers. That hides N+1 queries, and holds a database connection while the response is being rendered. Spring Boot logs a warning when it is enabled by default.</p></div></details>
+<details class="xp-details"><summary>What does <code>Sort.by("id").descending()</code> combined with <code>PageRequest.of(0, 50, sort)</code> produce?</summary><div class="xp-body"><p>An <code>order by id desc</code> query with an offset of 0 and a limit of 50, translated into the database's own syntax by Hibernate's dialect<a class="citation" href="#ref-18">[18]</a><a class="citation" href="#ref-20">[20]</a>.</p></div></details>
+<details class="xp-details"><summary>What is Querydsl's role with Spring Data?</summary><div class="xp-body"><p>Generated, type-safe query classes (Q-types) that a repository can accept as predicates through <code>QuerydslPredicateExecutor</code><a class="citation" href="#ref-14">[14]</a><a class="citation" href="#ref-15">[15]</a><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Spring Data JPA [Internet]. Version 4.1.0. Spring; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-data/jpa/reference/">https://docs.spring.io/spring-data/jpa/reference/</a></li>
@@ -1236,7 +1673,7 @@ class PurchaseOrderRepositoryTest {
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

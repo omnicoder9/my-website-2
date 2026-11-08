@@ -388,6 +388,26 @@
       .references a::after { content: " (" attr(href) ")"; font-size: 8pt; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
   <header class="hero">
@@ -431,6 +451,10 @@
         <li><a href="#structured-concurrency">Structured concurrency</a></li>
         <li><a href="#composition">How the features compose</a></li>
         <li><a href="#migration">Adoption and migration strategy</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
       </ol>
     </nav>
 
@@ -1582,6 +1606,283 @@ Response handle(Request request) {
           treat preview features as versioned experiments with an exit plan.
         </div>
       </section>
+<!-- xp:start -->
+      <section id="enterprise-scenarios">
+        <h2>20. Enterprise scenarios</h2>
+        <p class="lead">For most enterprises, the hard part of modern Java is not learning the features. It is moving millions of lines and hundreds of services from Java 8 or 11 without breaking anything, and adopting new features where they pay off. The scenarios below are composites from banks, insurers, and SaaS companies. The figures are illustrative, and section 21 lets you run before-and-after versions of each change.</p>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Retail bank · 420 services on Java 8 · regulator-driven upgrade deadline</p>
+          <h3>20.1 Leaping from Java 8 to 21</h3>
+          <p><strong>Situation.</strong> Java 8 support contracts were expiring, and the bank had to move its whole estate to a current LTS release.</p>
+          <p><strong>What went wrong at first.</strong> A big-bang attempt failed in the first week. Java 11 removed the bundled Java EE and CORBA modules (JAXB, JAX-WS, <code>javax.annotation</code>), so SOAP clients no longer compiled. JDK 16 and 17 strongly encapsulated JDK internals<a class="cite" href="#ref-9">[9]</a>, which broke old reflection-based libraries. The CMS collector (removed in JDK 14) and Nashorn (removed in JDK 15) had both been in use.</p>
+          <p><strong>What worked.</strong> An inventory first: <code>jdeps --jdk-internals</code> and <code>jdeprscan</code> on every artifact, plus a dependency upgrade wave, with explicit JAXB and JAX-WS dependencies. Then moving one service at a time, running the test suites under the target JDK in CI months before any switch. Compile with <code>--release</code> to target a version precisely, and adopt language features <em>after</em> the runtime upgrade, not as part of it.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Insurance · claims API · switching to virtual threads on JDK 21</p>
+          <h3>20.2 Virtual threads made one service faster and another stall</h3>
+          <p><strong>Situation.</strong> Two I/O-bound services moved from 200-thread pools to one virtual thread per request<a class="cite" href="#ref-22">[22]</a>.</p>
+          <p><strong>What happened.</strong> The document service's throughput rose about 6×, because its requests mostly waited on HTTP calls (Exercise 3). The claims service <em>stalled</em> under load. Its JDBC driver blocked inside <code>synchronized</code> blocks, and on JDK 21 a virtual thread blocked in <code>synchronized</code> pins its carrier, so a handful of carriers were all pinned at once. A per-thread <code>ThreadLocal</code> cache of 2 MB buffers also became 2 MB per <em>request</em>.</p>
+          <p><strong>Fix.</strong> Diagnose pinning with JFR's <code>jdk.VirtualThreadPinned</code> event<a class="cite" href="#ref-23">[23]</a>. Upgrade drivers, or move to JDK 24 or later, where JEP 491 removed pinning for <code>synchronized</code><a class="cite" href="#ref-24">[24]</a>. Replace per-thread caches with bounded pools. Remember that the connection pool is still the real concurrency limit.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">SaaS · domain model of 1,800 classes · hand-written value objects</p>
+          <h3>20.3 Records removed a class of equality bugs</h3>
+          <p><strong>Situation.</strong> Value classes had hand-written <code>equals</code>, <code>hashCode</code>, and <code>toString</code> methods, generated by the IDE years earlier.</p>
+          <p><strong>What went wrong.</strong> Fields were added later, but the generated methods were not regenerated. An <code>Address</code> whose <code>equals</code> ignored <code>country</code> deduplicated US and Canadian addresses with the same street and postcode, and shipping labels went to the wrong country (Exercise 2).</p>
+          <p><strong>Fix.</strong> Migrate value classes and DTOs to records<a class="cite" href="#ref-16">[16]</a>: the compiler derives every member from the component list, and validation moves into the compact constructor. Keep JPA <em>entities</em> as classes, because they need a no-argument constructor and mutable state, but use records for projections, commands, events, and API payloads.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Fintech · JDK 21–22 · preview features in production code</p>
+          <h3>20.4 String Templates were withdrawn after the code shipped</h3>
+          <p><strong>Situation.</strong> A team enabled <code>--enable-preview</code> in production builds, to use String Templates for SQL and JSON.</p>
+          <p><strong>What went wrong.</strong> String Templates previewed in JDK 21 and 22, and were then withdrawn for redesign in JDK 23<a class="cite" href="#ref-25">[25]</a><a class="cite" href="#ref-26">[26]</a><a class="cite" href="#ref-27">[27]</a>. The team had to rewrite every template before it could upgrade. Preview class files also run only on the exact JDK feature release that compiled them<a class="cite" href="#ref-4">[4]</a>.</p>
+          <p><strong>Fix.</strong> Treat preview features as experiments: keep them out of production artifacts, try them in spikes, and give feedback upstream. Text blocks with <code>formatted()</code> (Exercise 4), and prepared-statement parameters, covered the team's real needs.</p>
+        </div>
+      </section>
+
+      <section id="exercises">
+        <h2>21. Exercises</h2>
+        <p class="lead">Each exercise is a migration: the old code, the new code, and a check that they agree, or a demonstration of why they should not. Each solution is a single-file program: save it and run <code>java FileName.java</code>. The outputs shown were produced on OpenJDK 21.0.13. Exercise 5 uses a feature that was a preview in JDK 21 and is final in JDK 25.</p>
+
+        <div class="xp-exercise">
+          <h3>Exercise 1: From loops and nulls to a pipeline<span class="xp-lvl">streams · easy</span></h3>
+          <p>A Java 7 method sums paid orders per customer in a <code>TreeMap</code>, handles the missing-key case with <code>null</code> checks, and removes customers under 100 with an iterator. Rewrite it as a stream pipeline, and prove that the two versions agree.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p><code>groupingBy</code> with a <code>TreeMap</code> supplier and a <code>reducing</code> downstream collector replaces the accumulator loop, and a second filter replaces the iterator removal<a class="cite" href="#ref-7">[7]</a>. Comparing the two outputs is the cheapest regression test for a refactor like this.</p>
+<pre><code>import java.math.BigDecimal;
+import java.util.*;
+import java.util.stream.Collectors;
+
+class Ex1Java7ToStreams {
+    record Order(String customer, String status, BigDecimal total) {}
+
+    /** Java 7 style, as found in the legacy codebase. */
+    static Map&lt;String, BigDecimal&gt; legacy(List&lt;Order&gt; orders) {
+        Map&lt;String, BigDecimal&gt; totals = new TreeMap&lt;String, BigDecimal&gt;();
+        for (Order o : orders) {
+            if (!"PAID".equals(o.status())) continue;
+            BigDecimal current = totals.get(o.customer());
+            if (current == null) current = BigDecimal.ZERO;
+            totals.put(o.customer(), current.add(o.total()));
+        }
+        Iterator&lt;Map.Entry&lt;String, BigDecimal&gt;&gt; it = totals.entrySet().iterator();
+        while (it.hasNext()) if (it.next().getValue().compareTo(new BigDecimal("100")) &lt; 0) it.remove();
+        return totals;
+    }
+
+    /** Java 8+ style: one pipeline, no mutable accumulator. */
+    static Map&lt;String, BigDecimal&gt; modern(List&lt;Order&gt; orders) {
+        return orders.stream()
+            .filter(o -&gt; o.status().equals("PAID"))
+            .collect(Collectors.groupingBy(Order::customer, TreeMap::new,
+                     Collectors.reducing(BigDecimal.ZERO, Order::total, BigDecimal::add)))
+            .entrySet().stream()
+            .filter(e -&gt; e.getValue().compareTo(new BigDecimal("100")) &gt;= 0)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -&gt; a, TreeMap::new));
+    }
+
+    public static void main(String[] args) {
+        List&lt;Order&gt; orders = List.of(new Order("acme", "PAID", new BigDecimal("80")), new Order("acme", "PAID", new BigDecimal("45")),
+                new Order("globex", "PAID", new BigDecimal("60")), new Order("globex", "CANCELLED", new BigDecimal("500")),
+                new Order("initech", "PAID", new BigDecimal("310")));
+        System.out.println("legacy: " + legacy(orders));
+        System.out.println("modern: " + modern(orders));
+        System.out.println("identical: " + legacy(orders).equals(modern(orders)));
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>legacy: {acme=125, initech=310}
+modern: {acme=125, initech=310}
+identical: true</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 2: Replace a value class with a record<span class="xp-lvl">records · easy</span></h3>
+          <p>The legacy <code>LegacyAddress</code> has an <code>equals</code> method that forgot a field added later. Convert it to a record that also normalizes the postcode and validates the country code, and show the behavioral difference.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>A record's <code>equals</code> and <code>hashCode</code> always cover every component<a class="cite" href="#ref-16">[16]</a>, so adding a component cannot leave them stale. The compact constructor is the single place for normalization and invariants.</p>
+<pre><code>import java.util.*;
+
+class Ex2RecordMigration {
+    /** 40 lines of legacy value class, abbreviated: fields, constructor, getters, equals, hashCode, toString. */
+    static final class LegacyAddress {
+        private final String street, city, postcode, country;
+        LegacyAddress(String street, String city, String postcode, String country) {
+            this.street = street; this.city = city; this.postcode = postcode; this.country = country;
+        }
+        String getStreet() { return street; } String getCity() { return city; }
+        String getPostcode() { return postcode; } String getCountry() { return country; }
+        @Override public boolean equals(Object o) {
+            if (!(o instanceof LegacyAddress)) return false;
+            LegacyAddress a = (LegacyAddress) o;
+            return street.equals(a.street) &amp;&amp; city.equals(a.city) &amp;&amp; postcode.equals(a.postcode);   // forgot country!
+        }
+        @Override public int hashCode() { return Objects.hash(street, city, postcode); }
+    }
+
+    /** The record: the compiler generates all of it, consistently. */
+    record Address(String street, String city, String postcode, String country) {
+        Address {
+            Objects.requireNonNull(street); Objects.requireNonNull(city);
+            postcode = postcode.strip().toUpperCase(Locale.ROOT);
+            if (!country.matches("[A-Z]{2}")) throw new IllegalArgumentException("country must be ISO 3166-1 alpha-2");
+        }
+    }
+
+    public static void main(String[] args) {
+        var l1 = new LegacyAddress("1 Main St", "Springfield", "12345", "US");
+        var l2 = new LegacyAddress("1 Main St", "Springfield", "12345", "CA");
+        System.out.println("legacy: US and CA addresses equal? " + l1.equals(l2) + "  (hand-written equals drifted)");
+        var r1 = new Address("1 Main St", "Springfield", " 12345 ", "US");
+        var r2 = new Address("1 Main St", "Springfield", "12345", "CA");
+        System.out.println("record: US and CA addresses equal? " + r1.equals(r2));
+        System.out.println("record toString: " + r1);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>legacy: US and CA addresses equal? true  (hand-written equals drifted)
+record: US and CA addresses equal? false
+record toString: Address[street=1 Main St, city=Springfield, postcode=12345, country=US]</pre></div>
+            <p>The migration does change behavior: equality now includes the country. That is the bug fix, but check whether any stored data or cache keys depended on the old, wrong equality.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 3: A fixed pool against virtual threads<span class="xp-lvl">virtual threads · medium</span></h3>
+          <p>Run 10,000 tasks that each block for 100 ms, first on a fixed pool of 200 platform threads, then with one virtual thread per task. Check the expected bounds rather than printing raw timings.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>The pool can run only 200 tasks at a time, so it needs at least 10,000 / 200 × 100 ms = 5 s. Blocked virtual threads release their carrier, so all 10,000 can wait at once<a class="cite" href="#ref-22">[22]</a>. <code>ExecutorService</code> implements <code>AutoCloseable</code> (Java 19), and closing it waits for every task.</p>
+<pre><code>import java.time.Duration;
+import java.util.concurrent.*;
+import java.util.stream.IntStream;
+
+class Ex3VirtualThreads {
+    static long run(ExecutorService ex, int tasks) throws Exception {
+        long t0 = System.nanoTime();
+        try (ex) {
+            IntStream.range(0, tasks).forEach(i -&gt; ex.submit(() -&gt; { Thread.sleep(100); return i; }));   // a blocking call
+        }
+        return Duration.ofNanos(System.nanoTime() - t0).toMillis();
+    }
+
+    public static void main(String[] args) throws Exception {
+        int tasks = 10_000;
+        long pooled = run(Executors.newFixedThreadPool(200), tasks);           // classic "200 worker threads"
+        long virtual = run(Executors.newVirtualThreadPerTaskExecutor(), tasks);
+        System.out.println("10,000 blocking 100 ms calls");
+        System.out.println("fixed pool of 200 platform threads: at least 5 s = " + (pooled &gt;= 5_000) + "  (10,000 / 200 x 100 ms)");
+        System.out.println("one virtual thread per task:        under 1 s = " + (virtual &lt; 1_000));
+        System.out.println("speed-up at least 10x: " + (pooled &gt;= 10 * virtual));
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>10,000 blocking 100 ms calls
+fixed pool of 200 platform threads: at least 5 s = true  (10,000 / 200 x 100 ms)
+one virtual thread per task:        under 1 s = true
+speed-up at least 10x: true</pre></div>
+            <p>The speed-up comes from waiting concurrently, not from computing faster. CPU-bound work gains nothing from virtual threads.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 4: Text blocks for SQL and JSON<span class="xp-lvl">text blocks · easy</span></h3>
+          <p>Convert a concatenated SQL string into a text block, prove that the two are identical, and build a JSON payload with <code>formatted()</code>, using a line continuation for a long value.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Incidental indentation is removed, relative to the least-indented line or the closing delimiter, and a trailing <code>\</code> suppresses the line break<a class="cite" href="#ref-14">[14]</a><a class="cite" href="#ref-15">[15]</a>. Placing the closing <code>"""</code> on the last content line omits the final newline.</p>
+<pre><code>class Ex4TextBlocks {
+    public static void main(String[] args) {
+        String legacy = "SELECT o.id, o.total\n" +
+                        "FROM orders o\n" +
+                        "WHERE o.customer_id = ?\n" +
+                        "  AND o.status = 'PAID'\n" +
+                        "ORDER BY o.created_at DESC\n";
+        String modern = """
+                SELECT o.id, o.total
+                FROM orders o
+                WHERE o.customer_id = ?
+                  AND o.status = 'PAID'
+                ORDER BY o.created_at DESC
+                """;
+        System.out.println("identical SQL: " + legacy.equals(modern));
+
+        String json = """
+                {
+                  "type": "payment.succeeded",
+                  "id": "%s",
+                  "amount": %d,
+                  "note": "line one \
+                still line one"
+                }""".formatted("pay_81F2", 4990);
+        System.out.println(json);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>identical SQL: true
+{
+  "type": "payment.succeeded",
+  "id": "pay_81F2",
+  "amount": 4990,
+  "note": "line one still line one"
+}</pre></div>
+            <p>Text blocks are not a templating engine. Use <code>formatted()</code> only for trusted values: SQL values still go through <code>PreparedStatement</code> parameters, and JSON should come from a serializer.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 5: <code>ThreadLocal</code> leaks against scoped values<span class="xp-lvl">scoped values · medium</span></h3>
+          <p>Set a tenant in a <code>ThreadLocal</code> in one task on a single-thread pool, forget to remove it, and show that the next task inherits the tenant. Then bind the tenant with a <code>ScopedValue</code>, and show that it is unbound once the scope ends.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>A scoped value is immutable and is bound only for the dynamic extent of <code>run</code>, so there is nothing to forget to clean up<a class="cite" href="#ref-28">[28]</a><a class="cite" href="#ref-29">[29]</a>. This run used JDK 21's preview (<code>--enable-preview --source 21</code>). The same API is final in JDK 25 (JEP 506) and needs no flags there.</p>
+<pre><code>// java-flags: --enable-preview --source 21
+import java.util.concurrent.*;
+
+class Ex5ScopedValue {
+    static final ThreadLocal&lt;String&gt; TENANT_TL = new ThreadLocal&lt;&gt;();
+    static final ScopedValue&lt;String&gt; TENANT = ScopedValue.newInstance();
+
+    static String repositoryQueryTL() { return "SELECT ... WHERE tenant = '" + TENANT_TL.get() + "'"; }
+    static String repositoryQuerySV() { return "SELECT ... WHERE tenant = '" + TENANT.get() + "'"; }
+
+    public static void main(String[] args) throws Exception {
+        // ThreadLocal on a pooled thread: forgetting remove() leaks the tenant into the next task.
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        pool.submit(() -&gt; { TENANT_TL.set("acme"); return repositoryQueryTL(); }).get();
+        System.out.println("next task, ThreadLocal: " + pool.submit(Ex5ScopedValue::repositoryQueryTL).get());
+        pool.shutdown();
+
+        // ScopedValue: bound for exactly the duration of run(), immutable, then gone.
+        ScopedValue.where(TENANT, "acme").run(() -&gt; System.out.println("inside scope, ScopedValue: " + repositoryQuerySV()));
+        System.out.println("after scope, bound? " + TENANT.isBound());
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>Note: Ex5ScopedValue.java uses preview features of Java SE 21.
+Note: Recompile with -Xlint:preview for details.
+next task, ThreadLocal: SELECT ... WHERE tenant = 'acme'
+inside scope, ScopedValue: SELECT ... WHERE tenant = 'acme'
+after scope, bound? false</pre></div>
+          </div></details>
+        </div>
+      </section>
+
+      <section id="trivia">
+        <h2>22. Trivia</h2>
+        <p class="lead">Short questions with answers.</p>
+        <div class="xp-trivia">
+          <details class="xp-details"><summary>Which releases between Java 8 and Java 25 are long-term support releases?</summary><div class="xp-body"><p>8, 11, 17, 21, and 25. Since Java 17, Oracle has designated an LTS release every two years, every fourth six-month release<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-2">[2]</a>.</p></div></details>
+          <details class="xp-details"><summary>When did the six-month release cadence start?</summary><div class="xp-body"><p>With Java 10 in March 2018. Feature releases ship every March and September, and each is supported only until the next one, unless it is an LTS release.</p></div></details>
+          <details class="xp-details"><summary>In which release did each of these become final: <code>var</code>, switch expressions, text blocks, records, sealed classes, pattern-matching <code>switch</code>, virtual threads?</summary><div class="xp-body"><p><code>var</code> in 10, switch expressions in 14, text blocks in 15, records in 16, sealed classes in 17, and pattern-matching <code>switch</code>, record patterns, and virtual threads in 21<a class="cite" href="#ref-10">[10]</a><a class="cite" href="#ref-13">[13]</a><a class="cite" href="#ref-14">[14]</a><a class="cite" href="#ref-16">[16]</a><a class="cite" href="#ref-18">[18]</a><a class="cite" href="#ref-19">[19]</a><a class="cite" href="#ref-21">[21]</a><a class="cite" href="#ref-22">[22]</a>.</p></div></details>
+          <details class="xp-details"><summary>What happened to String Templates?</summary><div class="xp-body"><p>They previewed in JDK 21 (JEP 430) and JDK 22 (JEP 459), and were withdrawn in JDK 23 for redesign. The preview's syntax and processors are gone<a class="cite" href="#ref-25">[25]</a><a class="cite" href="#ref-26">[26]</a><a class="cite" href="#ref-27">[27]</a>.</p></div></details>
+          <details class="xp-details"><summary>Can a class compiled with preview features run on a later JDK?</summary><div class="xp-body"><p>No. The class file is marked as depending on preview features (minor version 0xFFFF), and only the same feature release of the JVM, started with <code>--enable-preview</code>, will load it<a class="cite" href="#ref-4">[4]</a>.</p></div></details>
+          <details class="xp-details"><summary>What does JEP 323 allow in lambdas?</summary><div class="xp-body"><p><code>var</code> for lambda parameters (Java 11), for example <code>(@NonNull var key, var value) -&gt; …</code>, mainly so that the parameters can be annotated<a class="cite" href="#ref-12">[12]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is the style guidance for <code>var</code>?</summary><div class="xp-body"><p>Use it when the type is obvious from the right-hand side or from a good variable name, and avoid it when it hides important type information. Project Amber's style guide lists the rules<a class="cite" href="#ref-11">[11]</a>.</p></div></details>
+          <details class="xp-details"><summary>Which tool reports a JAR's use of JDK internal APIs?</summary><div class="xp-body"><p><code>jdeps --jdk-internals app.jar</code>, which also suggests replacements. <code>jdeprscan</code> reports uses of deprecated APIs, including those deprecated for removal. Run both before every LTS upgrade.</p></div></details>
+          <details class="xp-details"><summary>What did JEP 491 change for virtual threads?</summary><div class="xp-body"><p>From JDK 24, a virtual thread that blocks inside <code>synchronized</code> releases its carrier thread instead of pinning it, which removed the most common reason to rewrite <code>synchronized</code> as <code>ReentrantLock</code><a class="cite" href="#ref-24">[24]</a>.</p></div></details>
+          <details class="xp-details"><summary>Has structured concurrency been finalized?</summary><div class="xp-body"><p>Not as of JDK 25, where it is in its fifth preview (JEP 505), with a redesigned API based on <code>StructuredTaskScope.open()</code> and joiners<a class="cite" href="#ref-30">[30]</a><a class="cite" href="#ref-31">[31]</a>. Scoped values, its companion feature, became final in JDK 25<a class="cite" href="#ref-28">[28]</a>.</p></div></details>
+        </div>
+      </section>
+
+<!-- xp:end -->
     </article>
 
     <section class="references" aria-labelledby="references-heading">

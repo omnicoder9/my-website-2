@@ -291,6 +291,26 @@
       pre,table,.callout { break-inside:avoid; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1810,6 +1830,258 @@ class AccountRepositoryIntegrationTest {
     When a Spring JDBC operation behaves unexpectedly, inspect the problem in this order: Which SQL and typed parameters were sent? Which connection and transaction owned the statement? What result cardinality or update count was promised? Which mapper or extractor interpreted the rows? Which JDBC exception details were translated into the observed Spring category? For batches, add: what did the driver report for each element, and did the transaction actually roll back? Those questions turn most database-access failures into a reproducible contract mismatch rather than a template mystery.
   </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">14. Enterprise scenarios</h2>
+<p>Spring JDBC keeps SQL in your hands, so most production incidents come from how the results, errors, and volumes are handled rather than from the framework. The scenarios below are composites, with illustrative figures. Section 15 reproduces each fix with Spring Framework 7.0.8 on an in-memory H2 2.4.240 database.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail bank · customer lookup API · 500 errors on unknown IDs</p>
+<h3 id="scenario-empty">14.1 "Not found" that became an outage alert</h3>
+<p><strong>Situation.</strong> A lookup service used <code>queryForObject</code> to fetch a customer by ID, and a generic exception handler turned every <code>DataAccessException</code> into a 500.</p>
+<p><strong>What went wrong.</strong> <code>queryForObject</code> expects exactly one row and throws <code>EmptyResultDataAccessException</code> when there is none<a class="citation" href="#ref-8">[8]</a><a class="citation" href="#ref-9">[9]</a>. A partner started probing for retired accounts, the error rate crossed the paging threshold, and on-call engineers chased a database "failure" that was really an expected miss.</p>
+<p><strong>Fix.</strong> Model absence explicitly: return an <code>Optional</code> with <code>JdbcClient</code>'s <code>optional()</code><a class="citation" href="#ref-28">[28]</a> or <code>DataAccessUtils.optionalResult</code><a class="citation" href="#ref-10">[10]</a>, and map it to 404 (Exercise 1).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Payments platform · mobile clients retrying on timeouts · duplicate charges</p>
+<h3 id="scenario-duplicate">14.2 Check-then-insert under retries</h3>
+<p><strong>Situation.</strong> A payment endpoint ran <code>SELECT COUNT(*)</code> for the client's idempotency key, and inserted only if the count was zero.</p>
+<p><strong>What went wrong.</strong> Mobile clients retried after a timeout while the first request was still running. Both requests saw zero rows and both inserted, and roughly one payment in 20,000 was recorded twice during a network incident.</p>
+<p><strong>Fix.</strong> Let the database decide. Put a unique constraint on the idempotency key, insert directly, and treat <code>DuplicateKeyException</code>, which Spring translates from the vendor's error code<a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-21">[21]</a>, as "already recorded" (Exercise 2).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Analytics · nightly export of 40 million rows · pods killed by the OOM killer</p>
+<h3 id="scenario-stream">14.3 A <code>List</code> of every row</h3>
+<p><strong>Situation.</strong> An export job called <code>jdbcTemplate.query(sql, rowMapper)</code> and wrote the resulting list to a CSV file.</p>
+<p><strong>What went wrong.</strong> The whole result set was materialized before the first line was written. As the table grew, the job's heap grew with it until the container was killed, and on PostgreSQL the driver also buffered every row because no fetch size was set and autocommit was on.</p>
+<p><strong>Fix.</strong> Process rows as they arrive with a <code>RowCallbackHandler</code><a class="citation" href="#ref-17">[17]</a> or a closed <code>Stream</code>, set a fetch size, and run inside a read-only transaction so that the driver can use a cursor (Exercise 4)<a class="citation" href="#ref-25">[25]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · shipment event ingestion · 3-hour load window missed</p>
+<h3 id="scenario-batch">14.4 One round trip per row</h3>
+<p><strong>Situation.</strong> A loader inserted 2 million tracking events a night with <code>update()</code> in a loop.</p>
+<p><strong>What went wrong.</strong> At about 4 ms per round trip to a database in another availability zone, the loop needed over two hours of pure network latency, and it overran the window whenever volumes spiked.</p>
+<p><strong>Fix.</strong> Use <code>batchUpdate</code> with a bounded batch size<a class="citation" href="#ref-22">[22]</a>, turn on the driver's batch rewriting where it exists (for example <code>rewriteBatchedStatements</code> for MySQL, <code>reWriteBatchedInserts</code> for PostgreSQL), and inspect the update counts and any <code>BatchUpdateException</code><a class="citation" href="#ref-23">[23]</a><a class="citation" href="#ref-24">[24]</a> (Exercise 5).</p>
+</div>
+
+<h2 id="exercises">15. Exercises</h2>
+<p>Each solution is a self-contained program, compiled and run with Spring Framework 7.0.8 and H2 2.4.240 on OpenJDK 21.0.13. The output shown is real. All of them share this helper and schema:</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sjdbc;
+
+import javax.sql.DataSource;
+import org.springframework.jdbc.datasource.embedded.*;
+
+/** Shared in-memory database for the exercises. */
+final class JdbcLab {
+    static DataSource database() {
+        return new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true)
+            .addScript("classpath:sjdbc-schema.sql").build();
+    }
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">SQL · sjdbc-schema.sql</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>CREATE TABLE customer (id BIGINT PRIMARY KEY, email VARCHAR(80) UNIQUE NOT NULL, country CHAR(2));
+CREATE TABLE payment (id VARCHAR(40) PRIMARY KEY, customer_id BIGINT, cents BIGINT);
+INSERT INTO customer VALUES (1, 'ana@example.com', 'DE'), (2, 'bo@example.com', 'FR'), (3, 'cy@example.com', 'DE'), (4, 'di@example.com', 'US');</code></pre>
+  </div>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">15.1 Absence without exceptions<span class="xp-lvl">queries · easy</span></h3>
+<p>Look up a customer's email by an ID that does not exist, first with <code>JdbcTemplate.queryForObject</code> and then so that the caller receives an <code>Optional</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>queryForObject</code> throws when the row count is not exactly one<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-8">[8]</a>. <code>JdbcClient</code>'s <code>optional()</code> returns <code>Optional.empty()</code> for no rows, and still throws <code>IncorrectResultSizeDataAccessException</code> for more than one<a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-28">[28]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sjdbc;
+
+import java.util.Optional;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
+
+public class Ex1Optional {
+    public static void main(String[] args) {
+        var ds = JdbcLab.database();
+        JdbcTemplate jdbc = new JdbcTemplate(ds);
+        try {
+            jdbc.queryForObject("SELECT email FROM customer WHERE id = ?", String.class, 99);
+        } catch (EmptyResultDataAccessException e) {
+            System.out.println("queryForObject, no row: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+        JdbcClient client = JdbcClient.create(ds);
+        Optional&lt;String&gt; email = client.sql("SELECT email FROM customer WHERE id = :id").param("id", 99).query(String.class).optional();
+        System.out.println("JdbcClient.optional(), no row: " + email);
+        System.out.println("JdbcClient.optional(), row:    " + client.sql("SELECT email FROM customer WHERE id = :id").param("id", 1).query(String.class).optional());
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.4.240, OpenJDK 21.0.13</span><pre>queryForObject, no row: EmptyResultDataAccessException: Incorrect result size: expected 1, actual 0
+JdbcClient.optional(), no row: Optional.empty
+JdbcClient.optional(), row:    Optional[ana@example.com]</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">15.2 An idempotent insert<span class="xp-lvl">errors · medium</span></h3>
+<p>Record a payment so that a client retry with the same payment ID succeeds without creating a second row, and without a check-then-insert race.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The primary key enforces uniqueness, and Spring's translator turns H2's error code 23505 into <code>DuplicateKeyException</code>, the same exception you would get from PostgreSQL, Oracle, or SQL Server<a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-21">[21]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sjdbc;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+
+public class Ex2Duplicate {
+    /** Idempotent: a retried request with the same payment id is not an error. */
+    static String record(JdbcClient db, String paymentId, long customer, long cents) {
+        try {
+            db.sql("INSERT INTO payment (id, customer_id, cents) VALUES (?, ?, ?)").params(paymentId, customer, cents).update();
+            return "inserted";
+        } catch (DuplicateKeyException e) {          // vendor error code translated by Spring
+            return "already recorded (" + e.getClass().getSimpleName() + ")";
+        }
+    }
+
+    public static void main(String[] args) {
+        JdbcClient db = JdbcClient.create(JdbcLab.database());
+        System.out.println("first attempt: " + record(db, "pay_81F2", 1, 4990));
+        System.out.println("client retry:  " + record(db, "pay_81F2", 1, 4990));
+        System.out.println("rows: " + db.sql("SELECT COUNT(*) FROM payment").query(Integer.class).single());
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.4.240, OpenJDK 21.0.13</span><pre>first attempt: inserted
+client retry:  already recorded (DuplicateKeyException)
+rows: 1</pre></div>
+<p>Inside a transaction on PostgreSQL, a failed insert aborts the whole transaction. There, use <code>INSERT … ON CONFLICT DO NOTHING</code> and check the update count instead of catching the exception.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">15.3 An <code>IN</code> list mapped to records<span class="xp-lvl">named parameters · easy</span></h3>
+<p>Fetch the customers in a list of countries that is only known at run time, and map them to a Java record without writing a <code>RowMapper</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Named parameters expand a collection into the right number of placeholders<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-12">[12]</a>, and <code>query(Customer.class)</code> maps records through their constructor, as <code>DataClassRowMapper</code> does<a class="citation" href="#ref-15">[15]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sjdbc;
+
+import java.util.List;
+import org.springframework.jdbc.core.simple.JdbcClient;
+
+public class Ex3InClause {
+    public record Customer(long id, String email, String country) {}
+
+    public static void main(String[] args) {
+        JdbcClient db = JdbcClient.create(JdbcLab.database());
+        List&lt;String&gt; countries = List.of("DE", "FR");
+        List&lt;Customer&gt; found = db.sql("SELECT id, email, country FROM customer WHERE country IN (:countries) ORDER BY id")
+                .param("countries", countries)                    // expanded to IN (?, ?)
+                .query(Customer.class).list();                    // record mapped by constructor (DataClassRowMapper)
+        found.forEach(System.out::println);
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.4.240, OpenJDK 21.0.13</span><pre>Customer[id=1, email=ana@example.com, country=DE]
+Customer[id=2, email=bo@example.com, country=FR]
+Customer[id=3, email=cy@example.com, country=DE]</pre></div>
+<p>Very long lists hurt plan caching and can exceed vendor limits (1,000 items in an Oracle <code>IN</code> list). For thousands of values, use a temporary table or an array parameter such as PostgreSQL's <code>= ANY(?)</code>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">15.4 Stream a large result<span class="xp-lvl">memory · medium</span></h3>
+<p>Sum a column over 200,000 rows without building a list of them.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>stream()</code> holds an open <code>ResultSet</code> and connection, so it must be closed with try-with-resources. <code>withFetchSize</code> tells the driver how many rows to fetch per round trip<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-28">[28]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sjdbc;
+
+import java.util.stream.Stream;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
+
+public class Ex4Streaming {
+    public static void main(String[] args) {
+        var ds = JdbcLab.database();
+        new JdbcTemplate(ds).execute("INSERT INTO payment SELECT 'p' || X, MOD(X, 4) + 1, X * 10 FROM SYSTEM_RANGE(1, 200000)");
+        JdbcClient db = JdbcClient.create(ds);
+        long total;
+        long rows;
+        try (Stream&lt;Long&gt; cents = db.sql("SELECT cents FROM payment").withFetchSize(1_000).query(Long.class).stream()) {   // must be closed
+            long[] acc = new long[2];
+            cents.forEach(c -&gt; { acc[0] += c; acc[1]++; });
+            total = acc[0]; rows = acc[1];
+        }
+        System.out.println("streamed " + rows + " rows, total cents " + total + " (no 200,000-element list in memory)");
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.4.240, OpenJDK 21.0.13</span><pre>streamed 200000 rows, total cents 200001000000 (no 200,000-element list in memory)</pre></div>
+<p>An aggregate like this belongs in SQL (<code>SELECT SUM(cents)</code>). Streaming is for work that has to happen in Java, such as writing an export file row by row.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">15.5 Batched inserts<span class="xp-lvl">throughput · easy</span></h3>
+<p>Insert 2,500 payments in batches of 1,000, and report how many batches ran.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The <code>batchUpdate</code> overload that takes a collection and a batch size returns one <code>int[]</code> per batch<a class="citation" href="#ref-22">[22]</a>. Each element is the row count for one statement, or <code>Statement.SUCCESS_NO_INFO</code> (−2) when the driver does not report it<a class="citation" href="#ref-23">[23]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sjdbc;
+
+import java.util.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+public class Ex5Batch {
+    record Payment(String id, long customer, long cents) {}
+
+    public static void main(String[] args) {
+        JdbcTemplate jdbc = new JdbcTemplate(JdbcLab.database());
+        List&lt;Payment&gt; payments = new ArrayList&lt;&gt;();
+        for (int i = 1; i &lt;= 2_500; i++) payments.add(new Payment("b" + i, i % 4 + 1, i * 100L));
+        int[][] counts = jdbc.batchUpdate("INSERT INTO payment (id, customer_id, cents) VALUES (?, ?, ?)", payments, 1_000,
+                (ps, p) -&gt; { ps.setString(1, p.id()); ps.setLong(2, p.customer()); ps.setLong(3, p.cents()); });
+        System.out.println("batches: " + counts.length + ", sizes: " + Arrays.stream(counts).map(b -&gt; String.valueOf(b.length)).toList()
+                + ", rows: " + jdbc.queryForObject("SELECT COUNT(*) FROM payment", Integer.class));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, H2 2.4.240, OpenJDK 21.0.13</span><pre>batches: 3, sizes: [1000, 1000, 500], rows: 2500</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">16. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Which Spring Framework version introduced <code>JdbcClient</code>?</summary><div class="xp-body"><p>Spring Framework 6.1. It is a fluent facade over <code>JdbcTemplate</code> and <code>NamedParameterJdbcTemplate</code> that supports both positional and named parameters<a class="citation" href="#ref-28">[28]</a>.</p></div></details>
+<details class="xp-details"><summary>Why does <code>DataAccessException</code> extend <code>RuntimeException</code>?</summary><div class="xp-body"><p>Most data access errors cannot be handled where they occur, so Spring makes them unchecked and organizes them in a hierarchy you can catch selectively, independent of the vendor<a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>How does Spring know which vendor error codes mean "duplicate key"?</summary><div class="xp-body"><p>From <code>sql-error-codes.xml</code>, which <code>SQLErrorCodeSQLExceptionTranslator</code> loads and matches against the database product name. Without a match, Spring falls back to the SQL state class<a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between <code>RowMapper</code>, <code>RowCallbackHandler</code>, and <code>ResultSetExtractor</code>?</summary><div class="xp-body"><p>A <code>RowMapper</code> maps each row to an object, a <code>RowCallbackHandler</code> processes each row and returns nothing, and a <code>ResultSetExtractor</code> receives the whole <code>ResultSet</code> and returns one result, which suits joins that build aggregates<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-16">[16]</a><a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+<details class="xp-details"><summary>Why is <code>BeanPropertyRowMapper</code> slower than a hand-written mapper?</summary><div class="xp-body"><p>It resolves columns to properties by name and uses reflection for every row. It is convenient for prototypes; hot paths benefit from an explicit mapper<a class="citation" href="#ref-14">[14]</a>.</p></div></details>
+<details class="xp-details"><summary>How do you get a generated primary key back from an insert?</summary><div class="xp-body"><p>Pass a <code>GeneratedKeyHolder</code> to <code>update</code>, or call <code>update(keyHolder)</code> on <code>JdbcClient</code>, and read <code>getKey()</code><a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>How does <code>JdbcTemplate</code> join a Spring-managed transaction?</summary><div class="xp-body"><p>It obtains its connection through <code>DataSourceUtils</code>, which returns the connection bound to the current thread by the transaction manager<a class="citation" href="#ref-25">[25]</a><a class="citation" href="#ref-27">[27]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>JdbcTransactionManager</code> add over <code>DataSourceTransactionManager</code>?</summary><div class="xp-body"><p>It translates exceptions raised on commit and rollback into Spring's <code>DataAccessException</code> hierarchy, as <code>JdbcTemplate</code> does for statements<a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>Is <code>JdbcTemplate</code> thread-safe?</summary><div class="xp-body"><p>Yes, once configured. It is designed to be created once and shared as a singleton bean<a class="citation" href="#ref-5">[5]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
   <h2 id="references">References</h2>
   <ol class="references">
     <li id="ref-1">Spring team. Spring Framework versions [Internet]. GitHub; 2026 [cited 2026 Jul 31]. Available from: <a href="https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions">https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions</a></li>
@@ -1838,7 +2110,9 @@ class AccountRepositoryIntegrationTest {
     <li id="ref-24">Oracle. BatchUpdateException class [Internet]. Java SE 17 API; 2021 [cited 2026 Jul 31]. Available from: <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.sql/java/sql/BatchUpdateException.html">https://docs.oracle.com/en/java/javase/17/docs/api/java.sql/java/sql/BatchUpdateException.html</a></li>
     <li id="ref-25">Spring team. Transaction management [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/data-access/transaction.html">https://docs.spring.io/spring-framework/reference/data-access/transaction.html</a></li>
     <li id="ref-26">Spring team. NamedParameterJdbcOperations interface [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/core/namedparam/NamedParameterJdbcOperations.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/core/namedparam/NamedParameterJdbcOperations.html</a></li>
-    <li id="ref-27">Spring team. DataSourceUtils class [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/DataSourceUtils.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/DataSourceUtils.html</a></li>
+    <li id="ref-27">Spring team. DataSourceUtils class [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/DataSourceUtils.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/DataSourceUtils.html</a></li><!-- xp-refs:start -->
+    <li id="ref-28">Spring team. JdbcClient interface [Internet]. Spring Framework 7.0.8 API; 2026 [cited 2026 Nov 8]. Available from: <a href="https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/core/simple/JdbcClient.html">https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/core/simple/JdbcClient.html</a></li><!-- xp-refs:end -->
+
   </ol>
 </main>
 
@@ -1858,6 +2132,10 @@ class AccountRepositoryIntegrationTest {
     <li><a href="#diagnostics">Diagnostics</a></li>
     <li><a href="#practices">Expert practices</a></li>
     <li><a href="#summary">Summary</a></li>
+<!-- xp-toc:start -->    <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+    <li><a href="#exercises">Exercises</a></li>
+    <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
     <li><a href="#references">References</a></li>
   </ol>
 </aside>

@@ -291,6 +291,26 @@
       pre,table,.callout { break-inside:avoid; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1638,6 +1658,333 @@ java -jar delivery-service.jar \
     When configuration behaves unexpectedly, ask four questions in order: Which profiles were effective before refresh? Which property sources were installed, and in what order? Which source contained the winning key? How was that raw value converted, bound, and validated? Those questions reduce most environment problems to a deterministic bootstrap trace rather than an annotation mystery.
   </p>
 
+<!-- xp:start -->
+  <h2 id="enterprise-scenarios">16. Enterprise scenarios</h2>
+
+  <p>
+    Configuration incidents are among the most common causes of production outages, and they rarely involve exotic features. They come from a value set in an unexpected place, a profile that activated more, or less, than intended, or a typo that nothing validated. The scenarios below are composites, with illustrative figures. Section 17 reproduces each mechanism with Spring Boot 4.1.0.
+  </p>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Payments · pool size changed in Git, unchanged in production</p>
+  <h3 id="scenario-precedence">16.1 "We changed the property, and nothing happened"</h3>
+  <p>
+    <strong>Situation.</strong> An engineer raised <code>psp.pool-size</code> from 25 to 40 in <code>application-prod.properties</code> to fix connection starvation, and the change was deployed.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> Nothing changed. A <code>-Dpsp.pool-size=25</code> left over in the deployment manifest from an earlier incident took precedence over every configuration file<a class="citation" href="#ref-12">[12]</a>. The outage continued for another two hours, while three people edited the file again.
+  </p>
+  <p>
+    <strong>Fix.</strong> Know the precedence order, from command-line arguments through system properties and environment variables down to profile-specific files, base files, and defaults, and make the winning source visible. Iterating the <code>Environment</code>'s property sources shows it (Exercise 1), and so does Boot's <code>/actuator/env</code> endpoint, with values masked. Keep one place per environment for overrides.
+  </p>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">SaaS · Kubernetes environment variables · a typo in a ConfigMap</p>
+  <h3 id="scenario-binding">16.2 A pool size of 500 reached production</h3>
+  <p>
+    <strong>Situation.</strong> Configuration came from ConfigMap environment variables such as <code>PSP_POOLSIZE</code>, read with scattered <code>@Value</code> annotations.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> A ConfigMap change set <code>PSP_POOLSIZE=500</code> instead of 50. Nothing validated the value, so 120 pods each opened up to 500 connections, and the payment provider blocked the account for exceeding its connection limit.
+  </p>
+  <p>
+    <strong>Fix.</strong> Bind related settings into one validated <code>@ConfigurationProperties</code> record. Relaxed binding maps <code>PSP_POOLSIZE</code> to <code>psp.pool-size</code>, and <code>PSP_REGIONS_0_</code> to a list index, and constraints make startup fail with a precise report instead of running with a dangerous value<a class="citation" href="#ref-12">[12]</a> (Exercise 2). A rollout then stops at the first pod.
+  </p>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Retail · EU launch · profile combinations</p>
+  <h3 id="scenario-groups">16.3 Fifteen profiles, and nobody knew what <code>prod</code> meant</h3>
+  <p>
+    <strong>Situation.</strong> Deployments listed long chains of profiles, such as <code>prod,prod-db,prod-observability,eu,eu-payments</code>, and each environment's manifest had drifted from the others.
+  </p>
+  <p>
+    <strong>What went wrong.</strong> One region forgot <code>prod-observability</code> and ran without tracing for a month, and an EU-only feature flag was enabled in the US.
+  </p>
+  <p>
+    <strong>Fix.</strong> Define <em>profile groups</em>, so that <code>prod</code> expands to its parts in one reviewed place, and use multi-document configuration files with <code>spring.config.activate.on-profile</code> expressions such as <code>prod &amp; eu</code><a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-22">[22]</a> (Exercise 3). Use the same expressions on beans with <code>@Profile</code><a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a> (Exercise 4).
+  </p>
+  </div>
+
+  <div class="xp-scenario">
+  <p class="xp-tag">Bank · secrets in property files · audit finding</p>
+  <h3 id="scenario-secrets">16.4 Database passwords in <code>application-prod.properties</code></h3>
+  <p>
+    <strong>Situation.</strong> Production credentials sat in a profile-specific file inside the JAR, readable by anyone who could download the artifact.
+  </p>
+  <p>
+    <strong>Fix.</strong> Keep secrets out of artifacts and Git entirely. Inject them at run time from a secret manager, or from mounted files, imported with <code>spring.config.import=configtree:/run/secrets/</code><a class="citation" href="#ref-12">[12]</a>. Rotate them without rebuilding the application, and make sure actuator endpoints mask them.
+  </p>
+  </div>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <p>
+    Each solution is a self-contained Spring Boot 4.1.0 (Spring Framework 7.0.8) application with a <code>main</code> method, run on OpenJDK 21.0.13 with the resource files shown. The output shown is real.
+  </p>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-1">17.1 Which source won?<span class="xp-lvl">precedence · easy</span></h3>
+  <p>
+    Set <code>psp.*</code> values in a base file, a <code>prod</code> profile file, a system property, a command-line argument, and default properties. For each key, print the effective value and the property source it came from.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Properties · envdemo.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>psp.timeout=2s
+psp.pool-size=10
+psp.endpoint=https://psp.sandbox.example</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Properties · envdemo-prod.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>psp.endpoint=https://psp.example
+psp.pool-size=40</code></pre>
+  </div>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    The <code>Environment</code> is an ordered list of property sources, and the first source that contains a key wins<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-7">[7]</a>. Boot also adds an aggregate source called <code>configurationProperties</code> at the front, so skip it to find the real origin.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.env.prec;
+
+import java.util.*;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.core.env.*;
+
+@SpringBootApplication
+public class Ex1Precedence {
+    public static void main(String[] args) {
+        System.setProperty("psp.pool-size", "25");                         // a -D flag in the deployment
+        try (var ctx = new SpringApplicationBuilder(Ex1Precedence.class).web(WebApplicationType.NONE)
+                .properties("spring.config.name=envdemo", "psp.retries=3")  // default properties: lowest precedence
+                .profiles("prod")
+                .run("--psp.timeout=500ms")) {                              // command-line argument: highest here
+            ConfigurableEnvironment env = ctx.getEnvironment();
+            for (String key : List.of("psp.endpoint", "psp.pool-size", "psp.timeout", "psp.retries")) {
+                String winner = env.getPropertySources().stream()
+                        .filter(ps -&gt; !ps.getName().equals("configurationProperties"))   // Boot's aggregate view of all sources
+                        .filter(ps -&gt; ps.containsProperty(key)).map(PropertySource::getName).findFirst().orElse("?");
+                System.out.printf("%-14s = %-28s from %s%n", key, env.getProperty(key), winner);
+            }
+        } finally {
+            System.clearProperty("psp.pool-size");
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>psp.endpoint   = https://psp.example          from Config resource 'class path resource [envdemo-prod.properties]' via location 'optional:classpath:/'
+psp.pool-size  = 25                           from systemProperties
+psp.timeout    = 500ms                        from commandLineArgs
+psp.retries    = 3                            from defaultProperties</pre></div>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-2">17.2 Bind and validate environment variables<span class="xp-lvl">binding · medium</span></h3>
+  <p>
+    Bind <code>PSP_ENDPOINT</code>, <code>PSP_TIMEOUT</code>, <code>PSP_POOLSIZE</code>, and an indexed list (<code>PSP_REGIONS_0_</code>, <code>PSP_REGIONS_1_</code>) into a validated record. Start once with valid values, and once with a pool size of 500.
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    Relaxed binding maps upper-case, underscore-separated variables to kebab-case properties, and <code>_0_</code> to a list index. <code>750ms</code> converts to a <code>Duration</code>, and <code>@Validated</code> applies the constraints during binding, so an invalid value refuses startup with the field name and the rule<a class="citation" href="#ref-12">[12]</a>. The example replaces the system-environment property source to simulate injected variables.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.env.bind;
+
+import jakarta.validation.constraints.*;
+import java.net.URI;
+import java.time.Duration;
+import java.util.*;
+import org.springframework.boot.*;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.*;
+import org.springframework.core.env.*;
+import org.springframework.validation.annotation.Validated;
+
+@SpringBootApplication
+@EnableConfigurationProperties(Ex2Binding.PspProperties.class)
+public class Ex2Binding {
+    @ConfigurationProperties("psp") @Validated
+    public record PspProperties(@NotNull URI endpoint, @NotNull Duration timeout,
+                                @Min(1) @Max(200) int poolSize, List&lt;String&gt; regions) {}
+
+    /** Simulates the container's environment variables, as Kubernetes would inject them. */
+    static void run(String label, Map&lt;String, Object&gt; envVars) {
+        StandardEnvironment env = new StandardEnvironment();
+        env.getPropertySources().replace(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
+                new SystemEnvironmentPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, envVars));
+        SpringApplication app = new SpringApplication(Ex2Binding.class);
+        app.setWebApplicationType(WebApplicationType.NONE);
+        app.setEnvironment(env);
+        app.setDefaultProperties(Map.of("spring.config.name", "none", "logging.level.root", "OFF"));
+        try (var ctx = app.run()) {
+            System.out.println(label + ": " + ctx.getBean(PspProperties.class));
+        } catch (Exception e) {
+            Throwable t = e;
+            while (t != null &amp;&amp; !(t instanceof org.springframework.boot.context.properties.bind.validation.BindValidationException)) t = t.getCause();
+            var errors = ((org.springframework.boot.context.properties.bind.validation.BindValidationException) t).getValidationErrors();
+            errors.getAllErrors().forEach(err -&gt; System.out.println(label + ": startup refused: "
+                    + ((org.springframework.validation.FieldError) err).getField() + " " + err.getDefaultMessage()
+                    + " (from " + errors.getName() + ")"));
+        }
+    }
+
+    public static void main(String[] args) {
+        run("valid env vars  ", Map.of("PSP_ENDPOINT", "https://psp.example", "PSP_TIMEOUT", "750ms",
+                                        "PSP_POOLSIZE", "40", "PSP_REGIONS_0_", "eu-west", "PSP_REGIONS_1_", "us-east"));
+        run("pool size 500   ", Map.of("PSP_ENDPOINT", "https://psp.example", "PSP_TIMEOUT", "750ms", "PSP_POOLSIZE", "500"));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>valid env vars  : PspProperties[endpoint=https://psp.example, timeout=PT0.75S, poolSize=40, regions=[eu-west, us-east]]
+pool size 500   : startup refused: poolSize must be less than or equal to 200 (from psp)</pre></div>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-3">17.3 Profile groups and multi-document YAML<span class="xp-lvl">profiles · medium</span></h3>
+  <p>
+    Write one YAML file in which <code>prod</code> is a group of <code>prod-db</code> and <code>prod-observability</code>, each with its own document, and in which a fast-checkout feature turns on only for <code>prod &amp; eu</code>. Start with <code>dev</code>, <code>prod</code>, and <code>prod,eu</code>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">YAML · envyaml.yml</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>spring:
+  profiles:
+    group:
+      prod: "prod-db,prod-observability"
+feature:
+  fast-checkout: false
+db:
+  pool: 5
+---
+spring:
+  config:
+    activate:
+      on-profile: "prod-db"
+db:
+  pool: 50
+---
+spring:
+  config:
+    activate:
+      on-profile: "prod-observability"
+tracing:
+  sample-rate: 0.05
+---
+spring:
+  config:
+    activate:
+      on-profile: "prod &amp; eu"
+feature:
+  fast-checkout: true</code></pre>
+  </div>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    Activating <code>prod</code> also activates its group members, which appear in the active-profile list. Each <code>---</code> document applies only when its <code>on-profile</code> expression matches, and later documents override earlier ones<a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-22">[22]</a>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.env.yaml;
+
+import java.util.Arrays;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+
+@SpringBootApplication
+public class Ex3ProfileGroups {
+    static void run(String... profiles) {
+        try (var ctx = new SpringApplicationBuilder(Ex3ProfileGroups.class).web(WebApplicationType.NONE)
+                .properties("spring.config.name=envyaml").profiles(profiles).run()) {
+            var env = ctx.getEnvironment();
+            System.out.printf("--profiles=%-9s active=%-44s db.pool=%-3s fast-checkout=%-5s tracing=%s%n",
+                String.join(",", profiles), Arrays.toString(env.getActiveProfiles()), env.getProperty("db.pool"),
+                env.getProperty("feature.fast-checkout"), env.getProperty("tracing.sample-rate", "off"));
+        }
+    }
+    public static void main(String[] args) { run("dev"); run("prod"); run("prod", "eu"); }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>--profiles=dev       active=[dev]                                        db.pool=5   fast-checkout=false tracing=off
+--profiles=prod      active=[prod, prod-db, prod-observability]          db.pool=50  fast-checkout=false tracing=0.05
+--profiles=prod,eu   active=[prod, prod-db, prod-observability, eu]      db.pool=50  fast-checkout=true  tracing=0.05</pre></div>
+  </div></details>
+  </div>
+
+  <div class="xp-exercise">
+  <h3 id="exercise-4">17.4 Choose a bean with profile expressions<span class="xp-lvl">profiles · easy</span></h3>
+  <p>
+    Register a sandbox gateway for non-production profiles, a US acquirer for <code>prod &amp; !eu</code>, and an EU acquirer for <code>prod &amp; eu</code>. Which gateway is injected for each set of active profiles?
+  </p>
+  <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+  <p>
+    <code>@Profile</code> accepts expressions with <code>!</code>, <code>&amp;</code>, and <code>|</code><a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a>. Exactly one bean matches each combination, so injection is never ambiguous. Note that <code>staging,eu</code> falls through to the sandbox, because it is not <code>prod</code>.
+  </p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.env.expr;
+
+import java.util.*;
+import org.springframework.context.annotation.*;
+
+public class Ex4ProfileExpressions {
+    interface PaymentGateway { String name(); }
+
+    @Configuration
+    static class Gateways {
+        @Bean @Profile("!prod") PaymentGateway sandbox() { return () -&gt; "sandbox"; }
+        @Bean @Profile("prod &amp; !eu") PaymentGateway usAcquirer() { return () -&gt; "us-acquirer"; }
+        @Bean @Profile("prod &amp; eu") PaymentGateway euAcquirer() { return () -&gt; "eu-acquirer (PSD2 SCA)"; }
+    }
+
+    public static void main(String[] args) {
+        for (String[] profiles : new String[][] {{}, {"prod"}, {"prod", "eu"}, {"staging", "eu"}}) {
+            try (var ctx = new AnnotationConfigApplicationContext()) {
+                ctx.getEnvironment().setActiveProfiles(profiles);
+                ctx.register(Gateways.class); ctx.refresh();
+                System.out.printf("%-14s -&gt; %s%n", Arrays.toString(profiles), ctx.getBean(PaymentGateway.class).name());
+            }
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, OpenJDK 21.0.13</span><pre>[]             -&gt; sandbox
+[prod]         -&gt; us-acquirer
+[prod, eu]     -&gt; eu-acquirer (PSD2 SCA)
+[staging, eu]  -&gt; sandbox</pre></div>
+  </div></details>
+  </div>
+
+  <h2 id="trivia">18. Trivia</h2>
+
+  <p>Short questions with answers.</p>
+
+  <div class="xp-trivia">
+  <details class="xp-details"><summary>Which profile is active when none is set?</summary><div class="xp-body"><p>The profile named <code>default</code>. Beans annotated <code>@Profile("default")</code> load only when no other profile is active<a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+  <details class="xp-details"><summary>Can profile-specific files activate further profiles?</summary><div class="xp-body"><p>No. Since Spring Boot 2.4, setting <code>spring.profiles.active</code> inside a profile-specific document is an error. Use profile groups instead<a class="citation" href="#ref-22">[22]</a>.</p></div></details>
+  <details class="xp-details"><summary>What does <code>@PropertySource</code> not support?</summary><div class="xp-body"><p>YAML files, without a custom factory. It loads <code>.properties</code> files into the <code>Environment</code>, and its sources are added late, so they lose to most of Boot's sources<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+  <details class="xp-details"><summary>How does <code>SystemEnvironmentPropertySource</code> find <code>psp.pool-size</code> in the environment?</summary><div class="xp-body"><p>It tries variants of the name: dots replaced by underscores, and upper case, so <code>PSP_POOL_SIZE</code> also matches. Boot's relaxed binding additionally accepts <code>PSP_POOLSIZE</code><a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+  <details class="xp-details"><summary>What is a config tree?</summary><div class="xp-body"><p>A directory in which each file name is a property name and the file's content is its value, which is how Kubernetes mounts Secrets. <code>spring.config.import=configtree:/path/</code> loads it<a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+  <details class="xp-details"><summary>How do tests activate profiles?</summary><div class="xp-body"><p>With <code>@ActiveProfiles("test")</code> on the test class. <code>MockEnvironment</code> sets properties programmatically in unit tests<a class="citation" href="#ref-23">[23]</a><a class="citation" href="#ref-24">[24]</a>.</p></div></details>
+  <details class="xp-details"><summary>Do command-line arguments always win?</summary><div class="xp-body"><p>Nearly always, among the standard sources. Only a few special mechanisms rank higher, such as properties set by test annotations. <code>SpringApplication.setAddCommandLineProperties(false)</code> turns them off entirely<a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+  <details class="xp-details"><summary>What is the difference between <code>Environment.getProperty</code> and <code>@ConfigurationProperties</code> binding?</summary><div class="xp-body"><p><code>getProperty</code> looks up one key, with simple conversion. Binding maps a whole tree of keys onto a typed object, with relaxed names, collections, units such as <code>500ms</code>, and validation<a class="citation" href="#ref-4">[4]</a><a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+  <details class="xp-details"><summary>Where do servlet context parameters fit in the property sources?</summary><div class="xp-body"><p><code>StandardServletEnvironment</code> adds servlet config and servlet context init parameters, along with JNDI, as property sources for web applications<a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+  <details class="xp-details"><summary>Why is <code>@Value</code> a poor choice for groups of settings?</summary><div class="xp-body"><p>Each key is resolved separately, so there is no validation of the group, no typed structure, and no single place to document the settings. Use <code>@Value</code> for one-off values, and <code>@ConfigurationProperties</code> for everything else<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-15">[15]</a>.</p></div></details>
+  </div>
+
+
+<!-- xp:end -->
   <h2 id="references">References</h2>
   <ol class="references">
     <li id="ref-1">Spring team. Spring Framework versions [Internet]. GitHub; 2026 [cited 2026 Jul 31]. Available from: <a href="https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions">https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions</a></li>
@@ -1685,6 +2032,10 @@ java -jar delivery-service.jar \
     <li><a href="#diagnostics">Diagnostics</a></li>
     <li><a href="#practices">Expert practices</a></li>
     <li><a href="#summary">Summary</a></li>
+<!-- xp-toc:start -->    <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+    <li><a href="#exercises">Exercises</a></li>
+    <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
     <li><a href="#references">References</a></li>
   </ol>
 </aside>

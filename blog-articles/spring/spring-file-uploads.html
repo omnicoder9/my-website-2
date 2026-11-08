@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1464,6 +1484,208 @@ void publishesObjectWithDigest() throws Exception {
   Diagnose a file workflow as a pipeline: Which component accepted the bytes? Where were they temporarily stored? Which limits executed before and after parsing? Which names and media types came from the client? Which checks were content-based? Which object key and metadata record became authoritative? Was publication atomic within the storage system, and how are cross-resource failures reconciled? Which authorization and response headers governed retrieval? Those questions expose the real security and correctness properties beneath a convenient <code>MultipartFile</code> parameter.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">16. Enterprise scenarios</h2>
+<p>File handling is one of the most attacked and most resource-intensive parts of a web application. Uploads bring untrusted names, untrusted content, and unbounded sizes. Downloads bring encoding, caching, and range-request concerns. The scenarios below are composites, with illustrative figures. Section 17 reproduces the key defenses with Spring MVC 7.0.8 and <code>MockMvc</code>.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Accounts payable portal · supplier invoice uploads · penetration test</p>
+<h3 id="scenario-content">16.1 An "invoice" that was an HTML page</h3>
+<p><strong>Situation.</strong> Suppliers uploaded PDF invoices, and the server accepted any file whose <code>Content-Type</code> was <code>application/pdf</code>.</p>
+<p><strong>What went wrong.</strong> The content type is chosen by the client. A tester uploaded an HTML file with script, labelled as a PDF, and the download endpoint served it back from the application's own domain. That was stored cross-site scripting in the accounts-payable portal<a class="citation" href="#ref-5">[5]</a>.</p>
+<p><strong>Fix.</strong> Verify content by inspecting its magic bytes, or with a parser, against an allow-list of types (Exercise 1). Serve downloads with the type you detected, <code>Content-Disposition: attachment</code>, and <code>X-Content-Type-Options: nosniff</code>, ideally from a separate domain. Scan uploads for malware before anyone can open them.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Document management · user-supplied file names · storage on a shared volume</p>
+<h3 id="scenario-name">16.2 A file name that wrote outside the upload directory</h3>
+<p><strong>Situation.</strong> Files were saved under <code>uploadDir.resolve(file.getOriginalFilename())</code>.</p>
+<p><strong>What went wrong.</strong> <code>getOriginalFilename()</code> returns whatever the client sent<a class="citation" href="#ref-4">[4]</a>. A name such as <code>../../etc/cron.d/job</code> escaped the upload directory, and another upload overwrote a colleague's file with the same name.</p>
+<p><strong>Fix.</strong> Never use the client's name as a storage path. Generate the storage key on the server (a UUID, or a content hash), keep the original name only as metadata, and reject or sanitize suspicious names (Exercise 1)<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-9">[9]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Media SaaS · video uploads · pods out of memory</p>
+<h3 id="scenario-size">16.3 2 GB uploads held in memory</h3>
+<p><strong>Situation.</strong> A controller called <code>file.getBytes()</code> on uploads, and multipart limits were raised to "unlimited" after a customer complained that their upload was rejected.</p>
+<p><strong>What went wrong.</strong> A few concurrent large uploads exhausted the heap, and slow uploads held request threads for minutes.</p>
+<p><strong>Fix.</strong> Set explicit <code>max-file-size</code>, <code>max-request-size</code>, and <code>file-size-threshold</code> limits<a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-7">[7]</a>, and map <code>MaxUploadSizeExceededException</code> to a clear 413 response<a class="citation" href="#ref-10">[10]</a><a class="citation" href="#ref-11">[11]</a>. Stream to storage with <code>getInputStream()</code>, hashing as you go, rather than reading whole files into memory (Exercise 1). For very large files, let clients upload directly to object storage with pre-signed URLs.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · statement downloads · German and French customers</p>
+<h3 id="scenario-download">16.4 Garbled file names and failed resumes</h3>
+<p><strong>Situation.</strong> Downloads set <code>Content-Disposition: attachment; filename=Kontoauszug Müller.pdf</code> by string concatenation, and the endpoint ignored <code>Range</code> headers.</p>
+<p><strong>What went wrong.</strong> Some browsers garbled the umlaut, names with quotes broke the header, and download managers on mobile networks restarted 200 MB statements from zero after every disconnect.</p>
+<p><strong>Fix.</strong> Build the header with <code>ContentDisposition</code>, which adds an RFC 5987/6266 <code>filename*</code> parameter for non-ASCII names<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-14">[14]</a>. Return a <code>Resource</code>, so that Spring MVC answers range requests with 206 Partial Content<a class="citation" href="#ref-12">[12]</a><a class="citation" href="#ref-15">[15]</a> (Exercise 2).</p>
+</div>
+
+<h2 id="exercises">17. Exercises</h2>
+<p>Each solution is a self-contained program that drives a Spring MVC controller through standalone <code>MockMvc</code>, compiled and run with Spring Framework 7.0.8 on OpenJDK 21.0.13. The output shown is real.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">17.1 A defensive upload endpoint<span class="xp-lvl">security · medium</span></h3>
+<p>Accept invoice uploads only if the content really is a PDF or a PNG, whatever the client claims. Reject file names that contain path elements, store the file under a server-generated name while hashing it as it streams, and test a genuine PDF, an HTML file labelled as a PDF, and a path-traversal name.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Read only the first few bytes to detect the type, then stream the rest through a <code>DigestInputStream</code> into <code>Files.copy</code><a class="citation" href="#ref-4">[4]</a><a class="citation" href="#ref-9">[9]</a>. The response codes tell clients what went wrong: 415 for unsupported content, and 400 for a bad name.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.upl;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+
+import java.io.*;
+import java.nio.file.*;
+import java.security.*;
+import java.util.*;
+import org.springframework.http.*;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+public class Ex1SafeUpload {
+    static final Map&lt;String, byte[]&gt; MAGIC = Map.of(
+        "application/pdf", "%PDF-".getBytes(), "image/png", new byte[] {(byte) 0x89, 'P', 'N', 'G'});
+
+    @RestController
+    static class Invoices {
+        final Path storage;
+        Invoices(Path storage) { this.storage = storage; }
+
+        @PostMapping("/invoices")
+        ResponseEntity&lt;String&gt; upload(@RequestParam("file") MultipartFile file) throws Exception {
+            String original = Objects.requireNonNullElse(file.getOriginalFilename(), "");
+            if (original.contains("/") || original.contains("\\") || original.contains(".."))
+                return ResponseEntity.badRequest().body("rejected: suspicious file name '" + original + "'");
+            byte[] head;
+            try (InputStream in = file.getInputStream()) { head = in.readNBytes(8); }
+            String detected = MAGIC.entrySet().stream()
+                .filter(e -&gt; Arrays.equals(Arrays.copyOf(head, e.getValue().length), e.getValue()))
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+            if (detected == null)                                   // never trust the client's Content-Type
+                return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                        .body("rejected: content is not PDF or PNG (client claimed " + file.getContentType() + ")");
+            String storedAs = UUID.nameUUIDFromBytes(original.getBytes()).toString();   // server-chosen name
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            try (InputStream in = new DigestInputStream(file.getInputStream(), sha)) {
+                Files.copy(in, storage.resolve(storedAs), StandardCopyOption.REPLACE_EXISTING);   // streamed to disk
+            }
+            return ResponseEntity.status(HttpStatus.CREATED).body("stored " + detected + " as " + storedAs.substring(0, 8)
+                    + "..., sha256 " + HexFormat.of().formatHex(sha.digest()).substring(0, 12) + "...");
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Path dir = Files.createTempDirectory("uploads");
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Invoices(dir)).build();
+        List&lt;MockMultipartFile&gt; files = List.of(
+            new MockMultipartFile("file", "inv-1001.pdf", "application/pdf", "%PDF-1.7\n...invoice...".getBytes()),
+            new MockMultipartFile("file", "inv-1002.pdf", "application/pdf", "&lt;html&gt;&lt;script&gt;alert(1)&lt;/script&gt;".getBytes()),
+            new MockMultipartFile("file", "../../etc/cron.d/job", "application/pdf", "%PDF-1.7".getBytes()));
+        for (MockMultipartFile f : files) {
+            var r = mvc.perform(multipart("/invoices").file(f)).andReturn().getResponse();
+            System.out.printf("%-22s -&gt; %d %s%n", f.getOriginalFilename(), r.getStatus(), r.getContentAsString());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>inv-1001.pdf           -&gt; 201 stored application/pdf as 089be296..., sha256 f568f01b616a...
+inv-1002.pdf           -&gt; 415 rejected: content is not PDF or PNG (client claimed application/pdf)
+../../etc/cron.d/job   -&gt; 400 rejected: suspicious file name '../../etc/cron.d/job'</pre></div>
+<p>Magic-byte checks block the common attacks, but a file can be a valid PDF and still be malicious. Pair them with malware scanning, and serve user files from an isolated origin.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">17.2 Downloads with international names and ranges<span class="xp-lvl">downloads · easy</span></h3>
+<p>Serve a statement PDF named <code>Kontoauszug Müller 2026-10.pdf</code>, then request bytes 0–7 with a <code>Range</code> header, and finally request an impossible range.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>ContentDisposition.attachment().filename(name, UTF_8)</code> emits both <code>filename</code> and an encoded <code>filename*</code>, and modern browsers prefer the latter<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-14">[14]</a>. Returning a <code>Resource</code> lets Spring answer 206 with <code>Content-Range</code>, or 416 when the range cannot be satisfied<a class="citation" href="#ref-15">[15]</a><a class="citation" href="#ref-16">[16]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.upl;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+import java.nio.charset.StandardCharsets;
+import org.springframework.core.io.*;
+import org.springframework.http.*;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.*;
+
+public class Ex2Download {
+    @RestController
+    static class Statements {
+        static final byte[] PDF = "%PDF-1.7 0123456789 statement body …".getBytes(StandardCharsets.UTF_8);
+
+        @GetMapping("/statements/{id}")
+        ResponseEntity&lt;Resource&gt; download(@PathVariable String id) {
+            String filename = "Kontoauszug Müller " + id + ".pdf";              // non-ASCII file name
+            return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build().toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(new ByteArrayResource(PDF));
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Statements()).build();
+        var full = mvc.perform(get("/statements/2026-10")).andReturn().getResponse();
+        System.out.println(full.getStatus() + " Content-Disposition: " + full.getHeader("Content-Disposition"));
+        var part = mvc.perform(get("/statements/2026-10").header("Range", "bytes=0-7")).andReturn().getResponse();
+        System.out.println(part.getStatus() + " Content-Range: " + part.getHeader("Content-Range") + ", body: " + part.getContentAsString());
+        var bad = mvc.perform(get("/statements/2026-10").header("Range", "bytes=9999-")).andReturn().getResponse();
+        System.out.println(bad.getStatus() + " for an unsatisfiable range, Content-Range: " + bad.getHeader("Content-Range"));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>200 Content-Disposition: attachment; filename="Kontoauszug Müller 2026-10.pdf"; filename*=UTF-8''Kontoauszug%20M%C3%BCller%202026-10.pdf
+206 Content-Range: bytes 0-7/38, body: %PDF-1.7
+416 for an unsatisfiable range, Content-Range: bytes */38</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">17.3 Choose the limits<span class="xp-lvl">configuration · easy</span></h3>
+<p>Invoices are at most 10 MB, a request may carry up to 5 invoices, and files above 1 MB should go to disk rather than memory. Write the Spring Boot properties, and describe what the client receives when it exceeds a limit.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>(This is a configuration exercise; the snippet was not run.)</p>
+  <div class="code-wrap">
+    <span class="lang">Properties · application.properties</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=55MB
+spring.servlet.multipart.file-size-threshold=1MB
+spring.servlet.multipart.location=/var/app/upload-tmp</code></pre>
+  </div>
+<p>The servlet container enforces these limits while parsing the request, before the controller runs, and Spring raises <code>MaxUploadSizeExceededException</code><a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-10">[10]</a>. Handle it in a <code>@ControllerAdvice</code>, and return 413 Content Too Large with a problem-details body that states the limit. Also set limits at the reverse proxy, so that oversized bodies are refused before they reach the JVM.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">18. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Which RFC defines <code>multipart/form-data</code>?</summary><div class="xp-body"><p>RFC 7578, which replaced RFC 2388<a class="citation" href="#ref-6">[6]</a>.</p></div></details>
+<details class="xp-details"><summary>Which multipart resolver does Spring MVC use by default with Servlet containers?</summary><div class="xp-body"><p><code>StandardServletMultipartResolver</code>, built on the Servlet API's own multipart parsing. Commons FileUpload support was removed in Spring Framework 6<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>MultipartFile.transferTo(Path)</code> do?</summary><div class="xp-body"><p>It moves or copies the uploaded content to the destination, often by a file move when the part is already on disk. Call it at most once, because the temporary data may be gone afterwards<a class="citation" href="#ref-4">[4]</a>.</p></div></details>
+<details class="xp-details"><summary>How does WebFlux represent an uploaded file?</summary><div class="xp-body"><p>As a <code>FilePart</code>, whose content is a <code>Flux&lt;DataBuffer&gt;</code> that streams without blocking. <code>transferTo</code> returns a <code>Mono&lt;Void&gt;</code><a class="citation" href="#ref-19">[19]</a><a class="citation" href="#ref-20">[20]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the purpose of <code>filename*</code> in <code>Content-Disposition</code>?</summary><div class="xp-body"><p>It carries the file name in a declared character set, percent-encoded according to RFC 8187 (formerly RFC 5987), so that non-ASCII names survive<a class="citation" href="#ref-14">[14]</a>.</p></div></details>
+<details class="xp-details"><summary>What status code means "Range Not Satisfiable"?</summary><div class="xp-body"><p>416, sent with <code>Content-Range: bytes */<em>length</em></code> so that the client learns the real size<a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+<details class="xp-details"><summary>Why is <code>InputStreamResource</code> a poor choice for range requests?</summary><div class="xp-body"><p>It can be read only once, and it has no known length, so Spring cannot seek to a range. Use a <code>FileSystemResource</code>, <code>PathResource</code>, or <code>ByteArrayResource</code><a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-21">[21]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>X-Content-Type-Options: nosniff</code> prevent?</summary><div class="xp-body"><p>Browsers guessing ("sniffing") a content type other than the declared one, which is how a file served as text or as an image could otherwise be executed as HTML or script<a class="citation" href="#ref-5">[5]</a>.</p></div></details>
+<details class="xp-details"><summary>How can a server stream a large response without blocking a request thread?</summary><div class="xp-body"><p>By returning <code>StreamingResponseBody</code>, which writes to the output stream on an async thread, or <code>ResponseBodyEmitter</code><a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>What do the OWASP upload recommendations start with?</summary><div class="xp-body"><p>An allow-list of extensions and content types, validated on the server, together with renamed files, size limits, storage outside the web root, and malware scanning<a class="citation" href="#ref-5">[5]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Spring Web MVC [Internet]. Spring Framework 7.0.8 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-framework/reference/web/webmvc.html">https://docs.spring.io/spring-framework/reference/web/webmvc.html</a></li>
@@ -1508,7 +1730,7 @@ void publishesObjectWithDigest() throws Exception {
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

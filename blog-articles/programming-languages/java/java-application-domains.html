@@ -350,6 +350,26 @@
       .references a::after { content: " (" attr(href) ")"; font-size: 8pt; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
   <header class="hero">
@@ -387,6 +407,10 @@
         <li><a href="#embedded">Embedded systems</a></li>
         <li><a href="#cross-domain">Cross-domain architecture patterns</a></li>
         <li><a href="#decision">Choosing Java deliberately</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
       </ol>
     </nav>
 
@@ -1527,6 +1551,266 @@ void onSaveButton() {
           <li>Profile and benchmark before making claims about performance or resource use.</li>
         </ol>
       </section>
+<!-- xp:start -->
+      <section id="enterprise-scenarios">
+        <h2>15. Enterprise scenarios</h2>
+        <p class="lead">Each domain in this article has its own characteristic failure: money that does not reconcile, a cluster where one node does all the work, a gateway that trusts a corrupted frame, a calculation that drifts, a service that Kubernetes restarts for the wrong reason. The scenarios below are composites with illustrative figures, and section 16 runs each technique.</p>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Retail bank · loan servicing · quarterly interest statements</p>
+          <h3>15.1 A 43-cent difference per loan</h3>
+          <p><strong>Situation.</strong> A new Java loan-servicing platform replaced a mainframe batch job, and both ran in parallel for a quarter, with their outputs reconciled.</p>
+          <p><strong>What went wrong.</strong> On a 125,000 balance at 4.25%, the new system computed Q1 interest as 1,309.93, while the mainframe's statement showed 1,309.50. The mainframe rounded each <em>day's</em> accrual to the cent and summed the results, and the new code computed the quarter's interest once and rounded at the end. Neither was wrong, but the contract and the regulator specified the daily method. Across 800,000 loans the difference was material.</p>
+          <p><strong>Fix.</strong> Treat the day-count convention (ACT/365, 30/360, …), the rounding mode, and the point at which rounding happens as explicit, tested business rules, implemented with <code>BigDecimal</code> and <code>java.time</code><a class="cite" href="#ref-13">[13]</a><a class="cite" href="#ref-15">[15]</a> (Exercise 1). Keep a parallel run with automated reconciliation until the two systems agree to the cent. Model currency amounts as types, for example with JSR 354 (JavaMoney)<a class="cite" href="#ref-14">[14]</a>.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Ad analytics · Spark on 200 executors · nightly job</p>
+          <h3>15.2 Data skew: 199 executors idle, one out of memory</h3>
+          <p><strong>Situation.</strong> A nightly job aggregated clickstream events by country.</p>
+          <p><strong>What went wrong.</strong> Grouping by key sends all of a key's records to one partition. With the largest country holding about a third of all events, one task processed a third of the data while 199 executors sat idle, and it ran out of memory after six hours<a class="cite" href="#ref-18">[18]</a><a class="cite" href="#ref-19">[19]</a>.</p>
+          <p><strong>Fix.</strong> Measure key skew before choosing a partitioning strategy (Exercise 2). Pre-aggregate locally (combiners), "salt" hot keys into several sub-keys and merge them afterwards, or enable Spark's adaptive query execution, which splits skewed partitions. The same applies to Kafka: a hot partition key limits a whole consumer group to one consumer's throughput<a class="cite" href="#ref-20">[20]</a>.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Cold-chain logistics · Java IoT gateways · 6,000 refrigerated trucks</p>
+          <h3>15.3 A flipped bit that discarded a shipment of vaccines</h3>
+          <p><strong>Situation.</strong> Gateways on the trucks read binary frames from temperature sensors over a serial bus and forwarded them to the cloud.</p>
+          <p><strong>What went wrong.</strong> The frame decoder had no integrity check. Electrical noise flipped a bit in a temperature field, the gateway reported −12.5 °C as +7.98 °C, an excursion alarm fired, and a compliant shipment was destroyed.</p>
+          <p><strong>Fix.</strong> Validate every frame: magic bytes, length, and a checksum (CRC32 is in the JDK). Decode with explicit byte order and explicit signedness, using <code>ByteBuffer</code> (Exercise 3). Run gateways on a small custom runtime (<code>jlink</code>) or a native image<a class="cite" href="#ref-12">[12]</a>, and use a gateway framework such as Eclipse Kura for device management<a class="cite" href="#ref-26">[26]</a>.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Energy trading · risk simulations · single-precision arrays for speed</p>
+          <h3>15.4 Ten million additions, 8.8% wrong</h3>
+          <p><strong>Situation.</strong> To halve memory use and speed up vectorized code, a simulation accumulated millions of small <code>float</code> contributions.</p>
+          <p><strong>What went wrong.</strong> Once the running total was large, each small addition lost its low-order bits, and adding 0.1 ten million times gave 1,087,937 instead of 1,000,000. Risk figures were overstated by 8.8% until a reviewer compared them against a double-precision run.</p>
+          <p><strong>Fix.</strong> Use compensated (Kahan) summation, pairwise summation, or <code>double</code> accumulators while keeping <code>float</code> storage (Exercise 4). Libraries such as Apache Commons Math provide stable algorithms<a class="cite" href="#ref-23">[23]</a>. Test numerical code against a higher-precision reference.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Cloud-native SaaS · Kubernetes · database maintenance window</p>
+          <h3>15.5 A database outage that turned into a restart storm</h3>
+          <p><strong>Situation.</strong> The liveness probe of every service checked database connectivity.</p>
+          <p><strong>What went wrong.</strong> During a 10-minute database maintenance window, every pod failed its liveness probe, and Kubernetes restarted all of them in a loop. When the database returned, hundreds of cold JVMs started at once, and the cluster took 40 minutes to recover.</p>
+          <p><strong>Fix.</strong> Liveness should answer "is this process broken beyond repair?". Readiness should answer "should this pod receive traffic now?"<a class="cite" href="#ref-11">[11]</a>. A dependency outage affects readiness, or puts the service into a degraded mode, but never liveness (Exercise 5). MicroProfile Health and Spring Boot Actuator both model the distinction<a class="cite" href="#ref-10">[10]</a>.</p>
+        </div>
+      </section>
+
+      <section id="exercises">
+        <h2>16. Exercises</h2>
+        <p class="lead">Each exercise takes one domain's characteristic technique. Each solution is a single-file program: save it and run <code>java FileName.java</code>. The outputs shown were produced on OpenJDK 21.0.13.</p>
+
+        <div class="xp-exercise">
+          <h3>Exercise 1 (banking): Daily interest accrual<span class="xp-lvl">BigDecimal · medium</span></h3>
+          <p>For a 125,000.00 balance at 4.25% a year, accrue Q1 2026 interest on an ACT/365 basis, rounding each day to the cent with banker's rounding. Compare the result with computing the quarter once, and with <code>double</code> arithmetic.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Each day contributes 14.554794… which rounds to 14.55, and 90 days give 1,309.50. Computing once and rounding gives 1,309.93. <code>MathContext.DECIMAL128</code> keeps the intermediate daily rate exact enough<a class="cite" href="#ref-13">[13]</a>.</p>
+<pre><code>import java.math.*;
+import java.time.*;
+import java.time.temporal.ChronoUnit;
+
+class Ex1DailyAccrual {
+    /** Daily simple-interest accrual, ACT/365 day count, each day rounded to the cent with banker's rounding. */
+    static BigDecimal accrue(BigDecimal balance, BigDecimal annualRate, LocalDate from, LocalDate toExclusive) {
+        BigDecimal total = BigDecimal.ZERO;
+        BigDecimal daily = annualRate.divide(BigDecimal.valueOf(365), MathContext.DECIMAL128);
+        for (LocalDate d = from; d.isBefore(toExclusive); d = d.plusDays(1))
+            total = total.add(balance.multiply(daily).setScale(2, RoundingMode.HALF_EVEN));
+        return total;
+    }
+
+    public static void main(String[] args) {
+        BigDecimal balance = new BigDecimal("125000.00"), rate = new BigDecimal("0.0425");
+        LocalDate from = LocalDate.of(2026, 1, 1), to = LocalDate.of(2026, 4, 1);
+        long days = ChronoUnit.DAYS.between(from, to);
+        BigDecimal perDay = accrue(balance, rate, from, to);
+        BigDecimal once = balance.multiply(rate).multiply(BigDecimal.valueOf(days)).divide(BigDecimal.valueOf(365), 2, RoundingMode.HALF_EVEN);
+        double dbl = 0; for (int i = 0; i &lt; days; i++) dbl += 125000.00 * 0.0425 / 365;
+        System.out.println("days in Q1 2026          = " + days);
+        System.out.println("rounded daily, summed    = " + perDay);
+        System.out.println("computed once, rounded   = " + once);
+        System.out.println("double arithmetic        = " + dbl);
+        System.out.println("difference daily vs once = " + perDay.subtract(once) + "  (policy matters: write it down)");
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>days in Q1 2026          = 90
+rounded daily, summed    = 1309.50
+computed once, rounded   = 1309.93
+double arithmetic        = 1309.9315068493172
+difference daily vs once = -0.43  (policy matters: write it down)</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 2 (big data): Count, and measure skew<span class="xp-lvl">map/reduce · easy</span></h3>
+          <p>Generate 2 million click events with a skewed country distribution, count clicks per country with a parallel map/reduce-style pipeline, print the top five, and report the largest key's share of the data.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p><code>groupingByConcurrent</code> is the in-memory equivalent of the shuffle and reduce phases. The share held by the largest key is the number that predicts whether one reducer, executor, or consumer will become the bottleneck<a class="cite" href="#ref-18">[18]</a>.</p>
+<pre><code>import java.util.*;
+import java.util.stream.*;
+
+class Ex2MapReduce {
+    public static void main(String[] args) {
+        // 2 million click events: (country, page). Count clicks per country, top 5, in a map/reduce style.
+        String[] countries = {"DE", "US", "FR", "BR", "IN", "JP", "GB", "NG"};
+        Random rnd = new Random(42);
+        List&lt;String&gt; events = IntStream.range(0, 2_000_000)
+                .mapToObj(i -&gt; countries[Math.min(countries.length - 1, (int) Math.abs(rnd.nextGaussian() * 2.5))] + "|/p/" + (i % 500))
+                .toList();
+
+        Map&lt;String, Long&gt; byCountry = events.parallelStream()                     // "map" and "shuffle"
+                .map(e -&gt; e.substring(0, e.indexOf('|')))
+                .collect(Collectors.groupingByConcurrent(c -&gt; c, Collectors.counting()));   // "reduce"
+        byCountry.entrySet().stream().sorted(Map.Entry.&lt;String, Long&gt;comparingByValue().reversed()).limit(5)
+                .forEach(e -&gt; System.out.printf("%s %,9d%n", e.getKey(), e.getValue()));
+        long largest = Collections.max(byCountry.values());
+        System.out.printf("skew: the largest key holds %.0f%% of all events -&gt; one reducer does most of the work%n", 100.0 * largest / events.size());
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>DE   622,327
+US   532,152
+FR   385,601
+BR   240,736
+IN   128,130
+skew: the largest key holds 31% of all events -&gt; one reducer does most of the work</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 3 (IoT): Decode a sensor frame safely<span class="xp-lvl">ByteBuffer · medium</span></h3>
+          <p>Encode and decode an 18-byte big-endian frame: a magic number, sensor id, timestamp, temperature as signed centi-degrees, humidity as unsigned per mille, and a CRC32. Show that a frame with one flipped bit is rejected.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p><code>ByteBuffer</code> makes the byte order explicit. Java has no unsigned types, so mask (<code>&amp; 0xFFFF</code>) or use <code>Integer.toUnsignedLong</code> for unsigned fields. The CRC covers every byte before it<a class="cite" href="#ref-1">[1]</a>.</p>
+<pre><code>import java.nio.*;
+import java.util.zip.CRC32;
+
+class Ex3SensorFrames {
+    // Frame: magic 0xA55A (2) | sensorId (4) | timestamp seconds (4) | temp centi-degrees (2, signed) | humidity permille (2) | crc32 (4)
+    static byte[] encode(int sensor, int ts, short centiC, short permille) {
+        ByteBuffer b = ByteBuffer.allocate(18).order(ByteOrder.BIG_ENDIAN);
+        b.putShort((short) 0xA55A).putInt(sensor).putInt(ts).putShort(centiC).putShort(permille);
+        CRC32 crc = new CRC32(); crc.update(b.array(), 0, 14);
+        return b.putInt((int) crc.getValue()).array();
+    }
+
+    static String decode(byte[] frame) {
+        ByteBuffer b = ByteBuffer.wrap(frame).order(ByteOrder.BIG_ENDIAN);
+        if ((b.getShort() &amp; 0xFFFF) != 0xA55A) return "rejected: bad magic";
+        int sensor = b.getInt();
+        long ts = Integer.toUnsignedLong(b.getInt());
+        double temp = b.getShort() / 100.0;
+        int humidity = b.getShort() &amp; 0xFFFF;                           // unsigned 16-bit
+        CRC32 crc = new CRC32(); crc.update(frame, 0, 14);
+        if ((int) crc.getValue() != b.getInt()) return "rejected: CRC mismatch for sensor " + sensor;
+        return String.format("sensor %d at %d: %.2f °C, %.1f%% RH", sensor, ts, temp, humidity / 10.0);
+    }
+
+    public static void main(String[] args) {
+        byte[] ok = encode(7012, 1_794_096_000, (short) -1250, (short) 873);
+        byte[] corrupted = ok.clone(); corrupted[11] ^= 0x04;            // one flipped bit on a noisy serial line
+        System.out.println(decode(ok));
+        System.out.println(decode(corrupted));
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>sensor 7012 at 1794096000: -12.50 °C, 87.3% RH
+rejected: CRC mismatch for sensor 7012</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 4 (scientific): Compensated summation<span class="xp-lvl">numerics · easy</span></h3>
+          <p>Add <code>0.1f</code> ten million times with naive <code>float</code> addition, with Kahan summation in <code>float</code>, and with a <code>double</code> reference.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Kahan's algorithm keeps the rounding error of each addition in <code>c</code>, and feeds it back into the next one, so a <code>float</code> sum matches the <code>double</code> reference. The JDK's <code>DoubleStream.sum()</code> uses compensated summation internally for the same reason.</p>
+<pre><code>class Ex4KahanSum {
+    public static void main(String[] args) {
+        int n = 10_000_000;
+        float naive = 0f;
+        float sum = 0f, c = 0f;                       // Kahan: carry the lost low-order bits
+        double reference = 0;
+        for (int i = 0; i &lt; n; i++) {
+            float x = 0.1f;
+            naive += x;
+            float y = x - c, t = sum + y;
+            c = (t - sum) - y;
+            sum = t;
+            reference += x;                            // double as a reference
+        }
+        System.out.printf("naive float sum  = %.1f%n", naive);
+        System.out.printf("Kahan float sum  = %.1f%n", sum);
+        System.out.printf("double reference = %.1f%n", reference);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>naive float sum  = 1087937.0
+Kahan float sum  = 1000000.0
+double reference = 1000000.0</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 5 (cloud): Liveness versus readiness<span class="xp-lvl">operations · easy</span></h3>
+          <p>Define the liveness and readiness results for five service states (starting, ready, degraded, draining, and broken), taking database availability into account where it matters. Explain each choice.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Liveness fails only in <code>BROKEN</code>, because restarting fixes nothing else. Readiness is false while starting, while draining after <code>SIGTERM</code>, and when the database is down, which stops traffic without causing restarts<a class="cite" href="#ref-11">[11]</a>.</p>
+<pre><code>import java.util.*;
+
+class Ex5Probes {
+    enum State { STARTING, READY, DEGRADED, DRAINING, BROKEN }
+
+    /** Liveness: restart me if this is false. Readiness: send me traffic only if this is true. */
+    record Probes(boolean live, boolean ready) {}
+
+    static Probes probes(State s, boolean databaseUp) {
+        return switch (s) {
+            case STARTING -&gt; new Probes(true, false);              // warming up: do not kill, do not route
+            case READY -&gt; new Probes(true, databaseUp);            // a dependency outage is not a reason to restart
+            case DEGRADED -&gt; new Probes(true, true);               // serve what we can, with fallbacks
+            case DRAINING -&gt; new Probes(true, false);              // SIGTERM received: finish in-flight work
+            case BROKEN -&gt; new Probes(false, false);               // deadlocked or corrupted: restart
+        };
+    }
+
+    public static void main(String[] args) {
+        System.out.println("state      db-up  live  ready");
+        for (State s : State.values())
+            for (boolean db : new boolean[] {true, false})
+                if (s == State.READY || db) {
+                    Probes p = probes(s, db);
+                    System.out.printf("%-9s  %-5s  %-5s %s%n", s, db, p.live(), p.ready());
+                }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>state      db-up  live  ready
+STARTING   true   true  false
+READY      true   true  true
+READY      false  true  false
+DEGRADED   true   true  true
+DRAINING   true   true  false
+BROKEN     true   false false</pre></div>
+            <p>Kubernetes also has a startup probe, which suspends liveness checks until a slow-starting JVM is ready, so that warm-up time is not mistaken for a hang.</p>
+          </div></details>
+        </div>
+      </section>
+
+      <section id="trivia">
+        <h2>17. Trivia</h2>
+        <p class="lead">Short questions with answers.</p>
+        <div class="xp-trivia">
+          <details class="xp-details"><summary>Does Android run a JVM?</summary><div class="xp-body"><p>No. Android compiles Java and Kotlin bytecode to DEX format for the Android Runtime (ART), which has its own class library. Google declared Kotlin the preferred language for Android development in 2019<a class="cite" href="#ref-17">[17]</a>.</p></div></details>
+          <details class="xp-details"><summary>Where does Java Card run?</summary><div class="xp-body"><p>On smart cards: SIM cards, bank chip cards, and electronic passports. It is a tiny subset of Java, with a dedicated VM, running applets on secure elements, and it is one of the most widely deployed Java platforms by unit count.</p></div></details>
+          <details class="xp-details"><summary>Which major big-data systems run on the JVM?</summary><div class="xp-body"><p>Hadoop (Java), Spark (Scala), Kafka (Java and Scala), Flink, Cassandra, Elasticsearch, and HBase, among others<a class="cite" href="#ref-18">[18]</a><a class="cite" href="#ref-19">[19]</a><a class="cite" href="#ref-20">[20]</a>. The JVM's mature JIT, GC, and tooling made it the default runtime for distributed data platforms.</p></div></details>
+          <details class="xp-details"><summary>What does <code>jlink</code> do for embedded and container deployments?</summary><div class="xp-body"><p>It builds a custom runtime image containing only the modules an application needs (JDK 9+), often tens of MB instead of a full JDK.</p></div></details>
+          <details class="xp-details"><summary>Which API replaced JNI for calling native libraries?</summary><div class="xp-body"><p>The Foreign Function &amp; Memory API, final in JDK 22 (JEP 454). It calls C functions and manages off-heap memory safely, without hand-written C glue code<a class="cite" href="#ref-24">[24]</a>.</p></div></details>
+          <details class="xp-details"><summary>How long has the Vector API been incubating?</summary><div class="xp-body"><p>Since JDK 16, and it reached its eleventh incubator in JDK 26 (JEP 529). It is waiting for Project Valhalla's value classes before it can be finalized<a class="cite" href="#ref-25">[25]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is "banker's rounding"?</summary><div class="xp-body"><p><code>RoundingMode.HALF_EVEN</code>: an exact half rounds to the even neighbor (2.5 → 2, 3.5 → 4), so that rounding errors do not accumulate in one direction over many operations<a class="cite" href="#ref-13">[13]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is Java ME used for today?</summary><div class="xp-body"><p>It was once common on feature phones, set-top boxes (Blu-ray's BD-J), and industrial devices. Embedded Linux gateways now mostly run Java SE, while constrained microcontrollers typically use C or Rust<a class="cite" href="#ref-27">[27]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is MicroProfile?</summary><div class="xp-body"><p>A set of Eclipse Foundation specifications for cloud-native Java services, including Config, Health, Fault Tolerance, Metrics/Telemetry, and REST Client, built on Jakarta EE's Core Profile and implemented by Quarkus, Open Liberty, Payara, and others<a class="cite" href="#ref-8">[8]</a><a class="cite" href="#ref-9">[9]</a><a class="cite" href="#ref-10">[10]</a>.</p></div></details>
+          <details class="xp-details"><summary>Why are financial systems so often written in Java?</summary><div class="xp-body"><p>Exact decimal arithmetic in the standard library, strong typing, mature transaction and messaging standards, long-term support releases, and a deep talent pool<a class="cite" href="#ref-2">[2]</a><a class="cite" href="#ref-5">[5]</a><a class="cite" href="#ref-13">[13]</a>. Low-latency trading teams also value fine control over memory layout and garbage collection.</p></div></details>
+        </div>
+      </section>
+
+<!-- xp:end -->
     </article>
 
     <section class="references" aria-labelledby="references-heading">

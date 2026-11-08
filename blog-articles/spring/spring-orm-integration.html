@@ -283,6 +283,26 @@
       pre,table,.callout { break-inside:avoid; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1635,6 +1655,256 @@ class PurchaseOrderRepositoryTest {
     Diagnose ORM problems by tracing the unit of work: Which persistence context owns the entity? Is the entity new, managed, detached, or removed? Which transaction is active? When will flush occur? Which associations are initialized? Which SQL was generated? Which database constraint, version predicate, or lock determined the result? Which provider-specific behavior or repository abstraction participated? Those questions expose the real mechanics beneath the annotations.
   </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">18. Enterprise scenarios</h2>
+<p>Spring's ORM integration is thin, but it decides where transactions begin and end, which <code>EntityManager</code> a thread uses, and which exceptions callers see. The scenarios below are composites, with illustrative figures. Section 19 reproduces each mechanism with Spring Boot 4.1.0 and Hibernate 7.4.1.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Procurement platform · supplier onboarding · duplicate VAT IDs</p>
+<h3 id="scenario-translation">18.1 Error handling that depended on the provider</h3>
+<p><strong>Situation.</strong> A service caught <code>org.hibernate.exception.ConstraintViolationException</code> to report "supplier already registered".</p>
+<p><strong>What went wrong.</strong> The DAO classes were annotated <code>@Component</code>, so no exception translation applied. When one module moved to EclipseLink for a vendor integration, its exceptions were no longer caught, and duplicate registrations returned 500s.</p>
+<p><strong>Fix.</strong> Annotate data access classes with <code>@Repository</code>, so that <code>PersistenceExceptionTranslationPostProcessor</code> translates provider exceptions into Spring's <code>DataAccessException</code> hierarchy, and catch <code>DataIntegrityViolationException</code> (Exercise 1)<a class="citation" href="#ref-16">[16]</a><a class="citation" href="#ref-17">[17]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · regulatory reporting · account statuses changed overnight</p>
+<h3 id="scenario-dirty">18.2 A report that wrote to the database</h3>
+<p><strong>Situation.</strong> A reporting method loaded accounts in a <code>@Transactional</code> method and normalized their fields for display.</p>
+<p><strong>What went wrong.</strong> The entities were managed, so Hibernate's dirty checking flushed the changes as UPDATE statements at commit<a class="citation" href="#ref-6">[6]</a><a class="citation" href="#ref-7">[7]</a>. Reports silently rewrote 1.2 million rows a night, and auditors found unexplained modifications.</p>
+<p><strong>Fix.</strong> Mark read paths <code>@Transactional(readOnly = true)</code>, which makes Spring set the Hibernate session's flush mode to manual and its entities read-only (Exercise 2)<a class="citation" href="#ref-14">[14]</a><a class="citation" href="#ref-23">[23]</a>. Map entities to DTOs or projections before transforming them<a class="citation" href="#ref-21">[21]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail · order API · open-in-view disabled to fix connection exhaustion</p>
+<h3 id="scenario-lazy">18.3 <code>LazyInitializationException</code> after a "performance fix"</h3>
+<p><strong>Situation.</strong> Open-session-in-view held database connections for the full HTTP request, including JSON serialization, and the pool was exhausted at peak. The team disabled it.</p>
+<p><strong>What went wrong.</strong> Controllers that serialized entities now touched lazy collections after the transaction had closed, and endpoints failed with <code>LazyInitializationException</code>.</p>
+<p><strong>Fix.</strong> Keep open-in-view off, and load what each use case needs inside the transaction: a fetch join, an entity graph, or a DTO projection (Exercise 3)<a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-21">[21]</a>. Return DTOs from the service layer, so that serialization never touches the persistence context.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Insurance · two databases · policy and billing persistence units</p>
+<h3 id="scenario-units">18.4 Writes that went to the wrong transaction manager</h3>
+<p><strong>Situation.</strong> A second persistence unit was added for billing, with its own <code>EntityManagerFactory</code> and <code>JpaTransactionManager</code>.</p>
+<p><strong>What went wrong.</strong> <code>@Transactional</code> without a qualifier used the primary (policy) transaction manager. Billing writes ran with no billing transaction, and were flushed outside any transaction boundary or not at all, depending on the code path<a class="citation" href="#ref-14">[14]</a>.</p>
+<p><strong>Fix.</strong> Name the transaction manager on each unit's services, for example with <code>@Transactional("billingTransactionManager")</code> or a composed annotation. Bind repositories to their unit with <code>entityManagerFactoryRef</code> and <code>transactionManagerRef</code>, and test that a rollback in each unit really rolls back<a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-19">[19]</a>.</p>
+</div>
+
+<h2 id="exercises">19. Exercises</h2>
+<p>Each solution is a self-contained Spring Boot program, compiled and run with Spring Boot 4.1.0 (Spring Framework 7.0.8, Hibernate 7.4.1) and H2 2.4.240 on OpenJDK 21.0.13. The output shown is real. All three share this bootstrap helper:</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sorm;
+
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
+
+/** Boots a non-web Spring Boot context with Hibernate statistics enabled. */
+final class OrmLab {
+    static ConfigurableApplicationContext boot(Class&lt;?&gt; app) {
+        return new SpringApplicationBuilder(app).web(WebApplicationType.NONE)
+            .properties("spring.jpa.properties.hibernate.generate_statistics=true", "spring.jpa.open-in-view=false",
+                        "spring.datasource.generate-unique-name=true", "logging.level.org.hibernate.orm.jdbc.error=off").run();
+    }
+    static Statistics stats(ConfigurableApplicationContext ctx) {
+        return ctx.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+    }
+}</code></pre>
+  </div>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">19.1 Exception translation<span class="xp-lvl">exceptions · easy</span></h3>
+<p>Persist two suppliers with the same VAT ID, once through a <code>@Service</code> bean and once through a <code>@Repository</code> bean, and print the exception type the caller receives.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Spring Boot registers <code>PersistenceExceptionTranslationPostProcessor</code>, which proxies only <code>@Repository</code> beans. The <code>flush()</code> makes the violation happen inside the method, where the proxy can translate it<a class="citation" href="#ref-16">[16]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sorm;
+
+import jakarta.persistence.*;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.stereotype.*;
+import org.springframework.transaction.annotation.Transactional;
+
+@SpringBootApplication
+@EntityScan(basePackageClasses = Ex1Translation.class)
+public class Ex1Translation {
+    @Entity(name = "Supplier") @Table(name = "supplier", uniqueConstraints = @UniqueConstraint(columnNames = "vat_id"))
+    public static class Supplier {
+        @Id @GeneratedValue Long id;
+        @Column(name = "vat_id") String vatId;
+        protected Supplier() {}
+        Supplier(String vatId) { this.vatId = vatId; }
+    }
+
+    @Repository public static class TranslatedDao {          // @Repository: exceptions are translated
+        @PersistenceContext EntityManager em;
+        @Transactional public void add(String vat) { em.persist(new Supplier(vat)); em.flush(); }
+    }
+    @Service public static class PlainDao {                  // no @Repository: provider exceptions leak through
+        @PersistenceContext EntityManager em;
+        @Transactional public void add(String vat) { em.persist(new Supplier(vat)); em.flush(); }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = OrmLab.boot(Ex1Translation.class)) {
+            ctx.getBean(TranslatedDao.class).add("DE811907980");
+            try { ctx.getBean(PlainDao.class).add("DE811907980"); }
+            catch (RuntimeException e) { System.out.println("@Service:    " + e.getClass().getName()); }
+            try { ctx.getBean(TranslatedDao.class).add("DE811907980"); }
+            catch (RuntimeException e) { System.out.println("@Repository: " + e.getClass().getName()); }
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1, OpenJDK 21.0.13</span><pre>@Service:    org.hibernate.exception.ConstraintViolationException
+@Repository: org.springframework.dao.DataIntegrityViolationException</pre></div>
+<p>Without the flush, the violation would occur at commit, and <code>JpaTransactionManager</code> would translate it. Either way, callers see a Spring exception only if the right layer translates it.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">19.2 Dirty checking and read-only transactions<span class="xp-lvl">transactions · medium</span></h3>
+<p>Load an account and change its status in memory without calling any save method, first in a read-write transaction and then in a read-only one. Count the UPDATE statements and check the stored value.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Hibernate compares managed entities with their loaded state at flush time, and writes any difference<a class="citation" href="#ref-7">[7]</a>. With <code>readOnly = true</code>, Spring's <code>HibernateJpaDialect</code> sets the session to <code>FlushMode.MANUAL</code> and read-only, so nothing is written<a class="citation" href="#ref-14">[14]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sorm;
+
+import jakarta.persistence.*;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@SpringBootApplication
+@EntityScan(basePackageClasses = Ex2DirtyChecking.class)
+public class Ex2DirtyChecking {
+    @Entity(name = "Account") public static class Account {
+        @Id Long id; String status;
+        protected Account() {}
+        Account(Long id, String status) { this.id = id; this.status = status; }
+    }
+
+    @Service public static class Accounts {
+        @PersistenceContext EntityManager em;
+        @Transactional public void create() { em.persist(new Account(1L, "ACTIVE")); }
+        /** A "report" that normalizes data for display, and accidentally mutates the managed entity. */
+        @Transactional public String report() { Account a = em.find(Account.class, 1L); a.status = a.status.toLowerCase(); return a.status; }
+        @Transactional(readOnly = true) public String reportReadOnly() { Account a = em.find(Account.class, 1L); a.status = a.status.toUpperCase(); return a.status; }
+        @Transactional(readOnly = true) public String status() { return em.find(Account.class, 1L).status; }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = OrmLab.boot(Ex2DirtyChecking.class)) {
+            Accounts accounts = ctx.getBean(Accounts.class);
+            var st = OrmLab.stats(ctx);
+            accounts.create();
+            st.clear();
+            accounts.report();
+            System.out.println("read-write report: " + st.getEntityUpdateCount() + " UPDATE, stored status now '" + accounts.status() + "'");
+            st.clear();
+            accounts.reportReadOnly();
+            System.out.println("read-only report:  " + st.getEntityUpdateCount() + " UPDATE, stored status now '" + accounts.status() + "'");
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1, OpenJDK 21.0.13</span><pre>read-write report: 1 UPDATE, stored status now 'active'
+read-only report:  0 UPDATE, stored status now 'active'</pre></div>
+<p>Read-only sessions also skip the snapshot of loaded state, which reduces memory use for large reads.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">19.3 Lazy loading outside the transaction<span class="xp-lvl">fetching · easy</span></h3>
+<p>With open-in-view disabled, load an order in a transactional service method and read its lines after the method returns. Then fix it without making the association eager.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>After the transaction ends, the persistence context is closed and the entity is detached, so its uninitialized lazy collection cannot be loaded. A <code>JOIN FETCH</code> loads the lines in the same query<a class="citation" href="#ref-20">[20]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sorm;
+
+import jakarta.persistence.*;
+import java.util.*;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@SpringBootApplication
+@EntityScan(basePackageClasses = Ex3Lazy.class)
+public class Ex3Lazy {
+    @Entity(name = "PurchaseOrder") public static class PurchaseOrder {
+        @Id Long id;
+        @OneToMany(mappedBy = "order", cascade = CascadeType.ALL) List&lt;Line&gt; lines = new ArrayList&lt;&gt;();
+        protected PurchaseOrder() {}
+        PurchaseOrder(Long id) { this.id = id; }
+    }
+    @Entity(name = "Line") public static class Line {
+        @Id @GeneratedValue Long id; String sku;
+        @ManyToOne(fetch = FetchType.LAZY) PurchaseOrder order;
+        protected Line() {}
+        Line(PurchaseOrder o, String sku) { this.order = o; this.sku = sku; }
+    }
+
+    @Service public static class Orders {
+        @PersistenceContext EntityManager em;
+        @Transactional public void create() {
+            PurchaseOrder o = new PurchaseOrder(7L);
+            o.lines.add(new Line(o, "SKU-1")); o.lines.add(new Line(o, "SKU-2"));
+            em.persist(o);
+        }
+        @Transactional(readOnly = true) public PurchaseOrder find(long id) { return em.find(PurchaseOrder.class, id); }
+        @Transactional(readOnly = true) public PurchaseOrder findWithLines(long id) {
+            return em.createQuery("SELECT o FROM PurchaseOrder o JOIN FETCH o.lines WHERE o.id = :id", PurchaseOrder.class)
+                     .setParameter("id", id).getSingleResult();
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = OrmLab.boot(Ex3Lazy.class)) {
+            Orders orders = ctx.getBean(Orders.class);
+            orders.create();
+            PurchaseOrder detached = orders.find(7L);                    // transaction is over here
+            try { System.out.println(detached.lines.size()); }
+            catch (RuntimeException e) { System.out.println("find + lines.size(): " + e.getClass().getSimpleName() + ": " + e.getMessage()); }
+            System.out.println("JOIN FETCH:          " + orders.findWithLines(7L).lines.stream().map(l -&gt; l.sku).toList());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, Hibernate 7.4.1, OpenJDK 21.0.13</span><pre>find + lines.size(): LazyInitializationException: Cannot lazily initialize collection of role 'lab.sorm.Ex3Lazy$PurchaseOrder.lines' with key '7' (no session)
+JOIN FETCH:          [SKU-1, SKU-2]</pre></div>
+<p>Making the collection <code>EAGER</code> would hide the error, but load the lines on every query, including those that do not need them. A fetch join on a collection also cannot be combined safely with database-side pagination.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">20. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Is the <code>EntityManager</code> injected with <code>@PersistenceContext</code> thread-safe?</summary><div class="xp-body"><p>The injected object is: it is a shared proxy, created by <code>SharedEntityManagerCreator</code>, that delegates to the <code>EntityManager</code> bound to the current transaction. A real <code>EntityManager</code> is not thread-safe<a class="citation" href="#ref-13">[13]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>LocalContainerEntityManagerFactoryBean</code> replace?</summary><div class="xp-body"><p>The container's role in creating an <code>EntityManagerFactory</code>. It scans for entities and configures the provider from Spring, without a <code>persistence.xml</code><a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+<details class="xp-details"><summary>Which Jakarta Persistence version does Hibernate 7 implement?</summary><div class="xp-body"><p>Jakarta Persistence 3.2<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-4">[4]</a>.</p></div></details>
+<details class="xp-details"><summary>Can <code>JpaTransactionManager</code> also manage plain JDBC access?</summary><div class="xp-body"><p>Yes. It exposes the JPA transaction's connection to <code>JdbcTemplate</code> code on the same <code>DataSource</code>, so both take part in one transaction<a class="citation" href="#ref-14">[14]</a>.</p></div></details>
+<details class="xp-details"><summary>When does Hibernate flush automatically?</summary><div class="xp-body"><p>With the default <code>AUTO</code> flush mode: before a transaction commits, and before a query whose results could be affected by pending changes<a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between <code>persist</code> and <code>merge</code>?</summary><div class="xp-body"><p><code>persist</code> makes a new instance managed. <code>merge</code> copies the state of a detached instance onto a managed one, loading it first if needed, and returns the managed copy<a class="citation" href="#ref-6">[6]</a>.</p></div></details>
+<details class="xp-details"><summary>Which <code>JpaVendorAdapter</code> does Spring provide for EclipseLink?</summary><div class="xp-body"><p><code>EclipseLinkJpaVendorAdapter</code>. EclipseLink also needs load-time weaving, or static weaving at build time, for lazy loading of to-one associations<a class="citation" href="#ref-11">[11]</a><a class="citation" href="#ref-12">[12]</a>.</p></div></details>
+<details class="xp-details"><summary>Why does Spring Boot warn when <code>spring.jpa.open-in-view</code> is not set?</summary><div class="xp-body"><p>It is on by default, which allows database queries during view rendering, so Boot asks you to make the choice explicitly.</p></div></details>
+</div>
+
+<!-- xp:end -->
   <h2 id="references">References</h2>
   <ol class="references">
     <li id="ref-1">Spring team. Spring Framework versions [Internet]. GitHub; 2026 [cited 2026 Jul 31]. Available from: <a href="https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions">https://github.com/spring-projects/spring-framework/wiki/Spring-Framework-Versions</a></li>
@@ -1683,6 +1953,10 @@ class PurchaseOrderRepositoryTest {
     <li><a href="#diagnostics">Diagnostics</a></li>
     <li><a href="#practices">Expert practices</a></li>
     <li><a href="#summary">Summary</a></li>
+<!-- xp-toc:start -->    <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+    <li><a href="#exercises">Exercises</a></li>
+    <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
     <li><a href="#references">References</a></li>
   </ol>
 </aside>

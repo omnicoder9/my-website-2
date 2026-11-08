@@ -133,6 +133,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1624,6 +1644,257 @@ SecurityFilterChain apiSecurity(
   When a microservice design is unclear, trace ownership and failure: Which team owns the business decision? Which database transaction enforces it? Which contract crosses the boundary? What happens when the network times out after the receiver commits? How is a duplicate detected? How stale may a query be? Which compensation restores an acceptable business state? Which metric tells an operator that the workflow is stuck? Answering those questions produces a service architecture; merely splitting packages into deployables does not.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">23. Enterprise scenarios</h2>
+<p>Microservices trade in-process calls and local transactions for network calls and eventual consistency. Most failures come from underestimating that trade. The scenarios below are composites, with illustrative figures. Section 24 reproduces the key mechanics with Spring Modulith 2.1.2 and plain Java.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retailer · 60 services, 9 developers · every release coordinated</p>
+<h3 id="scenario-distributed-monolith">23.1 A distributed monolith</h3>
+<p><strong>Situation.</strong> A monolith was split into 60 services along technical layers, and the services shared one database schema.</p>
+<p><strong>What went wrong.</strong> Every feature touched several services, so releases had to be coordinated, a schema change broke services owned by others, and local debugging needed a dozen containers. The team had the costs of distribution without independent deployability<a class="citation" href="#ref-1">[1]</a><a class="citation" href="#ref-3">[3]</a>.</p>
+<p><strong>Fix.</strong> Start with a modular monolith whose modules follow business subdomains<a class="citation" href="#ref-5">[5]</a>, and enforce their boundaries in the build with Spring Modulith (Exercise 1)<a class="citation" href="#ref-7">[7]</a>. Extract a module into a service when it has a reason to deploy, scale, or fail independently, and give it its own data.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Travel booking · flight, hotel, and payment services · reservations held forever</p>
+<h3 id="scenario-saga">23.2 Half-completed bookings</h3>
+<p><strong>Situation.</strong> A booking reserved a flight, then a hotel, then charged the card, each in a different service.</p>
+<p><strong>What went wrong.</strong> When the payment failed, nothing released the flight and hotel reservations. Inventory looked sold out while thousands of seats were held by abandoned bookings.</p>
+<p><strong>Fix.</strong> Model the booking as a saga: a sequence of local transactions, each with a compensating action that runs in reverse order when a later step fails (Exercise 2)<a class="citation" href="#ref-32">[32]</a><a class="citation" href="#ref-33">[33]</a>. Use orchestration when the flow has many steps or needs a clear owner<a class="citation" href="#ref-35">[35]</a>, publish each step's events through an outbox<a class="citation" href="#ref-30">[30]</a>, and make compensations idempotent.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Media streaming · home page aggregates 50 services · p99 above 2 seconds</p>
+<h3 id="scenario-tail">23.3 Fast services, slow page</h3>
+<p><strong>Situation.</strong> Every backend service met its 99th-percentile latency target, yet the home page's p99 was poor.</p>
+<p><strong>What went wrong.</strong> The page called 50 services in parallel and waited for all of them. With 1% of calls slow, about 40% of page loads included at least one slow call (Exercise 3).</p>
+<p><strong>Fix.</strong> Reduce fan-out with aggregation and caching. Give each call a timeout and a fallback, so that the page renders without non-essential parts. Use hedged requests for idempotent reads, and measure latency at the user's level, not only per service<a class="citation" href="#ref-22">[22]</a><a class="citation" href="#ref-42">[42]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Fintech · consumer team changes a JSON field · provider breaks production</p>
+<h3 id="scenario-contracts">23.4 An API change that passed every test</h3>
+<p><strong>Situation.</strong> A provider renamed <code>amount</code> to <code>amountMinor</code>. Its own tests passed, and so did the consumers' tests, which used hand-written mocks.</p>
+<p><strong>What went wrong.</strong> The mocks still returned the old field, so nothing failed until production, when three consumers began reading <code>null</code> amounts.</p>
+<p><strong>Fix.</strong> Use consumer-driven contract tests, so that each consumer's expectations become tests in the provider's build and its stubs are generated from the same contract<a class="citation" href="#ref-43">[43]</a>. Evolve APIs additively: add the new field, migrate consumers, then remove the old one.</p>
+</div>
+
+<h2 id="exercises">24. Exercises</h2>
+<p>The solutions were compiled and run on OpenJDK 21.0.13, Exercise 1 with Spring Modulith 2.1.2. The output shown is real. Exercise 4 is a design exercise.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">24.1 Enforce module boundaries<span class="xp-lvl">modular monolith · medium</span></h3>
+<p>A shop has <code>order</code>, <code>inventory</code>, and <code>billing</code> modules. The order module uses a class from <code>inventory.internal</code>, and billing refers back to order. Make the build detect both problems.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Spring Modulith treats each direct subpackage of the root as a module, with only its top-level package exposed. <code>detectViolations()</code> (or <code>verify()</code> in a test) reports dependency cycles and access to non-exposed types<a class="citation" href="#ref-7">[7]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smicro.shop.order;
+
+import lab.smicro.shop.billing.BillingService;
+import lab.smicro.shop.inventory.internal.StockRepository;   // reaches into another module's internals
+
+public class OrderService {
+    private final StockRepository stock = new StockRepository();
+    private final BillingService billing = new BillingService();
+    public String place(String sku) { return stock.available(sku) &gt; 0 ? billing.charge(sku) : "rejected"; }
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smicro.shop.billing;
+
+import lab.smicro.shop.order.OrderService;                 // billing -&gt; order, while order -&gt; billing: a cycle
+
+public class BillingService {
+    public String charge(String sku) { return "charged " + sku; }
+    String refundFor(OrderService orders) { return "refund"; }
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smicro;
+
+import lab.smicro.shop.ShopApplication;
+import org.springframework.modulith.core.ApplicationModules;
+import org.springframework.modulith.core.Violations;
+
+public class Ex1Modules {
+    public static void main(String[] args) {
+        ApplicationModules modules = ApplicationModules.of(ShopApplication.class);
+        modules.forEach(m -&gt; System.out.println("module: " + m.getIdentifier()));
+        Violations violations = modules.detectViolations();
+        System.out.println("violations: " + violations.getMessages().size());
+        violations.getMessages().forEach(msg -&gt; System.out.println("- " + msg));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Modulith 2.1.2, OpenJDK 21.0.13</span><pre>module: billing
+module: inventory
+module: order
+violations: 4
+- Cycle detected: Slice billing -&gt; 
+                Slice order -&gt; 
+                Slice billing
+  1. Dependencies of Slice billing
+    - Method &lt;lab.smicro.shop.billing.BillingService.refundFor(lab.smicro.shop.order.OrderService)&gt; has parameter of type &lt;lab.smicro.shop.order.OrderService&gt; in (BillingService.java:0)
+  2. Dependencies of Slice order
+    - Field &lt;lab.smicro.shop.order.OrderService.billing&gt; has type &lt;lab.smicro.shop.billing.BillingService&gt; in (OrderService.java:0)
+    - Constructor &lt;lab.smicro.shop.order.OrderService.&lt;init&gt;()&gt; calls constructor &lt;lab.smicro.shop.billing.BillingService.&lt;init&gt;()&gt; in (OrderService.java:8)
+    - Method &lt;lab.smicro.shop.order.OrderService.place(java.lang.String)&gt; calls method &lt;lab.smicro.shop.billing.BillingService.charge(java.lang.String)&gt; in (OrderService.java:9)
+- Module 'order' depends on non-exposed type lab.smicro.shop.inventory.internal.StockRepository within module 'inventory'!
+Method &lt;lab.smicro.shop.order.OrderService.place(java.lang.String)&gt; calls method &lt;lab.smicro.shop.inventory.internal.StockRepository.available(java.lang.String)&gt; in (OrderService.java:9)
+- Module 'order' depends on non-exposed type lab.smicro.shop.inventory.internal.StockRepository within module 'inventory'!
+Constructor &lt;lab.smicro.shop.order.OrderService.&lt;init&gt;()&gt; calls constructor &lt;lab.smicro.shop.inventory.internal.StockRepository.&lt;init&gt;()&gt; in (OrderService.java:7)
+- Module 'order' depends on non-exposed type lab.smicro.shop.inventory.internal.StockRepository within module 'inventory'!
+Field &lt;lab.smicro.shop.order.OrderService.stock&gt; has type &lt;lab.smicro.shop.inventory.internal.StockRepository&gt; in (OrderService.java:0)</pre></div>
+<p>Run <code>ApplicationModules.of(App.class).verify()</code> in a unit test, so that a violation fails the build. To fix this one, call <code>InventoryService</code> instead of the repository, and break the cycle by having billing react to an <code>OrderPlaced</code> event rather than call into order<a class="citation" href="#ref-31">[31]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">24.2 An orchestrated saga with compensation<span class="xp-lvl">consistency · medium</span></h3>
+<p>Implement an order saga of four steps (create order, reserve stock, authorize payment, and schedule shipment) in which a failure undoes the steps that already completed.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Keep completed steps on a stack, and on failure pop and compensate them, in reverse order<a class="citation" href="#ref-33">[33]</a><a class="citation" href="#ref-35">[35]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smicro;
+
+import java.util.*;
+
+public class Ex2Saga {
+    /** One local transaction in another service, with the action that semantically undoes it. */
+    record Step(String name, Runnable action, Runnable compensation) {}
+
+    static void run(List&lt;Step&gt; steps) {
+        Deque&lt;Step&gt; done = new ArrayDeque&lt;&gt;();
+        for (Step s : steps) {
+            try {
+                s.action().run();
+                done.push(s);
+                System.out.println("  ok      " + s.name());
+            } catch (RuntimeException e) {
+                System.out.println("  FAILED  " + s.name() + ": " + e.getMessage());
+                while (!done.isEmpty()) {                       // compensate in reverse order
+                    Step c = done.pop();
+                    c.compensation().run();
+                    System.out.println("  undo    " + c.name());
+                }
+                System.out.println("  saga outcome: order CANCELLED");
+                return;
+            }
+        }
+        System.out.println("  saga outcome: order CONFIRMED");
+    }
+
+    static List&lt;Step&gt; placeOrder(boolean cardDeclined) {
+        return List.of(
+            new Step("create order (PENDING)", () -&gt; {}, () -&gt; {}),
+            new Step("reserve 2 x SKU-17", () -&gt; {}, () -&gt; {}),
+            new Step("authorize 49.90 EUR", () -&gt; { if (cardDeclined) throw new IllegalStateException("card declined"); }, () -&gt; {}),
+            new Step("schedule shipment", () -&gt; {}, () -&gt; {}));
+    }
+
+    public static void main(String[] args) {
+        System.out.println("happy path:");
+        run(placeOrder(false));
+        System.out.println("payment fails:");
+        run(placeOrder(true));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>happy path:
+  ok      create order (PENDING)
+  ok      reserve 2 x SKU-17
+  ok      authorize 49.90 EUR
+  ok      schedule shipment
+  saga outcome: order CONFIRMED
+payment fails:
+  ok      create order (PENDING)
+  ok      reserve 2 x SKU-17
+  FAILED  authorize 49.90 EUR: card declined
+  undo    reserve 2 x SKU-17
+  undo    create order (PENDING)
+  saga outcome: order CANCELLED</pre></div>
+<p>In production, the orchestrator's state must survive restarts. Persist each step's outcome, and drive steps by messages through an outbox. Compensations are semantic: "release the reservation" or "refund", not a database rollback. Other services can observe the intermediate states.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">24.3 Tail latency under fan-out<span class="xp-lvl">performance · easy</span></h3>
+<p>Each downstream call takes 20 ms, except 1% of calls, which take 1 s. Simulate 100,000 user requests that fan out to 1, 10, 50, and 100 parallel calls, and measure the share of user requests that take at least 1 s.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>A request that waits for all its calls is slow if any one of them is slow, so the chance is 1 − 0.99<sup><em>n</em></sup>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.smicro;
+
+import java.util.Random;
+
+public class Ex3FanOut {
+    /** Each downstream call: usually 20 ms, but 1% of calls take 1 s (GC pause, cold cache, retransmit). */
+    static int callLatency(Random r) { return r.nextDouble() &lt; 0.01 ? 1_000 : 20; }
+
+    public static void main(String[] args) {
+        Random r = new Random(42);
+        int requests = 100_000;
+        for (int fanOut : new int[] {1, 10, 50, 100}) {
+            int slow = 0;
+            for (int i = 0; i &lt; requests; i++) {
+                int worst = 0;                                     // parallel calls: the request waits for the slowest
+                for (int c = 0; c &lt; fanOut; c++) worst = Math.max(worst, callLatency(r));
+                if (worst &gt;= 1_000) slow++;
+            }
+            System.out.printf("fan-out %3d: %5.1f%% of user requests take &gt;= 1 s  (theory 1 - 0.99^n = %5.1f%%)%n",
+                fanOut, 100.0 * slow / requests, 100 * (1 - Math.pow(0.99, fanOut)));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>fan-out   1:   1.0% of user requests take &gt;= 1 s  (theory 1 - 0.99^n =   1.0%)
+fan-out  10:   9.5% of user requests take &gt;= 1 s  (theory 1 - 0.99^n =   9.6%)
+fan-out  50:  39.5% of user requests take &gt;= 1 s  (theory 1 - 0.99^n =  39.5%)
+fan-out 100:  63.4% of user requests take &gt;= 1 s  (theory 1 - 0.99^n =  63.4%)</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">24.4 Should this be a separate service?<span class="xp-lvl">design · medium</span></h3>
+<p>A team wants to extract "notifications" (email, SMS, and push) from a modular monolith. List the questions that decide whether extraction pays off, and what changes if it does.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<ul>
+<li><strong>Independent change:</strong> does it change on a different schedule, or does a different team own it?</li>
+<li><strong>Independent scaling or failure:</strong> campaign bursts or provider outages should not slow checkout. That favours extraction.</li>
+<li><strong>Coupling:</strong> notifications already react to events, and need no synchronous answer. They are among the easiest modules to extract<a class="citation" href="#ref-31">[31]</a>.</li>
+<li><strong>Data:</strong> the service needs its own store for templates, preferences, and delivery logs, with no reads from the monolith's tables.</li>
+<li><strong>Cost:</strong> a new pipeline, on-call rotation, observability, and security boundary<a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-41">[41]</a>.</li>
+</ul>
+<p>If it is extracted, in-process events become messages on a broker with an outbox<a class="citation" href="#ref-30">[30]</a>, consumers become idempotent, and the module's integration tests become contract tests<a class="citation" href="#ref-43">[43]</a>.</p>
+</div></details>
+</div>
+
+<h2 id="trivia">25. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Who wrote the 2014 article that popularized the term "microservices"?</summary><div class="xp-body"><p>James Lewis and Martin Fowler<a class="citation" href="#ref-1">[1]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the "MonolithFirst" advice?</summary><div class="xp-body"><p>Start with a well-structured monolith and extract services once the domain boundaries are understood, because wrong boundaries are expensive to move across a network<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-3">[3]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between choreography and orchestration in sagas?</summary><div class="xp-body"><p>In choreography, each service reacts to the others' events with no central coordinator. In orchestration, one component tells each participant what to do and tracks the saga's state<a class="citation" href="#ref-34">[34]</a><a class="citation" href="#ref-35">[35]</a>.</p></div></details>
+<details class="xp-details"><summary>What does CQRS separate?</summary><div class="xp-body"><p>The model used to update data (commands) from the model used to read it (queries), so that each can be shaped and scaled for its job<a class="citation" href="#ref-36">[36]</a><a class="citation" href="#ref-37">[37]</a>.</p></div></details>
+<details class="xp-details"><summary>In event sourcing, what is the source of truth?</summary><div class="xp-body"><p>The append-only sequence of events. Current state is derived by replaying it, often with snapshots for speed<a class="citation" href="#ref-38">[38]</a><a class="citation" href="#ref-39">[39]</a>.</p></div></details>
+<details class="xp-details"><summary>How can a Spring Data aggregate publish domain events?</summary><div class="xp-body"><p>By extending <code>AbstractAggregateRoot</code>, or by exposing a <code>@DomainEvents</code> method. The repository publishes the events when the aggregate is saved<a class="citation" href="#ref-40">[40]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@LoadBalanced</code> on a <code>RestClient.Builder</code> do?</summary><div class="xp-body"><p>It adds an interceptor that resolves a logical service name in the URL, such as <code>http://inventory</code>, to a concrete instance through Spring Cloud LoadBalancer<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-21">[21]</a>.</p></div></details>
+<details class="xp-details"><summary>Which header carries trace context between services under W3C Trace Context?</summary><div class="xp-body"><p><code>traceparent</code>, with vendor-specific data in <code>tracestate</code>. Micrometer Tracing propagates it by default<a class="citation" href="#ref-22">[22]</a>.</p></div></details>
+<details class="xp-details"><summary>What is Conway's Law?</summary><div class="xp-body"><p>The observation that systems mirror the communication structure of the organizations that build them. This is why service boundaries and team boundaries are usually designed together.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Lewis J, Fowler M. Microservices [Internet]. MartinFowler.com; 2014 [cited 2026 Jul 31]. Available from: <a href="https://martinfowler.com/articles/microservices.html">https://martinfowler.com/articles/microservices.html</a></li>
@@ -1697,7 +1968,7 @@ SecurityFilterChain apiSecurity(
 <li><a href="#anti-patterns">Anti-patterns</a></li>
 <li><a href="#selection">Selection guide</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

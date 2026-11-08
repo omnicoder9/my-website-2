@@ -432,6 +432,26 @@
       .references a::after { content: " (" attr(href) ")"; font-size: 8pt; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
   <header class="hero">
@@ -478,6 +498,10 @@
         <li><a href="#security">Security considerations</a></li>
         <li><a href="#decision">When to choose Native Image</a></li>
         <li><a href="#checklist">Production checklist</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
       </ol>
     </nav>
 
@@ -2009,6 +2033,172 @@ void loadsConfiguredPluginInNativeExecutable() {
           runtime dynamism and JIT adaptation.
         </div>
       </section>
+<!-- xp:start -->
+      <section id="enterprise-scenarios">
+        <h2>23. Enterprise scenarios</h2>
+        <p class="lead">Native Image changes Java's deployment trade-offs: it gives fast startup and a small memory footprint, in exchange for a closed-world build, longer build times, and different peak-performance characteristics. The scenarios below are composites of how enterprises adopt it, both successfully and painfully, with illustrative figures.</p>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Insurance · quote API on serverless functions · scale-to-zero</p>
+          <h3>23.1 Cold starts made the first quote of the morning take four seconds</h3>
+          <p><strong>Situation.</strong> A quote API ran as serverless functions that scaled to zero overnight and on quiet weekends.</p>
+          <p><strong>What went wrong.</strong> Each cold start on the JVM took 3–4 s: JVM startup, class loading, and framework initialization, followed by interpreted code until the JIT warmed up. Broker portals timed out on the first quote after any idle period.</p>
+          <p><strong>Fix.</strong> Compiling the function as a native executable, where classes are pre-initialized in an image heap and code is compiled ahead of time<a class="cite" href="#ref-14">[14]</a><a class="cite" href="#ref-16">[16]</a>, brought cold starts to about 150 ms and cut memory per instance by roughly two-thirds. For services where a native build was impractical, the OpenJDK AOT cache (JDK 24 and later) recovered part of the startup gap without a closed world (Exercise 1).</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Payments · native microservice · rare code path</p>
+          <h3>23.2 Passed every test, then failed on the first SEPA refund</h3>
+          <p><strong>Situation.</strong> A payment service loaded provider adapters by name from configuration, with <code>Class.forName(config.adapterClass())</code>. It also read refund templates from the class path.</p>
+          <p><strong>What went wrong.</strong> The unit tests ran on the JVM, where everything is dynamic. The native build's static analysis could not see which class name the configuration would supply, so the SEPA adapter was not in the image, and the first refund failed with <code>ClassNotFoundException</code>. The refund templates were also missing, because resources are included only if declared<a class="cite" href="#ref-25">[25]</a><a class="cite" href="#ref-28">[28]</a>.</p>
+          <p><strong>Fix.</strong> Declare dynamic access in reachability metadata<a class="cite" href="#ref-26">[26]</a>, generate a first draft with the tracing agent over realistic test runs<a class="cite" href="#ref-30">[30]</a>, and run the test suite <em>as a native image</em> (<code>nativeTest</code> in the Native Build Tools plugins<a class="cite" href="#ref-22">[22]</a>) in CI (Exercise 2).</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Trading analytics · long-running batch service · throughput regression</p>
+          <h3>23.3 Native was slower where it mattered</h3>
+          <p><strong>Situation.</strong> A team rewrote its deployment pipeline to compile every service natively, including a CPU-heavy risk calculator that ran for hours.</p>
+          <p><strong>What went wrong.</strong> The calculator's throughput fell by about 25%. A JIT compiler optimizes for the actual run-time profile, with speculative inlining, while an AOT compiler without profile data must be conservative. The native image also used the Serial GC by default<a class="cite" href="#ref-33">[33]</a>, which was a poor fit for its 12 GB working set.</p>
+          <p><strong>Fix.</strong> Choose per workload. Use native images for short-lived, scale-to-zero, or memory-constrained services, and the JIT for long-running throughput services. Where native is required, use profile-guided optimization from a representative training run<a class="cite" href="#ref-9">[9]</a>, and select G1 where the distribution supports it<a class="cite" href="#ref-33">[33]</a><a class="cite" href="#ref-34">[34]</a>. Benchmark both builds before you decide.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Platform security review · container images · build-time initialization</p>
+          <h3>23.4 A secret baked into the executable</h3>
+          <p><strong>Situation.</strong> To speed up startup, a framework setting initialized configuration classes at build time.</p>
+          <p><strong>What went wrong.</strong> One class read an API key from the environment in a static initializer. Run during the CI build, it stored the <em>build environment's</em> key in the image heap, which ended up inside every container image pushed to the registry. In the same build, a <code>static final</code> instance id was baked in, so every pod reported the same id.</p>
+          <p><strong>Fix.</strong> Never read secrets, time, randomness, or host information in code that may run at build time. Initialize such classes at run time (<code>--initialize-at-run-time</code>), or load the values lazily<a class="cite" href="#ref-17">[17]</a><a class="cite" href="#ref-32">[32]</a>. Scan native executables for secrets, just as you would scan images<a class="cite" href="#ref-31">[31]</a> (Exercise 3).</p>
+        </div>
+      </section>
+
+      <section id="exercises">
+        <h2>24. Exercises</h2>
+        <p class="lead">Exercise 1 was run with OpenJDK 27.0.1, which has the AOT cache, the JVM's own ahead-of-time option, on the same machine. Exercises 2–4 are design exercises with worked solutions. No GraalVM was available in the environment used to write them, so their snippets were not built here. Check them against your GraalVM version's documentation.</p>
+
+        <div class="xp-exercise">
+          <h3>Exercise 1: Measure the OpenJDK AOT cache<span class="xp-lvl">startup · medium</span></h3>
+          <p>Package a small CLI that touches the HTTP client, regular expressions, streams, and <code>java.time</code> before doing its first unit of work. Create an AOT cache with a training run, then compare the startup time with and without the cache over nine runs.</p>
+<pre><code>import java.lang.management.ManagementFactory;
+import java.net.URI;
+import java.net.http.*;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.regex.Pattern;
+import java.util.stream.*;
+
+/** A small CLI that touches a realistic mix of JDK subsystems before doing its first unit of work. */
+public class PricingCli {
+    public static void main(String[] args) throws Exception {
+        HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
+        HttpRequest req = HttpRequest.newBuilder(URI.create("https://rates.example/eur")).header("Accept", "application/json").build();
+        Pattern line = Pattern.compile("^(?&lt;sku&gt;[A-Z]{3}-\\d{4}),(?&lt;qty&gt;\\d+),(?&lt;price&gt;\\d+\\.\\d{2})$");
+        List&lt;String&gt; rows = IntStream.range(0, 500).mapToObj(i -&gt; "SKU-%04d,%d,%d.%02d".formatted(i, i % 7 + 1, 10 + i % 90, i % 100)).toList();
+        double total = rows.stream().map(line::matcher).filter(m -&gt; m.matches())
+                .mapToDouble(m -&gt; Integer.parseInt(m.group("qty")) * Double.parseDouble(m.group("price"))).sum();
+        String stamp = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(OffsetDateTime.of(2026, 11, 7, 9, 0, 0, 0, ZoneOffset.UTC));
+        Map&lt;String, Long&gt; bySku = rows.stream().collect(Collectors.groupingBy(r -&gt; "qty" + r.split(",")[1], TreeMap::new, Collectors.counting()));
+        long uptime = ManagementFactory.getRuntimeMXBean().getUptime();
+        System.out.printf("total=%.2f at %s groups=%s req=%s uptimeMs=%d%n", total, stamp, bySku, req.method(), uptime);
+    }
+}</code></pre>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>With <code>-XX:AOTCacheOutput</code> (JDK 25 ergonomics), the training run records which classes the application loads and links, together with method profiles, and then assembles the cache in a child process. Production runs map that state in with <code>-XX:AOTCache</code>. It is the same JVM, with the same JIT and the same dynamic features, so no reachability metadata is needed.</p>
+<div class="xp-out"><span>Output · OpenJDK 27.0.1, Linux x64</span><pre>$ java -XX:AOTCacheOutput=pricing.aot -jar pricing.jar      # training run: records and creates the cache
+total=105379.02 at 2026-11-07T09:00:00Z groups={qty1=72, qty2=72, qty3=72, qty4=71, qty5=71, qty6=71, qty7=71} req=GET uptimeMs=375
+Temporary AOTConfiguration recorded: pricing.aot.config
+Launching child process /usr/lib/jvm/java-27-openjdk/bin/java to assemble AOT cache pricing.aot using configuration pricing.aot.config
+Reading AOTConfiguration pricing.aot.config and writing AOTCache pricing.aot
+AOTCache creation is complete: pricing.aot 25235456 bytes
+Removed temporary AOT configuration file pricing.aot.config
+cache file: 24 MiB
+
+$ java -XX:AOTCache=pricing.aot -jar pricing.jar
+total=105379.02 at 2026-11-07T09:00:00Z groups={qty1=72, qty2=72, qty3=72, qty4=71, qty5=71, qty6=71, qty7=71} req=GET uptimeMs=161
+$ java -jar pricing.jar
+total=105379.02 at 2026-11-07T09:00:00Z groups={qty1=72, qty2=72, qty3=72, qty4=71, qty5=71, qty6=71, qty7=71} req=GET uptimeMs=293
+
+median wall-clock time of 9 runs: without cache 645 ms, with AOT cache 477 ms (26% less)</pre></div>
+            <p>The work printed by the program reaches its first result in about half the uptime (161 ms against 293 ms), and the wall-clock time for the whole process falls by 26%. A native image of the same program would typically start in tens of milliseconds, but it would need a closed-world build. The cache file must be regenerated whenever the application JAR or the JDK changes.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 2: Write the reachability metadata<span class="xp-lvl">metadata · medium</span></h3>
+          <p>A native-compiled service loads a tax adapter by a class name taken from configuration, calls its public no-argument constructor, and reads invoice templates from <code>templates/*.ftl</code> on the class path. Write the metadata that the build needs, and say where it belongs.</p>
+<pre><code>TaxAdapter adapter = (TaxAdapter) Class.forName(config.get("tax.adapter"))   // e.g. com.acme.tax.GermanVat
+        .getDeclaredConstructor().newInstance();
+String template = new String(Main.class.getResourceAsStream("/templates/" + kind + ".ftl").readAllBytes());</code></pre>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Static analysis cannot work out the string passed to <code>forName</code>, or the dynamic resource name, so both must be declared<a class="cite" href="#ref-25">[25]</a><a class="cite" href="#ref-26">[26]</a>. List every adapter that configuration might name, not only the one used in tests. Put the file under <code>META-INF/native-image/&lt;groupId&gt;/&lt;artifactId&gt;/reachability-metadata.json</code>, so that it travels inside the JAR.</p>
+<pre><code>{
+  "reflection": [
+    { "type": "com.acme.tax.GermanVat",  "methods": [ { "name": "&lt;init&gt;", "parameterTypes": [] } ] },
+    { "type": "com.acme.tax.FrenchTva",  "methods": [ { "name": "&lt;init&gt;", "parameterTypes": [] } ] }
+  ],
+  "resources": [
+    { "glob": "templates/*.ftl" }
+  ]
+}</code></pre>
+            <p>Then run the tests as a native image in CI, so that a missing entry fails the build rather than the first refund<a class="cite" href="#ref-22">[22]</a>. A better design avoids the problem altogether: a <code>ServiceLoader</code> or an explicit registry of adapter factories is visible to static analysis.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 3: Find the build-time initialization bugs<span class="xp-lvl">initialization · medium</span></h3>
+          <p>Assume that this class is initialized at <em>build time</em>, because a framework or a flag requested it. Which fields hold wrong values in production, and how do you fix them?</p>
+<pre><code>final class RuntimeInfo {
+    static final String INSTANCE_ID = UUID.randomUUID().toString();
+    static final Instant STARTED_AT = Instant.now();
+    static final String API_KEY = System.getenv("PSP_API_KEY");
+    static final Pattern IBAN = Pattern.compile("[A-Z]{2}\\d{2}[A-Z0-9]{11,30}");
+    static final Locale DEFAULT_LOCALE = Locale.getDefault();
+}</code></pre>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Values computed during the build are stored in the image heap and are identical in every process started from the executable<a class="cite" href="#ref-17">[17]</a>:</p>
+            <ul>
+              <li><code>INSTANCE_ID</code> is the same in every pod. <code>STARTED_AT</code> is the build time.</li>
+              <li><code>API_KEY</code> is the build agent's key, or <code>null</code>, embedded in the binary. That is a security issue<a class="cite" href="#ref-31">[31]</a>.</li>
+              <li><code>DEFAULT_LOCALE</code> is the build machine's locale.</li>
+              <li><code>IBAN</code> is fine: a compiled pattern is immutable, environment-independent state, and pre-building it is exactly what build-time initialization is for.</li>
+            </ul>
+            <p>Fix: keep environment-dependent values out of static initializers that might run at build time. Use <code>--initialize-at-run-time=com.acme.RuntimeInfo</code><a class="cite" href="#ref-32">[32]</a>, or move the values to a lazily created holder or an instance created at startup.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 4: Choose the runtime for each workload<span class="xp-lvl">architecture · easy</span></h3>
+          <p>Pick JIT on HotSpot, HotSpot with an AOT cache, or a GraalVM native executable for each of the following, and justify your choice: (a) a developer CLI run hundreds of times a day, (b) a scale-to-zero webhook handler, (c) a pricing engine that runs for weeks at 70% CPU, (d) a Kubernetes sidecar limited to 64 MiB, and (e) a Spring application that relies on runtime bytecode generation and a scripting engine.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <ul>
+              <li>(a) <strong>Native</strong>: startup dominates, and a single binary is easy to distribute.</li>
+              <li>(b) <strong>Native</strong>: cold-start latency and memory per instance are what you pay for<a class="cite" href="#ref-10">[10]</a>.</li>
+              <li>(c) <strong>JIT</strong>: profile-driven peak performance and a mature choice of GCs. Startup is irrelevant over weeks.</li>
+              <li>(d) <strong>Native</strong>, very likely: a small footprint with no JIT or class-metadata overhead<a class="cite" href="#ref-33">[33]</a>.</li>
+              <li>(e) <strong>HotSpot with an AOT cache</strong>: it keeps full dynamism, and still recovers part of the startup time (Exercise 1). Porting to native would mean replacing the dynamic features or declaring every one of them<a class="cite" href="#ref-18">[18]</a>.</li>
+            </ul>
+          </div></details>
+        </div>
+      </section>
+
+      <section id="trivia">
+        <h2>25. Trivia</h2>
+        <p class="lead">Short questions with answers.</p>
+        <div class="xp-trivia">
+          <details class="xp-details"><summary>Did OpenJDK ever ship its own AOT compiler?</summary><div class="xp-body"><p>Yes. <code>jaotc</code> (JEP 295) arrived in JDK 9 as an experimental feature, built on Graal. It was removed in JDK 17, together with the experimental Graal JIT (JEP 410), for lack of use<a class="cite" href="#ref-7">[7]</a><a class="cite" href="#ref-8">[8]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is JVMCI?</summary><div class="xp-body"><p>The JVM Compiler Interface (JEP 243, JDK 9), which lets a JIT compiler written in Java, such as Graal, plug into HotSpot<a class="cite" href="#ref-6">[6]</a><a class="cite" href="#ref-11">[11]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is the "closed-world assumption"?</summary><div class="xp-body"><p>The native build assumes that all code reachable at run time is known at build time. Anything loaded dynamically must be visible to static analysis or declared in metadata, which is the source of most migration work<a class="cite" href="#ref-16">[16]</a><a class="cite" href="#ref-25">[25]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is the image heap?</summary><div class="xp-body"><p>Objects created during the build, by classes initialized at build time, are serialized into the executable and mapped in at startup. This is one reason native images start so quickly, and also why build-time state must be environment-independent<a class="cite" href="#ref-14">[14]</a><a class="cite" href="#ref-17">[17]</a>.</p></div></details>
+          <details class="xp-details"><summary>Which garbage collector does a native image use by default?</summary><div class="xp-body"><p>The Serial GC. Oracle GraalVM also offers G1 on Linux, and an Epsilon (no-op) GC exists for very short-lived processes<a class="cite" href="#ref-33">[33]</a>.</p></div></details>
+          <details class="xp-details"><summary>Can a native executable produce JFR recordings and respond to <code>jcmd</code>?</summary><div class="xp-body"><p>Yes, if it is built with monitoring enabled (for example <code>--enable-monitoring=jfr,jcmd</code>). A subset of events and commands is supported<a class="cite" href="#ref-37">[37]</a><a class="cite" href="#ref-38">[38]</a>.</p></div></details>
+          <details class="xp-details"><summary>How do you ship a native executable in a distroless or <code>scratch</code> container?</summary><div class="xp-body"><p>Link it statically (with musl) or mostly statically, so that it does not depend on the image's C library<a class="cite" href="#ref-35">[35]</a>.</p></div></details>
+          <details class="xp-details"><summary>Can Native Image produce a C-callable library?</summary><div class="xp-body"><p>Yes. <code>--shared</code> builds a shared library, with entry points annotated <code>@CEntryPoint</code>, which C, C++, or other languages can call<a class="cite" href="#ref-40">[40]</a>.</p></div></details>
+          <details class="xp-details"><summary>What did JEPs 483, 514, and 515 add to HotSpot?</summary><div class="xp-body"><p>JEP 483 (JDK 24) added ahead-of-time class loading and linking, through an AOT cache produced by a training run. JDK 25's JEP 514 simplified creating the cache to a single <code>-XX:AOTCacheOutput</code> flag, and JEP 515 added method profiles to the cache, so that the JIT warms up sooner.</p></div></details>
+          <details class="xp-details"><summary>What does the tracing agent do?</summary><div class="xp-body"><p>Run on a normal JVM with <code>-agentlib:native-image-agent=config-output-dir=…</code>, it records the reflection, resources, proxies, JNI, and serialization the application actually uses, and writes them as metadata. It sees only the code paths your run exercised<a class="cite" href="#ref-30">[30]</a>.</p></div></details>
+        </div>
+      </section>
+
+<!-- xp:end -->
     </article>
 
     <section class="references" aria-labelledby="references-heading">

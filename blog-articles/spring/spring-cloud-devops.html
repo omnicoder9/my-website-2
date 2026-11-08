@@ -282,6 +282,26 @@
     .statbar{grid-template-columns:repeat(2,1fr);margin-top:-1rem;}
   }
 </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--rule);border-left:5px solid var(--cyan);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--rule);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--rule);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--rule);border-radius:10px;background:var(--paper-2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--cyan)}
+.xp-details[open]>summary{border-bottom:1px solid var(--rule)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--rule);border-radius:0 0 10px 10px;background:var(--paper);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--cyan)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <div id="progress"></div>
@@ -322,7 +342,10 @@
       <li><a href="#walkthrough">End-to-end deployment</a></li>
       <li><a href="#production">Operating in production</a></li>
       <li><a href="#close">Closing the loop</a></li>
-      <li><a href="#references">References</a></li>
+<!-- xp-toc:start -->      <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->      <li><a href="#references">References</a></li>
     </ol>
   </nav>
 
@@ -905,6 +928,172 @@ curl -X POST https://api.aurora.example.com/api/orders \
 
       <div class="endmark">/// END ///</div>
     </section>
+<!-- xp:start -->
+
+    <section id="enterprise-scenarios">
+      <span class="sec-num">Appendix A — Incidents</span>
+      <h2>Enterprise scenarios</h2>
+      <p>Cloud-native delivery moves risk from the release meeting into the pipeline and the platform. The scenarios below are composites, with illustrative figures. Appendix B reproduces two of the mechanisms with real runs.</p>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Retail · Spring services in 1 GiB, 1-CPU containers · slow and unstable</p>
+        <h3 id="scenario-ergonomics">A JVM that sized itself for a laptop</h3>
+        <p><strong>Situation.</strong> Services were containerized with no JVM flags and given 1 GiB of memory and one CPU each.</p>
+        <p><strong>What went wrong.</strong> The JVM saw the container limits and applied its defaults: a heap of a quarter of the memory, 256 MiB, and the Serial collector because it saw a single CPU. Services spent much of their time in GC with three quarters of their memory unused (Exercise 1).</p>
+        <p><strong>Fix.</strong> Set <code>-XX:MaxRAMPercentage</code> deliberately, typically 60–75%, leaving room for metaspace, threads, and buffers. Give latency-sensitive services at least two CPUs, or choose the collector explicitly. Build images with buildpacks, whose memory calculator does this sizing for you<sup class="cite"><a href="#ref-15">15</a></sup>.</p>
+      </div>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Payments · canary releases · regression promoted to 100%</p>
+        <h3 id="scenario-canary">A canary that looked healthy because it was small</h3>
+        <p><strong>Situation.</strong> Canaries received 5% of traffic for 10 minutes and were promoted automatically if their error rate was "within 0.5 percentage points" of the baseline.</p>
+        <p><strong>What went wrong.</strong> A release that raised errors from 0.5% to 0.8% passed. With only 3,000 canary requests, the difference was not distinguishable from noise, and the fixed threshold was too loose to catch it anyway (Exercise 2).</p>
+        <p><strong>Fix.</strong> Decide with a statistical test and enough traffic: run the canary long enough, or at a higher share, to detect the smallest regression you care about. Progressive-delivery tools such as Argo Rollouts and Flagger automate this analysis against Prometheus metrics.</p>
+      </div>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Logistics · CPU limits · p99 latency spikes every few seconds</p>
+        <h3 id="scenario-throttling">Throttled by a CPU limit</h3>
+        <p><strong>Situation.</strong> Pods had a CPU limit of 500m, and average CPU use was only 30%.</p>
+        <p><strong>What went wrong.</strong> The Linux CFS quota allows 50 ms of CPU per 100 ms period. A burst of parallel work, such as start-up, a GC cycle on several threads, or a fan-out of requests, used the quota in the first few milliseconds, and the whole container was paused until the next period. Average use hid the throttling.</p>
+        <p><strong>Fix.</strong> Watch <code>container_cpu_cfs_throttled_periods_total</code>, not only average use. Set requests from measurements, and consider removing CPU limits for latency-sensitive services while keeping memory limits. Kubernetes 1.35 can also resize pods in place without a restart<sup class="cite"><a href="#ref-22">22</a></sup>.</p>
+      </div>
+
+      <div class="xp-scenario">
+        <p class="xp-tag">Insurance · shared Jenkins controller · releases blocked for a day</p>
+        <h3 id="scenario-pipeline">A CI server as a single point of failure</h3>
+        <p><strong>Situation.</strong> Forty teams built on one Jenkins controller, with dozens of plug-ins and hand-edited jobs.</p>
+        <p><strong>What went wrong.</strong> A plug-in update broke the controller, and no team could build or release a fix for a production incident until it was restored from a backup.</p>
+        <p><strong>Fix.</strong> Keep pipelines as code in each repository, run builds on ephemeral agents, and pin and test plug-in updates in a staging controller, or move to a hosted model such as GitLab CI<sup class="cite"><a href="#ref-26">26</a>,<a href="#ref-27">27</a></sup>. Keep a documented break-glass path for emergency releases.</p>
+      </div>
+    </section>
+
+    <section id="exercises">
+      <span class="sec-num">Appendix B — Practice</span>
+      <h2>Exercises</h2>
+      <p>Exercise 1 is a shell script run against OpenJDK 21.0.13, which emulates container sizes with JVM flags. Exercise 2 is a Java program run on the same JDK. The output shown is real. Exercise 3 is a design exercise.</p>
+
+      <div class="xp-exercise">
+        <h3 id="exercise-1">B.1 What the JVM chooses in a container<span class="xp-lvl">containers · easy</span></h3>
+        <p>Without starting a container, find the heap size and garbage collector the JVM picks for 1 GiB with one CPU and for 4 GiB with two CPUs, with and without <code>-XX:MaxRAMPercentage=75</code>.</p>
+        <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+          <p><code>-XX:MaxRAM</code> and <code>-XX:ActiveProcessorCount</code> override what the JVM detects, so you can see its ergonomic choices for any container size. <code>-XX:+PrintFlagsFinal</code> prints the result.</p>
+<div class="filetab">jvm-ergonomics.sh</div>
+<pre><code>#!/usr/bin/env bash
+# Emulate container sizes with -XX:MaxRAM / -XX:ActiveProcessorCount and print what the JVM chooses.
+for flags in "-XX:MaxRAM=1g -XX:ActiveProcessorCount=1" \
+             "-XX:MaxRAM=1g -XX:ActiveProcessorCount=1 -XX:MaxRAMPercentage=75" \
+             "-XX:MaxRAM=4g -XX:ActiveProcessorCount=2" \
+             "-XX:MaxRAM=4g -XX:ActiveProcessorCount=2 -XX:MaxRAMPercentage=75"; do
+  java $flags -XX:+PrintFlagsFinal -version 2&gt;/dev/null | awk -v f="$flags" '
+    $2=="MaxHeapSize"{heap=$4/1048576} $2=="UseSerialGC"&amp;&amp;$4=="true"{gc="Serial"} $2=="UseG1GC"&amp;&amp;$4=="true"{gc="G1"}
+    $2=="ParallelGCThreads"{t=$4}
+    END{printf "%-64s heap %5d MiB  %-6s GC, ParallelGCThreads=%d\n", f, heap, gc, t}'
+done</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13, Linux</span><pre>-XX:MaxRAM=1g -XX:ActiveProcessorCount=1                         heap   256 MiB  Serial GC, ParallelGCThreads=0
+-XX:MaxRAM=1g -XX:ActiveProcessorCount=1 -XX:MaxRAMPercentage=75 heap   768 MiB  Serial GC, ParallelGCThreads=0
+-XX:MaxRAM=4g -XX:ActiveProcessorCount=2                         heap  1024 MiB  G1     GC, ParallelGCThreads=2
+-XX:MaxRAM=4g -XX:ActiveProcessorCount=2 -XX:MaxRAMPercentage=75 heap  3072 MiB  G1     GC, ParallelGCThreads=2</pre></div>
+          <p>Inside a real container, the JVM reads the same values from cgroup limits. Check them in a running pod with <code>java -XshowSettings:system -version</code>.</p>
+        </div></details>
+      </div>
+
+      <div class="xp-exercise">
+        <h3 id="exercise-2">B.2 Is the canary worse?<span class="xp-lvl">progressive delivery · medium</span></h3>
+        <p>A canary has 0.8% errors against a baseline of 0.5%. Decide at 99% confidence whether it is worse, after 10 and 60 minutes at 5% of traffic, and after 10 minutes at 25%.</p>
+        <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+          <p>A one-sided two-proportion z-test compares the error rates. A z-score above 2.33 means the canary is worse with 99% confidence.</p>
+<div class="filetab">Ex2Canary.java</div>
+<pre><code>package lab.sdevops;
+
+public class Ex2Canary {
+    /** One-sided two-proportion z-test: is the canary's error rate higher than the baseline's? */
+    static double z(long baseErrors, long baseTotal, long canErrors, long canTotal) {
+        double p1 = (double) baseErrors / baseTotal, p2 = (double) canErrors / canTotal;
+        double p = (double) (baseErrors + canErrors) / (baseTotal + canTotal);
+        return (p2 - p1) / Math.sqrt(p * (1 - p) * (1.0 / baseTotal + 1.0 / canTotal));
+    }
+
+    static void judge(String step, long baseErrors, long baseTotal, long canErrors, long canTotal) {
+        double zScore = z(baseErrors, baseTotal, canErrors, canTotal);
+        String verdict = zScore &gt; 2.33 ? "ROLL BACK (worse at 99% confidence)" : "no evidence of regression yet";
+        System.out.printf("%-34s baseline %.2f%%  canary %.2f%%  z = %5.2f  -&gt; %s%n", step,
+            100.0 * baseErrors / baseTotal, 100.0 * canErrors / canTotal, zScore, verdict);
+    }
+
+    public static void main(String[] args) {
+        // The canary has a real regression: 0.8% errors against a 0.5% baseline.
+        judge("5% traffic, after 10 minutes:", 285, 57_000, 24, 3_000);
+        judge("5% traffic, after 60 minutes:", 1_710, 342_000, 144, 18_000);
+        judge("25% traffic, after 10 minutes:", 225, 45_000, 120, 15_000);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>5% traffic, after 10 minutes:      baseline 0.50%  canary 0.80%  z =  2.24  -&gt; no evidence of regression yet
+5% traffic, after 60 minutes:      baseline 0.50%  canary 0.80%  z =  5.48  -&gt; ROLL BACK (worse at 99% confidence)
+25% traffic, after 10 minutes:     baseline 0.50%  canary 0.80%  z =  4.21  -&gt; ROLL BACK (worse at 99% confidence)</pre></div>
+          <p>The regression is real in every row; what changes is whether there is enough data to see it. Size the canary's duration and share for the smallest regression you need to detect, and keep a hard stop for gross failures, such as an error rate above 5%, that triggers without waiting for statistics.</p>
+        </div></details>
+      </div>
+
+      <div class="xp-exercise">
+        <h3 id="exercise-3">B.3 Design the pipeline<span class="xp-lvl">ci/cd · medium</span></h3>
+        <p>Sketch a GitLab CI pipeline for a Spring Boot service: build once, test, scan, build an image, deploy to staging automatically, and promote the same image to production after approval.</p>
+        <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+          <p>(This pipeline was not run here.) The key properties are that the image is built once and promoted by digest, and that production deploys are manual but scripted.</p>
+<div class="filetab">.gitlab-ci.yml</div>
+<pre><code>stages: [build, test, package, deploy]
+
+build:
+  stage: build
+  image: eclipse-temurin:21-jdk
+  script: ./mvnw -B verify -DskipITs
+  artifacts: { paths: [target/*.jar, target/classes/META-INF/sbom/] }
+
+integration-test:
+  stage: test
+  image: eclipse-temurin:21-jdk
+  services: [postgres:17]
+  script: ./mvnw -B failsafe:integration-test failsafe:verify
+
+image:
+  stage: package
+  script:
+    - ./mvnw -B spring-boot:build-image -Dspring-boot.build-image.imageName=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+
+deploy-staging:
+  stage: deploy
+  environment: staging
+  script: kubectl set image deploy/orders app=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -n staging
+
+deploy-production:
+  stage: deploy
+  environment: production
+  when: manual
+  rules: [{ if: '$CI_COMMIT_BRANCH == "main"' }]
+  script: kubectl set image deploy/orders app=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -n production</code></pre>
+          <p>In a GitOps setup, the deploy jobs would update the image tag in a manifest repository instead of calling <code>kubectl</code>, and Argo CD or Flux would apply it.</p>
+        </div></details>
+      </div>
+    </section>
+
+    <section id="trivia">
+      <span class="sec-num">Appendix C — Recall</span>
+      <h2>Trivia</h2>
+      <p>Short questions with answers.</p>
+      <div class="xp-trivia">
+        <details class="xp-details"><summary>What are the four DORA metrics?</summary><div class="xp-body"><p>Deployment frequency, lead time for changes, change failure rate, and time to restore service<sup class="cite"><a href="#ref-6">6</a>,<a href="#ref-8">8</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What replaced Ribbon and Hystrix in Spring Cloud?</summary><div class="xp-body"><p>Spring Cloud LoadBalancer and Spring Cloud CircuitBreaker, usually with Resilience4j<sup class="cite"><a href="#ref-11">11</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>How long is each Kubernetes minor release supported?</summary><div class="xp-body"><p>About 14 months: the project maintains the three most recent minor releases<sup class="cite"><a href="#ref-20">20</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What are native sidecar containers?</summary><div class="xp-body"><p>Init containers with <code>restartPolicy: Always</code>, which start before and stop after the main containers. The feature became stable in Kubernetes 1.33<sup class="cite"><a href="#ref-21">21</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What does an OpenShift Route add over a Kubernetes Ingress?</summary><div class="xp-body"><p>It is OpenShift's own resource for exposing services, built on its HAProxy router, with TLS termination modes (edge, passthrough, re-encrypt) as first-class options<sup class="cite"><a href="#ref-23">23</a>,<a href="#ref-24">24</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>Why do OpenShift images often fail on their first deployment?</summary><div class="xp-body"><p>By default, OpenShift runs containers with an arbitrary, non-root user ID. Images that assume root, or a fixed user that owns writable directories, cannot write their files<sup class="cite"><a href="#ref-24">24</a></sup>.</p></div></details>
+        <details class="xp-details"><summary>What is the difference between blue-green and canary releases?</summary><div class="xp-body"><p>Blue-green switches all traffic at once between two complete environments. A canary shifts a growing share of traffic to the new version while comparing its metrics with the old one.</p></div></details>
+        <details class="xp-details"><summary>Which managed Kubernetes services charge for the control plane?</summary><div class="xp-body"><p>EKS charges per cluster-hour. AKS has a free tier, and GKE waives the fee for one zonal cluster per billing account. Prices change, so check the providers' pages<sup class="cite"><a href="#ref-30">30</a>,<a href="#ref-31">31</a></sup>.</p></div></details>
+      </div>
+    </section>
+
+<!-- xp:end -->
 
   </article>
 </div>

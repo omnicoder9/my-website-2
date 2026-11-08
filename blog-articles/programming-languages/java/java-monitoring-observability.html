@@ -402,6 +402,26 @@
       .references a::after { content: " (" attr(href) ")"; font-size: 8pt; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
   <header class="hero">
@@ -448,6 +468,10 @@
         <li><a href="#security">Security and privacy</a></li>
         <li><a href="#incident">Incident workflow</a></li>
         <li><a href="#checklist">Production checklist</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
       </ol>
     </nav>
 
@@ -2826,6 +2850,326 @@ JFR:
           explain and mitigate it quickly.
         </div>
       </section>
+<!-- xp:start -->
+      <section id="enterprise-scenarios">
+        <h2>23. Enterprise scenarios</h2>
+        <p class="lead">Observability fails in two directions: too much telemetry, which costs money and still answers nothing, and the wrong telemetry, which looks healthy during an outage. The scenarios below are composites from SaaS, e-commerce, and platform teams. The figures are illustrative, and section 24 reproduces each mechanism with Micrometer 1.17, JFR, JMX, and small deterministic models.</p>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">B2B SaaS · Prometheus · a 14× monthly bill</p>
+          <h3>23.1 A <code>customerId</code> tag that created a million time series</h3>
+          <p><strong>Situation.</strong> To answer "which customer is slow?", a developer added <code>customerId</code> as a tag on the HTTP request timer.</p>
+          <p><strong>What went wrong.</strong> Every distinct combination of tag values is a separate time series. With 40,000 customers × routes × status codes × histogram buckets, the series count grew into the millions. Prometheus ran out of memory, the managed-metrics bill rose 14-fold, and dashboard queries timed out during the very incident they were meant to help with<a class="cite" href="#ref-17">[17]</a>.</p>
+          <p><strong>Fix.</strong> Keep metric tags bounded: route <em>templates</em>, status classes, regions. Enforce the limit in code with Micrometer <code>MeterFilter</code>s<a class="cite" href="#ref-22">[22]</a> (Exercise 1). Put high-cardinality identifiers in traces and logs, which are indexed per event, and use exemplars to link a metric's spike to a sample trace.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">E-commerce · 10 pods · latency SLO dashboard</p>
+          <h3>23.2 A dashboard showing a p99 that no request experienced</h3>
+          <p><strong>Situation.</strong> Each pod computed a client-side p99 latency, and the dashboard averaged the ten values.</p>
+          <p><strong>What went wrong.</strong> The dashboard showed 89 ms while customers complained. One pod served a large tenant, handled 10× the traffic, and was slow: the true p99 across all requests was 261 ms. Percentiles cannot be averaged or summed. You need the underlying distribution<a class="cite" href="#ref-16">[16]</a><a class="cite" href="#ref-21">[21]</a> (Exercise 2).</p>
+          <p><strong>Fix.</strong> Publish histograms (Prometheus buckets or native histograms, or OpenTelemetry exponential histograms), and compute percentiles at query time with <code>histogram_quantile</code> over <code>sum by (le)</code><a class="cite" href="#ref-29">[29]</a>. Client-side percentiles are fine for a single instance, and misleading for any aggregate.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Payments · 99.9% availability SLO · alert fatigue</p>
+          <h3>23.3 Two hundred alerts a week, and the real outage paged late</h3>
+          <p><strong>Situation.</strong> Alerts fired on "error rate &gt; 1% for 5 minutes" and on dozens of CPU and memory thresholds.</p>
+          <p><strong>What went wrong.</strong> Brief error spikes paged people at night for events that consumed almost none of the error budget. A slow burn of 0.5% errors, which spent the month's budget in four days, never crossed the threshold at all. On-call engineers had learned to ignore pages.</p>
+          <p><strong>Fix.</strong> Alert on symptoms that users feel, expressed as SLO <em>burn rates</em> over several windows, for example page when the budget burns at 14.4× over both 1 hour and 5 minutes, and open a ticket at 1× over 3 days<a class="cite" href="#ref-48">[48]</a><a class="cite" href="#ref-49">[49]</a> (Exercise 5). Keep resource thresholds for dashboards and capacity planning, not for paging.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Logistics · 30 services · mixed instrumentation libraries</p>
+          <h3>23.4 Traces that stopped at the message broker</h3>
+          <p><strong>Situation.</strong> HTTP calls were traced end to end, but the asynchronous half of each workflow, behind a message queue, appeared as unrelated root traces.</p>
+          <p><strong>What went wrong.</strong> The producers did not put trace context into message headers, and one legacy service generated its own uppercase trace ids. W3C Trace Context requires lowercase hex<a class="cite" href="#ref-36">[36]</a>, so downstream services rejected the ids and started new traces.</p>
+          <p><strong>Fix.</strong> Propagate <code>traceparent</code> (and <code>tracestate</code>) on <em>every</em> transport: HTTP, gRPC, Kafka and JMS headers, and the outbox rows themselves. Use OpenTelemetry's propagators or Java agent<a class="cite" href="#ref-37">[37]</a> rather than hand-written code, and validate inbound headers strictly (Exercise 6).</p>
+        </div>
+      </section>
+
+      <section id="exercises">
+        <h2>24. Exercises</h2>
+        <p class="lead">Try each exercise before opening its solution. Exercise 1 needs <code>micrometer-core</code>, <code>micrometer-commons</code>, and <code>micrometer-observation</code> 1.17.0 plus <code>HdrHistogram</code> 2.2.2 on the class path, as in its first line. The others use only the JDK. The outputs shown were produced on OpenJDK 21.0.13.</p>
+
+        <div class="xp-exercise">
+          <h3>Exercise 1: Measure, then cap, metric cardinality<span class="xp-lvl">Micrometer · medium</span></h3>
+          <p>Record 50,000 requests on a counter tagged with route, status, and customer (20,000 distinct customers), and count the resulting time series. Then use meter filters to drop the customer tag and cap the number of route values.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Each unique set of tags becomes a separate meter<a class="cite" href="#ref-13">[13]</a>. <code>MeterFilter.ignoreTags</code> removes a tag before registration, and <code>maximumAllowableTags</code> denies new meters once a tag has too many distinct values, which protects the registry from future mistakes<a class="cite" href="#ref-22">[22]</a>.</p>
+<pre><code>// java-flags: --class-path micrometer-core-1.17.0.jar:micrometer-commons-1.17.0.jar:micrometer-observation-1.17.0.jar:HdrHistogram-2.2.2.jar
+import io.micrometer.core.instrument.*;
+import io.micrometer.core.instrument.config.MeterFilter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
+class Ex1Cardinality {
+    static void simulate(MeterRegistry registry) {
+        for (int i = 0; i &lt; 50_000; i++) {
+            String customer = "cust-" + (i % 20_000);                 // unbounded in production
+            String route = i % 3 == 0 ? "/orders/{id}" : "/orders";  // a templated route: bounded
+            Counter.builder("http.server.requests.count")
+                   .tag("route", route).tag("status", i % 50 == 0 ? "500" : "200").tag("customer", customer)
+                   .register(registry).increment();
+        }
+    }
+
+    public static void main(String[] args) {
+        MeterRegistry naive = new SimpleMeterRegistry();
+        simulate(naive);
+        System.out.printf("with a customer tag:      %,d time series%n", naive.getMeters().size());
+
+        MeterRegistry guarded = new SimpleMeterRegistry();
+        guarded.config().meterFilter(MeterFilter.ignoreTags("customer"));          // strip the unbounded tag
+        guarded.config().meterFilter(MeterFilter.maximumAllowableTags("http.server.requests", "route", 100, MeterFilter.deny()));
+        simulate(guarded);
+        System.out.printf("customer tag filtered:    %,d time series%n", guarded.getMeters().size());
+        guarded.getMeters().stream().map(m -&gt; m.getId().getTags().toString()).sorted().forEach(t -&gt; System.out.println("  " + t));
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · Micrometer 1.17.0, OpenJDK 21.0.13</span><pre>with a customer tag:      36,667 time series
+customer tag filtered:    4 time series
+  [tag(route=/orders), tag(status=200)]
+  [tag(route=/orders), tag(status=500)]
+  [tag(route=/orders/{id}), tag(status=200)]
+  [tag(route=/orders/{id}), tag(status=500)]</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 2: Why percentiles cannot be averaged<span class="xp-lvl">statistics · easy</span></h3>
+          <p>Simulate ten pods. Nine handle 2,000 fast requests each, and one handles 20,000 slow requests. Compare the average of the per-pod p99s, the largest per-pod p99, and the true p99 across all requests.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Averaging gives each pod equal weight, whatever its traffic, and it ignores the shape of each distribution. Only merging the raw distributions, as histograms do, gives the right answer<a class="cite" href="#ref-16">[16]</a>.</p>
+<pre><code>import java.util.*;
+
+class Ex2PercentileAggregation {
+    static double p99(double[] v) { double[] s = v.clone(); Arrays.sort(s); return s[(int) Math.ceil(0.99 * s.length) - 1]; }
+
+    public static void main(String[] args) {
+        Random rnd = new Random(11);
+        int pods = 10;
+        double[][] perPod = new double[pods][];
+        for (int p = 0; p &lt; pods; p++) {
+            int n = p == 9 ? 20_000 : 2_000;                          // pod 9 takes 10x traffic (it serves a big tenant)
+            perPod[p] = new double[n];
+            for (int i = 0; i &lt; n; i++)
+                perPod[p][i] = 20 + rnd.nextExponential() * (p == 9 ? 60 : 10);   // and is slower
+        }
+        double avgOfP99 = Arrays.stream(perPod).mapToDouble(Ex2PercentileAggregation::p99).average().orElseThrow();
+        double maxOfP99 = Arrays.stream(perPod).mapToDouble(Ex2PercentileAggregation::p99).max().orElseThrow();
+        double trueP99 = p99(Arrays.stream(perPod).flatMapToDouble(Arrays::stream).toArray());
+        System.out.printf("average of per-pod p99s : %6.1f ms   &lt;- what a dashboard averaging client-side percentiles shows%n", avgOfP99);
+        System.out.printf("max of per-pod p99s     : %6.1f ms%n", maxOfP99);
+        System.out.printf("p99 of all requests     : %6.1f ms   &lt;- needs mergeable histograms%n", trueP99);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>average of per-pod p99s :   88.7 ms   &lt;- what a dashboard averaging client-side percentiles shows
+max of per-pod p99s     :  299.5 ms
+p99 of all requests     :  261.1 ms   &lt;- needs mergeable histograms</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 3: A custom JFR business event<span class="xp-lvl">JFR · medium</span></h3>
+          <p>Define a <code>com.acme.Checkout</code> JFR event with order id, item count, payment provider, and outcome. Record three checkouts, dump the recording to a file, and read the events back.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Subclass <code>jdk.jfr.Event</code>, annotate the class with a name, label, and category, and call <code>begin</code> and <code>commit</code> around the work<a class="cite" href="#ref-10">[10]</a><a class="cite" href="#ref-12">[12]</a>. Committing a disabled event costs almost nothing, so business events can stay in production code and be turned on during an incident with <code>jcmd &lt;pid&gt; JFR.start</code>. JDK Mission Control shows them next to GC and lock events<a class="cite" href="#ref-11">[11]</a>.</p>
+<pre><code>import java.nio.file.*;
+import jdk.jfr.*;
+import jdk.jfr.consumer.*;
+
+class Ex3JfrEvent {
+    @Name("com.acme.Checkout") @Label("Checkout") @Category({"Acme", "Commerce"})
+    @StackTrace(false)
+    static class CheckoutEvent extends Event {
+        @Label("Order id") String orderId;
+        @Label("Items") int items;
+        @Label("Payment provider") String provider;
+        @Label("Outcome") String outcome;
+    }
+
+    public static void main(String[] args) throws Exception {
+        Path file = Files.createTempFile("checkout", ".jfr");
+        try (Recording r = new Recording()) {
+            r.enable(CheckoutEvent.class);
+            r.start();
+            String[][] orders = {{"o-1001", "3", "adyen", "OK"}, {"o-1002", "1", "stripe", "DECLINED"}, {"o-1003", "7", "adyen", "OK"}};
+            for (String[] o : orders) {
+                CheckoutEvent e = new CheckoutEvent();
+                e.begin();
+                Thread.sleep(5);                                   // the work being timed
+                e.orderId = o[0]; e.items = Integer.parseInt(o[1]); e.provider = o[2]; e.outcome = o[3];
+                e.commit();                                        // cheap no-op if the event is disabled
+            }
+            r.stop();
+            r.dump(file);
+        }
+        for (RecordedEvent e : RecordingFile.readAllEvents(file)) {
+            if (!e.getEventType().getName().equals("com.acme.Checkout")) continue;
+            System.out.printf("%s order=%s items=%d provider=%s outcome=%s took&gt;=5ms=%b%n", e.getEventType().getLabel(),
+                    e.getString("orderId"), e.getInt("items"), e.getString("provider"), e.getString("outcome"),
+                    e.getDuration().toMillis() &gt;= 5);
+        }
+        Files.delete(file);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>Checkout order=o-1001 items=3 provider=adyen outcome=OK took&gt;=5ms=true
+Checkout order=o-1002 items=1 provider=stripe outcome=DECLINED took&gt;=5ms=true
+Checkout order=o-1003 items=7 provider=adyen outcome=OK took&gt;=5ms=true</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 4: Expose a queue over JMX<span class="xp-lvl">JMX · easy</span></h3>
+          <p>Publish an email-dispatch queue's depth and oldest-message age as an MXBean, read the attributes back through the platform MBean server, and invoke a <code>pause</code> operation.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>An interface whose name ends in <code>MXBean</code> defines the management interface: getters become attributes, and other methods become operations<a class="cite" href="#ref-7">[7]</a><a class="cite" href="#ref-8">[8]</a>. JConsole, VisualVM, and JMX exporters for Prometheus discover it under its <code>ObjectName</code>.</p>
+<pre><code>import java.lang.management.ManagementFactory;
+import java.util.concurrent.*;
+import javax.management.*;
+
+class Ex4MXBean {
+    public interface DispatchQueueMXBean {
+        int getDepth();
+        long getOldestAgeMillis();
+        void pause();
+    }
+
+    static final class DispatchQueue implements DispatchQueueMXBean {
+        final BlockingQueue&lt;Long&gt; enqueuedAt = new LinkedBlockingQueue&lt;&gt;();
+        volatile boolean paused;
+        long now = 10_000;                                           // simulated clock, ms
+        public int getDepth() { return enqueuedAt.size(); }
+        public long getOldestAgeMillis() { Long t = enqueuedAt.peek(); return t == null ? 0 : now - t; }
+        public void pause() { paused = true; }
+    }
+
+    public static void main(String[] args) throws Exception {
+        DispatchQueue q = new DispatchQueue();
+        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+        ObjectName name = new ObjectName("com.acme.dispatch:type=Queue,name=email");
+        server.registerMBean(q, name);
+
+        for (long t : new long[] {6_500, 8_000, 9_200}) q.enqueuedAt.add(t);
+
+        // What jconsole, VisualVM, or a JMX exporter sees:
+        System.out.println(name + " Depth=" + server.getAttribute(name, "Depth") + " OldestAgeMillis=" + server.getAttribute(name, "OldestAgeMillis"));
+        server.invoke(name, "pause", null, null);
+        System.out.println("paused via JMX operation: " + q.paused);
+        System.out.println("registered under domain com.acme.dispatch: " + server.queryNames(new ObjectName("com.acme.dispatch:*"), null).size());
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>com.acme.dispatch:type=Queue,name=email Depth=3 OldestAgeMillis=3500
+paused via JMX operation: true
+registered under domain com.acme.dispatch: 1</pre></div>
+            <p>The oldest message's <em>age</em> is usually a better alert signal than the queue's depth, because it measures user-visible delay directly.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 5: SLO burn-rate arithmetic<span class="xp-lvl">alerting · medium</span></h3>
+          <p>For a 99.9% 30-day SLO, compute the error budget, and for the three classic burn-rate thresholds (14.4× over 1 h, 6× over 6 h, and 1× over 3 days), compute the error ratio, the share of the budget each window spends, and the time until the budget is exhausted. Should a current error ratio of 1.68% page someone?</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>The burn rate is the observed error ratio divided by the budgeted ratio (0.1%). At 14.4×, one hour consumes 2% of a 30-day budget, which is the usual paging threshold. Multiwindow rules also require a short window, such as 5 minutes, to be burning, so that the alert resolves quickly once the problem stops<a class="cite" href="#ref-48">[48]</a><a class="cite" href="#ref-49">[49]</a>.</p>
+<pre><code>class Ex5BurnRate {
+    public static void main(String[] args) {
+        double slo = 0.999;                              // 99.9% of requests succeed over 30 days
+        double budget = 1 - slo;
+        double minutesIn30Days = 30 * 24 * 60;
+        System.out.printf("error budget: %.1f%% of requests = %.1f minutes of total outage per 30 days%n", budget * 100, budget * minutesIn30Days);
+
+        // Burn rate = observed error ratio / budgeted error ratio. 1.0 consumes exactly the budget in 30 days.
+        double[][] windows = {{14.4, 60}, {6, 360}, {1, 4320}};   // classic multiwindow thresholds (rate, window minutes)
+        for (double[] w : windows) {
+            double rate = w[0], windowMin = w[1];
+            double errorRatio = rate * budget;
+            double budgetSpent = rate * windowMin / minutesIn30Days * 100;
+            double hoursToExhaust = minutesIn30Days / rate / 60;
+            System.out.printf("burn %5.1fx over %5.0f min: error ratio %.2f%%, spends %4.1f%% of budget, exhausts it in %6.1f h%n",
+                    rate, windowMin, errorRatio * 100, budgetSpent, hoursToExhaust);
+        }
+        double observed = 0.0168;                         // 1.68% of requests failing right now
+        System.out.printf("current error ratio %.2f%% -&gt; burn rate %.1fx -&gt; page: %b%n", observed * 100, observed / budget, observed / budget &gt;= 14.4);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>error budget: 0.1% of requests = 43.2 minutes of total outage per 30 days
+burn  14.4x over    60 min: error ratio 1.44%, spends  2.0% of budget, exhausts it in   50.0 h
+burn   6.0x over   360 min: error ratio 0.60%, spends  5.0% of budget, exhausts it in  120.0 h
+burn   1.0x over  4320 min: error ratio 0.10%, spends 10.0% of budget, exhausts it in  720.0 h
+current error ratio 1.68% -&gt; burn rate 16.8x -&gt; page: true</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 6: Parse and propagate <code>traceparent</code><span class="xp-lvl">tracing · easy</span></h3>
+          <p>Parse a W3C <code>traceparent</code> header, create the header for an outgoing child call (same trace id, new span id, same sampling flag), and reject uppercase, all-zero, and malformed headers.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Version 00 of the format is <code>version-traceid(32 hex)-parentid(16 hex)-flags</code>, lowercase only, and all-zero ids are invalid<a class="cite" href="#ref-36">[36]</a>. In real services, let the OpenTelemetry propagators do this. The exercise shows what they check.</p>
+<pre><code>import java.security.SecureRandom;
+import java.util.HexFormat;
+import java.util.regex.Pattern;
+
+class Ex6TraceParent {
+    static final Pattern FORMAT = Pattern.compile("^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$");
+    record TraceParent(String traceId, String parentId, boolean sampled) {
+        String header() { return "00-" + traceId + "-" + parentId + "-" + (sampled ? "01" : "00"); }
+    }
+
+    static TraceParent parse(String h) {
+        var m = FORMAT.matcher(h);
+        if (!m.matches()) throw new IllegalArgumentException("invalid traceparent: " + h);
+        if (m.group(1).chars().allMatch(c -&gt; c == '0') || m.group(2).chars().allMatch(c -&gt; c == '0'))
+            throw new IllegalArgumentException("all-zero id: " + h);
+        return new TraceParent(m.group(1), m.group(2), (Integer.parseInt(m.group(3), 16) &amp; 1) == 1);
+    }
+
+    /** A child span keeps the trace id and sampling decision, and gets a new span id. */
+    static TraceParent child(TraceParent parent, SecureRandom rnd) {
+        byte[] span = new byte[8];
+        rnd.nextBytes(span);
+        return new TraceParent(parent.traceId(), HexFormat.of().formatHex(span), parent.sampled());
+    }
+
+    public static void main(String[] args) {
+        String incoming = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";   // example from the W3C spec
+        TraceParent p = parse(incoming);
+        TraceParent c = child(p, new SecureRandom());
+        System.out.println("incoming : " + p);
+        System.out.println("outgoing keeps trace id: " + c.traceId().equals(p.traceId()) + ", new span id: " + !c.parentId().equals(p.parentId())
+                + ", sampled: " + c.sampled());
+        for (String bad : new String[] {"00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01",
+                                        "00-00000000000000000000000000000000-00f067aa0ba902b7-01", "garbage"}) {
+            try { parse(bad); } catch (IllegalArgumentException e) { System.out.println("rejected: " + e.getMessage()); }
+        }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>incoming : TraceParent[traceId=4bf92f3577b34da6a3ce929d0e0e4736, parentId=00f067aa0ba902b7, sampled=true]
+outgoing keeps trace id: true, new span id: true, sampled: true
+rejected: invalid traceparent: 00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01
+rejected: all-zero id: 00-00000000000000000000000000000000-00f067aa0ba902b7-01
+rejected: invalid traceparent: garbage</pre></div>
+          </div></details>
+        </div>
+      </section>
+
+      <section id="trivia">
+        <h2>25. Trivia</h2>
+        <p class="lead">Short questions with answers.</p>
+        <div class="xp-trivia">
+          <details class="xp-details"><summary>What are the three classic signals of observability, and what did OpenTelemetry add?</summary><div class="xp-body"><p>Metrics, logs, and traces. OpenTelemetry also defines baggage, which propagates key-value context, and is adding continuous profiling as a fourth signal<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-38">[38]</a>.</p></div></details>
+          <details class="xp-details"><summary>What do RED and USE stand for?</summary><div class="xp-body"><p>RED, for services: Rate, Errors, Duration. USE, for resources: Utilization, Saturation, Errors (Brendan Gregg). Together with Google's "four golden signals" (latency, traffic, errors, saturation), they are the usual starting points for dashboards.</p></div></details>
+          <details class="xp-details"><summary>Why should a Prometheus counter's name end in <code>_total</code>?</summary><div class="xp-body"><p>It is the naming convention for counters, alongside base units such as <code>_seconds</code> and <code>_bytes</code>. Micrometer's Prometheus registry appends it automatically<a class="cite" href="#ref-17">[17]</a><a class="cite" href="#ref-25">[25]</a>. Use <code>rate()</code> on counters, never on gauges.</p></div></details>
+          <details class="xp-details"><summary>What does <code>rate()</code> do when a counter resets after a pod restart?</summary><div class="xp-body"><p>It detects the drop and treats it as a reset, so the rate stays correct. This is why counters, not gauges, are used for things that only increase<a class="cite" href="#ref-29">[29]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is the overhead of JFR's default configuration?</summary><div class="xp-body"><p>The <code>default</code> settings are designed for continuous production use, with overhead typically around 1%. The <code>profile</code> settings collect more and cost more<a class="cite" href="#ref-10">[10]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is the difference between a JMX MBean and an MXBean?</summary><div class="xp-body"><p>An MXBean uses only <em>open types</em>, such as primitives, strings, and <code>CompositeData</code>, so any client can read it without your classes on its class path. The JDK's own platform beans (memory, threads, GC) are MXBeans<a class="cite" href="#ref-8">[8]</a>.</p></div></details>
+          <details class="xp-details"><summary>Which bit of the <code>traceparent</code> flags means "sampled"?</summary><div class="xp-body"><p>The lowest bit (<code>01</code>). It records the caller's sampling decision, so that downstream services keep or drop the whole trace consistently<a class="cite" href="#ref-36">[36]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is tail-based sampling?</summary><div class="xp-body"><p>Deciding whether to keep a trace <em>after</em> it has finished, for example keeping every trace with an error or a latency above p99. It requires buffering whole traces, typically in the OpenTelemetry Collector, unlike head-based sampling, which decides at the root span<a class="cite" href="#ref-47">[47]</a>.</p></div></details>
+          <details class="xp-details"><summary>How do logs and traces get linked?</summary><div class="xp-body"><p>By putting the active trace id and span id in each log record, through MDC fields in SLF4J and Logback, or natively in the OpenTelemetry logs data model<a class="cite" href="#ref-40">[40]</a><a class="cite" href="#ref-44">[44]</a><a class="cite" href="#ref-45">[45]</a>. A log line in Grafana or Kibana then links straight to its trace.</p></div></details>
+          <details class="xp-details"><summary>What is an exemplar?</summary><div class="xp-body"><p>A sample trace id attached to a histogram bucket, which lets you jump from "the p99 spiked at 10:42" to an actual slow request. Prometheus stores exemplars when they are exposed in the OpenMetrics format.</p></div></details>
+        </div>
+      </section>
+
+<!-- xp:end -->
     </article>
 
     <section class="references" aria-labelledby="references-heading">

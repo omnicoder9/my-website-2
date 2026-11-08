@@ -133,6 +133,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1415,6 +1435,233 @@ void emitsPricingObservation() {
   During an incident, begin with the user-visible symptom, quantify it with metrics, locate representative operations with traces, and explain those operations with structured logs. When that workflow fails, inspect the telemetry pipeline itself: instrumentation names, label cardinality, sampling, context propagation, exporter queues, collector processors, backend ingestion, dashboard queries, and alert rules. Observability is not a collection of agents; it is a designed chain of evidence.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">24. Enterprise scenarios</h2>
+<p>Observability fails in two directions: too little signal to explain an incident, or so much signal that the monitoring system itself becomes the incident. The scenarios below are composites, with illustrative figures. Section 25 reproduces the mechanics with Micrometer 1.17.0.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Telecom · Prometheus · monitoring outage during a marketing campaign</p>
+<h3 id="scenario-cardinality">24.1 A tag that took down Prometheus</h3>
+<p><strong>Situation.</strong> A custom filter recorded request timers tagged with the raw request path, including customer IDs.</p>
+<p><strong>What went wrong.</strong> Each new customer created new time series. A campaign brought in 2 million visitors, the Prometheus server ran out of memory, and the operations team lost all dashboards and alerts in the middle of the event<a class="citation" href="#ref-19">[19]</a>.</p>
+<p><strong>Fix.</strong> Tag with bounded values, such as the URI template that Spring MVC's own instrumentation uses, and put high-cardinality identifiers in traces and logs instead. Install a <code>MeterFilter</code> that caps tag values as a safety net (Exercise 1)<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-4">[4]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Online retailer · 40 pods · latency SLO dashboard</p>
+<h3 id="scenario-percentiles">24.2 A p99 that hid a broken pod</h3>
+<p><strong>Situation.</strong> Each pod published a client-side p99, and the SLO dashboard averaged them across pods.</p>
+<p><strong>What went wrong.</strong> Percentiles cannot be averaged. One pod with a failing disk served slow requests to a share of customers, while the averaged p99 stayed in the green (Exercise 2).</p>
+<p><strong>Fix.</strong> Publish histogram buckets, which can be summed across pods, and compute percentiles in the query with <code>histogram_quantile</code>. Better still, express the SLO as the fraction of requests faster than a threshold, using a <code>serviceLevelObjectives</code> bucket<a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-24">[24]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Payments · async processing · traces that stopped at the thread pool</p>
+<h3 id="scenario-context">24.3 Traces that broke at every <code>@Async</code> call</h3>
+<p><strong>Situation.</strong> Requests were traced through the gateway and the web layer, but stopped where work moved to an executor or a reactive pipeline.</p>
+<p><strong>What went wrong.</strong> Trace context lives in thread-local state. Work submitted to a plain executor ran without it, so log lines had no trace ID and spans became orphaned roots.</p>
+<p><strong>Fix.</strong> Wrap executors with <code>ContextExecutorService</code> or a <code>TaskDecorator</code> based on <code>ContextSnapshot</code>, and enable automatic context propagation for Reactor<a class="citation" href="#ref-38">[38]</a><a class="citation" href="#ref-39">[39]</a>. Test that a trace ID survives each boundary<a class="citation" href="#ref-43">[43]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">SaaS platform · 300 alert rules · pager fatigue</p>
+<h3 id="scenario-alerting">24.4 Alerts nobody answered</h3>
+<p><strong>Situation.</strong> Every service alerted on CPU, heap, GC pauses, and error counts, with fixed thresholds.</p>
+<p><strong>What went wrong.</strong> On-call engineers received about 90 pages a week, most needing no action, and learned to ignore them. A real outage went unanswered for 25 minutes.</p>
+<p><strong>Fix.</strong> Page on symptoms that users feel, such as error rate and latency against an SLO, with burn-rate rules over several windows. Route cause-level signals to dashboards or tickets, and precompute expensive expressions with recording rules (Exercise 4)<a class="citation" href="#ref-27">[27]</a><a class="citation" href="#ref-28">[28]</a>.</p>
+</div>
+
+<h2 id="exercises">25. Exercises</h2>
+<p>Exercises 1–3 are self-contained programs, compiled and run with Micrometer 1.17.0 on OpenJDK 21.0.13. The output shown is real. Exercise 4 is a configuration exercise.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">25.1 Count the time series<span class="xp-lvl">metrics · easy</span></h3>
+<p>Record 50,000 requests across 20,000 customers, once with the raw path as the <code>uri</code> tag and once with the URI template. Then cap the raw-path version at 100 tag values with a meter filter.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Each distinct combination of tag values is a separate time series. <code>MeterFilter.maximumAllowableTags</code> stops registering new values once the cap is reached, and applies a fallback filter, here <code>deny()</code><a class="citation" href="#ref-2">[2]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sobs;
+
+import io.micrometer.core.instrument.*;
+import io.micrometer.core.instrument.config.MeterFilter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
+public class Ex1Cardinality {
+    static void record(MeterRegistry registry, String label, boolean perCustomerTag) {
+        for (int i = 0; i &lt; 50_000; i++) {
+            String customer = "cust-" + (i % 20_000);
+            String uri = "/customers/" + customer + "/orders";
+            Timer.builder("http.server.requests")
+                .tag("uri", perCustomerTag ? uri : "/customers/{id}/orders")   // raw path vs URI template
+                .tag("status", i % 50 == 0 ? "500" : "200")
+                .register(registry).record(java.time.Duration.ofMillis(12));
+        }
+        System.out.printf("%-28s %,7d time series%n", label, registry.getMeters().size());
+    }
+
+    public static void main(String[] args) {
+        record(new SimpleMeterRegistry(), "raw path as a tag:", true);
+        record(new SimpleMeterRegistry(), "URI template as a tag:", false);
+
+        SimpleMeterRegistry guarded = new SimpleMeterRegistry();
+        guarded.config().meterFilter(MeterFilter.maximumAllowableTags("http.server.requests", "uri", 100, MeterFilter.deny()));
+        record(guarded, "raw path, with a guard:", true);
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Micrometer 1.17.0, OpenJDK 21.0.13</span><pre>raw path as a tag:            20,000 time series
+URI template as a tag:             2 time series
+raw path, with a guard:          100 time series</pre></div>
+<p>The guard keeps the backend alive, but the data past the cap is lost. The real fix is the template. Spring Boot applies a similar cap to its own HTTP metrics through <code>management.metrics.web.server.max-uri-tags</code><a class="citation" href="#ref-4">[4]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">25.2 Why percentiles do not average<span class="xp-lvl">metrics · medium</span></h3>
+<p>Two pods serve checkout. Pod A handles 90,000 healthy requests, and pod B handles 10,000, 30% of them slow. Compare the average of their p99s with the true p99, and compute the share of requests under 300 ms from SLO buckets.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Client-side percentiles are computed per instance and cannot be combined. Bucket counts are additive, so they aggregate correctly across pods<a class="citation" href="#ref-20">[20]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sobs;
+
+import io.micrometer.core.instrument.*;
+import io.micrometer.core.instrument.distribution.*;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
+
+public class Ex2Percentiles {
+    static Timer timer(MeterRegistry r) {
+        return Timer.builder("checkout").publishPercentiles(0.99)
+            .serviceLevelObjectives(Duration.ofMillis(300)).register(r);
+    }
+
+    public static void main(String[] args) {
+        Random rnd = new Random(7);
+        SimpleMeterRegistry a = new SimpleMeterRegistry(), b = new SimpleMeterRegistry();
+        Timer ta = timer(a), tb = timer(b);
+        List&lt;Long&gt; all = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 90_000; i++) { long ms = 40 + rnd.nextInt(60); ta.record(Duration.ofMillis(ms)); all.add(ms); }          // healthy pod
+        for (int i = 0; i &lt; 10_000; i++) { long ms = rnd.nextInt(10) &lt; 3 ? 900 + rnd.nextInt(400) : 50 + rnd.nextInt(60); tb.record(Duration.ofMillis(ms)); all.add(ms); }  // pod with a bad disk
+        double pa = p99(ta), pb = p99(tb);
+        Collections.sort(all);
+        System.out.printf("pod A p99 %4.0f ms, pod B p99 %5.0f ms, average of the two p99s: %5.0f ms%n", pa, pb, (pa + pb) / 2);
+        System.out.printf("true p99 over all requests:                       %5d ms%n", all.get((int) Math.ceil(0.99 * all.size()) - 1));
+        double under = under300(ta) + under300(tb);
+        System.out.printf("from mergeable SLO buckets: %.2f%% of requests under 300 ms%n", 100 * under / (ta.count() + tb.count()));
+    }
+
+    static double p99(Timer t) { return t.takeSnapshot().percentileValues()[0].value(java.util.concurrent.TimeUnit.MILLISECONDS); }
+
+    static double under300(Timer t) {
+        for (CountAtBucket c : t.takeSnapshot().histogramCounts())
+            if (c.bucket(java.util.concurrent.TimeUnit.MILLISECONDS) == 300) return c.count();
+        return 0;
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Micrometer 1.17.0, OpenJDK 21.0.13</span><pre>pod A p99   99 ms, pod B p99  1340 ms, average of the two p99s:   719 ms
+true p99 over all requests:                        1166 ms
+from mergeable SLO buckets: 97.00% of requests under 300 ms</pre></div>
+<p>The averaged p99 is less than two-thirds of the true value. Micrometer's client-side percentiles are also approximations, which is why pod B's figure exceeds its slowest request. With <code>publishPercentileHistogram()</code> enabled, Prometheus can compute fleet-wide percentiles with <code>histogram_quantile(0.99, sum by (le) (rate(..._bucket[5m])))</code><a class="citation" href="#ref-24">[24]</a>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">25.3 One observation, metrics and spans<span class="xp-lvl">observation api · medium</span></h3>
+<p>Instrument a payment authorization with the Observation API so that it produces a timer and a span, with the provider as a metric tag and the order ID only on the span.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Handlers decide what an observation becomes. Low-cardinality key values go to both metrics and traces, while high-cardinality ones go only to traces<a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-22">[22]</a><a class="citation" href="#ref-23">[23]</a>. A printing handler stands in for the tracing handler here.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sobs;
+
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.*;
+
+public class Ex3Observation {
+    public static void main(String[] args) {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ObservationRegistry registry = ObservationRegistry.create();
+        registry.observationConfig()
+            .observationHandler(new DefaultMeterObservationHandler(meters))         // metrics from the same observation
+            .observationHandler(new ObservationHandler&lt;Observation.Context&gt;() {      // stands in for a tracing handler
+                public boolean supportsContext(Observation.Context c) { return true; }
+                public void onStop(Observation.Context c) {
+                    System.out.println("span " + c.getName() + " low=" + c.getLowCardinalityKeyValues() + " high=" + c.getHighCardinalityKeyValues());
+                }
+            });
+
+        for (String order : new String[] {"o-1001", "o-1002"}) {
+            Observation.createNotStarted("payment.authorize", registry)
+                .lowCardinalityKeyValue("provider", "adyen")         // becomes a metric tag and a span attribute
+                .highCardinalityKeyValue("order.id", order)          // span attribute only
+                .observe(() -&gt; { });
+        }
+        meters.getMeters().forEach(m -&gt; System.out.println("meter " + m.getId().getName() + " " + m.getId().getTags()));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Micrometer 1.17.0, OpenJDK 21.0.13</span><pre>span payment.authorize low=[keyValue(provider=adyen)] high=[keyValue(order.id=o-1001)]
+span payment.authorize low=[keyValue(provider=adyen)] high=[keyValue(order.id=o-1002)]
+meter payment.authorize.active [tag(provider=adyen)]
+meter payment.authorize [tag(error=none), tag(provider=adyen)]</pre></div>
+<p>The order IDs appear on the spans but not on the meters, so instrumenting with observations keeps cardinality safe by construction. In Spring Boot, the registry and handlers are configured for you, and <code>@Observed</code> does the same for a method.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">25.4 An SLO burn-rate alert<span class="xp-lvl">alerting · medium</span></h3>
+<p>Checkout has an SLO of 99.9% successful requests over 30 days. Write a Prometheus recording rule for the error ratio, and an alert that pages when the error budget burns 14.4 times faster than allowed over both a short and a long window.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>(This rule was not loaded into a Prometheus server here.) A burn rate of 14.4 spends 2% of a 30-day budget in one hour. Requiring both windows avoids pages for brief spikes, and clears the alert quickly once the problem stops<a class="citation" href="#ref-27">[27]</a><a class="citation" href="#ref-28">[28]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">YAML · checkout-slo.rules.yml</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>groups:
+  - name: checkout-slo
+    rules:
+      - record: checkout:error_ratio:rate5m
+        expr: |
+          sum(rate(http_server_requests_seconds_count{uri="/checkout",status=~"5.."}[5m]))
+          / sum(rate(http_server_requests_seconds_count{uri="/checkout"}[5m]))
+      - record: checkout:error_ratio:rate1h
+        expr: |
+          sum(rate(http_server_requests_seconds_count{uri="/checkout",status=~"5.."}[1h]))
+          / sum(rate(http_server_requests_seconds_count{uri="/checkout"}[1h]))
+      - alert: CheckoutErrorBudgetBurn
+        expr: checkout:error_ratio:rate1h &gt; (14.4 * 0.001) and checkout:error_ratio:rate5m &gt; (14.4 * 0.001)
+        labels: { severity: page }
+        annotations:
+          summary: "Checkout is burning its 30-day error budget 14x too fast"</code></pre>
+  </div>
+</div></details>
+</div>
+
+<h2 id="trivia">26. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What are the "three pillars" usually said to make up observability?</summary><div class="xp-body"><p>Metrics, logs, and traces. Profiles are increasingly counted as a fourth signal<a class="citation" href="#ref-37">[37]</a>.</p></div></details>
+<details class="xp-details"><summary>What does SLF4J do when no logging backend is on the class path?</summary><div class="xp-body"><p>SLF4J 2 prints a warning and falls back to a no-operation logger, so log calls are silently discarded<a class="citation" href="#ref-8">[8]</a><a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+<details class="xp-details"><summary>Which structured log formats does Spring Boot support out of the box?</summary><div class="xp-body"><p>Elastic Common Schema (ECS), Graylog Extended Log Format (GELF), and Logstash JSON, selected with <code>logging.structured.format.console</code> or <code>.file</code><a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>Why do Prometheus counters end in <code>_total</code>?</summary><div class="xp-body"><p>It is the naming convention for monotonic counters in the exposition format. Micrometer adds the suffix automatically for its Prometheus registry<a class="citation" href="#ref-24">[24]</a><a class="citation" href="#ref-26">[26]</a>.</p></div></details>
+<details class="xp-details"><summary>Can you change a log level at run time in Spring Boot?</summary><div class="xp-body"><p>Yes. Send a POST to <code>/actuator/loggers/{name}</code> with a <code>configuredLevel</code>, provided that the endpoint is exposed and secured<a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between a Micrometer <code>Observation</code> and a span?</summary><div class="xp-body"><p>An observation is instrumentation-neutral. Handlers turn it into a span, a timer, log entries, or all of these. A span is one tracing-specific representation<a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-36">[36]</a>.</p></div></details>
+<details class="xp-details"><summary>Why run an OpenTelemetry Collector rather than export straight to a vendor?</summary><div class="xp-body"><p>It decouples applications from backends, and centralizes batching, retries, sampling, attribute filtering (for example of personal data), and routing to several destinations<a class="citation" href="#ref-40">[40]</a><a class="citation" href="#ref-41">[41]</a>.</p></div></details>
+<details class="xp-details"><summary>What does tail-based sampling make possible?</summary><div class="xp-body"><p>Deciding whether to keep a trace after it has finished, so that slow or failed traces can always be kept while routine ones are sampled down. It is usually done in the Collector<a class="citation" href="#ref-40">[40]</a>.</p></div></details>
+<details class="xp-details"><summary>How do you test that code emits the right observation?</summary><div class="xp-body"><p>Use <code>TestObservationRegistry</code> and its assertions, for example <code>assertThat(registry).hasObservationWithNameEqualTo("payment.authorize")</code><a class="citation" href="#ref-42">[42]</a>.</p></div></details>
+</div>
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Observability [Internet]. Spring Boot 4.1.0 Reference Documentation; 2026 [cited 2026 Jul 31]. Available from: <a href="https://docs.spring.io/spring-boot/reference/actuator/observability.html">https://docs.spring.io/spring-boot/reference/actuator/observability.html</a></li>
@@ -1489,7 +1736,7 @@ void emitsPricingObservation() {
 <li><a href="#reference-architecture">Reference architecture</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

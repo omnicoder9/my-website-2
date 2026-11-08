@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1211,6 +1231,337 @@ void rejectsInvalidOrderBody() throws Exception {
   When a validation result is surprising, trace the complete declaration: Which element carries the constraint? Which groups were requested? Which validator implementation matched the declared type? Was the value reached through cascading or a value extractor? Which Spring boundary invoked validation? Which exception adapter and message source transformed the violation? That sequence exposes the runtime model beneath concise annotations.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">25. Enterprise scenarios</h2>
+<p>Validation is where business rules meet untrusted input. The common enterprise failures are not missing annotations. They are annotations that silently never run, rules that differ between create and update, nested data that is never checked, and error responses that every client has to parse differently. The scenarios below are composites, with illustrative figures. Section 26 runs each mechanism with Spring Framework 7.0.8 and Hibernate Validator 9.1.0.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Payments · payout service · constraints on service methods</p>
+<h3 id="scenario-method">25.1 Constraints on a service that were never checked</h3>
+<p><strong>Situation.</strong> A payout service declared <code>@Positive long cents</code> and <code>@NotBlank String merchantId</code> on its public methods, and the team assumed Spring would enforce them.</p>
+<p><strong>What went wrong.</strong> Method parameter constraints are enforced only through an interceptor: <code>MethodValidationPostProcessor</code>, plus <code>@Validated</code> on the class<a class="citation" href="#ref-15">[15]</a><a class="citation" href="#ref-16">[16]</a>. The application had neither, because it was not a Boot application, so a batch job scheduled negative payouts, which the bank rejected the next morning.</p>
+<p><strong>Fix.</strong> Register method validation explicitly, or rely on Boot's auto-configuration<a class="citation" href="#ref-22">[22]</a><a class="citation" href="#ref-23">[23]</a>, and write a test that <em>expects</em> a <code>ConstraintViolationException</code> (Exercise 1). Remember that method validation is proxy-based: self-invocation is not validated.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">SaaS · customer API · create and update share one DTO</p>
+<h3 id="scenario-groups">25.2 Clients that could choose their own ids</h3>
+<p><strong>Situation.</strong> <code>POST</code> and <code>PUT</code> used the same <code>CustomerDto</code>, so the <code>id</code> field had no constraint at all.</p>
+<p><strong>What went wrong.</strong> On create, clients could send an <code>id</code>, which overwrote existing customers in one code path. On update, a missing <code>id</code> created a new record instead of failing.</p>
+<p><strong>Fix.</strong> Use validation groups: <code>@Null(groups = OnCreate.class)</code> and <code>@NotNull(groups = OnUpdate.class)</code>, selected with <code>@Validated(OnCreate.class)</code> on the controller parameter<a class="citation" href="#ref-10">[10]</a><a class="citation" href="#ref-16">[16]</a> (Exercise 2). Separate request types per operation are often clearer still.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">E-commerce · order import from marketplaces · nested line items</p>
+<h3 id="scenario-cascade">25.3 Valid orders full of invalid lines</h3>
+<p><strong>Situation.</strong> <code>Order</code> was validated, but its <code>List&lt;Line&gt;</code> was not annotated with <code>@Valid</code>.</p>
+<p><strong>What went wrong.</strong> Lines with zero quantities, blank SKUs, and zero prices passed validation and reached fulfilment. Bean Validation does not cascade into nested objects unless told to<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-9">[9]</a>.</p>
+<p><strong>Fix.</strong> Cascade explicitly with <code>List&lt;@Valid Line&gt;</code>, and constrain container elements, as in <code>Set&lt;@Pattern(...) String&gt;</code> (Exercise 3). Bound collection sizes too, so that a 2-million-line payload cannot become a denial of service.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail · rules that need the database · "is this SKU real?"</p>
+<h3 id="scenario-injected">25.4 Validation rules that needed Spring beans</h3>
+<p><strong>Situation.</strong> A rule, "the SKU must exist in the catalog", needed a repository. The team wrote it as controller code, duplicated across six endpoints, with three slightly different versions.</p>
+<p><strong>Fix.</strong> Write a custom constraint whose validator receives the repository through constructor injection. With <code>LocalValidatorFactoryBean</code>, Spring creates validators through <code>SpringConstraintValidatorFactory</code>, so they can depend on beans<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-14">[14]</a> (Exercise 4). Keep such checks cheap, or cache them, because they run on every request.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · public API · consistent error responses</p>
+<h3 id="scenario-problem">25.5 Validation errors in four different formats</h3>
+<p><strong>Situation.</strong> <code>@RequestBody</code> failures, <code>@RequestParam</code> failures, and service-level violations each produced a different error body.</p>
+<p><strong>Fix.</strong> Handle <code>MethodArgumentNotValidException</code> and <code>HandlerMethodValidationException</code><a class="citation" href="#ref-18">[18]</a><a class="citation" href="#ref-19">[19]</a> in one <code>@RestControllerAdvice</code>, and return RFC 9457 <code>ProblemDetail</code> bodies with a field-errors extension (Exercise 5). Resolve the messages through <code>MessageSource</code> so that they can be localized<a class="citation" href="#ref-24">[24]</a><a class="citation" href="#ref-25">[25]</a>.</p>
+</div>
+
+<h2 id="exercises">26. Exercises</h2>
+<p>Each solution is a self-contained program with a <code>main</code> method. The code was compiled and run with Spring Framework 7.0.8, Hibernate Validator 9.1.0 (both managed by the Spring Boot 4.1.0 BOM), and OpenJDK 21.0.13, and it was compiled with <code>-parameters</code>. The output shown is real.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">26.1 Enforce constraints on a service method<span class="xp-lvl">method validation · easy</span></h3>
+<p>Make Spring validate the parameters of <code>Payouts.schedule(merchantId, cents)</code>, and show the violations for a blank merchant id and a negative amount.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Register <code>MethodValidationPostProcessor</code> and annotate the class with <code>@Validated</code><a class="citation" href="#ref-15">[15]</a><a class="citation" href="#ref-16">[16]</a>. Violations arrive as <code>ConstraintViolationException</code>, and the property path names the method and the parameter. The parameter names appear only because the code was compiled with <code>-parameters</code>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.bv;
+
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.constraints.*;
+import org.springframework.context.annotation.*;
+import org.springframework.stereotype.Service;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.validation.beanvalidation.*;
+
+public class Ex1MethodValidation {
+    @Configuration @Import(Payouts.class)
+    static class Config {
+        @Bean static LocalValidatorFactoryBean validator() { return new LocalValidatorFactoryBean(); }
+        @Bean static MethodValidationPostProcessor mvpp() { return new MethodValidationPostProcessor(); }
+    }
+
+    @Service @Validated
+    public static class Payouts {
+        public @NotBlank String schedule(@NotBlank String merchantId, @Positive @Max(1_000_000_00) long cents) {
+            return "payout-" + merchantId;
+        }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Payouts p = ctx.getBean(Payouts.class);
+            System.out.println(p.schedule("M-77", 125_00));
+            try { p.schedule(" ", -5); }
+            catch (ConstraintViolationException e) {
+                e.getConstraintViolations().stream().map(v -&gt; v.getPropertyPath() + ": " + v.getMessage()).sorted().forEach(System.out::println);
+            }
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>payout-M-77
+schedule.cents: must be greater than 0
+schedule.merchantId: must not be blank</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">26.2 Different rules for create and update<span class="xp-lvl">groups · medium</span></h3>
+<p>One <code>Customer</code> record must have no <code>id</code> when it is created and must have one when it is updated, while the other rules apply in both cases. Validate three requests.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Constraints without a <code>groups</code> attribute belong to <code>Default</code>. Validating with <code>Default</code> plus <code>OnCreate</code> or <code>OnUpdate</code> combines the shared rules with the operation-specific ones<a class="citation" href="#ref-10">[10]</a>. In a controller, the same selection is <code>@Validated({Default.class, OnCreate.class})</code>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.bv;
+
+import jakarta.validation.*;
+import jakarta.validation.constraints.*;
+import jakarta.validation.groups.Default;
+import java.util.Comparator;
+
+public class Ex2Groups {
+    interface OnCreate {}
+    interface OnUpdate {}
+
+    record Customer(
+            @Null(groups = OnCreate.class, message = "is assigned by the server")
+            @NotNull(groups = OnUpdate.class) Long id,
+            @NotBlank String name,
+            @Email @NotBlank String email) {}
+
+    static void show(Validator v, String label, Customer c, Class&lt;?&gt;... groups) {
+        var violations = v.validate(c, groups);
+        System.out.println(label + ": " + (violations.isEmpty() ? "valid" : ""));
+        violations.stream().sorted(Comparator.comparing((ConstraintViolation&lt;?&gt; x) -&gt; x.getPropertyPath().toString()))
+                  .forEach(x -&gt; System.out.println("  " + x.getPropertyPath() + " " + x.getMessage()));
+    }
+
+    public static void main(String[] args) {
+        try (ValidatorFactory f = Validation.byDefaultProvider().configure()
+                .messageInterpolator(new org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator()).buildValidatorFactory()) {
+            Validator v = f.getValidator();
+            show(v, "POST with id", new Customer(42L, "Ana", "ana@example.com"), Default.class, OnCreate.class);
+            show(v, "POST without id", new Customer(null, "Ana", "ana@example.com"), Default.class, OnCreate.class);
+            show(v, "PUT without id", new Customer(null, "Ana", "not-an-email"), Default.class, OnUpdate.class);
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>POST with id: 
+  id is assigned by the server
+POST without id: valid
+PUT without id: 
+  email must be a well-formed email address
+  id must not be null</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">26.3 Validate nested lines and collection elements<span class="xp-lvl">cascading · medium</span></h3>
+<p>Validate an order whose second line has a blank SKU, a zero quantity, and a zero price, and whose promo codes contain an invalid entry. Compare the default message interpolator with <code>ParameterMessageInterpolator</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>List&lt;@Valid Line&gt;</code> cascades into each line, and a constraint on a type argument validates each set element<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-9">[9]</a>. The property paths, such as <code>lines[1].sku</code>, are what an API should return to clients<a class="citation" href="#ref-29">[29]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.bv;
+
+import jakarta.validation.*;
+import jakarta.validation.constraints.*;
+import java.math.BigDecimal;
+import java.util.*;
+
+public class Ex3Cascade {
+    record Line(@NotBlank String sku, @Positive int quantity, @DecimalMin("0.01") BigDecimal unitPrice) {}
+    record Order(@NotBlank String customerId,
+                 @NotEmpty @Size(max = 100) List&lt;@Valid Line&gt; lines,        // cascade into each element
+                 Set&lt;@Pattern(regexp = "[A-Z]{3,10}") String&gt; promoCodes) {} // container-element constraint
+
+    public static void main(String[] args) {
+        Order o = new Order("C-9",
+            List.of(new Line("SKU-1", 2, new BigDecimal("9.99")), new Line("", 0, new BigDecimal("0"))),
+            new TreeSet&lt;&gt;(Set.of("WINTER", "x1")));
+        System.out.println("-- default interpolator (uses Jakarta EL):");
+        try (ValidatorFactory f = Validation.buildDefaultValidatorFactory()) {
+            f.getValidator().validate(o).stream().map(v -&gt; v.getPropertyPath() + ": " + v.getMessage()).sorted().forEach(System.out::println);
+        }
+        System.out.println("-- ParameterMessageInterpolator (no EL):");
+        try (ValidatorFactory f = Validation.byDefaultProvider().configure()
+                .messageInterpolator(new org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator()).buildValidatorFactory()) {
+            f.getValidator().validate(o).stream().filter(v -&gt; v.getPropertyPath().toString().endsWith("unitPrice"))
+             .forEach(v -&gt; System.out.println(v.getPropertyPath() + ": " + v.getMessage()));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Hibernate Validator 9.1.0, OpenJDK 21.0.13</span><pre>-- default interpolator (uses Jakarta EL):
+lines[1].quantity: must be greater than 0
+lines[1].sku: must not be blank
+lines[1].unitPrice: must be greater than or equal to 0.01
+promoCodes[].&lt;iterable element&gt;: must match "[A-Z]{3,10}"
+-- ParameterMessageInterpolator (no EL):
+WARN  ParameterMessageInterpolator - HV000185: Message contains EL expression: ${inclusive == true ? 'or equal to ' : ''}, which is not supported by the selected message interpolator
+lines[1].unitPrice: must be greater than ${inclusive == true ? 'or equal to ' : ''}0.01</pre></div>
+<p>The second block shows a real pitfall. <code>@DecimalMin</code>'s built-in message uses an EL expression, which <code>ParameterMessageInterpolator</code> cannot evaluate, so the raw expression leaks into the message. Use it only if no constraint you rely on has an EL-based message.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">26.4 A constraint validator with an injected bean<span class="xp-lvl">custom constraints · medium</span></h3>
+<p>Write <code>@KnownSku</code>, whose validator asks a Spring-managed <code>Catalog</code> bean whether the SKU exists, and use constructor injection in the validator.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>LocalValidatorFactoryBean</code> installs a <code>SpringConstraintValidatorFactory</code>, which creates validator instances through the application context, so their constructor dependencies are resolved like any other bean's<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-14">[14]</a>. Returning <code>true</code> for <code>null</code> leaves null handling to <code>@NotNull</code>, which is the convention for custom constraints<a class="citation" href="#ref-7">[7]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.bv;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
+import jakarta.validation.Validator;
+import java.lang.annotation.*;
+import java.util.Set;
+import org.springframework.context.annotation.*;
+import org.springframework.stereotype.Component;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+
+public class Ex4InjectedValidator {
+    @Component
+    static class Catalog { boolean exists(String sku) { return Set.of("SKU-1", "SKU-2").contains(sku); } }
+
+    @Target({ElementType.FIELD, ElementType.RECORD_COMPONENT, ElementType.PARAMETER, ElementType.TYPE_USE})
+    @Retention(RetentionPolicy.RUNTIME)
+    @Constraint(validatedBy = KnownSkuValidator.class)
+    public @interface KnownSku {
+        String message() default "unknown SKU";
+        Class&lt;?&gt;[] groups() default {};
+        Class&lt;? extends Payload&gt;[] payload() default {};
+    }
+
+    /** Created by Spring's SpringConstraintValidatorFactory, so constructor injection works. */
+    public static class KnownSkuValidator implements ConstraintValidator&lt;KnownSku, String&gt; {
+        private final Catalog catalog;
+        public KnownSkuValidator(Catalog catalog) { this.catalog = catalog; }
+        public boolean isValid(String sku, ConstraintValidatorContext ctx) { return sku == null || catalog.exists(sku); }
+    }
+
+    record AddToCart(@KnownSku String sku, int qty) {}
+
+    @Configuration @Import(Catalog.class)
+    static class Config { @Bean LocalValidatorFactoryBean validator() { return new LocalValidatorFactoryBean(); } }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Validator v = ctx.getBean(LocalValidatorFactoryBean.class);
+            for (String sku : new String[] {"SKU-1", "SKU-404"})
+                System.out.println(sku + " -&gt; " + (v.validate(new AddToCart(sku, 1)).isEmpty() ? "valid" : v.validate(new AddToCart(sku, 1)).iterator().next().getMessage()));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>SKU-1 -&gt; valid
+SKU-404 -&gt; unknown SKU</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">26.5 Validation errors as <code>ProblemDetail</code><span class="xp-lvl">web · medium</span></h3>
+<p>Validate a <code>@RequestBody</code> in a Spring MVC controller, and return failures as <code>application/problem+json</code> with a list of field errors. Test it with <code>MockMvc</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>@Valid</code> on a <code>@RequestBody</code> raises <code>MethodArgumentNotValidException</code><a class="citation" href="#ref-17">[17]</a><a class="citation" href="#ref-18">[18]</a>. Returning a <code>ProblemDetail</code> from an exception handler makes Spring set the problem-JSON media type. Standalone <code>MockMvc</code> exercises the whole MVC pipeline without starting a server<a class="citation" href="#ref-27">[27]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.bv;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import org.springframework.http.*;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.*;
+
+public class Ex5MvcProblemDetail {
+    record Transfer(@NotBlank String toIban, @Positive long cents) {}
+
+    @RestController
+    static class Transfers {
+        @PostMapping("/transfers") ResponseEntity&lt;String&gt; create(@Valid @RequestBody Transfer t) { return ResponseEntity.status(201).body("created"); }
+    }
+
+    @RestControllerAdvice
+    static class Errors {
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        ProblemDetail invalid(MethodArgumentNotValidException e) {
+            ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getErrorCount() + " invalid field(s)");
+            pd.setTitle("Validation failed");
+            pd.setProperty("errors", e.getFieldErrors().stream().map(f -&gt; f.getField() + ": " + f.getDefaultMessage()).sorted().toList());
+            return pd;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+        validator.afterPropertiesSet();
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new Transfers()).setControllerAdvice(new Errors()).setValidator(validator).build();
+        for (String body : new String[] {"{\"toIban\":\"DE89370400440532013000\",\"cents\":5000}", "{\"toIban\":\"\",\"cents\":-1}"}) {
+            var res = mvc.perform(post("/transfers").contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().getResponse();
+            System.out.println(res.getStatus() + " " + res.getContentType() + "\n  " + res.getContentAsString());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>201 text/plain;charset=ISO-8859-1
+  created
+400 application/problem+json
+  {"detail":"2 invalid field(s)","instance":"/transfers","status":400,"title":"Validation failed","errors":["cents: must be greater than 0","toIban: must not be blank"]}</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">27. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What is the difference between <code>@Valid</code> and <code>@Validated</code>?</summary><div class="xp-body"><p><code>@Valid</code> is the standard Jakarta annotation for cascading validation. <code>@Validated</code> is Spring's variant: it can select validation groups, and on a class it marks the bean for method validation<a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+<details class="xp-details"><summary>Why should custom validators return <code>true</code> for <code>null</code>?</summary><div class="xp-body"><p>So that each constraint has one responsibility. "Required" is <code>@NotNull</code>'s job, and combining the two keeps optional fields possible<a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@GroupSequence</code> do?</summary><div class="xp-body"><p>It validates groups in order, and stops at the first group that has violations. This is useful when expensive checks, such as database lookups, should run only after the cheap format checks have passed<a class="citation" href="#ref-10">[10]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@ConvertGroup</code> do?</summary><div class="xp-body"><p>During a cascade, it maps the group being validated on the parent to a different group on the child, for example validating an embedded address with its own "shipping" rules<a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>Which exception does Spring MVC 6.1+ raise for invalid <code>@RequestParam</code> or <code>@PathVariable</code> values with constraints?</summary><div class="xp-body"><p><code>HandlerMethodValidationException</code>, from MVC's built-in method validation. <code>MethodArgumentNotValidException</code> remains the exception for <code>@Valid</code> on <code>@RequestBody</code> and model attributes<a class="citation" href="#ref-18">[18]</a><a class="citation" href="#ref-19">[19]</a>.</p></div></details>
+<details class="xp-details"><summary>Can <code>@ConfigurationProperties</code> classes be validated?</summary><div class="xp-body"><p>Yes. Annotate them with <code>@Validated</code> and add constraints, and Spring Boot fails startup with a binding report if the configuration is invalid<a class="citation" href="#ref-26">[26]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the Jakarta Validation version in Jakarta EE 11, and its reference implementation?</summary><div class="xp-body"><p>Jakarta Validation 3.1. Its reference implementation is Hibernate Validator, version 9 in this era<a class="citation" href="#ref-1">[1]</a><a class="citation" href="#ref-2">[2]</a>.</p></div></details>
+<details class="xp-details"><summary>Where does the default <code>"must not be blank"</code> message come from?</summary><div class="xp-body"><p>From the provider's <code>ValidationMessages</code> resource bundle, through the key <code>{jakarta.validation.constraints.NotBlank.message}</code>. Supply your own <code>ValidationMessages.properties</code>, or a Spring <code>MessageSource</code>, to override or translate it<a class="citation" href="#ref-24">[24]</a><a class="citation" href="#ref-25">[25]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between <code>@NotNull</code>, <code>@NotEmpty</code>, and <code>@NotBlank</code>?</summary><div class="xp-body"><p><code>@NotNull</code> rejects <code>null</code> only. <code>@NotEmpty</code> also rejects empty strings and empty collections. <code>@NotBlank</code> rejects strings that are empty or contain only whitespace<a class="citation" href="#ref-5">[5]</a>.</p></div></details>
+<details class="xp-details"><summary>How can a tool discover which constraints a class declares?</summary><div class="xp-body"><p>Through the metadata API: <code>validator.getConstraintsForClass(Type.class)</code> returns a <code>BeanDescriptor</code> with every constrained property, method, and constructor, which is how documentation and OpenAPI generators can expose validation rules<a class="citation" href="#ref-31">[31]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Jakarta Validation Team. Jakarta Validation 3.1 [Internet]. Eclipse Foundation; 2024 [cited 2026 Jul 31]. Available from: <a href="https://jakarta.ee/specifications/bean-validation/3.1/">https://jakarta.ee/specifications/bean-validation/3.1/</a></li>
@@ -1274,7 +1625,7 @@ void rejectsInvalidOrderBody() throws Exception {
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

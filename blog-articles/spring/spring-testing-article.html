@@ -521,6 +521,26 @@
     .stat-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--rule);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute)}
+.xp-exercise{border-top:1px solid var(--rule);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--rule);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--rule);border-radius:10px;background:var(--paper-alt)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--rule)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--rule);border-radius:0 0 10px 10px;background:var(--paper);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body class="blog-article-page">
 <div id="site-header"></div>
@@ -559,7 +579,10 @@
         <li><a href="#security">Security Integration</a></li>
         <li><a href="#testcontainers">Testcontainers</a></li>
         <li><a href="#strategy">Testing Strategy</a></li>
-        <li><a href="#references">References</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise Scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->        <li><a href="#references">References</a></li>
       </ol>
     </aside>
   </div>
@@ -1394,6 +1417,241 @@
     </div>
   </div>
 </div>
+<!-- xp:start -->
+<div class="container">
+  <div class="section" id="enterprise-scenarios">
+    <div class="section-header">
+      <span class="section-num">09</span>
+      <h2>Enterprise Scenarios</h2>
+    </div>
+
+    <p>A test suite fails an organization in two ways: it is too slow to run, or it passes while production breaks. The scenarios below are composites, with illustrative figures. Section 10 reproduces two of them with Spring Boot 4.1.0, JUnit 6.0.3, and Mockito 5.23.0.</p>
+
+    <div class="xp-scenario">
+      <p class="xp-tag">Bank · 3,400 integration tests · a 47-minute pipeline</p>
+      <h3 id="scenario-cache">A context cache that never hit</h3>
+      <p><strong>Situation.</strong> Almost every integration test class declared its own <code>@MockBean</code> fields, a few activated profiles, and some set extra properties.</p>
+      <p><strong>What went wrong.</strong> Spring caches application contexts by their configuration. Each unique combination of mocks, profiles, and properties is a new key, so the suite started over 300 contexts, each taking several seconds (Exercise 1)<sup>[1]</sup>.</p>
+      <p><strong>Fix.</strong> Standardize a few test configurations, move shared mocks into a common base class or a test configuration, and treat a new context key as a cost to justify in review. Spring Boot 3.4 replaced <code>@MockBean</code> with <code>@MockitoBean</code>, but the caching rule is the same<sup>[13]</sup>.</p>
+    </div>
+
+    <div class="xp-scenario">
+      <p class="xp-tag">Retail · customer registration · duplicate accounts in production</p>
+      <h3 id="scenario-flush">A test that passed because it never wrote</h3>
+      <p><strong>Situation.</strong> A <code>@Transactional</code> integration test registered two customers with the same email and asserted that the second registration was rejected by the service.</p>
+      <p><strong>What went wrong.</strong> The test rolled back at the end, so Hibernate never flushed the INSERTs, and the unique constraint was never checked. The service's own duplicate check had a race, and production created duplicates that the test suite could not see (Exercise 2)<sup>[14]</sup>.</p>
+      <p><strong>Fix.</strong> Call <code>flush()</code> in tests that depend on database constraints, or run them without a test-managed transaction, and clean up explicitly.</p>
+    </div>
+
+    <div class="xp-scenario">
+      <p class="xp-tag">Logistics · H2 in tests, PostgreSQL in production · a migration that failed on deploy</p>
+      <h3 id="scenario-h2">Green tests against the wrong database</h3>
+      <p><strong>Situation.</strong> Repository tests ran on H2 in PostgreSQL compatibility mode.</p>
+      <p><strong>What went wrong.</strong> A Flyway migration used a PostgreSQL partial index, and a query used <code>jsonb</code> operators. H2 accepted a simplified version of the schema, the tests passed, and the migration failed on the first production deploy<sup>[17]</sup><sup>[22]</sup>.</p>
+      <p><strong>Fix.</strong> Run repository and migration tests against the real database engine with Testcontainers and <code>@ServiceConnection</code>, and reuse containers across the suite to keep it fast<sup>[20]</sup><sup>[21]</sup>.</p>
+    </div>
+
+    <div class="xp-scenario">
+      <p class="xp-tag">Insurance · admin endpoints · authorization regression</p>
+      <h3 id="scenario-security">Security tested only as "logged in"</h3>
+      <p><strong>Situation.</strong> Every controller test used <code>@WithMockUser</code> with the default user, which has the <code>USER</code> role.</p>
+      <p><strong>What went wrong.</strong> A refactoring removed a role check from an admin endpoint. No test made a request as a user without the admin role, so the regression shipped<sup>[18]</sup><sup>[19]</sup>.</p>
+      <p><strong>Fix.</strong> Test each protected endpoint at least three ways: anonymous (401 or a redirect), authenticated without the role (403), and with the role (200).</p>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="section" id="exercises">
+    <div class="section-header">
+      <span class="section-num">10</span>
+      <h2>Exercises</h2>
+    </div>
+
+    <p>The solutions run real JUnit test classes through the JUnit Platform launcher, with Spring Boot 4.1.0 (Spring Framework 7.0.8, Hibernate 7.4.1, H2 2.4.240) on OpenJDK 21.0.13. Mockito was attached with <code>-javaagent</code>, as Mockito recommends for current JDKs. The output shown is real. Both use this small runner:</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-title">RunTests.java</span>
+        <span class="code-lang">Java</span>
+      </div>
+      <pre>package lab.stest;
+
+import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass;
+import org.junit.platform.engine.TestExecutionResult;
+import org.junit.platform.launcher.*;
+import org.junit.platform.launcher.core.*;
+
+/** Runs JUnit test classes through the JUnit Platform launcher and prints one line per test. */
+final class RunTests {
+    static void run(Class&lt;?&gt;... classes) {
+        var request = LauncherDiscoveryRequestBuilder.request();
+        for (Class&lt;?&gt; c : classes) request.selectors(selectClass(c));
+        LauncherFactory.create().execute(request.build(), new TestExecutionListener() {
+            @Override public void executionFinished(TestIdentifier id, TestExecutionResult result) {
+                if (!id.isTest()) return;
+                String cls = id.getUniqueIdObject().getSegments().get(1).getValue();
+                System.out.printf("  %-6s %s.%s%s%n", result.getStatus() == TestExecutionResult.Status.SUCCESSFUL ? "PASS" : "FAIL",
+                    cls.substring(cls.lastIndexOf('$') + 1), id.getDisplayName(),
+                    result.getThrowable().map(t -&gt; "  (" + t.getClass().getSimpleName() + ")").orElse(""));
+            }
+        });
+    }
+}</pre>
+    </div>
+
+    <div class="xp-exercise">
+      <h3 id="exercise-1">10.1 Count the contexts<span class="xp-lvl">context cache · medium</span></h3>
+      <p>Write four test classes against the same configuration: two plain, one with a <code>@MockitoBean</code>, and one with an active profile. Count how many application contexts the suite starts.</p>
+      <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+        <p>The TestContext framework caches contexts by a key made of the configuration classes, active profiles, property sources, context customizers (which include bean overrides), and more. Identical keys share a context<sup>[1]</sup>.</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-title">Ex1ContextCache.java</span>
+        <span class="code-lang">Java</span>
+      </div>
+      <pre>package lab.stest;
+
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.*;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+
+public class Ex1ContextCache {
+    static final AtomicInteger contextsStarted = new AtomicInteger();
+
+    public static class PricingService { public long price(String sku) { return 4990; } }
+    public static class CheckoutService {
+        final PricingService pricing;
+        CheckoutService(PricingService p) { pricing = p; contextsStarted.incrementAndGet(); }   // one per application context
+    }
+
+    @Configuration static class AppConfig {
+        @Bean PricingService pricing() { return new PricingService(); }
+        @Bean CheckoutService checkout(PricingService p) { return new CheckoutService(p); }
+    }
+
+    @SpringJUnitConfig(AppConfig.class) public static class CartTest { @Test void addsItem() {} }
+    @SpringJUnitConfig(AppConfig.class) public static class OrderTest { @Test void placesOrder() {} }        // same key: cache hit
+    @SpringJUnitConfig(AppConfig.class) public static class DiscountTest {
+        @MockitoBean PricingService pricing;                                                            // different key: new context
+        @Test void appliesDiscount() {}
+    }
+    @SpringJUnitConfig(AppConfig.class) @ActiveProfiles("eu") public static class EuTaxTest { @Test void addsVat() {} } // different key
+
+    public static void main(String[] args) {
+        RunTests.run(CartTest.class, OrderTest.class, DiscountTest.class, EuTaxTest.class);
+        System.out.println("4 test classes, " + contextsStarted.get() + " application contexts started");
+    }
+}</pre>
+    </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, JUnit 6.0.3, OpenJDK 21.0.13</span><pre>  PASS   CartTest.addsItem()
+  PASS   OrderTest.placesOrder()
+  PASS   DiscountTest.appliesDiscount()
+  PASS   EuTaxTest.addsVat()
+4 test classes, 3 application contexts started</pre></div>
+        <p>Set <code>logging.level.org.springframework.test.context.cache=DEBUG</code> to see cache hits and misses, including the cache statistics, in a real build.</p>
+      </div></details>
+    </div>
+
+    <div class="xp-exercise">
+      <h3 id="exercise-2">10.2 The flush trap<span class="xp-lvl">jpa · medium</span></h3>
+      <p>In a transactional test that rolls back, persist two customers with the same email, which violates a unique constraint. Run the test with and without an explicit <code>flush()</code>.</p>
+      <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+        <p>Hibernate queues INSERTs until a flush, and a test-managed transaction rolls back without one. Only the flushing test sends the SQL, and only it sees the constraint<sup>[14]</sup>.</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-title">Ex2FlushTrap.java</span>
+        <span class="code-lang">Java</span>
+      </div>
+      <pre>package lab.stest;
+
+import jakarta.persistence.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
+
+public class Ex2FlushTrap {
+    @Entity(name = "Customer") @Table(name = "customer", uniqueConstraints = @UniqueConstraint(columnNames = "email"))
+    public static class Customer {
+        @Id @GeneratedValue Long id; String email;
+        protected Customer() {}
+        Customer(String email) { this.email = email; }
+    }
+
+    @SpringBootConfiguration @EnableAutoConfiguration @EntityScan(basePackageClasses = Ex2FlushTrap.class)
+    static class App {}
+
+    /** Both tests "register" two customers with the same email; only one of them can notice. */
+    @SpringBootTest(classes = App.class, properties = {"spring.jpa.open-in-view=false", "logging.level.org.hibernate=off"})
+    @Transactional                                                    // each test rolls back at the end
+    public static class RegistrationTest {
+        @Autowired EntityManager em;
+
+        @Test void duplicateEmailWithoutFlush() {
+            em.persist(new Customer("ana@example.com"));
+            em.persist(new Customer("ana@example.com"));                // INSERTs are still queued; rollback discards them
+        }
+
+        @Test void duplicateEmailWithFlush() {
+            em.persist(new Customer("ana@example.com"));
+            em.persist(new Customer("ana@example.com"));
+            em.flush();                                                // what the production commit would do
+        }
+    }
+
+    public static void main(String[] args) {
+        RunTests.run(RegistrationTest.class);
+    }
+}</pre>
+    </div>
+<div class="xp-out"><span>Output · Spring Boot 4.1.0, JUnit 6.0.3, OpenJDK 21.0.13</span><pre>  PASS   RegistrationTest.duplicateEmailWithoutFlush()
+  FAIL   RegistrationTest.duplicateEmailWithFlush()  (ConstraintViolationException)</pre></div>
+        <p>The failing test is the correct one: it shows what production would do. Here it fails by design, to demonstrate the trap. In a real suite, assert the exception with <code>assertThrows</code>.</p>
+      </div></details>
+    </div>
+
+    <div class="xp-exercise">
+      <h3 id="exercise-3">10.3 Choose the test type<span class="xp-lvl">strategy · easy</span></h3>
+      <p>For each check, choose a plain unit test, a slice test, a full <code>@SpringBootTest</code>, or a Testcontainers test: (a) a discount calculation; (b) a controller returns 400 for an invalid body; (c) a repository query with a PostgreSQL-specific function; (d) an order flows from the REST API through to the database and an outgoing event.</p>
+      <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+        <ul>
+          <li><strong>(a) A unit test:</strong> no Spring at all, which is fastest and clearest.</li>
+          <li><strong>(b) <code>@WebMvcTest</code> with <code>MockMvc</code>:</strong> only the web layer is started, with collaborators mocked<sup>[8]</sup><sup>[9]</sup>.</li>
+          <li><strong>(c) <code>@DataJpaTest</code> with Testcontainers:</strong> the query must run on the real engine<sup>[20]</sup><sup>[21]</sup>.</li>
+          <li><strong>(d) <code>@SpringBootTest</code> with Testcontainers:</strong> a few such end-to-end tests, at the top of the pyramid<sup>[5]</sup><sup>[6]</sup>.</li>
+        </ul>
+      </div></details>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="section" id="trivia">
+    <div class="section-header">
+      <span class="section-num">11</span>
+      <h2>Trivia</h2>
+    </div>
+
+    <p>Short questions with answers.</p>
+    <div class="xp-trivia">
+      <details class="xp-details"><summary>Which <code>@SpringBootTest</code> web environment starts a real server on a random port?</summary><div class="xp-body"><p><code>WebEnvironment.RANDOM_PORT</code>. The default, <code>MOCK</code>, creates a mock servlet environment without a server<sup>[5]</sup>.</p></div></details>
+      <details class="xp-details"><summary>Does a <code>@Transactional</code> test with <code>RANDOM_PORT</code> roll back the server's changes?</summary><div class="xp-body"><p>No. The HTTP request is handled on a server thread in a different transaction, so the test's rollback does not undo it<sup>[1]</sup>.</p></div></details>
+      <details class="xp-details"><summary>What replaced <code>@MockBean</code> and <code>@SpyBean</code>?</summary><div class="xp-body"><p><code>@MockitoBean</code> and <code>@MockitoSpyBean</code> from Spring Framework's own test module. The Boot annotations were deprecated in 3.4<sup>[13]</sup>.</p></div></details>
+      <details class="xp-details"><summary>Which database does <code>@DataJpaTest</code> use by default?</summary><div class="xp-body"><p>An embedded in-memory database, replacing any configured <code>DataSource</code>, unless you set <code>@AutoConfigureTestDatabase(replace = NONE)</code><sup>[14]</sup><sup>[23]</sup>.</p></div></details>
+      <details class="xp-details"><summary>What does <code>@ServiceConnection</code> do?</summary><div class="xp-body"><p>It derives connection properties, such as the JDBC URL and credentials, from a Testcontainers container, so no <code>@DynamicPropertySource</code> is needed<sup>[21]</sup>.</p></div></details>
+      <details class="xp-details"><summary>How do you send a CSRF token in a <code>MockMvc</code> test?</summary><div class="xp-body"><p>With the <code>csrf()</code> request post-processor from <code>SecurityMockMvcRequestPostProcessors</code><sup>[19]</sup>.</p></div></details>
+      <details class="xp-details"><summary>What does <code>@DirtiesContext</code> cost?</summary><div class="xp-body"><p>It removes the context from the cache, so the next test that needs it starts a new one. Used widely, it disables caching altogether<sup>[1]</sup>.</p></div></details>
+    </div>
+  </div>
+</div>
+
+<!-- xp:end -->
 
 </main>
 

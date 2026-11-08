@@ -436,6 +436,26 @@
       .references a::after { content: " (" attr(href) ")"; font-size: 8pt; }
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
   <header class="hero">
@@ -480,6 +500,10 @@
         <li><a href="#architecture">End-to-end architecture</a></li>
         <li><a href="#decision">Decision guide</a></li>
         <li><a href="#checklist">Production checklist</a></li>
+<!-- xp-toc:start -->        <li><a href="#enterprise-scenarios">Enterprise scenarios</a></li>
+        <li><a href="#exercises">Exercises</a></li>
+        <li><a href="#trivia">Trivia</a></li>
+<!-- xp-toc:end -->
       </ol>
     </nav>
 
@@ -2812,6 +2836,314 @@ spec:
           controlled load, and evidence that explains what happened.
         </div>
       </section>
+<!-- xp:start -->
+      <section id="enterprise-scenarios">
+        <h2>21. Enterprise scenarios</h2>
+        <p class="lead">Distributed systems fail in ways a single process cannot: partially, ambiguously, and through amplification. The scenarios below are composites of incident patterns from commerce, logistics, and SaaS platforms. The figures are illustrative, and section 22 models each mechanism deterministically, so that you can check the numbers yourself.</p>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">E-commerce · four-tier call chain · inventory database failover</p>
+          <h3>21.1 A 30-second failover became a 40-minute outage</h3>
+          <p><strong>Situation.</strong> Gateway → orders → pricing → inventory. Each layer used a client library configured to retry three times on failure.</p>
+          <p><strong>What went wrong.</strong> When the inventory database failed over, each user request became 4 × 4 × 4 × 4 = 256 calls to inventory. The service came back after 30 seconds into a 256-fold load spike, failed again, and every retry started over. Retries multiply across layers, so the amplification grows exponentially with depth<a class="cite" href="#ref-44">[44]</a>.</p>
+          <p><strong>Fix.</strong> Retry at one layer only, usually the edge or the caller closest to the user. Cap retries with a <em>retry budget</em>, for example retries may add at most 10% to request volume. Pair retries with circuit breakers<a class="cite" href="#ref-32">[32]</a>, and propagate deadlines, so that downstream services stop working on requests nobody is waiting for<a class="cite" href="#ref-20">[20]</a><a class="cite" href="#ref-21">[21]</a> (Exercise 1).</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Logistics · order fulfilment saga · inventory, payment, carrier</p>
+          <h3>21.2 Paid orders stuck with stock reserved and no carrier</h3>
+          <p><strong>Situation.</strong> Fulfilment spanned three services, each with its own database, so no distributed transaction was possible.</p>
+          <p><strong>What went wrong.</strong> When carrier booking failed, the orchestrator logged an error and stopped. Inventory stayed reserved and payments stayed authorized: 2,300 orders were in limbo before customer service noticed.</p>
+          <p><strong>Fix.</strong> Model the workflow as a <em>saga</em>: each step has a compensating action, and on failure the completed steps are compensated in reverse order (Exercise 2). Persist the saga's state, so that a crashed orchestrator resumes where it left off. Make every step and compensation idempotent, because they will be retried. Alert on sagas that have not progressed within their deadline<a class="cite" href="#ref-42">[42]</a><a class="cite" href="#ref-43">[43]</a>.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">SaaS · multi-region user profiles · last-writer-wins</p>
+          <h3>21.3 Email changes that reverted themselves</h3>
+          <p><strong>Situation.</strong> User profiles replicated between regions, and conflicts were resolved by "the latest wall-clock timestamp wins".</p>
+          <p><strong>What went wrong.</strong> One region's clock ran 350 ms behind. A user's newer email change, applied in that region after the older change had already replicated there, carried an <em>earlier</em> timestamp, so replication resolved the conflict in favor of the old value. Physical clocks on different machines cannot order events reliably<a class="cite" href="#ref-1">[1]</a>.</p>
+          <p><strong>Fix.</strong> Order causally related updates with logical clocks: Lamport timestamps, or version vectors to detect concurrent writes (Exercise 5). Alternatively, give each entity a single home region that sequences its writes. Where last-writer-wins is acceptable, use hybrid logical clocks and bound the clock skew with monitoring<a class="cite" href="#ref-42">[42]</a>.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Media streaming · session cache cluster · scaling from 5 to 6 nodes</p>
+          <h3>21.4 Adding one cache node took down the database</h3>
+          <p><strong>Situation.</strong> Clients chose a cache node with <code>hash(key) % nodeCount</code>.</p>
+          <p><strong>What went wrong.</strong> Going from five to six nodes remapped about 83% of all keys. Nearly every session lookup missed the cache at once, the database behind it received the full read load, and it failed.</p>
+          <p><strong>Fix.</strong> Use consistent hashing with virtual nodes, so that adding a node moves only about 1/N of the keys, spread evenly (Exercise 4). Warm new nodes before they take traffic, and protect the database with request coalescing and rate limits during cache rebuilds.</p>
+        </div>
+
+        <div class="xp-scenario">
+          <p class="xp-tag">Payments · 1,000 mobile clients · a 2-second backend blip</p>
+          <h3>21.5 Synchronized retries: the thundering herd</h3>
+          <p><strong>Situation.</strong> Mobile clients retried failed API calls with exponential backoff (100, 200, 400 ms) but no jitter.</p>
+          <p><strong>What went wrong.</strong> All the clients failed at the same moment, so they all retried at the same moments: 1,000 requests within a few milliseconds, three times over. Each wave knocked the recovering backend over again.</p>
+          <p><strong>Fix.</strong> Add randomness. "Full jitter", a random delay between zero and the backoff ceiling, spreads the retries out, and in Exercise 3 it lowers the peak from 1,000 to 170 retries per 10 ms. Honor <code>Retry-After</code> headers from the server<a class="cite" href="#ref-5">[5]</a>.</p>
+        </div>
+      </section>
+
+      <section id="exercises">
+        <h2>22. Exercises</h2>
+        <p class="lead">Try each exercise before opening its solution. Each solution is a deterministic single-file simulation, with seeded randomness and no real network: save it and run <code>java FileName.java</code>. The outputs shown were produced on OpenJDK 21.0.13.</p>
+
+        <div class="xp-exercise">
+          <h3>Exercise 1: Retry amplification and a retry budget<span class="xp-lvl">resilience · easy</span></h3>
+          <p>Compute how many calls reach the bottom of a four-layer chain when every layer retries 0, 1, or 3 times. Then implement a retry budget that limits retries to 10% of request volume, and count the calls it allows during a total outage of 10,000 requests.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Each layer multiplies the load below it by its number of attempts, so the total is attempts<sup>layers</sup>. A budget caps the extra load whatever the failure mode. gRPC's retry throttling uses the same idea, with a token bucket<a class="cite" href="#ref-21">[21]</a>.</p>
+<pre><code>class Ex1RetryAmplification {
+    /** Calls that reach the bottom service when each of `layers` retries `retries` times on failure. */
+    static long callsAtBottom(int layers, int retries) {
+        long calls = 1;
+        for (int i = 0; i &lt; layers; i++) calls *= (retries + 1);
+        return calls;
+    }
+
+    /** A retry budget: retries allowed only while they stay under `ratio` of recent requests. */
+    static final class RetryBudget {
+        final double ratio; long requests, retries;
+        RetryBudget(double ratio) { this.ratio = ratio; }
+        void onRequest() { requests++; }
+        boolean tryRetry() {
+            if (retries + 1 &gt; ratio * requests) return false;
+            retries++; return true;
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("gateway -&gt; orders -&gt; pricing -&gt; inventory, bottom service down:");
+        for (int retries : new int[] {0, 1, 3})
+            System.out.printf("  %d retries per layer: %3d calls reach inventory per user request%n", retries, callsAtBottom(4, retries));
+
+        RetryBudget budget = new RetryBudget(0.10);           // retries may add at most 10% load
+        long sent = 0;
+        for (int i = 0; i &lt; 10_000; i++) {                    // 10,000 requests during an outage, all failing
+            budget.onRequest(); sent++;
+            for (int attempt = 0; attempt &lt; 3 &amp;&amp; budget.tryRetry(); attempt++) sent++;
+        }
+        System.out.printf("with a 10%% retry budget: %,d calls for 10,000 requests (%.2fx)%n", sent, sent / 10_000.0);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>gateway -&gt; orders -&gt; pricing -&gt; inventory, bottom service down:
+  0 retries per layer:   1 calls reach inventory per user request
+  1 retries per layer:  16 calls reach inventory per user request
+  3 retries per layer: 256 calls reach inventory per user request
+with a 10% retry budget: 11,000 calls for 10,000 requests (1.10x)</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 2: An orchestrated saga with compensation<span class="xp-lvl">sagas · medium</span></h3>
+          <p>Run four fulfilment steps: reserve inventory, authorize payment, book a carrier, and send a confirmation. Booking fails. Compensate every completed step, in reverse order, and log what happened.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Push each completed step onto a stack, and pop the stack to compensate. The confirmation never ran, so it needs no compensation. In production, the stack lives in a database row (the saga log), not in memory<a class="cite" href="#ref-43">[43]</a>.</p>
+<pre><code>import java.util.*;
+
+class Ex2Saga {
+    record Step(String name, Runnable action, Runnable compensation) {}
+
+    static List&lt;String&gt; log = new ArrayList&lt;&gt;();
+
+    /** Orchestrated saga: run steps in order; on failure, compensate completed steps in reverse. */
+    static boolean run(List&lt;Step&gt; steps) {
+        Deque&lt;Step&gt; done = new ArrayDeque&lt;&gt;();
+        for (Step s : steps) {
+            try {
+                s.action().run();
+                log.add("done        " + s.name());
+                done.push(s);
+            } catch (RuntimeException e) {
+                log.add("FAILED      " + s.name() + ": " + e.getMessage());
+                while (!done.isEmpty()) {
+                    Step c = done.pop();
+                    c.compensation().run();                       // must be idempotent and retryable
+                    log.add("compensated " + c.name());
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static void main(String[] args) {
+        boolean ok = run(List.of(
+            new Step("reserve-inventory", () -&gt; {}, () -&gt; {}),
+            new Step("authorize-payment", () -&gt; {}, () -&gt; {}),
+            new Step("book-carrier", () -&gt; { throw new IllegalStateException("no capacity for 2026-11-09"); }, () -&gt; {}),
+            new Step("send-confirmation", () -&gt; {}, () -&gt; {})));
+        log.forEach(System.out::println);
+        System.out.println("saga completed: " + ok);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>done        reserve-inventory
+done        authorize-payment
+FAILED      book-carrier: no capacity for 2026-11-09
+compensated authorize-payment
+compensated reserve-inventory
+saga completed: false</pre></div>
+            <p>Compensation is a business operation, not an undo. Releasing a payment authorization is not the same as refunding a captured payment, so design each compensation with the domain owner.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 3: Why backoff needs jitter<span class="xp-lvl">resilience · medium</span></h3>
+          <p>A thousand clients fail at the same instant, and each retries three times. Compare the peak number of retries in any 10 ms window, and how widely they spread, for a fixed delay, exponential backoff without jitter, and exponential backoff with full jitter.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Without randomness, identical clients stay synchronized however the delay grows. Full jitter draws each delay uniformly from [0, ceiling), which turns three spikes of 1,000 retries into a spread-out stream. The seed is fixed, so the run is reproducible.</p>
+<pre><code>import java.util.*;
+
+class Ex3BackoffJitter {
+    /** "Full jitter": sleep a random time in [0, min(cap, base * 2^attempt)). */
+    static long fullJitter(Random rnd, long baseMs, long capMs, int attempt) {
+        long ceiling = Math.min(capMs, baseMs &lt;&lt; attempt);
+        return (long) (rnd.nextDouble() * ceiling);
+    }
+
+    static void report(String label, long[] perWindow) {
+        long peak = Arrays.stream(perWindow).max().orElseThrow();
+        long busy = Arrays.stream(perWindow).filter(n -&gt; n &gt; 0).count();
+        System.out.printf("%-26s peak %4d retries in one 10 ms window, retries spread over %3d windows%n", label, peak, busy);
+    }
+
+    public static void main(String[] args) {
+        int clients = 1_000;                                   // all failed at the same moment (a backend blip)
+        long[] fixed = new long[300], expo = new long[300], jitter = new long[300];   // 10 ms windows over 3 s
+        Random rnd = new Random(2026);
+        for (int c = 0; c &lt; clients; c++) {
+            long tFixed = 0, tExpo = 0, tJitter = 0;
+            for (int attempt = 0; attempt &lt; 3; attempt++) {
+                tFixed += 200;                                 // fixed 200 ms delay
+                tExpo += 100L &lt;&lt; attempt;                      // 100, 200, 400 ms: still in lockstep
+                tJitter += fullJitter(rnd, 100, 2_000, attempt);
+                fixed[(int) (tFixed / 10)]++; expo[(int) (tExpo / 10)]++; jitter[(int) (tJitter / 10)]++;
+            }
+        }
+        report("fixed delay", fixed);
+        report("exponential, no jitter", expo);
+        report("exponential, full jitter", jitter);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>fixed delay                peak 1000 retries in one 10 ms window, retries spread over   3 windows
+exponential, no jitter     peak 1000 retries in one 10 ms window, retries spread over   3 windows
+exponential, full jitter   peak  170 retries in one 10 ms window, retries spread over  67 windows</pre></div>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 4: Consistent hashing<span class="xp-lvl">partitioning · medium</span></h3>
+          <p>Assign 100,000 session keys to five cache nodes, then add a sixth. Compare the share of keys that move under mod-N hashing and under a consistent-hash ring with 200 virtual nodes per server, and check how evenly the ring spreads the keys.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>On a ring, a key belongs to the first node clockwise from its hash. A new node takes over only the arcs just before its own points, so roughly 1/6 of the keys move. Virtual nodes smooth out the arc lengths. A <code>TreeMap</code>'s <code>ceilingEntry</code> makes the lookup O(log n).</p>
+<pre><code>import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.*;
+
+class Ex4ConsistentHashing {
+    static long hash(String s) {
+        try {
+            byte[] d = MessageDigest.getInstance("MD5").digest(s.getBytes(StandardCharsets.UTF_8));
+            long h = 0; for (int i = 0; i &lt; 8; i++) h = (h &lt;&lt; 8) | (d[i] &amp; 0xff);
+            return h;
+        } catch (Exception e) { throw new IllegalStateException(e); }
+    }
+
+    static final class Ring {
+        final TreeMap&lt;Long, String&gt; ring = new TreeMap&lt;&gt;();
+        Ring(List&lt;String&gt; nodes, int virtualNodes) {
+            for (String n : nodes) for (int v = 0; v &lt; virtualNodes; v++) ring.put(hash(n + "#" + v), n);
+        }
+        String nodeFor(String key) {
+            Map.Entry&lt;Long, String&gt; e = ring.ceilingEntry(hash(key));
+            return (e != null ? e : ring.firstEntry()).getValue();
+        }
+    }
+
+    public static void main(String[] args) {
+        List&lt;String&gt; keys = new ArrayList&lt;&gt;();
+        for (int i = 0; i &lt; 100_000; i++) keys.add("session:" + i);
+        List&lt;String&gt; five = List.of("cache-1", "cache-2", "cache-3", "cache-4", "cache-5");
+        List&lt;String&gt; six = new ArrayList&lt;&gt;(five); six.add("cache-6");
+
+        long movedModN = keys.stream().filter(k -&gt; Math.floorMod(hash(k), 5) != Math.floorMod(hash(k), 6)).count();
+        Ring r5 = new Ring(five, 200), r6 = new Ring(six, 200);
+        long movedRing = keys.stream().filter(k -&gt; !r5.nodeFor(k).equals(r6.nodeFor(k))).count();
+        System.out.printf("add a 6th cache node: mod-N moves %.1f%% of keys, consistent hashing moves %.1f%% (ideal %.1f%%)%n",
+                100.0 * movedModN / keys.size(), 100.0 * movedRing / keys.size(), 100.0 / 6);
+
+        Map&lt;String, Integer&gt; load = new TreeMap&lt;&gt;();
+        keys.forEach(k -&gt; load.merge(r6.nodeFor(k), 1, Integer::sum));
+        System.out.println("keys per node with 200 virtual nodes each: " + load);
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>add a 6th cache node: mod-N moves 83.3% of keys, consistent hashing moves 16.6% (ideal 16.7%)
+keys per node with 200 virtual nodes each: {cache-1=16045, cache-2=15164, cache-3=16823, cache-4=17243, cache-5=18149, cache-6=16576}</pre></div>
+            <p>MD5 is used here only for its even distribution, not for security. Production rings often use faster non-cryptographic hashes, such as Murmur3 or xxHash.</p>
+          </div></details>
+        </div>
+
+        <div class="xp-exercise">
+          <h3>Exercise 5: Clock skew against logical time<span class="xp-lvl">ordering · medium</span></h3>
+          <p>Reproduce scenario 21.3. One region's clock runs 350 ms behind. An older write in eu-west replicates to us-east, which then applies a newer write. Resolve the conflict with last-writer-wins by wall clock, and then with Lamport timestamps.</p>
+          <details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+            <p>Lamport's rule is to increment on each local event, and on receipt to set the clock to max(local, received) + 1, which guarantees that if A happened before B, then L(A) &lt; L(B)<a class="cite" href="#ref-1">[1]</a>. The wall clock gives no such guarantee.</p>
+<pre><code>import java.util.*;
+
+class Ex5LamportClocks {
+    static final class Node {
+        final String name; final long skewMs; long lamport;
+        Node(String name, long skewMs) { this.name = name; this.skewMs = skewMs; }
+        long wallClock(long trueTimeMs) { return trueTimeMs + skewMs; }
+        long tick() { return ++lamport; }
+        long receive(long senderClock) { lamport = Math.max(lamport, senderClock) + 1; return lamport; }
+    }
+    record Write(String node, String value, long wallMs, long lamport) {}
+
+    public static void main(String[] args) {
+        Node eu = new Node("eu-west", 0), us = new Node("us-east", -350);   // us-east's clock runs 350 ms behind
+        List&lt;Write&gt; writes = new ArrayList&lt;&gt;();
+
+        // t=1000 ms: user updates their email in eu-west.
+        long l1 = eu.tick();
+        writes.add(new Write(eu.name, "ana@old.example", eu.wallClock(1_000), l1));
+        // t=1200 ms: replication reaches us-east, which then applies the user's newer change.
+        us.receive(l1);
+        long l2 = us.tick();
+        writes.add(new Write(us.name, "ana@new.example", us.wallClock(1_200), l2));
+
+        Write byWall = writes.stream().max(Comparator.comparingLong(Write::wallMs)).orElseThrow();
+        Write byLamport = writes.stream().max(Comparator.comparingLong(Write::lamport)).orElseThrow();
+        writes.forEach(w -&gt; System.out.println(w));
+        System.out.println("last-writer-wins by wall clock keeps: " + byWall.value() + "   (the older write)");
+        System.out.println("by Lamport timestamp keeps:          " + byLamport.value());
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · OpenJDK 21.0.13</span><pre>Write[node=eu-west, value=ana@old.example, wallMs=1000, lamport=1]
+Write[node=us-east, value=ana@new.example, wallMs=850, lamport=3]
+last-writer-wins by wall clock keeps: ana@old.example   (the older write)
+by Lamport timestamp keeps:          ana@new.example</pre></div>
+            <p>Lamport timestamps order causally related events, but they cannot <em>detect</em> truly concurrent writes. Version vectors can, and they let the application merge both versions or ask the user<a class="cite" href="#ref-42">[42]</a>.</p>
+          </div></details>
+        </div>
+      </section>
+
+      <section id="trivia">
+        <h2>23. Trivia</h2>
+        <p class="lead">Short questions with answers.</p>
+        <div class="xp-trivia">
+          <details class="xp-details"><summary>What does the FLP impossibility result say?</summary><div class="xp-body"><p>In an asynchronous network where even one process may crash, no deterministic algorithm can guarantee that consensus is always reached (Fischer, Lynch, and Paterson, 1985)<a class="cite" href="#ref-2">[2]</a>. Practical protocols such as Raft and Paxos guarantee safety always, and make progress under timing assumptions.</p></div></details>
+          <details class="xp-details"><summary>What does the CAP theorem actually force you to choose?</summary><div class="xp-body"><p>During a network <em>partition</em>, either consistency (linearizability) or availability. Without a partition, you can have both. Gilbert and Lynch proved Brewer's conjecture in 2002<a class="cite" href="#ref-3">[3]</a>. PACELC adds the latency-versus-consistency trade-off that applies when the network is healthy.</p></div></details>
+          <details class="xp-details"><summary>What are the "fallacies of distributed computing"?</summary><div class="xp-body"><p>Eight false assumptions attributed to L. Peter Deutsch and others at Sun in the 1990s: the network is reliable, latency is zero, bandwidth is infinite, the network is secure, the topology does not change, there is one administrator, transport cost is zero, and the network is homogeneous.</p></div></details>
+          <details class="xp-details"><summary>Who coined "microservices" as it is used today?</summary><div class="xp-body"><p>The term was popularized by James Lewis and Martin Fowler's 2014 article, which described the style that a 2011 workshop of software architects had discussed<a class="cite" href="#ref-40">[40]</a>.</p></div></details>
+          <details class="xp-details"><summary>Is exactly-once delivery possible?</summary><div class="xp-body"><p>Not over an unreliable network in general. What systems offer is exactly-once <em>processing</em> within a boundary: at-least-once delivery plus idempotent handling, or transactional coupling of the consume, process, and produce steps, as Kafka's transactions do inside Kafka<a class="cite" href="#ref-35">[35]</a><a class="cite" href="#ref-36">[36]</a>.</p></div></details>
+          <details class="xp-details"><summary>What does a gRPC deadline do that a client timeout does not?</summary><div class="xp-body"><p>It propagates: the remaining time travels with the call (the <code>grpc-timeout</code> header), so downstream servers can stop work when the original caller has given up<a class="cite" href="#ref-20">[20]</a>.</p></div></details>
+          <details class="xp-details"><summary>Why must you never reuse a Protocol Buffers field number?</summary><div class="xp-body"><p>The wire format identifies fields by number, not by name. Old clients would decode the new field's bytes as the old field, which corrupts data silently. Mark removed numbers and names as <code>reserved</code><a class="cite" href="#ref-18">[18]</a>.</p></div></details>
+          <details class="xp-details"><summary>What is the transactional outbox for?</summary><div class="xp-body"><p>Publishing an event exactly when a database change commits, without a distributed transaction. The event row is written in the same local transaction, and a relay or change data capture tool such as Debezium publishes it<a class="cite" href="#ref-38">[38]</a><a class="cite" href="#ref-39">[39]</a>.</p></div></details>
+          <details class="xp-details"><summary>What happens to an idempotent HTTP <code>PUT</code> that is retried after a timeout?</summary><div class="xp-body"><p>Repeating it has the same effect as sending it once, which is why HTTP clients and proxies may retry <code>PUT</code> and <code>DELETE</code> automatically, but not <code>POST</code> or <code>PATCH</code><a class="cite" href="#ref-5">[5]</a>. An <code>Idempotency-Key</code> header makes a <code>POST</code> safe to retry as well.</p></div></details>
+          <details class="xp-details"><summary>What is a "split brain"?</summary><div class="xp-body"><p>Two parts of a partitioned cluster each believe they are the leader and accept conflicting writes. Quorums (a majority is required) and fencing tokens (a store rejects writes from stale leaders) prevent it<a class="cite" href="#ref-42">[42]</a>.</p></div></details>
+        </div>
+      </section>
+
+<!-- xp:end -->
     </article>
 
     <section class="references" aria-labelledby="references-heading">

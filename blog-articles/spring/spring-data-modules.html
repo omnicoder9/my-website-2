@@ -135,6 +135,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1195,6 +1215,261 @@ public record ProductCacheEntry(
   Diagnose a Spring Data system by asking two sets of questions. First, what is common: which repository factory, converter, callback, projection, paging type, and transaction abstraction is involved? Second, what is native: which document update, Redis command, CQL partition, Elasticsearch query, Cypher traversal, SQL statement, consistency level, driver, and failure model actually executed? The first set explains the Spring programming model; the second determines correctness and performance.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">17. Enterprise scenarios</h2>
+<p>The Spring Data modules share a programming model, but not semantics. A repository method that looks the same over MongoDB, Redis, Cassandra, or a relational database can mean very different things for consistency, query cost, and data lifetime. The scenarios below are composites from commerce, media, and SaaS teams, with illustrative figures. Section 18 runs the two modules that work without a server, Spring Data JDBC on H2 and Spring Data KeyValue, and turns the store-specific lessons into design exercises.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">E-commerce · order service moved from JPA to Spring Data JDBC</p>
+<h3 id="scenario-aggregate">17.1 "Why does changing one line rewrite the whole order?"</h3>
+<p><strong>Situation.</strong> A team moved an order service from JPA to Spring Data JDBC for simpler, more predictable SQL.</p>
+<p><strong>What surprised them.</strong> Spring Data JDBC treats an aggregate root and everything it contains as one unit<a class="citation" href="#ref-22">[22]</a><a class="citation" href="#ref-23">[23]</a>. Saving an order updates the root, deletes all of its lines, and inserts them again, and loading an order always loads every line, with no lazy loading. That is right for an order with ten lines. It is wrong for a "customer" aggregate that someone had modelled with 40,000 orders inside it.</p>
+<p><strong>Fix.</strong> Design small aggregates, and reference other aggregates by id with <code>AggregateReference</code>, never by containment<a class="citation" href="#ref-24">[24]</a> (Exercise 1). Spring Data JDBC rewards domain-driven boundaries, and punishes object graphs that were built for JPA's lazy loading.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">SaaS · adding Redis and MongoDB to a JPA application</p>
+<h3 id="scenario-strict">17.2 Repositories that silently disappeared</h3>
+<p><strong>Situation.</strong> A JPA application added Spring Data Redis for sessions and MongoDB for documents.</p>
+<p><strong>What went wrong.</strong> After the new dependencies were added, some existing repository beans vanished at startup with "No qualifying bean". With more than one Spring Data module on the class path, repository scanning switches to <em>strict</em> mode: a repository is assigned to a module only if its interface extends that module's base repository, or its entity carries that module's mapping annotation, such as <code>@Entity</code>, <code>@Document</code>, <code>@RedisHash</code>, or <code>@Table</code>, and ambiguous interfaces are skipped<a class="citation" href="#ref-3">[3]</a>. This exact behavior surfaced while preparing Exercise 1, where removing <code>@Table</code> made Spring Data JDBC ignore the repository.</p>
+<p><strong>Fix.</strong> In multi-store applications, extend store-specific interfaces (<code>JpaRepository</code>, <code>MongoRepository</code>, <code>KeyValueRepository</code>), annotate entities for their store, and scope each <code>@Enable…Repositories</code> to its own package.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Media platform · Redis for sessions and caching · memory exhaustion</p>
+<h3 id="scenario-redis">17.3 A Redis instance that only ever grew</h3>
+<p><strong>Situation.</strong> User sessions and "recently viewed" lists were stored with Spring Data Redis repositories<a class="citation" href="#ref-9">[9]</a><a class="citation" href="#ref-10">[10]</a>.</p>
+<p><strong>What went wrong.</strong> No entity had a time to live, and Redis repositories also maintain secondary-index sets for every <code>@Indexed</code> property. Memory grew until eviction started dropping <em>active</em> sessions, which logged users out at random during peak hours.</p>
+<p><strong>Fix.</strong> Give every key a lifetime (<code>@RedisHash(timeToLive = …)</code> or a <code>@TimeToLive</code> property), index only what you query, and set an explicit <code>maxmemory</code> policy. Treat Redis as a cache or a store with expiry, not as an unbounded database.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">IoT telemetry · Cassandra · query patterns added after launch</p>
+<h3 id="scenario-cassandra">17.4 "Just add a query method" on Cassandra</h3>
+<p><strong>Situation.</strong> A telemetry service stored readings in Cassandra, partitioned by device and day.</p>
+<p><strong>What went wrong.</strong> A new dashboard needed "all readings above a threshold across all devices". A derived query method compiled, but it required <code>ALLOW FILTERING</code>, which scanned the whole cluster and caused timeouts<a class="citation" href="#ref-12">[12]</a><a class="citation" href="#ref-13">[13]</a>.</p>
+<p><strong>Fix.</strong> In wide-column stores, design one table per query pattern, and write to all of them, denormalizing on purpose. A repository abstraction that hides the store does not make queries portable. It only makes them look portable (Exercise 3).</p>
+</div>
+
+<h2 id="exercises">18. Exercises</h2>
+<p>Exercises 1 and 2 are self-contained Spring applications, compiled and run with Spring Data JDBC 4.1.0 and Spring Data KeyValue 4.1.0 (Spring Data 2026.0, through the Spring Boot 4.1.0 BOM), H2 2.4.240, and OpenJDK 21.0.13. The output shown is real. Exercises 3 and 4 are design exercises for stores that need a running server.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">18.1 Watch an aggregate load and save<span class="xp-lvl">Spring Data JDBC · medium</span></h3>
+<p>Model a purchase order that contains its lines, and references its customer by id. Record the SQL statements that loading the order runs, and those that changing one line's quantity and saving run.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>A recording <code>DataSource</code> proxy logs the verb and table of every prepared statement. Loading reads the root and its collection in two queries, and returns the customer only as an id. Saving updates the root, then deletes and re-inserts the lines: Spring Data JDBC has no change tracking, so it rewrites the contained collection<a class="citation" href="#ref-22">[22]</a><a class="citation" href="#ref-24">[24]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sdm.agg;
+
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.util.*;
+import javax.sql.DataSource;
+import org.springframework.context.annotation.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.jdbc.core.mapping.AggregateReference;
+import org.springframework.data.jdbc.repository.config.*;
+import org.springframework.data.relational.core.mapping.*;
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.jdbc.core.namedparam.*;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.embedded.*;
+import org.springframework.transaction.PlatformTransactionManager;
+
+public class Ex1Aggregate {
+    static final List&lt;String&gt; SQL = new ArrayList&lt;&gt;();
+
+    /** Records the first word and table of every statement the repository prepares. */
+    static DataSource recording(DataSource real) {
+        return (DataSource) Proxy.newProxyInstance(DataSource.class.getClassLoader(), new Class&lt;?&gt;[] {DataSource.class}, (p, m, a) -&gt; {
+            Object r = m.invoke(real, a);
+            if (!(r instanceof Connection c)) return r;
+            return Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class&lt;?&gt;[] {Connection.class}, (p2, m2, a2) -&gt; {
+                if (m2.getName().equals("prepareStatement")) {
+                    String s = ((String) a2[0]).replaceAll("\"", "").toUpperCase(Locale.ROOT);
+                    SQL.add(s.replaceAll("^(\\w+)\\s.*?(?:FROM|INTO|UPDATE)\\s+(\\w+).*$", "$1 $2").replaceAll("^UPDATE (\\w+).*", "UPDATE $1"));
+                }
+                try { return m2.invoke(c, a2); } catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
+            });
+        });
+    }
+
+    // @Table also tells Spring Data, in strict multi-module mode, that this aggregate belongs to Spring Data JDBC.
+    @Table("PURCHASE_ORDER")
+    record PurchaseOrder(@Id Long id, AggregateReference&lt;Customer, Long&gt; customer,
+                         @MappedCollection(idColumn = "PURCHASE_ORDER") Set&lt;Line&gt; lines) {}
+    @Table("LINE") record Line(String sku, int qty) {}
+    @Table("CUSTOMER") record Customer(@Id Long id, String name) {}
+
+    interface Orders extends CrudRepository&lt;PurchaseOrder, Long&gt; {}
+    interface Customers extends CrudRepository&lt;Customer, Long&gt; {}
+
+    @Configuration
+    @EnableJdbcRepositories(considerNestedRepositories = true, basePackageClasses = Ex1Aggregate.class)
+    static class Config extends AbstractJdbcConfiguration {
+        @Bean DataSource dataSource() {
+            return recording(new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true).addScript("classpath:sdm-schema.sql").build());
+        }
+        @Bean NamedParameterJdbcOperations jdbc(DataSource ds) { return new NamedParameterJdbcTemplate(ds); }
+        @Bean PlatformTransactionManager transactionManager(DataSource ds) { return new DataSourceTransactionManager(ds); }
+    }
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Customers customers = ctx.getBean(Customers.class);
+            Orders orders = ctx.getBean(Orders.class);
+            Customer ana = customers.save(new Customer(null, "Ana"));
+            PurchaseOrder o = orders.save(new PurchaseOrder(null, AggregateReference.to(ana.id()),
+                    Set.of(new Line("SKU-1", 1), new Line("SKU-2", 2), new Line("SKU-3", 1))));
+            SQL.clear();
+            PurchaseOrder loaded = orders.findById(o.id()).orElseThrow();
+            System.out.println("load order: " + SQL + " -&gt; " + loaded.lines().size() + " lines loaded with it, customer is just id " + loaded.customer().getId());
+            SQL.clear();
+            Set&lt;Line&gt; changed = new HashSet&lt;&gt;(loaded.lines());
+            changed.remove(new Line("SKU-2", 2)); changed.add(new Line("SKU-2", 5));            // change ONE line's quantity
+            orders.save(new PurchaseOrder(loaded.id(), loaded.customer(), changed));
+            System.out.println("save after changing one line: " + SQL);
+        }
+    }
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">SQL · sdm-schema.sql</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>CREATE TABLE customer (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(40));
+CREATE TABLE purchase_order (id BIGINT AUTO_INCREMENT PRIMARY KEY, customer BIGINT REFERENCES customer(id));
+CREATE TABLE line (purchase_order BIGINT REFERENCES purchase_order(id), sku VARCHAR(20), qty INT);</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Data JDBC 4.1.0, H2 2.4.240</span><pre>load order: [SELECT PURCHASE_ORDER, SELECT LINE] -&gt; 3 lines loaded with it, customer is just id 1
+save after changing one line: [UPDATE PURCHASE_ORDER, DELETE LINE, INSERT LINE]</pre></div>
+<p>The single <code>INSERT LINE</code> entry is one prepared statement executed as a batch for every line. The table names in <code>@Table</code> are uppercase because Spring Data JDBC quotes identifiers, and H2 stores unquoted names in uppercase. With lowercase names, the first insert failed with "bad SQL grammar".</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">18.2 One repository interface, any store<span class="xp-lvl">Spring Data Commons · easy</span></h3>
+<p>Define session records and a repository with three derived queries: find by user, find by region with a time filter and sorting, and count by region. Run it against Spring Data's in-memory map store.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Spring Data Commons parses method names into store-independent query metadata, and each module translates that metadata<a class="citation" href="#ref-3">[3]</a>. Here, the KeyValue module evaluates it against a <code>ConcurrentHashMap</code>, which is handy for tests and prototypes. The interface extends <code>KeyValueRepository</code> because of strict mode (scenario 17.2): the lab also has JPA and JDBC on its class path.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sdm.kv;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.keyvalue.annotation.KeySpace;
+
+@KeySpace("sessions")
+public record Session(@Id String id, String userId, String region, long lastSeenEpochSec) {}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sdm.kv;
+
+import java.util.List;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.keyvalue.repository.KeyValueRepository;
+
+/** The same derived-query interface would work against Redis, MongoDB, or JPA; here it runs on a ConcurrentHashMap. */
+public interface Sessions extends KeyValueRepository&lt;Session, String&gt; {   // store-specific base: see the text
+    List&lt;Session&gt; findByUserId(String userId);
+    List&lt;Session&gt; findByRegionAndLastSeenEpochSecGreaterThan(String region, long since, Sort sort);
+    long countByRegion(String region);
+}</code></pre>
+  </div>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.sdm.kv;
+
+import java.util.*;
+import org.springframework.context.annotation.*;
+import org.springframework.data.domain.*;
+import org.springframework.data.map.repository.config.EnableMapRepositories;
+
+public class Ex2PortableRepository {
+    @Configuration @EnableMapRepositories(basePackageClasses = Sessions.class)
+    static class Config {}
+
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(Config.class)) {
+            Sessions repo = ctx.getBean(Sessions.class);
+            repo.saveAll(List.of(new Session("s1", "ana", "eu", 1_000), new Session("s2", "ana", "us", 1_500),
+                                 new Session("s3", "bo", "eu", 2_000), new Session("s4", "cy", "eu", 900)));
+            System.out.println("findByUserId(ana): " + repo.findByUserId("ana").stream().map(Session::id).sorted().toList());
+            System.out.println("eu, seen after 950, newest first: " + repo.findByRegionAndLastSeenEpochSecGreaterThan("eu", 950,
+                    Sort.by(Sort.Direction.DESC, "lastSeenEpochSec")).stream().map(Session::id).toList());
+            System.out.println("countByRegion(eu): " + repo.countByRegion("eu"));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Data KeyValue 4.1.0</span><pre>findByUserId(ana): [s1, s2]
+eu, seen after 950, newest first: [s3, s1]
+countByRegion(eu): 3</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">18.3 Design Cassandra tables from the queries<span class="xp-lvl">Cassandra · hard</span></h3>
+<p>A telemetry service needs (a) the readings of one device for one day, newest first, and (b) the devices whose temperature exceeded 8 °C on a given day. Design the tables and the Spring Data Cassandra entities, without <code>ALLOW FILTERING</code>.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Use one table per query. The partition key decides which node holds the data, and clustering columns decide the order within a partition<a class="citation" href="#ref-12">[12]</a>. Write each alert to the second table at ingest time.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>@Table("readings_by_device_day")
+record ReadingByDeviceDay(
+    @PrimaryKeyColumn(name = "device_id", type = PrimaryKeyType.PARTITIONED, ordinal = 0) String deviceId,
+    @PrimaryKeyColumn(name = "day", type = PrimaryKeyType.PARTITIONED, ordinal = 1) LocalDate day,
+    @PrimaryKeyColumn(name = "ts", type = PrimaryKeyType.CLUSTERED, ordering = Ordering.DESCENDING, ordinal = 2) Instant ts,
+    double celsius) {}
+
+@Table("excursions_by_day")
+record ExcursionByDay(
+    @PrimaryKeyColumn(name = "day", type = PrimaryKeyType.PARTITIONED, ordinal = 0) LocalDate day,
+    @PrimaryKeyColumn(name = "device_id", type = PrimaryKeyType.CLUSTERED, ordinal = 1) String deviceId,
+    double maxCelsius) {}</code></pre>
+  </div>
+<p>Bound partition sizes: one device-day partition holds at most 86,400 one-second readings. Plan time-to-live and compaction for time series. Neither table supports arbitrary ad-hoc queries, which belong in an analytics store.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">18.4 Pick the module<span class="xp-lvl">architecture · easy</span></h3>
+<p>Choose a Spring Data module for each need: (a) product catalog search with typo tolerance and facets, (b) "people who bought X also bought Y" recommendations, (c) shopping carts that expire after 24 hours, (d) orders with strong consistency and reporting, and (e) a reactive, non-blocking service on PostgreSQL.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<ul>
+<li>(a) <strong>Elasticsearch</strong>: full-text search, analyzers, and aggregations<a class="citation" href="#ref-16">[16]</a>. Keep the system of record elsewhere, and index from it.</li>
+<li>(b) <strong>Neo4j</strong>: relationship traversal is the query<a class="citation" href="#ref-18">[18]</a><a class="citation" href="#ref-19">[19]</a>.</li>
+<li>(c) <strong>Redis</strong>, with a time to live on every cart<a class="citation" href="#ref-9">[9]</a>.</li>
+<li>(d) <strong>JPA or JDBC on a relational database</strong>: transactions, constraints, and SQL reporting<a class="citation" href="#ref-21">[21]</a>.</li>
+<li>(e) <strong>Spring Data R2DBC</strong>, though a blocking driver on virtual threads is now often simpler<a class="citation" href="#ref-25">[25]</a><a class="citation" href="#ref-26">[26]</a>.</li>
+</ul>
+</div></details>
+</div>
+
+<h2 id="trivia">19. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What is a Spring Data "release train"?</summary><div class="xp-body"><p>A coordinated release of all the modules, with compatible versions. Since 2020, trains have been named by calendar version, such as 2026.0, which contains Spring Data JPA 4.1, MongoDB 5.1, and Neo4j 8.1<a class="citation" href="#ref-1">[1]</a>.</p></div></details>
+<details class="xp-details"><summary>Does Spring Data JDBC support lazy loading?</summary><div class="xp-body"><p>No, deliberately. An aggregate is loaded completely, and references to other aggregates are ids<a class="citation" href="#ref-22">[22]</a><a class="citation" href="#ref-23">[23]</a>.</p></div></details>
+<details class="xp-details"><summary>Which annotation marks a MongoDB document, and which a Redis hash?</summary><div class="xp-body"><p><code>@Document</code> for MongoDB<a class="citation" href="#ref-5">[5]</a>, and <code>@RedisHash</code> for Redis repositories<a class="citation" href="#ref-10">[10]</a>. In multi-store applications, these annotations also decide which module claims a repository.</p></div></details>
+<details class="xp-details"><summary>Does MongoDB support multi-document transactions with Spring?</summary><div class="xp-body"><p>Yes, on replica sets and sharded clusters, through <code>MongoTransactionManager</code> and <code>@Transactional</code>, with a cost in performance. Single-document operations are always atomic<a class="citation" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the template counterpart of each repository?</summary><div class="xp-body"><p><code>MongoTemplate</code>, <code>RedisTemplate</code>, <code>CassandraTemplate</code>, <code>ElasticsearchOperations</code>, <code>Neo4jTemplate</code>, and <code>JdbcAggregateTemplate</code>. Use them for operations that derived queries cannot express<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-20">[20]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>Neo4jClient</code> offer beyond repositories?</summary><div class="xp-body"><p>Direct Cypher execution with result mapping, for graph queries that do not fit the repository model<a class="citation" href="#ref-19">[19]</a>.</p></div></details>
+<details class="xp-details"><summary>Why must Spring Data Elasticsearch versions match the cluster closely?</summary><div class="xp-body"><p>Each Spring Data Elasticsearch release is built against a specific Elasticsearch client version, and the version-compatibility table lists the supported cluster versions<a class="citation" href="#ref-15">[15]</a>.</p></div></details>
+<details class="xp-details"><summary>What is R2DBC?</summary><div class="xp-body"><p>Reactive Relational Database Connectivity, a non-blocking SPI for SQL databases. Spring Data R2DBC builds repositories on it, and returns <code>Mono</code> and <code>Flux</code><a class="citation" href="#ref-25">[25]</a><a class="citation" href="#ref-26">[26]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@MappedCollection</code> configure in Spring Data JDBC?</summary><div class="xp-body"><p>The foreign-key column in the child table (<code>idColumn</code>), and for lists and maps, the key column, for collections that an aggregate root contains<a class="citation" href="#ref-24">[24]</a>.</p></div></details>
+<details class="xp-details"><summary>Can derived query methods be shared verbatim between stores?</summary><div class="xp-body"><p>Syntactically, often yes. Semantically, no: the same name can be an index lookup in one store and a full scan in another (scenario 17.4)<a class="citation" href="#ref-3">[3]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Paluch M. Spring Data 2026.0.0 generally available [Internet]. Spring; 2026 Jun 9 [cited 2026 Jul 31]. Available from: <a href="https://spring.io/blog/2026/06/09/spring-data-2026-0-0-generally-available/">https://spring.io/blog/2026/06/09/spring-data-2026-0-0-generally-available/</a></li>
@@ -1245,7 +1520,7 @@ public record ProductCacheEntry(
 <li><a href="#diagnostics">Diagnostics</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>

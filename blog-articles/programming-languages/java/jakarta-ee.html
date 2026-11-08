@@ -12,6 +12,26 @@
 @media(max-width:900px){.toc ol{columns:2}}@media(max-width:680px){.toc ol{columns:1}.grid{grid-template-columns:1fr}.hero{padding-top:3.5rem}}
 @media print{body{font-size:10.2pt}.hero{background:#fff;color:#000;border-bottom:2px solid #85000d;padding:1.5rem 0}.dek,.meta{color:#333}.page{width:100%;padding:0}.toc,article,.references{border:0;box-shadow:none}.toc{page-break-after:always}pre,table,.callout{break-inside:avoid}}
 </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--surface2)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header class="hero"><div class="hero-inner">
@@ -33,6 +53,7 @@
 <li><a href="#testing">Testing</a></li><li><a href="#migration">Migration</a></li>
 <li><a href="#operations">Operations</a></li><li><a href="#decision">Decision guide</a></li>
 <li><a href="#checklist">Checklist</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end -->
 </ol></nav>
 <article>
 <section id="overview">
@@ -1466,6 +1487,319 @@ jar tf target/orders.war |
 </ul>
 <div class="callout"><strong>Final principle:</strong> Jakarta EE is not primarily a collection of annotations. It is a set of behavioral contracts between applications and containers. Correct design depends on understanding lifecycle, scope, threading, transactions, persistence contexts, HTTP semantics, and message delivery.</div>
 </section>
+<!-- xp:start -->
+<section id="enterprise-scenarios">
+<h2>22. Enterprise scenarios</h2>
+<p class="lead">Jakarta EE runs a large share of the world's long-lived enterprise systems, in banks, insurers, governments, and telecoms. Its production problems are rarely about individual APIs. They come from migrations, container-managed magic such as scopes, proxies, and transactions, and integration semantics. The scenarios below are composites with illustrative figures. Section 23 runs the key mechanisms with Hibernate Validator 9.0 and Weld 6.0, the reference implementations of Jakarta Validation 3.1 and CDI 4.1.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">Government benefits platform · Java EE 8 → Jakarta EE 10 · 1.2 million lines</p>
+<h3>22.1 The <code>javax</code> → <code>jakarta</code> migration that half-happened</h3>
+<p><strong>Situation.</strong> Jakarta EE 9 renamed every API package from <code>javax.*</code> to <code>jakarta.*</code><a class="cite" href="#ref-6">[6]</a><a class="cite" href="#ref-7">[7]</a>. The team migrated its own code with a search and replace, and upgraded to a Jakarta EE 10 server.</p>
+<p><strong>What went wrong.</strong> Several internal libraries and one vendor JAR still used <code>javax.persistence</code> and <code>javax.validation</code> annotations. Nothing failed to start. The new runtime simply did not recognize the old annotations, so some entities lost their column mappings, and some request objects were no longer validated. The validation gap was found in a penetration test, not in testing.</p>
+<p><strong>Fix.</strong> Migrate every dependency, not only your own code. Use the Eclipse Transformer, or OpenRewrite's Jakarta recipes, for binaries you cannot rebuild. Add a build check that fails on any <code>javax.(persistence|validation|ws.rs|inject|enterprise)</code> import or class reference in the final artifact. Write tests that <em>expect</em> invalid input to be rejected (Exercise 1), so that silently ignored constraints become visible.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Insurer · customer portal · CDI scopes · data-protection incident</p>
+<h3>22.2 One customer saw another customer's statement</h3>
+<p><strong>Situation.</strong> A "current customer" holder was annotated <code>@ApplicationScoped</code>, because "it's injected everywhere". The login filter set the customer on it.</p>
+<p><strong>What went wrong.</strong> An application-scoped bean has exactly one instance for the whole application<a class="cite" href="#ref-11">[11]</a>. Under concurrent load, one user's request occasionally read the customer id set by another user's login, and a statement was rendered for the wrong person. A related bug in the same codebase read a field of an injected request-scoped bean directly. Injected normal-scoped beans are <em>client proxies</em>, and a field read on the proxy never reaches the contextual instance, so it saw <code>null</code> (Exercise 5).</p>
+<p><strong>Fix.</strong> Hold per-request state only in <code>@RequestScoped</code> (or session-scoped) beans, accessed through methods. Keep application-scoped beans stateless, or make their state immutable configuration. Add a concurrency test that interleaves two users' requests and asserts isolation.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Telecom provisioning · Jakarta Messaging queue · 3 million messages/day</p>
+<h3>22.3 One poison message stalled a provisioning queue</h3>
+<p><strong>Situation.</strong> A message-driven bean provisioned SIM activations. Each message was processed in a container-managed transaction.</p>
+<p><strong>What went wrong.</strong> A malformed message caused a runtime exception, the transaction rolled back, and the broker redelivered the message immediately, again and again. The consumer's single-threaded ordering meant that thousands of valid activations queued behind it for six hours.</p>
+<p><strong>Fix.</strong> Configure a maximum delivery count and a dead-letter queue on the broker. Read <code>JMSXDeliveryCount</code> to divert repeatedly failing messages to a parking queue with diagnostic headers<a class="cite" href="#ref-37">[37]</a>. Make consumers idempotent, because redelivery after a crash is normal, and use <code>PERSISTENT</code> delivery for work that must survive a broker restart<a class="cite" href="#ref-38">[38]</a>.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Bank · REST API on Jakarta REST · audit and API consistency review</p>
+<h3>22.4 Twelve error formats in one API</h3>
+<p><strong>Situation.</strong> Each team mapped validation failures to its own JSON shape: some returned 500s with stack traces, others 400s with plain text.</p>
+<p><strong>What went wrong.</strong> Client teams wrote a dozen error parsers, the stack traces exposed internal class names, and the audit flagged the inconsistency as a security and usability issue.</p>
+<p><strong>Fix.</strong> Validate at the boundary with Jakarta Validation, on request DTOs and on resource-method parameters<a class="cite" href="#ref-27">[27]</a><a class="cite" href="#ref-30">[30]</a>. Map <code>ConstraintViolationException</code> once, in a shared <code>ExceptionMapper</code>, to an RFC 9457 <code>application/problem+json</code> response<a class="cite" href="#ref-36">[36]</a> (Exercises 1–3). Compile with <code>-parameters</code>, so that violation paths name real parameters rather than <code>arg0</code>.</p>
+</div>
+</section>
+
+<section id="exercises">
+<h2>23. Exercises</h2>
+<p class="lead">Try each exercise before opening its solution. The solutions run in Java SE with the reference implementations: Hibernate Validator 9.0.1 with Expressly 6.0 (Exercises 1–3), and Weld SE 6.0.3 (Exercises 4 and 5). Each class's <code>main</code> method can be run from a Maven project that depends on <code>hibernate-validator</code>, <code>expressly</code>, and <code>weld-se-core</code>. The outputs shown were produced on OpenJDK 21.0.13.</p>
+
+<div class="xp-exercise">
+<h3>Exercise 1: Validate a transfer request<span class="xp-lvl">Validation · easy</span></h3>
+<p>Model a transfer as a record with constraints: two non-blank IBANs, a positive amount with at most two decimal places, and a reference of at most 140 characters. Add a class-level rule that the two accounts must differ. Print the violations for an invalid request.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>Constraints on record components apply to the generated fields and accessors. A custom constraint, an annotation plus a <code>ConstraintValidator</code>, expresses the cross-field rule at class level<a class="cite" href="#ref-27">[27]</a><a class="cite" href="#ref-29">[29]</a>. The <code>ParameterMessageInterpolator</code> avoids needing an Expression Language implementation for message interpolation, although one is on the class path here anyway.</p>
+<pre><code>package lab;
+
+import jakarta.validation.*;
+import jakarta.validation.constraints.*;
+import java.lang.annotation.*;
+import java.math.BigDecimal;
+import java.util.Comparator;
+
+public class Ex1Validation {
+
+    /** Class-level rule: you cannot transfer money to the same account. */
+    @Target(ElementType.TYPE) @Retention(RetentionPolicy.RUNTIME)
+    @Constraint(validatedBy = DistinctAccounts.Validator.class)
+    public @interface DistinctAccounts {
+        String message() default "source and destination accounts must differ";
+        Class&lt;?&gt;[] groups() default {};
+        Class&lt;? extends Payload&gt;[] payload() default {};
+
+        class Validator implements ConstraintValidator&lt;DistinctAccounts, TransferRequest&gt; {
+            public boolean isValid(TransferRequest r, ConstraintValidatorContext ctx) {
+                return r.fromIban() == null || !r.fromIban().equals(r.toIban());
+            }
+        }
+    }
+
+    @DistinctAccounts
+    public record TransferRequest(
+            @NotBlank @Pattern(regexp = "[A-Z]{2}\\d{2}[A-Z0-9]{11,30}", message = "must be an IBAN") String fromIban,
+            @NotBlank @Pattern(regexp = "[A-Z]{2}\\d{2}[A-Z0-9]{11,30}", message = "must be an IBAN") String toIban,
+            @NotNull @Positive @Digits(integer = 9, fraction = 2) BigDecimal amount,
+            @Size(max = 140) String reference) {}
+
+    public static void main(String[] args) {
+        try (ValidatorFactory factory = Validation.byDefaultProvider().configure()
+                .messageInterpolator(new org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator())
+                .buildValidatorFactory()) {
+            Validator v = factory.getValidator();
+            var bad = new TransferRequest("DE89370400440532013000", "DE89370400440532013000", new BigDecimal("-12.345"), "x".repeat(150));
+            v.validate(bad).stream()
+             .sorted(Comparator.comparing((ConstraintViolation&lt;?&gt; c) -&gt; c.getPropertyPath().toString()).thenComparing(ConstraintViolation::getMessage))
+             .forEach(c -&gt; System.out.println((c.getPropertyPath().toString().isEmpty() ? "(object)" : c.getPropertyPath()) + ": " + c.getMessage()));
+            var ok = new TransferRequest("DE89370400440532013000", "FR1420041010050500013M02606", new BigDecimal("250.00"), "Invoice 1001");
+            System.out.println("valid request violations: " + v.validate(ok).size());
+        }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · Hibernate Validator 9.0.1 / Weld 6.0.3, OpenJDK 21.0.13</span><pre>(object): source and destination accounts must differ
+amount: must be greater than 0
+amount: numeric value out of bounds (&lt;9 digits&gt;.&lt;2 digits&gt; expected)
+reference: size must be between 0 and 140
+valid request violations: 0</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3>Exercise 2: Validate method parameters<span class="xp-lvl">Validation · easy</span></h3>
+<p>A statement service takes an account id, a year (2000–2100), and a month (1–12). Validate a call with a blank id, the year 1999, and month 13, using <code>ExecutableValidator</code>, the mechanism that containers use for method validation.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>forExecutables().validateParameters</code> evaluates parameter constraints without invoking the method<a class="cite" href="#ref-30">[30]</a>. Jakarta REST and CDI containers run exactly this check through an interceptor before your resource method is called.</p>
+<pre><code>package lab;
+
+import jakarta.validation.*;
+import jakarta.validation.constraints.*;
+import java.lang.reflect.Method;
+
+public class Ex2MethodValidation {
+    public static class StatementService {
+        public String statement(@NotBlank String accountId, @Min(2000) @Max(2100) int year, @Min(1) @Max(12) int month) {
+            return accountId + "-" + year + "-" + month;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        try (ValidatorFactory f = Validation.byDefaultProvider().configure()
+                .messageInterpolator(new org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator())
+                .buildValidatorFactory()) {
+            var exec = f.getValidator().forExecutables();
+            Method m = StatementService.class.getMethod("statement", String.class, int.class, int.class);
+            var violations = exec.validateParameters(new StatementService(), m, new Object[] {" ", 1999, 13});
+            violations.stream().map(c -&gt; c.getPropertyPath() + ": " + c.getMessage()).sorted().forEach(System.out::println);
+        }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · Hibernate Validator 9.0.1 / Weld 6.0.3, OpenJDK 21.0.13</span><pre>statement.accountId: must not be blank
+statement.month: must be less than or equal to 12
+statement.year: must be greater than or equal to 2000</pre></div>
+<p>The paths name the real parameters only because the class was compiled with <code>-parameters</code>. Without that flag, the same run reports <code>statement.arg0</code>, <code>statement.arg1</code>, and <code>statement.arg2</code>.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3>Exercise 3: One error format for the whole API<span class="xp-lvl">REST · medium</span></h3>
+<p>Convert a set of constraint violations into an RFC 9457 problem document with <code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code>, and <code>instance</code> members, plus an <code>errors</code> extension that lists each field and its message.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>RFC 9457 defines the standard members, and allows extension members such as <code>errors</code><a class="cite" href="#ref-36">[36]</a>. In a Jakarta REST application, this method's body belongs in an <code>ExceptionMapper&lt;ConstraintViolationException&gt;</code>, serialized with JSON-B<a class="cite" href="#ref-34">[34]</a>. The string-building here only keeps the example dependency-free.</p>
+<pre><code>package lab;
+
+import jakarta.validation.*;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.stream.Collectors;
+
+public class Ex3ProblemDetails {
+    static String json(String s) { return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""; }
+
+    /** RFC 9457 problem document, with an "errors" extension member listing field violations. */
+    static String problem(Set&lt;? extends ConstraintViolation&lt;?&gt;&gt; violations, String instance) {
+        String errors = violations.stream()
+            .sorted(Comparator.comparing((ConstraintViolation&lt;?&gt; c) -&gt; c.getPropertyPath().toString()).thenComparing(ConstraintViolation::getMessage))
+            .map(c -&gt; "    {\"field\": " + json(c.getPropertyPath().toString()) + ", \"message\": " + json(c.getMessage()) + "}")
+            .collect(Collectors.joining(",\n"));
+        return "{\n  \"type\": \"https://api.example.com/problems/validation\",\n  \"title\": \"Request validation failed\",\n"
+             + "  \"status\": 400,\n  \"detail\": " + json(violations.size() + " field(s) are invalid") + ",\n"
+             + "  \"instance\": " + json(instance) + ",\n  \"errors\": [\n" + errors + "\n  ]\n}";
+    }
+
+    public static void main(String[] args) {
+        try (ValidatorFactory f = Validation.byDefaultProvider().configure()
+                .messageInterpolator(new org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator())
+                .buildValidatorFactory()) {
+            var req = new Ex1Validation.TransferRequest("DE89", "FR1420041010050500013M02606", new BigDecimal("0"), null);
+            System.out.println("Content-Type: application/problem+json");
+            System.out.println(problem(f.getValidator().validate(req), "/transfers/requests/7f3a"));
+        }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · Hibernate Validator 9.0.1 / Weld 6.0.3, OpenJDK 21.0.13</span><pre>Content-Type: application/problem+json
+{
+  "type": "https://api.example.com/problems/validation",
+  "title": "Request validation failed",
+  "status": 400,
+  "detail": "2 field(s) are invalid",
+  "instance": "/transfers/requests/7f3a",
+  "errors": [
+    {"field": "amount", "message": "must be greater than 0"},
+    {"field": "fromIban", "message": "must be an IBAN"}
+  ]
+}</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3>Exercise 4: An audit interceptor, and the self-invocation question<span class="xp-lvl">CDI · medium</span></h3>
+<p>Define an <code>@Audited</code> interceptor binding and an interceptor that records each call. Apply it to two methods of an application-scoped service, one of which calls the other through <code>this</code>. Predict how many audit entries a single external call produces.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The <code>@InterceptorBinding</code> ties the annotation to the interceptor class, and <code>@Priority</code> enables the interceptor for the application<a class="cite" href="#ref-26">[26]</a>. In this run, with Weld 6.0.3, only the external call was intercepted. The inner call through <code>this</code> bypassed the interceptor, just as it bypasses a Spring proxy.</p>
+<pre><code>package lab;
+
+import jakarta.annotation.Priority;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.interceptor.*;
+import java.lang.annotation.*;
+import java.util.*;
+import org.jboss.weld.environment.se.*;
+
+public class Ex4Interceptor {
+    @InterceptorBinding @Retention(RetentionPolicy.RUNTIME) @Target({ElementType.METHOD, ElementType.TYPE})
+    public @interface Audited {}
+
+    @Audited @Interceptor @Priority(Interceptor.Priority.APPLICATION)
+    public static class AuditInterceptor {
+        static final List&lt;String&gt; LOG = new ArrayList&lt;&gt;();
+        @AroundInvoke
+        public Object audit(InvocationContext ctx) throws Exception {
+            LOG.add("audit " + ctx.getMethod().getName() + Arrays.toString(ctx.getParameters()));
+            return ctx.proceed();
+        }
+    }
+
+    @ApplicationScoped
+    public static class LimitService {
+        @Audited public void raiseLimit(String account, long cents) { notifyRisk(account); }
+        @Audited public void notifyRisk(String account) { }           // called from raiseLimit via 'this'
+    }
+
+    public static void main(String[] args) {
+        try (WeldContainer c = new Weld().disableDiscovery()
+                .addBeanClasses(LimitService.class, AuditInterceptor.class).addInterceptor(AuditInterceptor.class).initialize()) {
+            LimitService svc = c.select(LimitService.class).get();
+            svc.raiseLimit("ACC-1", 500_000);
+            AuditInterceptor.LOG.forEach(System.out::println);
+            System.out.println("injected type is a client proxy: " + svc.getClass().getName().contains("Proxy"));
+        }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · Hibernate Validator 9.0.1 / Weld 6.0.3, OpenJDK 21.0.13</span><pre>audit raiseLimit[ACC-1, 500000]
+injected type is a client proxy: true</pre></div>
+<p>Do not build security or auditing on the assumption that self-invocation is intercepted. If the inner operation must be audited on its own, move it to a separate bean.</p>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3>Exercise 5: Scopes and client proxies<span class="xp-lvl">CDI · hard</span></h3>
+<p>Reproduce scenario 22.2. Store the logged-in user in an application-scoped bean and in a request-scoped bean, and also read a package-private field of the request-scoped bean directly through the injected reference. Simulate two requests with <code>RequestContextController</code>, alice and then an anonymous user, and predict all three values for each request.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The application-scoped value leaks into the second request. The request-scoped value is fresh for each request<a class="cite" href="#ref-11">[11]</a>. The field read returns <code>null</code> both times: the injected reference is a client proxy, and only method calls are forwarded to the current contextual instance<a class="cite" href="#ref-25">[25]</a>.</p>
+<pre><code>package lab;
+
+import jakarta.enterprise.context.*;
+import jakarta.enterprise.context.control.RequestContextController;
+import jakarta.inject.Inject;
+import org.jboss.weld.environment.se.*;
+
+public class Ex5Scopes {
+    @ApplicationScoped
+    public static class TenantSettings {                   // one instance for the whole application
+        private String lastUser;                           // per-user state in an app-wide bean: a leak
+        public String lastUser() { return lastUser; }
+        public void setLastUser(String u) { lastUser = u; }
+    }
+
+    @RequestScoped
+    public static class CurrentUser {                      // a fresh instance for every request
+        private String name;
+        String cachedName;                                 // package-private: read below without a method call
+        public String name() { return name; }
+        public void login(String u) { name = u; cachedName = u; }
+    }
+
+    @ApplicationScoped
+    public static class StatementResource {
+        @Inject TenantSettings settings;
+        @Inject CurrentUser current;                       // injected as a client proxy
+        void login(String u) { settings.setLastUser(u); current.login(u); }
+        String whoAmI() {
+            return "app-scoped=" + settings.lastUser() + ", request-scoped=" + current.name()
+                 + ", field via proxy=" + current.cachedName;
+        }
+    }
+
+    public static void main(String[] args) {
+        try (WeldContainer c = new Weld().disableDiscovery()
+                .addBeanClasses(TenantSettings.class, CurrentUser.class, StatementResource.class).initialize()) {
+            StatementResource res = c.select(StatementResource.class).get();
+            RequestContextController rc = c.select(RequestContextController.class).get();
+
+            rc.activate(); res.login("alice"); System.out.println("request 1 (alice): " + res.whoAmI()); rc.deactivate();
+            rc.activate();                      System.out.println("request 2 (anon):  " + res.whoAmI()); rc.deactivate();
+        }
+    }
+}</code></pre>
+<div class="xp-out"><span>Output · Hibernate Validator 9.0.1 / Weld 6.0.3, OpenJDK 21.0.13</span><pre>request 1 (alice): app-scoped=alice, request-scoped=alice, field via proxy=null
+request 2 (anon):  app-scoped=alice, request-scoped=null, field via proxy=null</pre></div>
+<p>CDI enforces part of this rule itself. When the field was made <code>public</code>, Weld refused to start, with <code>WELD-000075: Normal scoped managed bean implementation class has a public field</code>.</p>
+</div></details>
+</div>
+</section>
+
+<section id="trivia">
+<h2>24. Trivia</h2>
+<p class="lead">Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>Why did Jakarta EE 9 rename <code>javax.*</code> to <code>jakarta.*</code>?</summary><div class="xp-body"><p>When Oracle transferred Java EE to the Eclipse Foundation, the agreement did not allow the <code>javax</code> namespace to be evolved under the new project. Jakarta EE 9 (2020) therefore made the rename its main change, with essentially no new features, to give the ecosystem a clean migration step<a class="cite" href="#ref-4">[4]</a><a class="cite" href="#ref-7">[7]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the difference between the Platform, Web Profile, and Core Profile?</summary><div class="xp-body"><p>The Platform is the full set of specifications. The Web Profile is a subset for web applications: Servlet, Pages, Faces, REST, CDI, Persistence, Validation, and Transactions. The Core Profile, introduced in Jakarta EE 10, is a minimal subset (CDI Lite, REST, JSON) for microservices and native compilation<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-8">[8]</a><a class="cite" href="#ref-9">[9]</a>.</p></div></details>
+<details class="xp-details"><summary>What does CDI Lite leave out?</summary><div class="xp-body"><p>Features that need run-time reflection or whole-application scanning, such as portable extensions, decorators, and session scope. CDI Lite allows build-time implementations such as Quarkus ArC, with build-compatible extensions replacing portable ones<a class="cite" href="#ref-11">[11]</a><a class="cite" href="#ref-13">[13]</a>.</p></div></details>
+<details class="xp-details"><summary>Can a normal-scoped CDI bean have public fields?</summary><div class="xp-body"><p>No. The container reports a definition error at startup, as Weld's <code>WELD-000075</code> showed in Exercise 5. Field access cannot be forwarded through the client proxy, so the specification forbids public fields on such beans<a class="cite" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>@Version</code> do in Jakarta Persistence?</summary><div class="xp-body"><p>It enables optimistic locking. The provider adds <code>WHERE version = ?</code> to updates and increments the version, and a concurrent change causes an <code>OptimisticLockException</code><a class="cite" href="#ref-23">[23]</a>. Expose the version as an HTTP <code>ETag</code>, and require <code>If-Match</code> on updates, to carry the same protection to API clients<a class="cite" href="#ref-33">[33]</a>.</p></div></details>
+<details class="xp-details"><summary>What is the default transaction attribute of an Enterprise Beans business method?</summary><div class="xp-body"><p><code>REQUIRED</code>: join the caller's transaction, or start one if there is none. CDI beans get the same behavior with <code>@jakarta.transaction.Transactional</code><a class="cite" href="#ref-39">[39]</a><a class="cite" href="#ref-40">[40]</a>.</p></div></details>
+<details class="xp-details"><summary>Which Java SE versions does Jakarta EE 11 require?</summary><div class="xp-body"><p>Java SE 17 or later. Jakarta EE 11 also added Jakarta Data and support for virtual threads in Concurrency, and it removed the Security Manager dependencies<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-2">[2]</a>.</p></div></details>
+<details class="xp-details"><summary>What is <code>JMSXDeliveryCount</code>?</summary><div class="xp-body"><p>A message property, mandatory since JMS 2.0, giving the number of delivery attempts. A value above 1 means that the message is being redelivered, which consumers use to divert poison messages<a class="cite" href="#ref-37">[37]</a>.</p></div></details>
+<details class="xp-details"><summary>Who decides whether an implementation is "Jakarta EE compatible"?</summary><div class="xp-body"><p>Passing the open-source Technology Compatibility Kit (TCK) for the release. Compatible products are listed by the Eclipse Foundation, and anyone can run the TCKs, unlike Java EE's licensed ones<a class="cite" href="#ref-3">[3]</a><a class="cite" href="#ref-5">[5]</a>.</p></div></details>
+<details class="xp-details"><summary>Why does Bean Validation need an Expression Language implementation?</summary><div class="xp-body"><p>Message templates can contain EL expressions, such as <code>${validatedValue}</code>. Hibernate Validator uses Jakarta EL for them, unless you configure the <code>ParameterMessageInterpolator</code>, which supports only parameters like <code>{max}</code><a class="cite" href="#ref-20">[20]</a><a class="cite" href="#ref-27">[27]</a>.</p></div></details>
+</div>
+</section>
+
+<!-- xp:end -->
 </article>
 
 <section class="references" aria-labelledby="references-heading">

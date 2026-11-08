@@ -133,6 +133,26 @@
       h2,h3{break-after:avoid;} pre,table,.callout{break-inside:avoid;}
     }
   </style>
+<!-- xp-css:start -->
+<style>
+/* Enterprise scenarios, exercises and trivia */
+.xp-scenario{margin:1.6rem 0 2.2rem;padding:1.1rem 1.25rem 0.4rem;border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:0 12px 12px 0}
+.xp-scenario h3{margin-top:.2rem}
+.xp-tag{margin:0;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.xp-exercise{border-top:1px solid var(--line);padding-top:1.1rem;margin-top:2rem}
+.xp-exercise h3{margin-top:0}
+.xp-lvl{display:inline-block;margin-left:.55rem;padding:.08rem .45rem;border:1px solid var(--line);border-radius:4px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);vertical-align:.2em}
+.xp-details{margin:1rem 0;border:1px solid var(--line);border-radius:10px;background:var(--note)}
+.xp-details>summary{cursor:pointer;padding:.6rem .95rem;font-weight:650;color:var(--accent)}
+.xp-details[open]>summary{border-bottom:1px solid var(--line)}
+.xp-details>.xp-body{padding:.35rem 1.05rem .6rem}
+.xp-out{margin:-1rem 0 1.6rem;border:1px dashed var(--line);border-radius:0 0 10px 10px;background:var(--bg);padding:.55rem .9rem .7rem}
+.xp-out>span{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem}
+.xp-out pre{margin:0;padding:0;background:transparent;color:inherit;border:0;box-shadow:none;font-size:.82rem;white-space:pre-wrap}
+.xp-trivia .xp-details>summary{color:inherit}
+.xp-trivia .xp-details>summary::marker{color:var(--accent)}
+</style>
+<!-- xp-css:end -->
 </head>
 <body>
 <header>
@@ -1271,6 +1291,272 @@ and lines.?[
   A disciplined way to reason about any expression is to ask five questions: What is the root object? Which evaluation context is used? Which properties, methods, types, variables, functions, and beans are reachable? Can the expression mutate state? Who controls the expression string? Those questions determine both correctness and security more reliably than the surface syntax alone.
 </p>
 
+<!-- xp:start -->
+<h2 id="enterprise-scenarios">26. Enterprise scenarios</h2>
+<p>SpEL is powerful precisely because it can call methods, create objects, and reference types. In an enterprise, that power is a security boundary: every expression that comes from users, configuration UIs, or databases is code. The scenarios below are composites, with illustrative figures. Section 27 runs the mechanisms on Spring Framework 7.0.8.</p>
+
+<div class="xp-scenario">
+<p class="xp-tag">BI platform · "custom column" feature · security advisory</p>
+<h3 id="scenario-injection">26.1 A reporting feature that ran arbitrary code</h3>
+<p><strong>Situation.</strong> Analysts could define computed report columns as expressions, which were evaluated with SpEL in a <code>StandardEvaluationContext</code>.</p>
+<p><strong>What went wrong.</strong> A <code>StandardEvaluationContext</code> allows type references (<code>T(…)</code>), constructors, and arbitrary method calls<a class="citation" href="#ref-5">[5]</a><a class="citation" href="#ref-15">[15]</a>. A penetration tester's "column" read system properties, and could equally have started processes. Expression injection of this kind has appeared in real CVEs across many frameworks.</p>
+<p><strong>Fix.</strong> Evaluate untrusted expressions only with <code>SimpleEvaluationContext</code>, which allows no type references, constructors, or bean references, and in read-only mode, no assignments<a class="citation" href="#ref-2">[2]</a>. Better still, offer a constrained expression language, or a builder UI, instead of free text (Exercise 1).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Retail · pricing rules edited by the business · 4,000 rules</p>
+<h3 id="scenario-rules">26.2 A rules engine that reparsed every rule on every order</h3>
+<p><strong>Situation.</strong> Discount rules lived in a database as SpEL conditions, and each checkout parsed every rule again.</p>
+<p><strong>What went wrong.</strong> Parsing dominated the checkout CPU profile, and a rule with a syntax error broke <em>every</em> checkout, because it failed at evaluation time, in production.</p>
+<p><strong>Fix.</strong> Parse each rule once, when it is saved, which validates it at the point of editing, and cache the <code>Expression</code><a class="citation" href="#ref-3">[3]</a><a class="citation" href="#ref-4">[4]</a>. Evaluate against a typed root object in a restricted context (Exercise 2). For hot expressions, SpEL's compiler can generate bytecode (Exercise 3).</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">Logistics · shipping-label rules · null addresses</p>
+<h3 id="scenario-null">26.3 <code>NullPointerException</code>s in the middle of a label run</h3>
+<p><strong>Situation.</strong> Label rules navigated <code>customer.shipping.city</code>, and some customers had only a billing address.</p>
+<p><strong>Fix.</strong> Use safe navigation (<code>?.</code>) with the Elvis operator (<code>?:</code>) to express fallbacks inside the rule, and use selection (<code>.?[…]</code>) and projection (<code>.![…]</code>) instead of loops in Java glue code<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-21">[21]</a><a class="citation" href="#ref-23">[23]</a> (Exercise 4). Where a rule needs method calls, enable them explicitly with <code>withInstanceMethods()</code>, and only those.</p>
+</div>
+
+<div class="xp-scenario">
+<p class="xp-tag">SaaS · customer notifications · templates in the database</p>
+<h3 id="scenario-template">26.4 Renewal emails with the wrong date format</h3>
+<p><strong>Situation.</strong> Notification templates used SpEL templating (<code>#{…}</code>), evaluated in a restricted context.</p>
+<p><strong>What went wrong.</strong> Rendering failed for any template that printed a <code>LocalDate</code>, because the restricted context had no converter. When a formatting conversion service was added, dates appeared in the server locale's short style, <code>12/1/26</code>, which European customers read as 12 January.</p>
+<p><strong>Fix.</strong> Supply a conversion service on purpose, and format dates explicitly per recipient's locale before they reach the template<a class="citation" href="#ref-24">[24]</a> (Exercise 5). For rich email templates, a real template engine is usually the better tool.</p>
+</div>
+
+<h2 id="exercises">27. Exercises</h2>
+<p>Each solution is a self-contained program with a <code>main</code> method, compiled and run with Spring Framework 7.0.8 on OpenJDK 21.0.13. The output shown is real. Exercise 1's payload only reads a system property.</p>
+
+<div class="xp-exercise">
+<h3 id="exercise-1">27.1 The same expression in two contexts<span class="xp-lvl">security · easy</span></h3>
+<p>Evaluate a user-supplied expression that references <code>T(java.lang.System)</code>, first in a <code>StandardEvaluationContext</code> and then in a read-only <code>SimpleEvaluationContext</code>, and show that a legitimate expression still works in the restricted context.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The restricted context has no type locator, so <code>T(…)</code> fails with "Type cannot be found". Property access on the root object, arithmetic, and string concatenation still work<a class="citation" href="#ref-2">[2]</a><a class="citation" href="#ref-5">[5]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.spel;
+
+import org.springframework.expression.*;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.*;
+
+public class Ex1Injection {
+    public record Report(String region, long totalCents) {}
+
+    public static void main(String[] args) {
+        ExpressionParser parser = new SpelExpressionParser();
+        Report root = new Report("eu", 1_250_000);
+        // A "custom column" feature let users type an expression. An attacker types this instead:
+        String userInput = "T(java.lang.System).getProperty('user.name')";
+
+        EvaluationContext full = new StandardEvaluationContext(root);
+        System.out.println("StandardEvaluationContext: " + parser.parseExpression(userInput).getValue(full));
+
+        EvaluationContext restricted = SimpleEvaluationContext.forReadOnlyDataBinding().withRootObject(root).build();
+        try {
+            parser.parseExpression(userInput).getValue(restricted);
+        } catch (EvaluationException e) {
+            System.out.println("SimpleEvaluationContext:   rejected: " + e.getMessage());
+        }
+        System.out.println("legitimate expression:     " + parser.parseExpression("totalCents / 100 + ' EUR in ' + region").getValue(restricted));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>StandardEvaluationContext: UserOne
+SimpleEvaluationContext:   rejected: EL1005E: Type cannot be found 'java.lang.System'
+legitimate expression:     12500 EUR in eu</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-2">27.2 A small, safe rules engine<span class="xp-lvl">rules · medium</span></h3>
+<p>Store three discount rules as SpEL conditions, parse each once, and apply the first matching rule to three orders, using a read-only context per order.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>Expression</code> objects are thread-safe and reusable, and the evaluation context is cheap to create per evaluation<a class="citation" href="#ref-4">[4]</a>. Operators such as <code>and</code>, <code>matches</code>, and <code>&gt;</code> work on the record's properties<a class="citation" href="#ref-11">[11]</a>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.spel;
+
+import java.math.BigDecimal;
+import java.util.*;
+import org.springframework.expression.*;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.SimpleEvaluationContext;
+
+public class Ex2RuleEngine {
+    public record Order(String tier, String country, BigDecimal total, int items) {}
+    public record Rule(String name, String condition, String discountPercent) {}
+
+    public static void main(String[] args) {
+        ExpressionParser parser = new SpelExpressionParser();
+        List&lt;Rule&gt; rules = List.of(                                    // maintained by the pricing team, stored in a DB
+            new Rule("gold-big-basket", "tier == 'GOLD' and items &gt;= 10", "10"),
+            new Rule("eu-high-value", "country matches 'DE|FR|NL' and total &gt; 500", "5"),
+            new Rule("everyone", "true", "0"));
+        Map&lt;String, Expression&gt; compiled = new LinkedHashMap&lt;&gt;();
+        rules.forEach(r -&gt; compiled.put(r.name(), parser.parseExpression(r.condition())));   // parse once, reuse
+
+        List&lt;Order&gt; orders = List.of(new Order("GOLD", "US", new BigDecimal("120"), 12),
+                                     new Order("SILVER", "DE", new BigDecimal("899"), 2),
+                                     new Order("SILVER", "US", new BigDecimal("80"), 1));
+        for (Order o : orders) {
+            EvaluationContext ctx = SimpleEvaluationContext.forReadOnlyDataBinding().withRootObject(o).build();
+            Rule first = rules.stream().filter(r -&gt; Boolean.TRUE.equals(compiled.get(r.name()).getValue(ctx, Boolean.class))).findFirst().orElseThrow();
+            System.out.printf("%-6s %s %6s %2d items -&gt; %s (%s%%)%n", o.tier(), o.country(), o.total(), o.items(), first.name(), first.discountPercent());
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>GOLD   US    120 12 items -&gt; gold-big-basket (10%)
+SILVER DE    899  2 items -&gt; eu-high-value (5%)
+SILVER US     80  1 items -&gt; everyone (0%)</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-3">27.3 Compile an expression to bytecode<span class="xp-lvl">performance · medium</span></h3>
+<p>Configure the SpEL compiler in <code>IMMEDIATE</code> mode, evaluate a pricing formula, and check whether it was compiled. Try an expression with a runtime type test as well.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p>The compiler needs type information gathered by an interpreted evaluation, and then generates a class for the expression. Expressions whose types can vary between evaluations, here an <code>instanceof</code> test with map indexing, are not compilable and stay interpreted.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.spel;
+
+import org.springframework.expression.Expression;
+import org.springframework.expression.spel.*;
+import org.springframework.expression.spel.standard.*;
+
+public class Ex3Compiled {
+    public static class Quote { public double base = 100; public double riskFactor = 1.35; public int years = 3; }
+
+    public static void main(String[] args) {
+        SpelParserConfiguration cfg = new SpelParserConfiguration(SpelCompilerMode.IMMEDIATE, Ex3Compiled.class.getClassLoader());
+        SpelExpressionParser parser = new SpelExpressionParser(cfg);
+        Expression e = parser.parseExpression("base * riskFactor * (1 + years * 0.02)");
+        Quote q = new Quote();
+        Object first = e.getValue(q);                                   // interpreted run collects type information...
+        System.out.println("first evaluation (interpreted): " + first);
+        System.out.println("compiled to bytecode after it:  " + SpelCompiler.compile(e));
+        System.out.println("compiled evaluation:            " + e.getValue(q));
+        Expression dynamic = parser.parseExpression("#root instanceof T(java.util.Map) ? #root['base'] : base");
+        dynamic.getValue(q);
+        System.out.println("expression with type tests compiles: " + SpelCompiler.compile(dynamic));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>first evaluation (interpreted): 143.1
+compiled to bytecode after it:  true
+compiled evaluation:            143.1
+expression with type tests compiles: false</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-4">27.4 Selection, projection, and null-safe fallbacks<span class="xp-lvl">collections · medium</span></h3>
+<p>Over a batch of orders, find the ids of the paid orders, find the first order over 100.00, choose each order's shipping city with a fallback to the billing city, and count the paid orders, which requires a method call.</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>.?[…]</code> selects, <code>.^[…]</code> takes the first match, and <code>.![…]</code> projects<a class="citation" href="#ref-20">[20]</a><a class="citation" href="#ref-21">[21]</a>. <code>?.</code> returns <code>null</code> instead of throwing, and <code>?:</code> supplies a default<a class="citation" href="#ref-13">[13]</a><a class="citation" href="#ref-23">[23]</a>. The read-only context forbids method calls such as <code>size()</code> until you opt in with <code>withInstanceMethods()</code>.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.spel;
+
+import java.util.*;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.SimpleEvaluationContext;
+
+public class Ex4SelectProject {
+    public record Address(String city) {}
+    public record Customer(String name, Address billing, Address shipping) {}
+    public record Order(String id, Customer customer, long cents, String status) {}
+    public record Batch(List&lt;Order&gt; orders) {}
+
+    public static void main(String[] args) {
+        var batch = new Batch(List.of(
+            new Order("o-1", new Customer("Ana", new Address("Berlin"), null), 12_000, "PAID"),
+            new Order("o-2", new Customer("Bo", null, new Address("Paris")), 4_500, "OPEN"),
+            new Order("o-3", new Customer("Cy", new Address("Madrid"), new Address("Lisbon")), 30_000, "PAID")));
+        var ctx = SimpleEvaluationContext.forReadOnlyDataBinding().withRootObject(batch).build();
+        var p = new SpelExpressionParser();
+        String[] exprs = {
+            "orders.?[status == 'PAID'].![id]",                                   // selection, then projection
+            "orders.^[cents &gt; 10000].id",                                          // first match
+            "orders.![customer.shipping?.city ?: customer.billing?.city ?: 'unknown']"};  // safe navigation + Elvis
+        for (String x : exprs) System.out.printf("%-72s -&gt; %s%n", x, p.parseExpression(x).getValue(ctx));
+
+        String withMethod = "orders.?[status == 'PAID'].size()";
+        try { p.parseExpression(withMethod).getValue(ctx); }
+        catch (org.springframework.expression.EvaluationException e) { System.out.printf("%-72s -&gt; %s%n", withMethod + "  (read-only)", e.getMessage()); }
+        var withMethods = SimpleEvaluationContext.forReadOnlyDataBinding().withInstanceMethods().withRootObject(batch).build();
+        System.out.printf("%-72s -&gt; %s%n", withMethod + "  (withInstanceMethods)", p.parseExpression(withMethod).getValue(withMethods));
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>orders.?[status == 'PAID'].![id]                                         -&gt; [o-1, o-3]
+orders.^[cents &gt; 10000].id                                               -&gt; o-1
+orders.![customer.shipping?.city ?: customer.billing?.city ?: 'unknown'] -&gt; [Berlin, Paris, Lisbon]
+orders.?[status == 'PAID'].size()  (read-only)                           -&gt; EL1004E: Method call: Method size() cannot be found on type java.util.ArrayList
+orders.?[status == 'PAID'].size()  (withInstanceMethods)                 -&gt; 2</pre></div>
+</div></details>
+</div>
+
+<div class="xp-exercise">
+<h3 id="exercise-5">27.5 Templated notifications<span class="xp-lvl">templates · easy</span></h3>
+<p>Render a renewal notice from a template with <code>#{…}</code> placeholders, including a date and a singular or plural "seat".</p>
+<details class="xp-details"><summary>Show solution</summary><div class="xp-body">
+<p><code>TemplateParserContext</code> parses literal text with embedded expressions<a class="citation" href="#ref-24">[24]</a>. Without a conversion service, the restricted context cannot turn a <code>LocalDate</code> into text, and the first version of this exercise failed with "No converter found". <code>DefaultFormattingConversionService</code> fixes that, and uses the JVM locale's short date style, so format dates explicitly for real customers.</p>
+  <div class="code-wrap">
+    <span class="lang">Java</span>
+    <button class="copy" type="button">Copy</button>
+    <pre><code>package lab.spel;
+
+import java.time.LocalDate;
+import org.springframework.expression.common.TemplateParserContext;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.SimpleEvaluationContext;
+
+public class Ex5Templates {
+    public record Notice(String firstName, String plan, LocalDate renewsOn, int seats) {}
+
+    public static void main(String[] args) {
+        String template = "Hi #{firstName}, your #{plan} plan renews on #{renewsOn} for #{seats} #{seats == 1 ? 'seat' : 'seats'}.";
+        var expr = new SpelExpressionParser().parseExpression(template, new TemplateParserContext());
+        var conversions = new org.springframework.format.support.DefaultFormattingConversionService();   // knows java.time
+        for (Notice n : new Notice[] {new Notice("Ana", "Team", LocalDate.of(2026, 12, 1), 12), new Notice("Bo", "Solo", LocalDate.of(2027, 1, 15), 1)}) {
+            var ctx = SimpleEvaluationContext.forReadOnlyDataBinding()
+                    .withConversionService(conversions).withRootObject(n).build();
+            System.out.println(expr.getValue(ctx, String.class));
+        }
+    }
+}</code></pre>
+  </div>
+<div class="xp-out"><span>Output · Spring Framework 7.0.8, OpenJDK 21.0.13</span><pre>Hi Ana, your Team plan renews on 12/1/26 for 12 seats.
+Hi Bo, your Solo plan renews on 1/15/27 for 1 seat.</pre></div>
+</div></details>
+</div>
+
+<h2 id="trivia">28. Trivia</h2>
+<p>Short questions with answers.</p>
+<div class="xp-trivia">
+<details class="xp-details"><summary>What is the difference between <code>${…}</code> and <code>#{…}</code> in <code>@Value</code>?</summary><div class="xp-body"><p><code>${…}</code> is a property placeholder, resolved from the <code>Environment</code>. <code>#{…}</code> is a SpEL expression, and the two can be nested, as in <code>#{'${app.name}'.toUpperCase()}</code><a class="citation" href="#ref-25">[25]</a>.</p></div></details>
+<details class="xp-details"><summary>How do you reference a bean in SpEL?</summary><div class="xp-body"><p>With <code>@beanName</code>, given a bean resolver, and with <code>&amp;beanName</code> for the factory bean itself<a class="citation" href="#ref-19">[19]</a>.</p></div></details>
+<details class="xp-details"><summary>What do <code>#root</code> and <code>#this</code> refer to?</summary><div class="xp-body"><p><code>#root</code> is always the root object of the evaluation. <code>#this</code> is the object currently being evaluated, for example the element inside a selection<a class="citation" href="#ref-17">[17]</a>.</p></div></details>
+<details class="xp-details"><summary>How are inline lists and maps written?</summary><div class="xp-body"><p><code>{1, 2, 3}</code> for a list and <code>{currency: 'EUR', amount: 10}</code> for a map. Lists of literals are cached as constants<a class="citation" href="#ref-8">[8]</a><a class="citation" href="#ref-9">[9]</a>.</p></div></details>
+<details class="xp-details"><summary>Which textual operators does SpEL accept, for use in XML?</summary><div class="xp-body"><p><code>lt</code>, <code>gt</code>, <code>le</code>, <code>ge</code>, <code>eq</code>, <code>ne</code>, <code>div</code>, <code>mod</code>, and <code>not</code>, along with <code>and</code> and <code>or</code><a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+<details class="xp-details"><summary>Where else does Spring use SpEL?</summary><div class="xp-body"><p>In <code>@Cacheable</code> keys and conditions, Spring Security's <code>@PreAuthorize</code>, Spring Data <code>@Query</code> expressions, <code>@EventListener(condition = …)</code>, and Spring Integration routing<a class="citation" href="#ref-1">[1]</a>.</p></div></details>
+<details class="xp-details"><summary>How do you register a custom function?</summary><div class="xp-body"><p>Set a <code>Method</code> or <code>MethodHandle</code> as a variable on the evaluation context, and call it as <code>#name(args)</code><a class="citation" href="#ref-18">[18]</a>.</p></div></details>
+<details class="xp-details"><summary>Can SpEL construct arrays?</summary><div class="xp-body"><p>Yes: <code>new int[]{1, 2, 3}</code> or <code>new String[4]</code>, but only in contexts that allow constructors, which <code>SimpleEvaluationContext</code> does not<a class="citation" href="#ref-10">[10]</a><a class="citation" href="#ref-16">[16]</a>.</p></div></details>
+<details class="xp-details"><summary>What does <code>SpelCompilerMode.MIXED</code> do?</summary><div class="xp-body"><p>It starts interpreted, compiles after a number of successful evaluations, and falls back to interpretation if the compiled version fails, for example because a type changed. <code>IMMEDIATE</code> compiles as soon as it can, and reports failures.</p></div></details>
+<details class="xp-details"><summary>What do <code>matches</code> and <code>between</code> do?</summary><div class="xp-body"><p><code>matches</code> tests a regular expression against the whole string. <code>between</code> tests an inclusive range, as in <code>age between {18, 65}</code><a class="citation" href="#ref-11">[11]</a>.</p></div></details>
+</div>
+
+
+<!-- xp:end -->
 <h2 id="references">References</h2>
 <ol class="references">
 <li id="ref-1">Spring team. Spring Expression Language (SpEL) [Internet]. Spring Framework 7.0.9 Reference Documentation; 2026 [cited 2026 Sep 23]. Available from: <a href="https://docs.spring.io/spring-framework/reference/core/expressions.html">https://docs.spring.io/spring-framework/reference/core/expressions.html</a></li>
@@ -1329,7 +1615,7 @@ and lines.?[
 <li><a href="#worked-example">Worked rule engine</a></li>
 <li><a href="#practices">Expert practices</a></li>
 <li><a href="#summary">Summary</a></li>
-<li><a href="#references">References</a></li>
+<!-- xp-toc:start --><li><a href="#enterprise-scenarios">Enterprise scenarios</a></li><li><a href="#exercises">Exercises</a></li><li><a href="#trivia">Trivia</a></li><!-- xp-toc:end --><li><a href="#references">References</a></li>
 </ol>
 </aside>
 </div>
