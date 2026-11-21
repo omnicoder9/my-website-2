@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compiler-Assisted Inference Optimization</title>
+<meta name="description" content="A technical article on how ML compilers (TVM, XLA, MLIR, IREE, Triton, TensorRT, torch.compile, ONNX Runtime) speed up AI inference, with diagrams, code, exercises, trivia and Vancouver-style references.">
+<style>
+:root{
+  --bg:#fbfaf7; --surface:#ffffff; --surface-2:#f3f1ec; --text:#1d1f23; --muted:#5b6070;
+  --border:#dedad1; --accent:#2f5fd0; --accent-soft:#e6edfb; --accent-2:#b4532a; --accent-2-soft:#f8e9e1;
+  --ok:#2c7a4b; --code-bg:#f5f3ee; --code-text:#22252b; --kw:#7a3bb8; --str:#2c7a4b; --cm:#7b7f8c; --num:#b4532a;
+  --diagram-line:#5b6070; --diagram-fill:#ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15171b; --surface:#1d2026; --surface-2:#252930; --text:#e7e8eb; --muted:#a2a7b4;
+    --border:#343944; --accent:#8fb0ff; --accent-soft:#233050; --accent-2:#f0a27a; --accent-2-soft:#43291d;
+    --ok:#7fd3a0; --code-bg:#1a1d22; --code-text:#dde0e6; --kw:#c9a2ff; --str:#8fd6a8; --cm:#8a909e; --num:#f0a27a;
+    --diagram-line:#a2a7b4; --diagram-fill:#1d2026;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+    --bg:#15171b; --surface:#1d2026; --surface-2:#252930; --text:#e7e8eb; --muted:#a2a7b4;
+    --border:#343944; --accent:#8fb0ff; --accent-soft:#233050; --accent-2:#f0a27a; --accent-2-soft:#43291d;
+    --ok:#7fd3a0; --code-bg:#1a1d22; --code-text:#dde0e6; --kw:#c9a2ff; --str:#8fd6a8; --cm:#8a909e; --num:#f0a27a;
+    --diagram-line:#a2a7b4; --diagram-fill:#1d2026;
+    color-scheme: dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.65 Georgia,"Iowan Old Style","Times New Roman",serif;}
+.wrap{max-width:860px;margin:0 auto;padding:32px 16px 80px}
+h1,h2,h3,h4{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.25;letter-spacing:-.01em}
+h1{font-size:2.1rem;margin:.2em 0 .3em}
+h2{font-size:1.5rem;margin:2.4em 0 .6em;padding-top:.6em;border-top:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.8em 0 .5em}
+p,li{max-width:72ch}
+a{color:var(--accent)}
+.kicker{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--accent-2);font-weight:600}
+.lede{font-size:1.15rem;color:var(--muted)}
+.meta{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.85rem;color:var(--muted)}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 20px;margin:28px 0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.92rem}
+nav.toc ol{margin:.4em 0 0;padding-left:1.3em;columns:2;column-gap:2em}
+nav.toc li{margin:.15em 0;break-inside:avoid}
+@media (max-width:620px){nav.toc ol{columns:1}}
+sup.cite a{text-decoration:none;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.72em;font-weight:600}
+pre{background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:8px;padding:14px 16px;overflow-x:auto;font:13.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em}
+p code,li code,td code{background:var(--surface-2);padding:.08em .35em;border-radius:4px}
+.kw{color:var(--kw)}.str{color:var(--str)}.cm{color:var(--cm);font-style:italic}.num{color:var(--num)}
+.codecap{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.82rem;color:var(--muted);margin:-.4em 0 1.2em}
+figure{margin:28px 0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.85rem;color:var(--muted);margin-top:10px}
+.callout{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 16px;border-radius:0 8px 8px 0;margin:20px 0}
+.callout.warn{background:var(--accent-2-soft);border-left-color:var(--accent-2)}
+.callout p{margin:.3em 0}
+.tablewrap{overflow-x:auto;margin:20px 0}
+table{border-collapse:collapse;width:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.88rem}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--border)}
+th{background:var(--surface-2);font-weight:600}
+details{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin:10px 0;padding:10px 14px}
+details summary{cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-weight:600;color:var(--accent)}
+details[open] summary{margin-bottom:6px}
+.ex{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px 18px 10px;margin:18px 0}
+.ex h4{margin:.9em 0 .3em}
+.calc{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 0}
+.calc .row{display:flex;flex-wrap:wrap;gap:12px}
+.calc label{display:flex;flex-direction:column;font-size:.8rem;color:var(--muted);flex:1 1 140px}
+.calc input{font:inherit;font-size:.95rem;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}
+.calc output{display:block;margin-top:12px;font-size:.95rem}
+.badge{display:inline-block;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.72rem;font-weight:600;padding:.1em .5em;border-radius:99px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
+ol.refs{font-size:.88rem;padding-left:2.2em}
+ol.refs li{margin:.45em 0;max-width:none;word-break:break-word}
+.theme-toggle{position:fixed;top:12px;right:12px;font:12px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:99px;padding:6px 12px;cursor:pointer;z-index:5}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.s-line{stroke:var(--diagram-line)} .s-box{fill:var(--diagram-fill);stroke:var(--diagram-line)}
+.s-acc{fill:var(--accent-soft);stroke:var(--accent)} .s-acc2{fill:var(--accent-2-soft);stroke:var(--accent-2)}
+.t-main{fill:var(--text)} .t-muted{fill:var(--muted)} .t-acc{fill:var(--accent)} .t-acc2{fill:var(--accent-2)}
+@media print{.theme-toggle{display:none} details{break-inside:avoid} details:not([open]) > *:not(summary){display:block}}
+</style>
+</head>
+<body>
+<button class="theme-toggle" type="button" id="themeToggle" aria-label="Toggle light or dark theme">Theme</button>
+<main class="wrap">
+
+<div class="kicker">Compilers · Machine learning systems</div>
+<h1>Compiler-Assisted AI Inference Optimization</h1>
+<p class="lede">How deep-learning compilers turn a trained model into fast machine code: graph rewriting, operator fusion, layout and precision changes, loop scheduling, and auto-tuning, with a tour of TVM, XLA, MLIR, IREE, Triton, TensorRT, torch.compile and ONNX Runtime.</p>
+<p class="meta">Technical article · References in Vancouver style · Last checked 16 November 2026</p>
+
+<nav class="toc" aria-label="Contents">
+<strong>Contents</strong>
+<ol>
+<li><a href="#why">Why inference needs a compiler</a></li>
+<li><a href="#stack">Anatomy of an ML compiler</a></li>
+<li><a href="#perf">A performance model: the roofline</a></li>
+<li><a href="#graph">Graph-level optimizations</a></li>
+<li><a href="#fusion">Operator fusion</a></li>
+<li><a href="#layout">Data layout</a></li>
+<li><a href="#quant">Precision and quantization</a></li>
+<li><a href="#loops">Loop-level scheduling</a></li>
+<li><a href="#tune">Auto-tuning</a></li>
+<li><a href="#runtime">Runtime-level tricks</a></li>
+<li><a href="#tools">Tools in practice (with code)</a></li>
+<li><a href="#compare">Tool comparison</a></li>
+<li><a href="#exercises">Exercises with solutions</a></li>
+<li><a href="#trivia">Trivia with answers</a></li>
+<li><a href="#glossary">Glossary</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="why">1. Why inference needs a compiler</h2>
+<p>A trained neural network is, at heart, a dataflow graph of tensor operators: convolutions, matrix multiplications, normalizations, activations and reshapes. Frameworks such as PyTorch and TensorFlow execute that graph by calling one hand-written library kernel per operator. That approach is flexible, but it leaves performance on the table. Each kernel reads its inputs from and writes its outputs to device memory, the framework pays dispatch overhead for each call, and a vendor library can only ship kernels for the shapes, data types and operator combinations its authors anticipated.<sup class="cite"><a href="#ref1">1</a></sup></p>
+<p><strong>Deep-learning (DL) compilers</strong> treat the model as a program to be optimized as a whole. They lower it through a series of intermediate representations (IRs), apply transformations at each level, and generate code specialized for the target hardware, whether that is a CPU, GPU, mobile NPU or custom accelerator.<sup class="cite"><a href="#ref1">1</a>,<a href="#ref3">3</a></sup> For inference the payoff is especially large: the weights are fixed, the graph usually does not change between requests, and the compiled artifact can be reused millions of times, so even an expensive compile is quickly amortized.</p>
+
+<div class="callout">
+<p><strong>Key idea.</strong> A DL compiler applies classical compiler ideas (IR design, dataflow analysis, loop transformation, instruction selection) to tensor programs. It adds domain knowledge that a general-purpose compiler such as LLVM does not have, for example that two operators can be fused or that a weight tensor is constant and can be pre-transformed.<sup class="cite"><a href="#ref1">1</a>,<a href="#ref5">5</a></sup></p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="stack">2. Anatomy of an ML compiler</h2>
+<p>Almost every DL compiler follows the same broad pipeline, described in the survey by Li et al.<sup class="cite"><a href="#ref1">1</a></sup> The <em>frontend</em> imports a model from a framework or an exchange format such as ONNX<sup class="cite"><a href="#ref16">16</a></sup> and builds a <strong>high-level (graph) IR</strong>. Hardware-independent optimizations happen there. The graph is then lowered to a <strong>low-level (tensor/loop) IR</strong> where hardware-specific scheduling happens, and finally the <em>backend</em> emits code, often through LLVM<sup class="cite"><a href="#ref5">5</a></sup> or a vendor toolchain.</p>
+
+<figure>
+<svg viewBox="0 0 800 380" role="img" aria-labelledby="f1t f1d">
+<title id="f1t">The DL compiler pipeline</title>
+<desc id="f1d">Models from frameworks flow into a graph IR, are optimized, lowered to a tensor IR, scheduled and tuned, and emitted as code for CPU, GPU or accelerators.</desc>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--diagram-line)"/></marker></defs>
+<!-- frontends -->
+<g font-size="13">
+<rect x="20" y="30" width="150" height="40" rx="6" class="s-box"/><text x="95" y="55" text-anchor="middle" class="t-main">PyTorch / JAX / TF</text>
+<rect x="20" y="85" width="150" height="40" rx="6" class="s-box"/><text x="95" y="110" text-anchor="middle" class="t-main">ONNX / StableHLO</text>
+<text x="95" y="150" text-anchor="middle" class="t-muted" font-size="12">Frontend: import</text>
+</g>
+<line x1="170" y1="78" x2="225" y2="78" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- graph IR -->
+<rect x="230" y="20" width="250" height="125" rx="8" class="s-acc" stroke-width="1.5"/>
+<text x="355" y="44" text-anchor="middle" class="t-acc" font-weight="700" font-size="14">High-level graph IR</text>
+<text x="355" y="66" text-anchor="middle" class="t-main" font-size="12">Relax · StableHLO · FX graph · ONNX graph</text>
+<text x="355" y="92" text-anchor="middle" class="t-muted" font-size="12">constant folding · CSE · dead code</text>
+<text x="355" y="110" text-anchor="middle" class="t-muted" font-size="12">operator fusion · layout · algebraic</text>
+<text x="355" y="128" text-anchor="middle" class="t-muted" font-size="12">simplification · quantization passes</text>
+<line x1="355" y1="145" x2="355" y2="190" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="365" y="173" class="t-muted" font-size="12">lower</text>
+<!-- tensor IR -->
+<rect x="230" y="195" width="250" height="125" rx="8" class="s-acc2" stroke-width="1.5"/>
+<text x="355" y="219" text-anchor="middle" class="t-acc2" font-weight="700" font-size="14">Low-level tensor / loop IR</text>
+<text x="355" y="241" text-anchor="middle" class="t-main" font-size="12">TensorIR · Linalg/SCF · Triton IR</text>
+<text x="355" y="267" text-anchor="middle" class="t-muted" font-size="12">tiling · reordering · vectorization</text>
+<text x="355" y="285" text-anchor="middle" class="t-muted" font-size="12">parallelization · tensorization</text>
+<text x="355" y="303" text-anchor="middle" class="t-muted" font-size="12">memory promotion</text>
+<!-- autotuner -->
+<rect x="530" y="210" width="130" height="95" rx="8" class="s-box" stroke-dasharray="5 4"/>
+<text x="595" y="240" text-anchor="middle" class="t-main" font-size="13" font-weight="600">Auto-tuner</text>
+<text x="595" y="260" text-anchor="middle" class="t-muted" font-size="12">search space</text>
+<text x="595" y="276" text-anchor="middle" class="t-muted" font-size="12">+ cost model</text>
+<text x="595" y="292" text-anchor="middle" class="t-muted" font-size="12">+ measurement</text>
+<line x1="482" y1="245" x2="528" y2="245" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="528" y1="275" x2="482" y2="275" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- backend -->
+<line x1="355" y1="320" x2="355" y2="345" class="s-line" stroke-width="1.5"/>
+<line x1="355" y1="345" x2="560" y2="345" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<rect x="565" y="325" width="215" height="42" rx="6" class="s-box"/>
+<text x="672" y="345" text-anchor="middle" class="t-main" font-size="12">Codegen: LLVM · PTX · SPIR-V</text>
+<text x="672" y="360" text-anchor="middle" class="t-muted" font-size="11">CPU · GPU · NPU · accelerator</text>
+<!-- runtime -->
+<rect x="530" y="40" width="250" height="85" rx="8" class="s-box"/>
+<text x="655" y="66" text-anchor="middle" class="t-main" font-size="13" font-weight="600">Runtime</text>
+<text x="655" y="86" text-anchor="middle" class="t-muted" font-size="12">memory planning · scheduling</text>
+<text x="655" y="104" text-anchor="middle" class="t-muted" font-size="12">kernel launch · CUDA graphs</text>
+<line x1="672" y1="325" x2="672" y2="128" class="s-line" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#arr)"/>
+</svg>
+<figcaption>Figure 1. A generic DL compiler pipeline, after the structure described by Li et al.<sup class="cite"><a href="#ref1">1</a></sup> IR names are examples from TVM,<sup class="cite"><a href="#ref27">27</a>,<a href="#ref26">26</a></sup> XLA,<sup class="cite"><a href="#ref7">7</a></sup> PyTorch 2,<sup class="cite"><a href="#ref8">8</a></sup> MLIR<sup class="cite"><a href="#ref34">34</a></sup> and Triton.<sup class="cite"><a href="#ref11">11</a></sup></figcaption>
+</figure>
+
+<h3>Multi-level IRs and MLIR</h3>
+<p>Different optimizations need different levels of abstraction: fusion decisions are easy on a graph of named operators, while tiling and vectorization need explicit loops. Early compilers built bespoke IRs for each level. <strong>MLIR</strong> (Multi-Level Intermediate Representation) generalizes this by letting a compiler define many <em>dialects</em> that coexist in one IR and are progressively lowered into each other.<sup class="cite"><a href="#ref4">4</a></sup> Its <code>linalg</code> dialect, for instance, represents tensor computations as structured operations that can be tiled, fused and vectorized before being lowered to loops.<sup class="cite"><a href="#ref34">34</a></sup> IREE, OpenXLA's StableHLO tooling and Triton are all built on MLIR.<sup class="cite"><a href="#ref7">7</a>,<a href="#ref12">12</a>,<a href="#ref17">17</a></sup></p>
+
+<!-- ============================================================ -->
+<h2 id="perf">3. A performance model: the roofline</h2>
+<p>To know which optimization matters, you need to know what limits a kernel. The <strong>roofline model</strong> of Williams, Waterman and Patterson bounds attainable performance by two ceilings: peak compute throughput and peak memory bandwidth multiplied by the kernel's <em>arithmetic intensity</em> (AI), the number of floating-point operations per byte moved to or from main memory.<sup class="cite"><a href="#ref2">2</a></sup></p>
+<p style="text-align:center"><code>attainable FLOP/s = min( peak FLOP/s , bandwidth × AI )</code></p>
+
+<figure>
+<svg viewBox="0 0 700 340" role="img" aria-labelledby="f2t f2d">
+<title id="f2t">Roofline model</title>
+<desc id="f2d">Log-log plot. A sloped memory-bound region rises until the ridge point, then a flat compute-bound ceiling. Elementwise ops and matrix-vector products sit on the slope; large matrix multiplications sit under the flat roof. Fusion moves a point to the right.</desc>
+<line x1="70" y1="290" x2="670" y2="290" class="s-line" stroke-width="1.5"/>
+<line x1="70" y1="290" x2="70" y2="30" class="s-line" stroke-width="1.5"/>
+<text x="370" y="325" text-anchor="middle" class="t-muted" font-size="13">Arithmetic intensity (FLOP/byte, log scale)</text>
+<text x="22" y="160" text-anchor="middle" class="t-muted" font-size="13" transform="rotate(-90 22 160)">Performance (FLOP/s, log)</text>
+<polyline points="70,270 360,70 670,70" fill="none" style="stroke:var(--accent)" stroke-width="3"/>
+<text x="520" y="60" text-anchor="middle" class="t-acc" font-size="13" font-weight="600">compute roof (peak FLOP/s)</text>
+<text x="170" y="170" class="t-acc" font-size="13" font-weight="600" transform="rotate(-34.6 170 170)">memory roof (BW × AI)</text>
+<line x1="360" y1="70" x2="360" y2="290" class="s-line" stroke-dasharray="4 4"/>
+<text x="360" y="306" text-anchor="middle" class="t-muted" font-size="12">ridge point</text>
+<!-- points -->
+<circle cx="120" cy="236" r="7" style="fill:var(--accent-2)"/>
+<text x="112" y="262" class="t-main" font-size="12">elementwise (unfused)</text>
+<circle cx="185" cy="191" r="7" style="fill:var(--accent-2)"/>
+<text x="196" y="210" class="t-main" font-size="12">fused chain</text>
+<line x1="128" y1="231" x2="176" y2="198" style="stroke:var(--accent-2)" stroke-width="2" marker-end="url(#arr)"/>
+<circle cx="160" cy="208" r="0"/>
+<circle cx="300" cy="250" r="7" style="fill:var(--muted)"/>
+<text x="300" y="236" text-anchor="middle" class="t-main" font-size="12">GEMV (LLM decode)</text>
+<circle cx="560" cy="95" r="7" style="fill:var(--ok)"/>
+<text x="560" y="120" text-anchor="middle" class="t-main" font-size="12">large GEMM / conv</text>
+</svg>
+<figcaption>Figure 2. Roofline model.<sup class="cite"><a href="#ref2">2</a></sup> Kernels left of the ridge point are memory-bound; kernels to the right are compute-bound. Fusion raises arithmetic intensity by removing intermediate memory traffic. Point positions are schematic.</figcaption>
+</figure>
+
+<p>Two lessons follow. First, elementwise operators such as ReLU or bias-add do roughly one FLOP per element loaded, so on modern accelerators they are memory-bound; the only way to make them faster is to move fewer bytes, which is exactly what fusion does. Second, large matrix multiplications are compute-bound, so the compiler must keep the arithmetic units busy through tiling, vectorization and use of tensor or matrix units.<sup class="cite"><a href="#ref2">2</a>,<a href="#ref3">3</a></sup></p>
+
+<div class="calc" id="roofcalc">
+<strong>Try it: roofline calculator</strong>
+<div class="row" style="margin-top:10px">
+<label>Peak compute (TFLOP/s)<input type="number" id="rc-peak" value="100" min="0.001" step="any"></label>
+<label>Memory bandwidth (TB/s)<input type="number" id="rc-bw" value="2" min="0.001" step="any"></label>
+<label>Kernel FLOPs<input type="number" id="rc-flops" value="137438953472" step="any"></label>
+<label>Bytes moved<input type="number" id="rc-bytes" value="100663296" step="any"></label>
+</div>
+<output id="rc-out" aria-live="polite"></output>
+<p class="meta" style="margin:.6em 0 0">Defaults: a 4096 × 4096 × 4096 FP16 GEMM on a hypothetical 100 TFLOP/s, 2 TB/s accelerator (see Exercise 1).</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="graph">4. Graph-level optimizations</h2>
+<p>At the graph level the compiler sees whole operators and their dependencies. Common passes include:<sup class="cite"><a href="#ref1">1</a>,<a href="#ref14">14</a></sup></p>
+<ul>
+<li><strong>Constant folding.</strong> Subgraphs that depend only on constants (for example, a weight transpose or a shape computation) are evaluated once at compile time.</li>
+<li><strong>Dead-code and redundant-node elimination.</strong> Unused outputs, identity ops and duplicate subexpressions (common-subexpression elimination) are removed.</li>
+<li><strong>Algebraic simplification.</strong> Rewrites such as <code>x * 1 → x</code>, merging consecutive transposes or reshapes, and folding a batch normalization into the preceding convolution.</li>
+<li><strong>Operator fusion</strong> (Section 5) and <strong>layout transformation</strong> (Section 6).</li>
+</ul>
+
+<h3>Example: folding batch normalization into convolution</h3>
+<p>At inference time batch normalization uses fixed statistics, so it is an affine transform per output channel. It can be folded into the preceding convolution's weights and bias, eliminating an entire operator, as described for quantized inference by Jacob et al.:<sup class="cite"><a href="#ref18">18</a></sup></p>
+<pre><code>BN(conv(x)) = γ · (W∗x + b − μ) / √(σ² + ε) + β
+            = (γ/√(σ²+ε) · W) ∗ x  +  (γ (b − μ)/√(σ²+ε) + β)
+                \_____ W' _____/       \__________ b' __________/</code></pre>
+<p>ONNX Runtime's "basic" level performs fusions of this kind, for example Conv + BatchNorm and Conv + Add.<sup class="cite"><a href="#ref14">14</a></sup></p>
+
+<h3>Superoptimization of graphs</h3>
+<p>Instead of a hand-written list of rewrite rules, TASO automatically generates candidate graph substitutions, formally verifies them, and searches over their application with a cost model, finding rewrites that manual rule sets missed.<sup class="cite"><a href="#ref21">21</a></sup></p>
+
+<!-- ============================================================ -->
+<h2 id="fusion">5. Operator fusion</h2>
+<p>Fusion merges several operators into one kernel so that intermediate results stay in registers or on-chip memory instead of being written to and re-read from device memory. It also removes kernel-launch overhead. TVM's original paper groups operators into categories (injective, reduction, complex-out-fusable such as conv2d, and opaque) and fuses according to rules over those categories.<sup class="cite"><a href="#ref3">3</a></sup> XLA uses fusion as one of its central optimizations,<sup class="cite"><a href="#ref6">6</a></sup> and TorchInductor fuses pointwise and reduction operators into generated Triton kernels on GPUs.<sup class="cite"><a href="#ref8">8</a></sup></p>
+
+<figure>
+<svg viewBox="0 0 760 320" role="img" aria-labelledby="f3t f3d">
+<title id="f3t">Unfused versus fused execution</title>
+<desc id="f3d">Unfused: three kernels, each reading from and writing to device memory, for four round trips. Fused: one kernel reads x once and writes y once, keeping intermediates on chip.</desc>
+<text x="190" y="24" text-anchor="middle" class="t-main" font-weight="700" font-size="14">Unfused: 3 kernels</text>
+<text x="575" y="24" text-anchor="middle" class="t-main" font-weight="700" font-size="14">Fused: 1 kernel</text>
+<!-- DRAM bars -->
+<rect x="20" y="245" width="345" height="34" rx="6" class="s-acc2"/>
+<text x="192" y="267" text-anchor="middle" class="t-acc2" font-size="13" font-weight="600">Device memory (HBM / DRAM)</text>
+<rect x="405" y="245" width="340" height="34" rx="6" class="s-acc2"/>
+<text x="575" y="267" text-anchor="middle" class="t-acc2" font-size="13" font-weight="600">Device memory (HBM / DRAM)</text>
+<!-- unfused kernels -->
+<g font-size="13">
+<rect x="30" y="60" width="95" height="50" rx="6" class="s-box"/><text x="77" y="90" text-anchor="middle" class="t-main">matmul</text>
+<rect x="145" y="60" width="95" height="50" rx="6" class="s-box"/><text x="192" y="90" text-anchor="middle" class="t-main">+ bias</text>
+<rect x="260" y="60" width="95" height="50" rx="6" class="s-box"/><text x="307" y="90" text-anchor="middle" class="t-main">GELU</text>
+</g>
+<g stroke-width="1.5">
+<line x1="60" y1="243" x2="60" y2="112" class="s-line" marker-end="url(#arr)"/>
+<line x1="95" y1="112" x2="95" y2="243" class="s-line" marker-end="url(#arr)"/>
+<line x1="175" y1="243" x2="175" y2="112" class="s-line" marker-end="url(#arr)"/>
+<line x1="210" y1="112" x2="210" y2="243" class="s-line" marker-end="url(#arr)"/>
+<line x1="290" y1="243" x2="290" y2="112" class="s-line" marker-end="url(#arr)"/>
+<line x1="325" y1="112" x2="325" y2="243" class="s-line" marker-end="url(#arr)"/>
+</g>
+<text x="192" y="305" text-anchor="middle" class="t-muted" font-size="12">3 launches · t₁, t₂ round-trip through memory</text>
+<!-- fused kernel -->
+<rect x="440" y="50" width="270" height="70" rx="8" class="s-acc" stroke-width="1.5"/>
+<text x="575" y="78" text-anchor="middle" class="t-acc" font-size="13" font-weight="700">matmul → + bias → GELU</text>
+<text x="575" y="100" text-anchor="middle" class="t-muted" font-size="12">epilogue in registers / shared memory</text>
+<line x1="510" y1="243" x2="510" y2="122" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<line x1="640" y1="122" x2="640" y2="243" class="s-line" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="500" y="190" text-anchor="end" class="t-muted" font-size="12">read x, W</text>
+<text x="650" y="190" class="t-muted" font-size="12">write y</text>
+<text x="575" y="305" text-anchor="middle" class="t-muted" font-size="12">1 launch · intermediates stay on chip</text>
+</svg>
+<figcaption>Figure 3. Fusing a matmul with its elementwise epilogue (bias-add and GELU). Intermediate tensors never touch device memory, so total traffic drops and the fused kernel's arithmetic intensity rises.<sup class="cite"><a href="#ref3">3</a>,<a href="#ref6">6</a></sup></figcaption>
+</figure>
+
+<h3>Kinds of fusion</h3>
+<ul>
+<li><strong>Elementwise (loop) fusion:</strong> chains of pointwise ops become one loop nest.</li>
+<li><strong>Epilogue / prologue fusion:</strong> pointwise ops are folded into the output (or input) stage of a GEMM or convolution kernel.</li>
+<li><strong>Reduction fusion:</strong> e.g. a softmax or LayerNorm, whose reductions and pointwise steps are combined into a single kernel. ONNX Runtime's "extended" level includes fusions such as LayerNormalization, GELU and Attention.<sup class="cite"><a href="#ref14">14</a></sup></li>
+<li><strong>Algorithmic fusion:</strong> some patterns need a new algorithm, not just loop merging. FlashAttention fuses the whole attention computation and uses tiling with an online softmax so that the full N×N attention matrix is never written to GPU high-bandwidth memory.<sup class="cite"><a href="#ref20">20</a></sup></li>
+</ul>
+
+<div class="callout warn">
+<p><strong>Fusion is not free.</strong> Fusing too aggressively can increase register pressure, reduce parallelism, or force recomputation. Production compilers use heuristics or cost models to decide what to fuse, and Halide made the tradeoff between parallelism, locality and recomputation an explicit part of its scheduling language.<sup class="cite"><a href="#ref22">22</a></sup></p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="layout">6. Data layout</h2>
+<p>The same 4-D activation tensor can be stored as NCHW (channels outer) or NHWC (channels inner), or in blocked layouts such as NCHW<em>c</em>, where channels are split into fixed-size blocks that match the hardware's vector width. The best layout depends on the operator and the target: vector units and matrix engines want the dimension they reduce over to be contiguous. Compilers therefore pick layouts per operator and insert (and later try to cancel) layout transforms between them.<sup class="cite"><a href="#ref1">1</a>,<a href="#ref3">3</a></sup> ONNX Runtime applies NCHWc layout optimizations for its CPU execution provider at its highest optimization level.<sup class="cite"><a href="#ref14">14</a></sup> Because weights are constant, their layout transform is done once at compile time and is free at run time.</p>
+
+<!-- ============================================================ -->
+<h2 id="quant">7. Precision and quantization</h2>
+<p>Lower-precision arithmetic both reduces memory traffic and unlocks faster hardware units. Common inference formats are FP16 and BF16, 8-bit integers (INT8), FP8, and for large language model weights, 4-bit formats.</p>
+<h3>Affine (asymmetric) quantization</h3>
+<p>Jacob et al. define the widely used integer-only scheme that maps a real value <em>r</em> to an integer <em>q</em> with a scale <em>S</em> and zero point <em>Z</em>:<sup class="cite"><a href="#ref18">18</a></sup></p>
+<p style="text-align:center"><code>r = S · (q − Z)</code> &nbsp;&nbsp;⇔&nbsp;&nbsp; <code>q = clamp(round(r / S) + Z, q<sub>min</sub>, q<sub>max</sub>)</code></p>
+<p>The zero point is chosen so that real zero is exactly representable, which matters for zero-padding. Matrix multiplications are then carried out with integer multiply-accumulate into 32-bit accumulators and rescaled afterwards.<sup class="cite"><a href="#ref18">18</a></sup></p>
+
+<figure>
+<svg viewBox="0 0 700 170" role="img" aria-labelledby="f4t f4d">
+<title id="f4t">Affine quantization mapping</title>
+<desc id="f4d">A real number line from rmin to rmax maps linearly onto integers 0 to 255; real zero maps to the zero point Z.</desc>
+<line x1="60" y1="50" x2="640" y2="50" class="s-line" stroke-width="2"/>
+<line x1="60" y1="130" x2="640" y2="130" class="s-line" stroke-width="2"/>
+<text x="30" y="55" class="t-main" font-size="13" font-weight="600">r</text>
+<text x="30" y="135" class="t-main" font-size="13" font-weight="600">q</text>
+<g font-size="12">
+<line x1="60" y1="44" x2="60" y2="56" class="s-line"/><text x="60" y="34" text-anchor="middle" class="t-muted">r_min = −1.0</text>
+<line x1="205" y1="44" x2="205" y2="56" class="s-line"/><text x="205" y="34" text-anchor="middle" class="t-acc">0.0</text>
+<line x1="640" y1="44" x2="640" y2="56" class="s-line"/><text x="640" y="34" text-anchor="middle" class="t-muted">r_max = 3.0</text>
+<line x1="60" y1="124" x2="60" y2="136" class="s-line"/><text x="60" y="156" text-anchor="middle" class="t-muted">0</text>
+<line x1="206" y1="124" x2="206" y2="136" class="s-line"/><text x="206" y="156" text-anchor="middle" class="t-acc">Z = 64</text>
+<line x1="640" y1="124" x2="640" y2="136" class="s-line"/><text x="640" y="156" text-anchor="middle" class="t-muted">255</text>
+</g>
+<g stroke-dasharray="3 3" stroke-width="1.2">
+<line x1="60" y1="56" x2="60" y2="124" class="s-line"/>
+<line x1="205" y1="56" x2="206" y2="124" style="stroke:var(--accent)"/>
+<line x1="640" y1="56" x2="640" y2="124" class="s-line"/>
+</g>
+<text x="420" y="95" text-anchor="middle" class="t-muted" font-size="12">S = (r_max − r_min) / 255 ≈ 0.01569</text>
+</svg>
+<figcaption>Figure 4. Asymmetric UINT8 quantization of the range [−1, 3]. Real zero lands exactly on the integer zero point Z (see Exercise 3).<sup class="cite"><a href="#ref18">18</a></sup></figcaption>
+</figure>
+
+<h3>Where the compiler helps</h3>
+<ul>
+<li><strong>Calibration and placement.</strong> Static (post-training) quantization runs representative data through the model to choose scales; dynamic quantization computes activation scales at run time. ONNX Runtime provides both, plus a QDQ (QuantizeLinear/DequantizeLinear) format that execution providers fuse into true integer kernels.<sup class="cite"><a href="#ref15">15</a></sup></li>
+<li><strong>Precision selection.</strong> TensorRT can be allowed to choose FP16, INT8 or FP8 per layer and picks the fastest kernels that satisfy the allowed precisions.<sup class="cite"><a href="#ref13">13</a></sup></li>
+<li><strong>FP8.</strong> Micikevicius et al. proposed two 8-bit floating-point encodings: E4M3 (4 exponent bits, 3 mantissa bits) for more precision and E5M2 (5 exponent, 2 mantissa) for more range.<sup class="cite"><a href="#ref19">19</a></sup></li>
+<li><strong>Mixed precision.</strong> FP16 has a narrow range compared with FP32, which is why sensitive operations (reductions, softmax, normalization) are often kept at higher precision.<sup class="cite"><a href="#ref36">36</a></sup></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="loops">8. Loop-level scheduling</h2>
+<p>Once the graph is fixed, each (possibly fused) operator becomes a loop nest. The key insight, introduced by Halide for image processing, is to separate the <strong>algorithm</strong> (what is computed) from the <strong>schedule</strong> (how loops are ordered, tiled, parallelized and stored).<sup class="cite"><a href="#ref22">22</a></sup> TVM adopted this idea for deep learning and extended it with primitives for GPUs and accelerators, including <em>tensorization</em> (mapping an inner loop block to a hardware tensor instruction) and latency hiding.<sup class="cite"><a href="#ref3">3</a></sup> TensorIR later made the schedulable unit an explicit "block" to make tensorization more systematic.<sup class="cite"><a href="#ref26">26</a></sup></p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Primitive</th><th>What it does</th><th>Why it helps</th></tr></thead>
+<tbody>
+<tr><td>split / tile</td><td>Break a loop into outer and inner loops</td><td>Working set fits in cache, shared memory or registers</td></tr>
+<tr><td>reorder</td><td>Change loop nesting order</td><td>Contiguous inner-loop access; better reuse</td></tr>
+<tr><td>vectorize</td><td>Map inner loop to SIMD lanes</td><td>Uses AVX / NEON / SVE units</td></tr>
+<tr><td>parallel / bind</td><td>Map loops to CPU threads or GPU blocks and threads</td><td>Uses all cores and SMs</td></tr>
+<tr><td>unroll</td><td>Replicate loop body</td><td>Exposes instruction-level parallelism</td></tr>
+<tr><td>cache_read / cache_write</td><td>Stage data in faster memory</td><td>Reuse from shared memory or registers</td></tr>
+<tr><td>compute_at / inline</td><td>Place a producer inside its consumer's loop</td><td>Loop-level fusion</td></tr>
+<tr><td>tensorize</td><td>Replace a sub-block with an intrinsic</td><td>Uses tensor cores and matrix engines</td></tr>
+</tbody></table></div>
+<p class="meta">Primitive names follow TVM's TensorIR scheduling API.<sup class="cite"><a href="#ref26">26</a>,<a href="#ref33">33</a></sup></p>
+
+<p>An alternative to schedule languages is the <strong>polyhedral model</strong>, which represents loop nests as integer sets and finds legal transformations mathematically; Tensor Comprehensions applied it to deep-learning kernels.<sup class="cite"><a href="#ref31">31</a></sup> A third approach is <strong>tile-level programming</strong>: Triton lets the programmer write a kernel in terms of blocks of data, and the compiler handles intra-block details such as memory coalescing, shared-memory management and scheduling within the block.<sup class="cite"><a href="#ref11">11</a></sup></p>
+
+<!-- ============================================================ -->
+<h2 id="tune">9. Auto-tuning</h2>
+<p>For a single matmul the space of legal schedules (tile sizes, loop orders, unroll factors, thread bindings) easily runs into billions of points, and the best choice depends on shapes and hardware. Instead of relying on hand-tuned heuristics, compilers search the space empirically.</p>
+
+<figure>
+<svg viewBox="0 0 720 260" role="img" aria-labelledby="f5t f5d">
+<title id="f5t">Auto-tuning loop</title>
+<desc id="f5d">A search strategy proposes candidate schedules; a learned cost model ranks them; the top candidates are compiled and measured on hardware; measurements update the cost model. The best schedule is saved to a tuning log.</desc>
+<rect x="30" y="100" width="150" height="60" rx="8" class="s-box"/>
+<text x="105" y="125" text-anchor="middle" class="t-main" font-size="13" font-weight="600">Search space</text>
+<text x="105" y="143" text-anchor="middle" class="t-muted" font-size="12">templates / sketches</text>
+<rect x="240" y="20" width="200" height="60" rx="8" class="s-acc"/>
+<text x="340" y="45" text-anchor="middle" class="t-acc" font-size="13" font-weight="600">Search strategy</text>
+<text x="340" y="63" text-anchor="middle" class="t-muted" font-size="12">evolutionary · simulated annealing</text>
+<rect x="500" y="100" width="190" height="60" rx="8" class="s-acc"/>
+<text x="595" y="125" text-anchor="middle" class="t-acc" font-size="13" font-weight="600">Learned cost model</text>
+<text x="595" y="143" text-anchor="middle" class="t-muted" font-size="12">e.g. gradient-boosted trees</text>
+<rect x="240" y="180" width="200" height="60" rx="8" class="s-acc2"/>
+<text x="340" y="205" text-anchor="middle" class="t-acc2" font-size="13" font-weight="600">Measure on hardware</text>
+<text x="340" y="223" text-anchor="middle" class="t-muted" font-size="12">compile top-k, time them</text>
+<g stroke-width="1.5">
+<line x1="180" y1="115" x2="238" y2="62" class="s-line" marker-end="url(#arr)"/>
+<line x1="442" y1="55" x2="530" y2="98" class="s-line" marker-end="url(#arr)"/>
+<text x="500" y="65" class="t-muted" font-size="12">candidates</text>
+<line x1="560" y1="162" x2="442" y2="205" class="s-line" marker-end="url(#arr)"/>
+<text x="520" y="200" class="t-muted" font-size="12">top-k</text>
+<line x1="238" y1="215" x2="105" y2="162" class="s-line" stroke-dasharray="4 3"/>
+<path d="M440,232 C600,250 680,210 660,162" fill="none" class="s-line" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+<text x="640" y="245" class="t-muted" font-size="12">retrain</text>
+<text x="30" y="200" class="t-muted" font-size="12">best → tuning log</text>
+</g>
+</svg>
+<figcaption>Figure 5. The search loop used by AutoTVM, Ansor and MetaSchedule: propose, predict with a cost model, measure the most promising candidates, and learn from the measurements.<sup class="cite"><a href="#ref23">23</a>,<a href="#ref24">24</a>,<a href="#ref25">25</a></sup></figcaption>
+</figure>
+
+<ul>
+<li><strong>AutoTVM</strong> searches within human-written schedule templates, guided by a statistical cost model trained on measurements (gradient-boosted trees and TreeGRU models were explored), and can transfer learning across workloads.<sup class="cite"><a href="#ref23">23</a></sup></li>
+<li><strong>Ansor</strong> removes the need for templates. It generates program "sketches" from a hierarchical search space, fills in details by random annotation, fine-tunes with evolutionary search and a learned cost model, and allocates tuning time across a network's subgraphs with a task scheduler. Its authors reported improvements of up to 3.8×, 2.6× and 1.7× over the prior state of the art on Intel CPU, ARM CPU and NVIDIA GPU respectively.<sup class="cite"><a href="#ref24">24</a></sup></li>
+<li><strong>MetaSchedule</strong> expresses search spaces as probabilistic programs over TensorIR scheduling primitives, unifying template-based and template-free tuning.<sup class="cite"><a href="#ref25">25</a></sup></li>
+<li><strong>Library-style selection.</strong> TensorRT times multiple candidate kernel implementations ("tactics") for each layer while building an engine and keeps the fastest.<sup class="cite"><a href="#ref13">13</a></sup> TorchInductor's <code>max-autotune</code> mode benchmarks Triton and template-based matmul configurations.<sup class="cite"><a href="#ref9">9</a></sup></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="runtime">10. Runtime-level tricks</h2>
+<ul>
+<li><strong>Static memory planning.</strong> When tensor lifetimes are known at compile time, buffers can be assigned to a small arena with reuse, avoiding allocator calls on the hot path.<sup class="cite"><a href="#ref1">1</a></sup></li>
+<li><strong>Launch-overhead removal.</strong> CUDA Graphs record a sequence of kernel launches once and replay them as a single unit, reducing CPU launch overhead.<sup class="cite"><a href="#ref29">29</a></sup> <code>torch.compile(mode="reduce-overhead")</code> uses CUDA graphs for this purpose.<sup class="cite"><a href="#ref9">9</a></sup></li>
+<li><strong>Dynamic shapes.</strong> Batch size and sequence length often vary. Compilers either specialize and cache per shape, use symbolic shapes, or bucket shapes. TVM's Relax IR makes symbolic shapes first-class to compile dynamic workloads such as LLMs end-to-end.<sup class="cite"><a href="#ref27">27</a></sup> TorchDynamo can mark dimensions as dynamic and guard on shape properties.<sup class="cite"><a href="#ref8">8</a></sup></li>
+<li><strong>Heterogeneous partitioning.</strong> ONNX Runtime assigns subgraphs to "execution providers" (for example TensorRT, CUDA or CPU), falling back for unsupported operators.<sup class="cite"><a href="#ref14">14</a></sup></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="tools">11. Tools in practice (with code)</h2>
+<p class="meta">Snippets were written against the documented APIs listed in the references. These projects evolve quickly; check the version you have installed.</p>
+
+<h3>11.1 PyTorch 2: <code>torch.compile</code> (TorchDynamo + TorchInductor)</h3>
+<p>PyTorch 2 introduced <strong>TorchDynamo</strong>, which captures graphs by intercepting Python bytecode just before execution using CPython's frame evaluation API (PEP 523), and <strong>TorchInductor</strong>, the default backend, which generates Triton kernels for GPUs and C++/OpenMP for CPUs.<sup class="cite"><a href="#ref8">8</a>,<a href="#ref10">10</a></sup> When Dynamo meets code it cannot trace, it inserts a <em>graph break</em> and falls back to Python for that part. In the PyTorch 2 paper, the authors report a 2.27× geometric-mean inference speedup and 1.41× training speedup on an NVIDIA A100 across more than 180 real-world models.<sup class="cite"><a href="#ref8">8</a></sup></p>
+<pre><code><span class="kw">import</span> torch, torch.nn <span class="kw">as</span> nn
+
+<span class="kw">class</span> MLP(nn.Module):
+    <span class="kw">def</span> __init__(self, d=<span class="num">1024</span>):
+        <span class="kw">super</span>().__init__()
+        self.fc1, self.fc2 = nn.Linear(d, <span class="num">4</span>*d), nn.Linear(<span class="num">4</span>*d, d)
+    <span class="kw">def</span> forward(self, x):
+        <span class="kw">return</span> self.fc2(torch.nn.functional.gelu(self.fc1(x)))
+
+model = MLP().cuda().half().eval()
+x = torch.randn(<span class="num">64</span>, <span class="num">1024</span>, device=<span class="str">"cuda"</span>, dtype=torch.half)
+
+<span class="cm"># mode: "default" | "reduce-overhead" (CUDA graphs) | "max-autotune" | "max-autotune-no-cudagraphs"</span>
+compiled = torch.compile(model, mode=<span class="str">"max-autotune"</span>, fullgraph=<span class="kw">True</span>)
+
+<span class="kw">with</span> torch.inference_mode():
+    y = compiled(x)   <span class="cm"># first call compiles; later calls reuse the cached kernels</span></code></pre>
+<p class="codecap"><code>fullgraph=True</code> turns any graph break into an error, which is useful for checking that the whole model is captured.<sup class="cite"><a href="#ref9">9</a></sup> Setting the environment variable <code>TORCH_LOGS="output_code"</code> prints the generated kernels so you can inspect the fused GELU epilogue.</p>
+
+<h3>11.2 Triton: writing a fused kernel by hand</h3>
+<p>Triton kernels are Python functions decorated with <code>@triton.jit</code> that operate on blocks of data. Below, bias-add and ReLU are fused into one pass over memory, adapted from the pattern in Triton's vector-add tutorial.<sup class="cite"><a href="#ref11">11</a>,<a href="#ref12">12</a></sup></p>
+<pre><code><span class="kw">import</span> torch, triton, triton.language <span class="kw">as</span> tl
+
+<span class="kw">@triton.jit</span>
+<span class="kw">def</span> bias_relu_kernel(x_ptr, b_ptr, y_ptr, n_elem, n_col, BLOCK: tl.constexpr):
+    pid  = tl.program_id(axis=<span class="num">0</span>)                 <span class="cm"># which block am I?</span>
+    offs = pid * BLOCK + tl.arange(<span class="num">0</span>, BLOCK)       <span class="cm"># element indices for this block</span>
+    mask = offs &lt; n_elem                          <span class="cm"># guard the ragged last block</span>
+    x = tl.load(x_ptr + offs, mask=mask)
+    b = tl.load(b_ptr + offs % n_col, mask=mask)  <span class="cm"># broadcast bias along rows</span>
+    tl.store(y_ptr + offs, tl.maximum(x + b, <span class="num">0.0</span>), mask=mask)
+
+<span class="kw">def</span> bias_relu(x, b):
+    y = torch.empty_like(x)
+    n = x.numel()
+    grid = <span class="kw">lambda</span> meta: (triton.cdiv(n, meta[<span class="str">"BLOCK"</span>]),)
+    bias_relu_kernel[grid](x, b, y, n, x.shape[-<span class="num">1</span>], BLOCK=<span class="num">1024</span>)
+    <span class="kw">return</span> y</code></pre>
+<p class="codecap">One read of <code>x</code>, one write of <code>y</code>: half the device-memory traffic of running add and ReLU as separate kernels (Exercise 2).</p>
+
+<h3>11.3 JAX and XLA: seeing StableHLO</h3>
+<p><strong>XLA</strong> (Accelerated Linear Algebra) is an open-source compiler for machine learning, developed under the OpenXLA project, that takes models from frameworks such as JAX, TensorFlow and PyTorch.<sup class="cite"><a href="#ref6">6</a></sup> Its portable input operation set is <strong>StableHLO</strong>.<sup class="cite"><a href="#ref7">7</a></sup> JAX's ahead-of-time API lets you inspect each stage.<sup class="cite"><a href="#ref35">35</a></sup></p>
+<pre><code><span class="kw">import</span> jax, jax.numpy <span class="kw">as</span> jnp
+
+<span class="kw">def</span> layer(x, w, b):
+    <span class="kw">return</span> jax.nn.gelu(x @ w + b)
+
+x = jnp.ones((<span class="num">8</span>, <span class="num">512</span>)); w = jnp.ones((<span class="num">512</span>, <span class="num">512</span>)); b = jnp.zeros((<span class="num">512</span>,))
+
+lowered  = jax.jit(layer).lower(x, w, b)
+<span class="kw">print</span>(lowered.as_text())        <span class="cm"># StableHLO: dot_general, add, ... before optimization</span>
+compiled = lowered.compile()
+<span class="kw">print</span>(compiled.as_text())       <span class="cm"># backend HLO after XLA passes: look for "fusion"</span></code></pre>
+
+<h3>11.4 Apache TVM: a hand-written schedule in TensorIR</h3>
+<p>TVM is an end-to-end compiler that started at the University of Washington.<sup class="cite"><a href="#ref3">3</a></sup> Its current stack uses Relax for graphs and TensorIR for loop programs.<sup class="cite"><a href="#ref26">26</a>,<a href="#ref27">27</a>,<a href="#ref33">33</a></sup> This snippet defines a matmul with tensor expressions and applies the schedule primitives from Section 8 by hand; MetaSchedule can search for them automatically.<sup class="cite"><a href="#ref25">25</a></sup></p>
+<pre><code><span class="kw">import</span> tvm
+<span class="kw">from</span> tvm <span class="kw">import</span> te, tir
+
+n = <span class="num">1024</span>
+A = te.placeholder((n, n), name=<span class="str">"A"</span>)
+B = te.placeholder((n, n), name=<span class="str">"B"</span>)
+k = te.reduce_axis((<span class="num">0</span>, n), name=<span class="str">"k"</span>)
+C = te.compute((n, n), <span class="kw">lambda</span> i, j: te.sum(A[i, k] * B[k, j], axis=k), name=<span class="str">"C"</span>)
+
+sch = tir.Schedule(te.create_prim_func([A, B, C]))
+blk = sch.get_block(<span class="str">"C"</span>)
+i, j, kk = sch.get_loops(blk)
+io, ii = sch.split(i, factors=[<span class="kw">None</span>, <span class="num">32</span>])     <span class="cm"># tile rows</span>
+jo, ji = sch.split(j, factors=[<span class="kw">None</span>, <span class="num">32</span>])     <span class="cm"># tile columns</span>
+sch.reorder(io, jo, kk, ii, ji)                 <span class="cm"># j-inner loop is contiguous in B and C</span>
+sch.vectorize(ji)
+sch.parallel(io)
+lib = tvm.build(sch.mod, target=<span class="str">"llvm"</span>)
+<span class="kw">print</span>(sch.mod.script())                          <span class="cm"># inspect the transformed TensorIR</span></code></pre>
+
+<h3>11.5 ONNX Runtime: graph optimizations and quantization</h3>
+<p>ONNX Runtime applies graph optimizations when a session is created. The levels are basic, extended and layout optimizations, selected with <code>GraphOptimizationLevel</code> (<code>ORT_DISABLE_ALL</code>, <code>ORT_ENABLE_BASIC</code>, <code>ORT_ENABLE_EXTENDED</code>, <code>ORT_ENABLE_ALL</code>), and the optimized graph can be serialized for offline use.<sup class="cite"><a href="#ref14">14</a></sup></p>
+<pre><code><span class="kw">import</span> onnxruntime <span class="kw">as</span> ort
+<span class="kw">from</span> onnxruntime.quantization <span class="kw">import</span> quantize_dynamic, QuantType
+
+<span class="cm"># 1) Dynamic INT8 quantization of weights (activations quantized at run time)</span>
+quantize_dynamic(<span class="str">"model.onnx"</span>, <span class="str">"model.int8.onnx"</span>, weight_type=QuantType.QInt8)
+
+<span class="cm"># 2) Graph optimization; save the optimized graph to look at it in Netron</span>
+so = ort.SessionOptions()
+so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+so.optimized_model_filepath = <span class="str">"model.int8.opt.onnx"</span>
+sess = ort.InferenceSession(<span class="str">"model.int8.onnx"</span>, so, providers=[<span class="str">"CPUExecutionProvider"</span>])</code></pre>
+<p class="codecap">Quantization API from the ONNX Runtime quantization guide.<sup class="cite"><a href="#ref15">15</a></sup></p>
+
+<h3>11.6 NVIDIA TensorRT: building an engine</h3>
+<p>TensorRT parses a network (typically from ONNX), applies layer and tensor fusion, chooses precisions, times candidate kernels for the target GPU, and serializes the result as an <em>engine</em> (plan) file that is specific to that GPU model and TensorRT version.<sup class="cite"><a href="#ref13">13</a></sup></p>
+<pre><code><span class="cm"># Command line</span>
+trtexec --onnx=model.onnx --fp16 --saveEngine=model.plan</code></pre>
+<pre><code><span class="kw">import</span> tensorrt <span class="kw">as</span> trt
+
+logger  = trt.Logger(trt.Logger.WARNING)
+builder = trt.Builder(logger)
+network = builder.create_network(<span class="num">0</span>)          <span class="cm"># explicit batch is the default in TensorRT 10</span>
+parser  = trt.OnnxParser(network, logger)
+<span class="kw">with</span> <span class="kw">open</span>(<span class="str">"model.onnx"</span>, <span class="str">"rb"</span>) <span class="kw">as</span> f:
+    <span class="kw">assert</span> parser.parse(f.read()), parser.get_error(<span class="num">0</span>)
+
+config = builder.create_builder_config()
+config.set_flag(trt.BuilderFlag.FP16)                                 <span class="cm"># allow FP16 kernels</span>
+config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, <span class="num">1</span> &lt;&lt; <span class="num">30</span>)  <span class="cm"># 1 GiB scratch</span>
+plan = builder.build_serialized_network(network, config)              <span class="cm"># fusion + tactic timing happen here</span>
+<span class="kw">open</span>(<span class="str">"model.plan"</span>, <span class="str">"wb"</span>).write(plan)</code></pre>
+
+<h3>11.7 MLIR and IREE</h3>
+<p><strong>IREE</strong> (Intermediate Representation Execution Environment) is an MLIR-based end-to-end compiler and runtime that lowers ML models to a unified IR that scales from datacenter to mobile and edge deployments.<sup class="cite"><a href="#ref17">17</a></sup> A matmul in MLIR's <code>linalg</code> dialect looks like this:<sup class="cite"><a href="#ref34">34</a></sup></p>
+<pre><code>func.func @mm(%A: tensor&lt;128x256xf32&gt;, %B: tensor&lt;256x64xf32&gt;,
+              %C: tensor&lt;128x64xf32&gt;) -&gt; tensor&lt;128x64xf32&gt; {
+  %0 = linalg.matmul ins(%A, %B : tensor&lt;128x256xf32&gt;, tensor&lt;256x64xf32&gt;)
+                     outs(%C : tensor&lt;128x64xf32&gt;) -&gt; tensor&lt;128x64xf32&gt;
+  return %0 : tensor&lt;128x64xf32&gt;
+}</code></pre>
+<pre><code><span class="cm"># Compile for the host CPU and run with IREE's tools</span>
+iree-compile mm.mlir --iree-hal-target-backends=llvm-cpu -o mm.vmfb
+iree-run-module --module=mm.vmfb --function=mm \
+  --input=128x256xf32=1 --input=256x64xf32=1 --input=128x64xf32=0</code></pre>
+<p class="codecap">Recent IREE releases also accept <code>--iree-hal-target-device=local</code> with a CPU backend flag; see the IREE getting-started guide for your version.<sup class="cite"><a href="#ref17">17</a></sup></p>
+
+<!-- ============================================================ -->
+<h2 id="compare">12. Tool comparison</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Tool</th><th>Main input</th><th>Key IR(s)</th><th>Targets</th><th>Signature technique</th></tr></thead>
+<tbody>
+<tr><td><strong>Apache TVM</strong><sup class="cite"><a href="#ref3">3</a>,<a href="#ref33">33</a></sup></td><td>PyTorch, ONNX, TF Lite and others</td><td>Relax, TensorIR</td><td>CPUs, GPUs, accelerators</td><td>Learned auto-tuning (AutoTVM, Ansor, MetaSchedule)</td></tr>
+<tr><td><strong>XLA / OpenXLA</strong><sup class="cite"><a href="#ref6">6</a>,<a href="#ref7">7</a></sup></td><td>JAX, TensorFlow, PyTorch</td><td>StableHLO, HLO</td><td>CPU, GPU, TPU</td><td>Whole-program fusion, buffer assignment</td></tr>
+<tr><td><strong>MLIR</strong><sup class="cite"><a href="#ref4">4</a></sup></td><td>Infrastructure</td><td>Dialects (linalg, tensor, vector…)</td><td>Anything with a lowering</td><td>Reusable multi-level compiler building blocks</td></tr>
+<tr><td><strong>IREE</strong><sup class="cite"><a href="#ref17">17</a></sup></td><td>StableHLO, TOSA, PyTorch (via torch-mlir), ONNX</td><td>MLIR dialects</td><td>CPU, Vulkan, CUDA, ROCm, Metal</td><td>Compiler plus lightweight runtime, edge-friendly</td></tr>
+<tr><td><strong>Triton</strong><sup class="cite"><a href="#ref11">11</a>,<a href="#ref12">12</a></sup></td><td>Python kernel DSL</td><td>Triton IR (MLIR-based)</td><td>NVIDIA and AMD GPUs</td><td>Block-level programming</td></tr>
+<tr><td><strong>torch.compile</strong><sup class="cite"><a href="#ref8">8</a>,<a href="#ref9">9</a></sup></td><td>PyTorch code</td><td>FX graph, Inductor loop IR</td><td>GPU (Triton), CPU (C++)</td><td>Bytecode-level graph capture with guards</td></tr>
+<tr><td><strong>TensorRT</strong><sup class="cite"><a href="#ref13">13</a></sup></td><td>ONNX, framework integrations</td><td>Internal network definition</td><td>NVIDIA GPUs</td><td>Fusion, precision selection, tactic timing</td></tr>
+<tr><td><strong>ONNX Runtime</strong><sup class="cite"><a href="#ref14">14</a></sup></td><td>ONNX</td><td>ONNX graph</td><td>Many, via execution providers</td><td>Graph rewrites plus EP partitioning</td></tr>
+<tr><td><strong>OpenVINO</strong><sup class="cite"><a href="#ref32">32</a></sup></td><td>ONNX, PyTorch, TF, PaddlePaddle</td><td>OpenVINO IR</td><td>Intel CPU, GPU, NPU</td><td>Model conversion plus device plugins</td></tr>
+<tr><td><strong>Glow</strong><sup class="cite"><a href="#ref30">30</a></sup></td><td>PyTorch / ONNX</td><td>High- and low-level IR</td><td>CPU and accelerators</td><td>Two-phase graph lowering</td></tr>
+</tbody></table></div>
+
+<div class="callout">
+<p><strong>Choosing quickly.</strong> In a PyTorch codebase, try <code>torch.compile</code> first. For portable deployment from ONNX, ONNX Runtime with an appropriate execution provider is the lowest-friction path, and TensorRT is the specialist choice for NVIDIA GPUs. JAX users get XLA by default. For new hardware or edge targets, TVM and IREE are designed to be retargeted. When the compiler's output is still not good enough for one hot kernel, write it in Triton.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="exercises">13. Exercises with solutions</h2>
+
+<div class="ex">
+<h4>Exercise 1: Arithmetic intensity of GEMM versus GEMV</h4>
+<p>(a) Compute the FLOPs, the minimum bytes moved and the arithmetic intensity of an FP16 matrix multiplication with M = N = K = 4096. (b) Repeat for M = 1 (a matrix-vector product, as in single-token LLM decoding). (c) On a hypothetical accelerator with 100 TFLOP/s and 2 TB/s, which one is memory-bound?</p>
+<details><summary>Show solution</summary>
+<p>(a) FLOPs = 2MNK = 2 × 4096³ ≈ 1.374 × 10¹¹. Minimum bytes = 2 bytes × (MK + KN + MN) = 2 × 3 × 4096² ≈ 1.007 × 10⁸. AI ≈ 1365 FLOP/byte.</p>
+<p>(b) FLOPs = 2NK ≈ 3.36 × 10⁷. Bytes ≈ 2 × (K + KN + N) ≈ 3.36 × 10⁷. AI ≈ 1 FLOP/byte.</p>
+<p>(c) The ridge point is 100 × 10¹² / 2 × 10¹² = 50 FLOP/byte. The GEMM (1365) is compute-bound; the GEMV (≈1) is heavily memory-bound and can reach at most about 2 TFLOP/s. This is why weight quantization and batching help LLM decoding so much: they reduce bytes per useful FLOP.<sup class="cite"><a href="#ref2">2</a></sup></p>
+</details>
+</div>
+
+<div class="ex">
+<h4>Exercise 2: Bytes saved by fusion</h4>
+<p>A model computes <code>y = relu(x + b)</code> on N = 16 777 216 FP32 elements, as two separate kernels (add, then ReLU). Ignoring the small bias vector, how many bytes of device memory traffic does each version need, and what is the saving from fusion?</p>
+<details><summary>Show solution</summary>
+<p>Unfused: add reads x and writes t (2 × 4N bytes); ReLU reads t and writes y (2 × 4N bytes). Total 16N = 268 MB.</p>
+<p>Fused: read x, write y. Total 8N = 134 MB. Fusion halves the traffic, so a memory-bound kernel runs roughly twice as fast and launches once instead of twice.<sup class="cite"><a href="#ref3">3</a></sup></p>
+</details>
+</div>
+
+<div class="ex">
+<h4>Exercise 3: Affine quantization by hand</h4>
+<p>Quantize the real range [−1.0, 3.0] to UINT8 (0–255) using <code>r = S(q − Z)</code>. Find S and Z, quantize r = 1.5, dequantize it back, and give the error.</p>
+<details><summary>Show solution</summary>
+<p>S = (3.0 − (−1.0)) / 255 = 4/255 ≈ 0.015686. Z = round(0 − r<sub>min</sub>/S) = round(63.75) = 64.</p>
+<p>q = round(1.5 / S) + Z = round(95.625) + 64 = 96 + 64 = 160.</p>
+<p>r̂ = S(160 − 64) = 96 × 0.015686 ≈ 1.5059. Error ≈ 0.0059, within the maximum rounding error of S/2 ≈ 0.0078.<sup class="cite"><a href="#ref18">18</a></sup></p>
+</details>
+</div>
+
+<div class="ex">
+<h4>Exercise 4: Fold a batch norm</h4>
+<p>A convolution output channel has bias b. The following BatchNorm has γ = 2, β = 0.5, μ = 1, σ² = 3, ε = 1. Give the folded weight scale and bias.</p>
+<details><summary>Show solution</summary>
+<p>Scale = γ / √(σ² + ε) = 2 / √4 = 1, so W' = W. Bias b' = (b − μ) × scale + β = (b − 1) + 0.5 = b − 0.5. The BatchNorm node disappears entirely.<sup class="cite"><a href="#ref18">18</a></sup></p>
+</details>
+</div>
+
+<div class="ex">
+<h4>Exercise 5: Pick a tile size</h4>
+<p>A GPU matmul kernel stages one T × T tile of A and one T × T tile of B in 48 KiB of shared memory, in FP32. What is the largest power-of-two T that fits? Why might a tuner still pick a smaller one?</p>
+<details><summary>Show solution</summary>
+<p>2 × T² × 4 bytes ≤ 49 152 ⇒ T² ≤ 6144 ⇒ T ≤ 78. The largest power of two is T = 64 (32 KiB). A tuner may choose smaller or rectangular tiles because using less shared memory allows more thread blocks per SM (higher occupancy), and register pressure, double buffering and the problem shape all change the optimum. This is why measurement-driven tuning beats a single formula.<sup class="cite"><a href="#ref23">23</a>,<a href="#ref24">24</a></sup></p>
+</details>
+</div>
+
+<div class="ex">
+<h4>Exercise 6: Find the graph break</h4>
+<pre><code><span class="kw">@torch.compile</span>(fullgraph=<span class="kw">True</span>)
+<span class="kw">def</span> f(x):
+    <span class="kw">if</span> x.sum() &gt; <span class="num">0</span>:
+        <span class="kw">return</span> x * <span class="num">2</span>
+    <span class="kw">return</span> x - <span class="num">1</span></code></pre>
+<p>Why does this fail with <code>fullgraph=True</code>, and how can you rewrite it?</p>
+<details><summary>Show solution</summary>
+<p>The branch depends on a tensor's <em>value</em>, which is unknown at trace time, so Dynamo must break the graph; with <code>fullgraph=True</code> that becomes an error.<sup class="cite"><a href="#ref8">8</a>,<a href="#ref9">9</a></sup> Rewrite it as data flow, which computes both sides and selects:</p>
+<pre><code><span class="kw">return</span> torch.where(x.sum() &gt; <span class="num">0</span>, x * <span class="num">2</span>, x - <span class="num">1</span>)</code></pre>
+<p>or use the control-flow operator <code>torch.cond(pred, true_fn, false_fn, (x,))</code>, which captures both branches in the graph.<sup class="cite"><a href="#ref37">37</a></sup></p>
+</details>
+</div>
+
+<div class="ex">
+<h4>Exercise 7 (hands-on): Measure fusion yourself</h4>
+<p>Time the <code>MLP</code> from Section 11.1 eagerly and under <code>torch.compile</code> for batch sizes 1, 8 and 256, using <code>torch.cuda.synchronize()</code> around the timed region and discarding the first (compiling) call. Then rerun with <code>mode="reduce-overhead"</code>. Explain the pattern.</p>
+<details><summary>Show expected findings</summary>
+<p>At small batch sizes the work per kernel is tiny, so launch and Python overhead dominate; <code>reduce-overhead</code> (CUDA graphs) tends to help most there.<sup class="cite"><a href="#ref9">9</a>,<a href="#ref29">29</a></sup> At large batch sizes the GEMMs dominate and are already compute-bound in vendor libraries, so the gains come mainly from fusing the GELU into the matmul epilogue and are more modest. Exact numbers depend on your GPU and versions, which is the point of measuring.</p>
+</details>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="trivia">14. Trivia with answers</h2>
+
+<details><summary>1. What does XLA stand for?</summary><p>Accelerated Linear Algebra.<sup class="cite"><a href="#ref6">6</a></sup></p></details>
+<details><summary>2. What does MLIR stand for, and at which conference was its paper published?</summary><p>Multi-Level Intermediate Representation; the paper appeared at CGO 2021 (IEEE/ACM International Symposium on Code Generation and Optimization).<sup class="cite"><a href="#ref4">4</a></sup></p></details>
+<details><summary>3. What does IREE stand for?</summary><p>Intermediate Representation Execution Environment.<sup class="cite"><a href="#ref17">17</a></sup></p></details>
+<details><summary>4. Which image-processing language introduced the "algorithm versus schedule" split that TVM borrowed?</summary><p>Halide (PLDI 2013).<sup class="cite"><a href="#ref22">22</a>,<a href="#ref3">3</a></sup></p></details>
+<details><summary>5. Which Python Enhancement Proposal makes TorchDynamo possible?</summary><p>PEP 523, which added a frame evaluation API to CPython.<sup class="cite"><a href="#ref10">10</a>,<a href="#ref8">8</a></sup></p></details>
+<details><summary>6. How many 8-bit multiply-accumulate units are in the first-generation Google TPU's matrix unit?</summary><p>65 536, arranged as a 256 × 256 systolic array.<sup class="cite"><a href="#ref28">28</a></sup></p></details>
+<details><summary>7. In FP8 E4M3, what do the 4 and 3 refer to?</summary><p>4 exponent bits and 3 mantissa bits (plus a sign bit). E5M2 trades a mantissa bit for an extra exponent bit.<sup class="cite"><a href="#ref19">19</a></sup></p></details>
+<details><summary>8. At which workshop was the original Triton paper presented?</summary><p>MAPL 2019, the ACM SIGPLAN International Workshop on Machine Learning and Programming Languages, co-located with PLDI.<sup class="cite"><a href="#ref11">11</a></sup></p></details>
+<details><summary>9. What is the default backend of torch.compile?</summary><p><code>"inductor"</code> (TorchInductor).<sup class="cite"><a href="#ref9">9</a></sup></p></details>
+<details><summary>10. Which TVM auto-scheduler generates programs from "sketches" without manual templates?</summary><p>Ansor (OSDI 2020).<sup class="cite"><a href="#ref24">24</a></sup></p></details>
+<details><summary>11. Does FlashAttention compute an approximation of attention?</summary><p>No. It computes exact attention; the speedup comes from IO-awareness (tiling and recomputation that reduce reads and writes to GPU high-bandwidth memory).<sup class="cite"><a href="#ref20">20</a></sup></p></details>
+<details><summary>12. What three ingredients define the roofline model?</summary><p>Peak floating-point performance, peak memory bandwidth, and the kernel's operational (arithmetic) intensity.<sup class="cite"><a href="#ref2">2</a></sup></p></details>
+
+<!-- ============================================================ -->
+<h2 id="glossary">15. Glossary</h2>
+<div class="tablewrap"><table>
+<tbody>
+<tr><th>Arithmetic intensity</th><td>FLOPs performed per byte of main-memory traffic.<sup class="cite"><a href="#ref2">2</a></sup></td></tr>
+<tr><th>Dialect (MLIR)</th><td>A namespace of operations, types and attributes at one abstraction level.<sup class="cite"><a href="#ref4">4</a></sup></td></tr>
+<tr><th>Execution provider</th><td>ONNX Runtime's plug-in interface to a hardware backend.<sup class="cite"><a href="#ref14">14</a></sup></td></tr>
+<tr><th>Graph break</th><td>A point where TorchDynamo stops capturing and falls back to Python.<sup class="cite"><a href="#ref8">8</a></sup></td></tr>
+<tr><th>Guard</th><td>A runtime check that a cached compiled graph is still valid for the current inputs.<sup class="cite"><a href="#ref8">8</a></sup></td></tr>
+<tr><th>Schedule</th><td>The mapping of a computation to loops, memory and parallel hardware.<sup class="cite"><a href="#ref22">22</a></sup></td></tr>
+<tr><th>Tactic</th><td>One candidate kernel implementation timed by TensorRT for a layer.<sup class="cite"><a href="#ref13">13</a></sup></td></tr>
+<tr><th>Tensorization</th><td>Replacing a loop sub-nest with a hardware tensor instruction.<sup class="cite"><a href="#ref3">3</a>,<a href="#ref26">26</a></sup></td></tr>
+<tr><th>Zero point</th><td>The integer that represents real 0 in affine quantization.<sup class="cite"><a href="#ref18">18</a></sup></td></tr>
+</tbody></table></div>
+
+<!-- ============================================================ -->
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li id="ref1">Li M, Liu Y, Liu X, Sun Q, You X, Yang H, et al. The deep learning compiler: a comprehensive survey. IEEE Trans Parallel Distrib Syst. 2021;32(3):708–27. doi:10.1109/TPDS.2020.3030548</li>
+<li id="ref2">Williams S, Waterman A, Patterson D. Roofline: an insightful visual performance model for multicore architectures. Commun ACM. 2009;52(4):65–76. doi:10.1145/1498765.1498785</li>
+<li id="ref3">Chen T, Moreau T, Jiang Z, Zheng L, Yan E, Cowan M, et al. TVM: an automated end-to-end optimizing compiler for deep learning. In: Proceedings of the 13th USENIX Symposium on Operating Systems Design and Implementation (OSDI 18); 2018 Oct 8–10; Carlsbad, CA. Berkeley (CA): USENIX Association; 2018. p. 578–94.</li>
+<li id="ref4">Lattner C, Amini M, Bondhugula U, Cohen A, Davis A, Pienaar J, et al. MLIR: scaling compiler infrastructure for domain specific computation. In: 2021 IEEE/ACM International Symposium on Code Generation and Optimization (CGO); 2021 Feb 27–Mar 3; Seoul, Korea. Piscataway (NJ): IEEE; 2021. p. 2–14. doi:10.1109/CGO51591.2021.9370308</li>
+<li id="ref5">Lattner C, Adve V. LLVM: a compilation framework for lifelong program analysis &amp; transformation. In: International Symposium on Code Generation and Optimization (CGO 2004); 2004 Mar 20–24; Palo Alto, CA. Los Alamitos (CA): IEEE Computer Society; 2004. p. 75–86. doi:10.1109/CGO.2004.1281665</li>
+<li id="ref6">OpenXLA Project. XLA [Internet]. OpenXLA; c2024 [cited 2026 Nov 16]. Available from: <a href="https://openxla.org/xla">https://openxla.org/xla</a></li>
+<li id="ref7">OpenXLA Project. StableHLO specification [Internet]. OpenXLA; c2024 [cited 2026 Nov 16]. Available from: <a href="https://openxla.org/stablehlo/spec">https://openxla.org/stablehlo/spec</a></li>
+<li id="ref8">Ansel J, Yang E, He H, Gimelshein N, Jain A, Voznesensky M, et al. PyTorch 2: faster machine learning through dynamic Python bytecode transformation and graph compilation. In: Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 2 (ASPLOS '24); 2024 Apr 27–May 1; La Jolla, CA. New York: ACM; 2024. p. 929–47. doi:10.1145/3620665.3640366</li>
+<li id="ref9">PyTorch Foundation. torch.compile [Internet]. PyTorch documentation; 2026 [cited 2026 Nov 16]. Available from: <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html">https://docs.pytorch.org/docs/stable/generated/torch.compile.html</a></li>
+<li id="ref10">Cannon B, Viehland D. PEP 523 – Adding a frame evaluation API to CPython [Internet]. Python Software Foundation; 2016 [cited 2026 Nov 16]. Available from: <a href="https://peps.python.org/pep-0523/">https://peps.python.org/pep-0523/</a></li>
+<li id="ref11">Tillet P, Kung HT, Cox D. Triton: an intermediate language and compiler for tiled neural network computations. In: Proceedings of the 3rd ACM SIGPLAN International Workshop on Machine Learning and Programming Languages (MAPL 2019); 2019 Jun 22; Phoenix, AZ. New York: ACM; 2019. p. 10–9. doi:10.1145/3315508.3329973</li>
+<li id="ref12">Triton contributors. Triton documentation: tutorials [Internet]. OpenAI; 2026 [cited 2026 Nov 16]. Available from: <a href="https://triton-lang.org/main/getting-started/tutorials/index.html">https://triton-lang.org/main/getting-started/tutorials/index.html</a></li>
+<li id="ref13">NVIDIA Corporation. NVIDIA TensorRT documentation [Internet]. Santa Clara (CA): NVIDIA; 2026 [cited 2026 Nov 16]. Available from: <a href="https://docs.nvidia.com/deeplearning/tensorrt/latest/">https://docs.nvidia.com/deeplearning/tensorrt/latest/</a></li>
+<li id="ref14">Microsoft. Graph optimizations in ONNX Runtime [Internet]. ONNX Runtime documentation; 2026 [cited 2026 Nov 16]. Available from: <a href="https://onnxruntime.ai/docs/performance/model-optimizations/graph-optimizations.html">https://onnxruntime.ai/docs/performance/model-optimizations/graph-optimizations.html</a></li>
+<li id="ref15">Microsoft. Quantize ONNX models [Internet]. ONNX Runtime documentation; 2026 [cited 2026 Nov 16]. Available from: <a href="https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html">https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html</a></li>
+<li id="ref16">The Linux Foundation. ONNX: Open Neural Network Exchange [Internet]. LF AI &amp; Data; 2026 [cited 2026 Nov 16]. Available from: <a href="https://onnx.ai/">https://onnx.ai/</a></li>
+<li id="ref17">The IREE Authors. IREE [Internet]. 2026 [cited 2026 Nov 16]. Available from: <a href="https://iree.dev/">https://iree.dev/</a></li>
+<li id="ref18">Jacob B, Kligys S, Chen B, Zhu M, Tang M, Howard A, et al. Quantization and training of neural networks for efficient integer-arithmetic-only inference. In: 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR); 2018 Jun 18–23; Salt Lake City, UT. Piscataway (NJ): IEEE; 2018. p. 2704–13. doi:10.1109/CVPR.2018.00286</li>
+<li id="ref19">Micikevicius P, Stosic D, Burgess N, Cornea M, Dubey P, Grisenthwaite R, et al. FP8 formats for deep learning [Preprint]. arXiv:2209.05433. 2022 [cited 2026 Nov 16]. Available from: <a href="https://arxiv.org/abs/2209.05433">https://arxiv.org/abs/2209.05433</a></li>
+<li id="ref20">Dao T, Fu DY, Ermon S, Rudra A, Ré C. FlashAttention: fast and memory-efficient exact attention with IO-awareness. In: Advances in Neural Information Processing Systems 35 (NeurIPS 2022). Red Hook (NY): Curran Associates; 2022. p. 16344–59.</li>
+<li id="ref21">Jia Z, Padon O, Thomas J, Warszawski T, Zaharia M, Aiken A. TASO: optimizing deep learning computation with automatic generation of graph substitutions. In: Proceedings of the 27th ACM Symposium on Operating Systems Principles (SOSP '19); 2019 Oct 27–30; Huntsville, ON. New York: ACM; 2019. p. 47–62. doi:10.1145/3341301.3359630</li>
+<li id="ref22">Ragan-Kelley J, Barnes C, Adams A, Paris S, Durand F, Amarasinghe S. Halide: a language and compiler for optimizing parallelism, locality, and recomputation in image processing pipelines. In: Proceedings of the 34th ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '13); 2013 Jun 16–19; Seattle, WA. New York: ACM; 2013. p. 519–30. doi:10.1145/2491956.2462176</li>
+<li id="ref23">Chen T, Zheng L, Yan E, Jiang Z, Moreau T, Ceze L, et al. Learning to optimize tensor programs. In: Advances in Neural Information Processing Systems 31 (NeurIPS 2018). Red Hook (NY): Curran Associates; 2018. p. 3389–400.</li>
+<li id="ref24">Zheng L, Jia C, Sun M, Wu Z, Yu CH, Haj-Ali A, et al. Ansor: generating high-performance tensor programs for deep learning. In: Proceedings of the 14th USENIX Symposium on Operating Systems Design and Implementation (OSDI 20); 2020 Nov 4–6. Berkeley (CA): USENIX Association; 2020. p. 863–79.</li>
+<li id="ref25">Shao J, Zhou X, Feng S, Hou B, Lai R, Jin H, et al. Tensor program optimization with probabilistic programs. In: Advances in Neural Information Processing Systems 35 (NeurIPS 2022). Red Hook (NY): Curran Associates; 2022.</li>
+<li id="ref26">Feng S, Hou B, Jin H, Lin W, Shao J, Lai R, et al. TensorIR: an abstraction for automatic tensorized program optimization. In: Proceedings of the 28th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 2 (ASPLOS 2023); 2023 Mar 25–29; Vancouver, BC. New York: ACM; 2023. p. 804–17. doi:10.1145/3575693.3576933</li>
+<li id="ref27">Lai R, Shao J, Feng S, Lyubomirsky SS, Hou B, Lin W, et al. Relax: composable abstractions for end-to-end dynamic machine learning. In: Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS '25). New York: ACM; 2025. Preprint available from: <a href="https://arxiv.org/abs/2311.02103">https://arxiv.org/abs/2311.02103</a></li>
+<li id="ref28">Jouppi NP, Young C, Patil N, Patterson D, Agrawal G, Bajwa R, et al. In-datacenter performance analysis of a tensor processing unit. In: Proceedings of the 44th Annual International Symposium on Computer Architecture (ISCA '17); 2017 Jun 24–28; Toronto, ON. New York: ACM; 2017. p. 1–12. doi:10.1145/3079856.3080246</li>
+<li id="ref29">NVIDIA Corporation. CUDA C++ programming guide: CUDA graphs [Internet]. Santa Clara (CA): NVIDIA; 2026 [cited 2026 Nov 16]. Available from: <a href="https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs">https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs</a></li>
+<li id="ref30">Rotem N, Fix J, Abdulrasool S, Catron G, Deng S, Dzhabarov R, et al. Glow: graph lowering compiler techniques for neural networks [Preprint]. arXiv:1805.00907. 2018 [cited 2026 Nov 16]. Available from: <a href="https://arxiv.org/abs/1805.00907">https://arxiv.org/abs/1805.00907</a></li>
+<li id="ref31">Vasilache N, Zinenko O, Theodoridis T, Goyal P, DeVito Z, Moses WS, et al. Tensor Comprehensions: framework-agnostic high-performance machine learning abstractions [Preprint]. arXiv:1802.04730. 2018 [cited 2026 Nov 16]. Available from: <a href="https://arxiv.org/abs/1802.04730">https://arxiv.org/abs/1802.04730</a></li>
+<li id="ref32">Intel Corporation. OpenVINO documentation [Internet]. Santa Clara (CA): Intel; 2026 [cited 2026 Nov 16]. Available from: <a href="https://docs.openvino.ai/">https://docs.openvino.ai/</a></li>
+<li id="ref33">Apache Software Foundation. Apache TVM documentation [Internet]. 2026 [cited 2026 Nov 16]. Available from: <a href="https://tvm.apache.org/docs/">https://tvm.apache.org/docs/</a></li>
+<li id="ref34">LLVM Project. 'linalg' dialect [Internet]. MLIR documentation; 2026 [cited 2026 Nov 16]. Available from: <a href="https://mlir.llvm.org/docs/Dialects/Linalg/">https://mlir.llvm.org/docs/Dialects/Linalg/</a></li>
+<li id="ref35">The JAX Authors. Ahead-of-time lowering and compilation [Internet]. JAX documentation; 2026 [cited 2026 Nov 16]. Available from: <a href="https://docs.jax.dev/en/latest/aot.html">https://docs.jax.dev/en/latest/aot.html</a></li>
+<li id="ref36">Micikevicius P, Narang S, Alben J, Diamos G, Elsen E, Garcia D, et al. Mixed precision training. In: 6th International Conference on Learning Representations (ICLR 2018); 2018 Apr 30–May 3; Vancouver, BC. Available from: <a href="https://arxiv.org/abs/1710.03740">https://arxiv.org/abs/1710.03740</a></li>
+<li id="ref37">PyTorch Foundation. torch.cond [Internet]. PyTorch documentation; 2026 [cited 2026 Nov 16]. Available from: <a href="https://docs.pytorch.org/docs/stable/generated/torch.cond.html">https://docs.pytorch.org/docs/stable/generated/torch.cond.html</a></li>
+</ol>
+
+</main>
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeToggle');
+  try{var saved=localStorage.getItem('theme'); if(saved) root.setAttribute('data-theme',saved);}catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme');
+    if(!cur){cur=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
+    var next=cur==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{localStorage.setItem('theme',next);}catch(e){}
+  });
+  function fmt(v){ if(!isFinite(v)) return '–'; var a=Math.abs(v); if(a>=1e12) return (v/1e12).toFixed(2)+' T'; if(a>=1e9) return (v/1e9).toFixed(2)+' G'; if(a>=1e6) return (v/1e6).toFixed(2)+' M'; return v.toFixed(2)+' '; }
+  function calc(){
+    var peak=parseFloat(document.getElementById('rc-peak').value)*1e12,
+        bw=parseFloat(document.getElementById('rc-bw').value)*1e12,
+        fl=parseFloat(document.getElementById('rc-flops').value),
+        by=parseFloat(document.getElementById('rc-bytes').value),
+        out=document.getElementById('rc-out');
+    if(!(peak>0&&bw>0&&fl>0&&by>0)){out.textContent='Enter positive numbers in every field.';return;}
+    var ai=fl/by, ridge=peak/bw, att=Math.min(peak,bw*ai), t=fl/att;
+    out.innerHTML='Arithmetic intensity <strong>'+ai.toFixed(2)+' FLOP/B</strong> · ridge point '+ridge.toFixed(1)+' FLOP/B · <strong>'+(ai<ridge?'memory-bound':'compute-bound')+'</strong><br>Attainable '+fmt(att)+'FLOP/s · lower-bound time '+(t*1e3).toFixed(3)+' ms';
+  }
+  ['rc-peak','rc-bw','rc-flops','rc-bytes'].forEach(function(id){document.getElementById(id).addEventListener('input',calc);});
+  calc();
+})();
+</script>
+</body>
+</html>

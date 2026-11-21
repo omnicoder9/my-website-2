@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Security and Best Practices</title>
+<meta name="description" content="A technical guide to secure Bash scripting: quoting, input validation, eval, command construction, temporary files, permissions, secrets, filenames, arrays, dependencies, signals, privilege, ShellCheck and POSIX portability, with exercises and Vancouver-style references.">
+<style>
+:root {
+  --bg: #fbfaf7; --surface: #ffffff; --text: #1d1f23; --muted: #5c6370; --border: #e3e1da;
+  --accent: #1f6feb; --code-bg: #f3f2ee; --code-text: #1d1f23;
+  --good: #1a7f37; --good-bg: #e9f6ec; --bad: #b42318; --bad-bg: #fdecea;
+  --warn: #9a6700; --warn-bg: #fff6dc; --note-bg: #eef4ff;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --serif: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --surface: #1c1f24; --text: #e6e6e3; --muted: #9aa1ac; --border: #2e3239;
+    --accent: #6ea8ff; --code-bg: #101215; --code-text: #e6e6e3;
+    --good: #4ac26b; --good-bg: #13261a; --bad: #ff7b72; --bad-bg: #2b1515;
+    --warn: #e3b341; --warn-bg: #2a2310; --note-bg: #16213a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --surface: #1c1f24; --text: #e6e6e3; --muted: #9aa1ac; --border: #2e3239;
+  --accent: #6ea8ff; --code-bg: #101215; --code-text: #e6e6e3;
+  --good: #4ac26b; --good-bg: #13261a; --bad: #ff7b72; --bad-bg: #2b1515;
+  --warn: #e3b341; --warn-bg: #2a2310; --note-bg: #16213a;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.65 var(--serif); }
+main { max-width: 780px; margin: 0 auto; padding: 32px 16px 80px; }
+h1, h2, h3, .kicker, .meta, nav, table, figcaption, .callout-title, summary, .refs { font-family: var(--sans); }
+h1 { font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1.15; margin: 0.2em 0 0.4em; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; line-height: 1.25; margin: 2.6em 0 0.6em; padding-top: 0.4em; border-top: 1px solid var(--border); letter-spacing: -0.01em; }
+h3 { font-size: 1.12rem; margin: 1.8em 0 0.5em; }
+a { color: var(--accent); text-underline-offset: 2px; }
+p, li { overflow-wrap: break-word; }
+.kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; color: var(--accent); font-weight: 600; margin: 0; }
+.lede { font-size: 1.2rem; color: var(--text); margin: 0 0 0.8em; }
+.meta { color: var(--muted); font-size: 0.85rem; }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+pre code { background: none; padding: 0; font-size: 0.84rem; overflow-wrap: normal; }
+.toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 22px; margin: 28px 0; font-size: 0.93rem; }
+.toc h2 { border: 0; margin: 0 0 6px; padding: 0; font-size: 1rem; }
+.toc ol { margin: 0; padding-left: 1.4em; columns: 2 260px; column-gap: 28px; }
+.toc li { margin: 2px 0; break-inside: avoid; }
+.toc code { font-size: 0.85em; }
+figure.code { margin: 1.2em 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+figure.code figcaption { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--muted); background: var(--surface); }
+figure.code .tag { font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 4px; }
+figure.good .tag { color: var(--good); background: var(--good-bg); }
+figure.bad .tag { color: var(--bad); background: var(--bad-bg); }
+figure.good { border-left: 4px solid var(--good); }
+figure.bad { border-left: 4px solid var(--bad); }
+figure.code pre { margin: 0; padding: 12px 14px; overflow-x: auto; color: var(--code-text); line-height: 1.5; }
+.copy { margin-left: auto; font: inherit; font-size: 0.75rem; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 5px; padding: 2px 9px; cursor: pointer; }
+.copy:hover { color: var(--text); border-color: var(--muted); }
+.callout { background: var(--note-bg); border-radius: 8px; padding: 4px 18px; margin: 1.4em 0; }
+.callout.warn { background: var(--warn-bg); }
+.callout-title { font-weight: 700; margin-bottom: 0; }
+.callout.warn .callout-title { color: var(--warn); }
+.table-wrap { overflow-x: auto; margin: 1.2em 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; line-height: 1.45; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+sup.cite { font-family: var(--sans); font-size: 0.68em; line-height: 0; white-space: nowrap; }
+sup.cite a { text-decoration: none; }
+.exercise { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 2px 20px 14px; margin: 1.6em 0; }
+.exercise h3 { margin-top: 1em; }
+details { margin-top: 0.8em; }
+summary { cursor: pointer; font-weight: 600; color: var(--accent); font-size: 0.95rem; }
+details[open] summary { margin-bottom: 0.6em; }
+ul.check { list-style: none; padding-left: 0; }
+ul.check li { padding-left: 1.7em; position: relative; margin: 6px 0; }
+ul.check li::before { content: "\2610"; position: absolute; left: 0; color: var(--muted); }
+.refs { font-size: 0.82rem; line-height: 1.5; padding-left: 2.2em; }
+.refs li { margin: 0 0 8px; }
+.refs li:target { background: var(--warn-bg); border-radius: 4px; }
+.refs a { overflow-wrap: anywhere; }
+.theme-toggle { position: absolute; top: 12px; right: 12px; font: 600 0.75rem var(--sans); background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; z-index: 5; }
+footer { margin-top: 3em; color: var(--muted); font: 0.8rem/1.5 var(--sans); }
+@media print {
+  .theme-toggle, .copy { display: none; }
+  details { display: block; } details > * { display: block; }
+  body { font-size: 11pt; background: #fff; color: #000; }
+  figure.code { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<button class="theme-toggle" type="button" id="theme">Theme</button>
+<main>
+<header class="hero">
+  <p class="kicker">Technical article · Shell scripting</p>
+  <h1>Bash Security and Best Practices</h1>
+  <p class="lede">A practical guide to writing shell scripts that survive hostile input, odd filenames, interrupted runs and shared machines. Each recommendation comes with tested code and numbered references to primary sources, and the article closes with exercises and worked solutions.</p>
+  <p class="meta">Targets GNU Bash 5.x (manual version 5.3) on Linux and other POSIX systems · Examples checked with Bash 5.2 and ShellCheck 0.11 · November 2026</p>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#intro">Why shell scripts are a security surface</a></li>
+    <li><a href="#quote">Quote variable expansions</a></li>
+    <li><a href="#validate">Validate external input</a></li>
+    <li><a href="#eval">Avoid unnecessary <code>eval</code></a></li>
+    <li><a href="#construct">Avoid unsafe command construction</a></li>
+    <li><a href="#dashdash">Use <code>--</code> to end option parsing</a></li>
+    <li><a href="#tmp">Avoid predictable temporary filenames</a></li>
+    <li><a href="#mktemp">Use <code>mktemp</code></a></li>
+    <li><a href="#umask">Set restrictive permissions with <code>umask</code></a></li>
+    <li><a href="#secrets">Protect credentials and secrets</a></li>
+    <li><a href="#filenames">Handle filenames with whitespace and special characters</a></li>
+    <li><a href="#ls">Avoid parsing <code>ls</code> output</a></li>
+    <li><a href="#arrays">Prefer arrays for command arguments</a></li>
+    <li><a href="#deps">Validate external commands and dependencies</a></li>
+    <li><a href="#signals">Handle signals and cleanup</a></li>
+    <li><a href="#privilege">Minimize privilege</a></li>
+    <li><a href="#shellcheck">Use ShellCheck</a></li>
+    <li><a href="#posix">Follow POSIX portability requirements when needed</a></li>
+    <li><a href="#template">Putting it together: a hardened script template</a></li>
+    <li><a href="#exercises">Exercises with solutions</a></li>
+    <li><a href="#checklist">Review checklist</a></li>
+    <li><a href="#references">References</a></li>
+  </ol>
+</nav>
+
+<section id="intro">
+<h2>1. Why shell scripts are a security surface</h2>
+<p>Shell scripts glue together programs, files and user input, and they often run with more privilege than the people who feed them data: from cron, CI pipelines, web hooks, installers and <code>sudo</code> rules. The shell's own design makes mistakes easy. Unquoted expansions are split into words and treated as glob patterns<sup class="cite">[<a href="#ref-1">1</a>,<a href="#ref-2">2</a>]</sup>, strings can be re-parsed as code by <code>eval</code><sup class="cite">[<a href="#ref-3">3</a>]</sup>, and any argument starting with a dash may be read as an option<sup class="cite">[<a href="#ref-4">4</a>]</sup>. These behaviours are the shell-level forms of well-catalogued weaknesses: OS command injection (CWE-78)<sup class="cite">[<a href="#ref-5">5</a>]</sup>, argument injection (CWE-88)<sup class="cite">[<a href="#ref-6">6</a>]</sup>, eval injection (CWE-95)<sup class="cite">[<a href="#ref-7">7</a>]</sup>, and the symlink and race-condition attacks on temporary files (CWE-59, CWE-367)<sup class="cite">[<a href="#ref-8">8</a>,<a href="#ref-9">9</a>]</sup>.</p>
+<p>Bash itself has also carried serious flaws. The 2014 "Shellshock" bug (CVE-2014-6271) let attackers run commands through crafted environment variables that Bash imported as function definitions<sup class="cite">[<a href="#ref-10">10</a>]</sup>. Keeping Bash patched is the first line of defence. The rest of this article covers the second line, which is writing scripts that do not open holes of their own.</p>
+<p>Two habits run through every section below. Treat every value that came from outside the script (arguments, environment variables, file contents, filenames, command output, network data) as untrusted until it has been checked, which is the principle behind OWASP's input-validation guidance<sup class="cite">[<a href="#ref-11">11</a>]</sup>. And give each process only the access it needs, the "least privilege" principle described by Saltzer and Schroeder<sup class="cite">[<a href="#ref-12">12</a>]</sup>.</p>
+
+<div class="callout">
+<p class="callout-title">A note on "strict mode"</p>
+<p>Many scripts start with <code>set -euo pipefail</code>. The options are useful: <code>-u</code> treats expanding an unset variable as an error, and <code>pipefail</code> makes a pipeline fail if any stage fails rather than only the last<sup class="cite">[<a href="#ref-13">13</a>]</sup>. But <code>-e</code> has many documented exceptions. It does not fire inside an <code>if</code> or <code>while</code> condition, in any command of an <code>&amp;&amp;</code> or <code>||</code> list except the last, or for a command negated with <code>!</code><sup class="cite">[<a href="#ref-13">13</a>]</sup>. Greg Wooledge's BashFAQ explains why relying on it for correctness leads to surprises<sup class="cite">[<a href="#ref-14">14</a>]</sup>. Use these options as a safety net, and still check the exit status of commands that matter.</p>
+</div>
+</section>
+
+<section id="quote">
+<h2>2. Quote variable expansions</h2>
+<p>When Bash expands <code>$var</code>, <code>$(cmd)</code> or <code>$((expr))</code> outside double quotes, it scans the result for word splitting on the characters in <code>IFS</code><sup class="cite">[<a href="#ref-1">1</a>]</sup>. Each resulting word that contains <code>*</code>, <code>?</code> or <code>[</code> is then treated as a pattern and replaced with a sorted list of matching filenames<sup class="cite">[<a href="#ref-2">2</a>]</sup>. Splitting and globbing happen after the other expansions, in a fixed order<sup class="cite">[<a href="#ref-15">15</a>]</sup>. Inside double quotes, every character keeps its literal value except <code>$</code>, <code>`</code>, <code>\</code> and, when history expansion is on, <code>!</code><sup class="cite">[<a href="#ref-16">16</a>]</sup>. So double quotes keep the expansion working while turning off splitting and globbing.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> Unquoted: splits and globs<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>file='My Report *.txt'
+touch -- "$file"
+rm $file        # becomes: rm My Report &lt;every .txt file in the directory&gt;</code></pre></figure>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Quoted: one argument, taken literally<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>file='My Report *.txt'
+touch -- "$file"
+rm -- "$file"   # removes exactly one file</code></pre></figure>
+<p>The same rule applies to command substitution and to lists. Use <code>"$@"</code> to pass all positional parameters through unchanged, and <code>"${arr[@]}"</code> for arrays. Both expand each element to a separate word, and they are the documented exceptions to the "quotes make one word" rule<sup class="cite">[<a href="#ref-15">15</a>,<a href="#ref-17">17</a>]</sup>. ShellCheck reports unquoted expansions as SC2086 and unquoted array expansions as SC2068<sup class="cite">[<a href="#ref-18">18</a>,<a href="#ref-19">19</a>]</sup>.</p>
+<p>There are a few places where quotes are optional because no splitting happens: the right side of a plain assignment (<code>a=$b</code>), and the word after <code>case</code>. Inside <code>[[ … ]]</code> the left side is not split either, but on the right of <code>==</code> or <code>=~</code> an unquoted expansion is treated as a pattern, while a quoted part is matched literally<sup class="cite">[<a href="#ref-20">20</a>]</sup>. When in doubt, quote. The Wooledge wiki's page on quoting is a good general reference<sup class="cite">[<a href="#ref-21">21</a>]</sup>.</p>
+<p>Quoting also protects against a classic catastrophe: a variable that is empty when you expected a path. <code>rm -rf "$dir/"*</code> with an empty <code>$dir</code> becomes <code>rm -rf /*</code>. The <code>${var:?message}</code> form makes a non-interactive shell print the message and exit when the variable is unset or empty<sup class="cite">[<a href="#ref-22">22</a>]</sup>, which is what ShellCheck suggests in SC2115<sup class="cite">[<a href="#ref-23">23</a>]</sup>.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Refuse to run with an empty path<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>rm -rf -- "${build_dir:?build_dir is not set}"/*</code></pre></figure>
+</section>
+
+<section id="validate">
+<h2>3. Validate external input</h2>
+<p>Validate input against what you expect (an allow-list) rather than trying to strip out what you fear (a deny-list). OWASP's guidance is to define what the application accepts and reject everything else, instead of trying to recognise every malicious string<sup class="cite">[<a href="#ref-11">11</a>]</sup>. In Bash the tools are <code>case</code> patterns and the <code>[[ string =~ regex ]]</code> operator<sup class="cite">[<a href="#ref-20">20</a>]</sup>. Anchor the regex with <code>^</code> and <code>$</code> so the whole value must match, and keep the regex in a variable so that its backslashes and brackets are not mangled by quoting.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> validate.sh: allow-list validators<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -u
+
+is_username() {
+  local re='^[a-z_][a-z0-9_-]{0,31}$'
+  [[ $1 =~ $re ]]
+}
+
+is_port() {
+  [[ $1 =~ ^[0-9]{1,5}$ ]] || return 1
+  (( 10#$1 &gt;= 1 &amp;&amp; 10#$1 &lt;= 65535 ))
+}
+
+is_simple_filename() {
+  case $1 in
+    ''|.|..|*/*|-*) return 1 ;;   # empty, dot entries, slashes, leading dash
+    *[!A-Za-z0-9._-]*) return 1 ;; # anything outside the allowed set
+    *) return 0 ;;
+  esac
+}
+
+for v in alice 'bob; rm -rf ~' 8080 99999 report.txt ../etc/passwd; do
+  printf '%-16s user:%s port:%s file:%s\n' "$v" \
+    "$(is_username "$v" &amp;&amp; echo ok || echo no)" \
+    "$(is_port "$v" &amp;&amp; echo ok || echo no)" \
+    "$(is_simple_filename "$v" &amp;&amp; echo ok || echo no)"
+done</code></pre></figure>
+<div class="callout warn">
+<p class="callout-title">Arithmetic is code too</p>
+<p>In an arithmetic context, Bash evaluates the <em>value</em> of a variable as an arithmetic expression<sup class="cite">[<a href="#ref-24">24</a>]</sup>, and array subscripts inside that expression are expanded. So an unvalidated value can run commands when it is used in <code>(( … ))</code>, <code>$(( … ))</code>, <code>let</code>, or the numeric operators of <code>[[ … ]]</code> such as <code>-eq</code> and <code>-gt</code>. The following prints <code>PWNED</code> in Bash 5.2:</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> Arithmetic injection<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>x='a[$(echo PWNED &gt;&amp;2)]'
+(( x &gt; 0 ))          # runs the command substitution
+[[ $x -gt 0 ]]       # so does this</code></pre></figure>
+<p>This is why <code>is_port</code> above checks the value with a regex before doing any arithmetic, and uses the <code>10#</code> prefix so a leading zero is not read as octal.</p>
+</div>
+<p>Validate as early as possible, and also normalise: decide whether a path must be absolute, resolve it with <code>realpath</code> if you need to compare it against an allowed directory, and reject values that contain newlines when the value will be written to a line-oriented file such as a log or config.</p>
+</section>
+
+<section id="eval">
+<h2>4. Avoid unnecessary <code>eval</code></h2>
+<p><code>eval</code> joins its arguments into a single string and runs that string as a shell command<sup class="cite">[<a href="#ref-3">3</a>]</sup>. Any data in that string is parsed again as code, with quotes, semicolons, redirections and substitutions all active. This is CWE-95, eval injection<sup class="cite">[<a href="#ref-7">7</a>]</sup>. The BashFAQ entry on <code>eval</code> warns that it is a common source of bugs and security holes and that most uses have safer replacements<sup class="cite">[<a href="#ref-25">25</a>]</sup>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> eval re-parses data as code<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>read -r -p 'Variable to show: ' name
+eval "echo \$$name"     # input:  x; rm -rf ~   runs rm</code></pre></figure>
+<p>Most reasons people reach for <code>eval</code> have a direct, safe alternative in modern Bash:</p>
+<table>
+<thead><tr><th>Goal</th><th>Instead of <code>eval</code></th></tr></thead>
+<tbody>
+<tr><td>Run a command stored in a variable</td><td>Store it in an array and run <code>"${cmd[@]}"</code> (<a href="#arrays">section 13</a>)<sup class="cite">[<a href="#ref-26">26</a>]</sup></td></tr>
+<tr><td>Read a variable whose name is in another variable</td><td>Indirect expansion <code>${!name}</code>, or a nameref <code>declare -n ref=$name</code><sup class="cite">[<a href="#ref-22">22</a>,<a href="#ref-27">27</a>]</sup></td></tr>
+<tr><td>Assign to a variable whose name is dynamic</td><td><code>printf -v "$name" '%s' "$value"</code><sup class="cite">[<a href="#ref-27">27</a>]</sup></td></tr>
+<tr><td>Map keys to values</td><td>An associative array: <code>declare -A conf; conf[$key]=$value</code><sup class="cite">[<a href="#ref-17">17</a>]</sup></td></tr>
+<tr><td>Build a string that a shell will parse later</td><td>Quote each piece with <code>printf '%q'</code><sup class="cite">[<a href="#ref-27">27</a>]</sup></td></tr>
+</tbody>
+</table>
+<p>Even with indirection, check the name first. <code>${!name}</code> and <code>printf -v</code> accept array subscripts such as <code>a[$(cmd)]</code>, which brings back the arithmetic-expansion problem from section 3.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Safe dynamic assignment<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>set_var() {
+  local re='^[A-Za-z_][A-Za-z0-9_]*$'
+  [[ $1 =~ $re ]] || { printf 'bad variable name: %q\n' "$1" &gt;&amp;2; return 1; }
+  printf -v "$1" '%s' "$2"
+}
+
+greeting=
+set_var greeting 'hello; world'
+printf '%s\n' "$greeting"            # hello; world  (never executed)
+# shellcheck disable=SC2016  # the $(id) is a literal test string
+set_var 'x[$(id)]' oops || true      # rejected</code></pre></figure>
+<p>If <code>eval</code> is truly needed, for example to evaluate output that a trusted tool printed in shell syntax, make sure every piece of data inside the string was produced by <code>printf '%q'</code> or <code>${var@Q}</code>, and the rest is a constant you wrote. ShellCheck flags the common anti-pattern of flattening an array into <code>eval</code> as SC2294<sup class="cite">[<a href="#ref-28">28</a>]</sup>.</p>
+</section>
+
+<section id="construct">
+<h2>5. Avoid unsafe command construction</h2>
+<p>Command injection happens whenever untrusted data is pasted into a string that a shell will parse. OWASP's first recommendation is to avoid calling out to a command interpreter with built strings at all, and otherwise to keep data separate from the command structure and validate it<sup class="cite">[<a href="#ref-29">29</a>]</sup>. In shell terms, that means passing data as separate arguments, never as part of the command text.</p>
+<p>The common places strings get re-parsed are <code>sh -c</code> or <code>bash -c</code>, <code>eval</code>, <code>ssh</code> remote commands, <code>su -c</code>, <code>xargs</code> without <code>-0</code>, and tools like <code>find -exec sh -c</code>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> Data inside the command string<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>pattern=$1 file=$2
+sh -c "grep $pattern $file"            # pattern  '.; touch /tmp/owned'  runs touch
+find . -name '*.log' -exec sh -c "gzip {}" \;   # a filename becomes code</code></pre></figure>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Data as separate arguments<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>pattern=$1 file=$2
+grep -e "$pattern" -- "$file"          # no shell needed at all
+
+# If you need a shell, pass data as positional parameters:
+find . -name '*.log' -exec sh -c 'for f do gzip -- "$f"; done' sh {} +</code></pre></figure>
+<p>In the second example the script given to <code>sh -c</code> is a fixed string in single quotes. The filenames arrive as <code>$1</code>, <code>$2</code>, … (the first word after the script, <code>sh</code>, becomes <code>$0</code>), so they are never parsed. The <code>{} +</code> form passes many names per invocation<sup class="cite">[<a href="#ref-30">30</a>]</sup>.</p>
+<h3>Remote commands over SSH</h3>
+<p><code>ssh</code> does not pass an argument vector to the remote side. It appends any extra arguments to the command, separated by spaces, and sends that single string to the server, where the remote user's shell parses it<sup class="cite">[<a href="#ref-31">31</a>]</sup>. Quote each piece for the remote shell with <code>printf '%q'</code> (or <code>${var@Q}</code>), which produces output that can be reused as shell input<sup class="cite">[<a href="#ref-27">27</a>]</sup>:</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Quoting for a remote shell<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>dir='/srv/data/My Files; rm -rf ~'
+printf -v qdir '%q' "$dir"
+# shellcheck disable=SC2029  # expanding on the client side is the point
+ssh backup@host "ls -l -- $qdir"</code></pre></figure>
+<p><code>%q</code> quotes for Bash. If the remote login shell is not Bash-compatible, prefer sending data on standard input or pass a fixed script with <code>ssh host 'sh -s' &lt; script.sh</code> and validated arguments.</p>
+<h3>xargs</h3>
+<p>Without <code>-0</code>, <code>xargs</code> splits on blanks and newlines and interprets quotes and backslashes in its input, so filenames with spaces or quotes break or are misread. Pair <code>find -print0</code> with <code>xargs -0</code>, both of which are now in POSIX.1-2024<sup class="cite">[<a href="#ref-32">32</a>,<a href="#ref-33">33</a>]</sup>.</p>
+</section>
+
+<section id="dashdash">
+<h2>6. Use <code>--</code> to terminate option parsing where supported</h2>
+<p>If a filename or user-supplied value starts with <code>-</code>, many commands read it as an option. A file named <code>-rf</code> in the current directory turns <code>rm *</code> into <code>rm -rf …</code>. This is argument injection, CWE-88<sup class="cite">[<a href="#ref-6">6</a>]</sup>. POSIX Utility Syntax Guideline 10 says the first <code>--</code> argument that is not an option-argument should be accepted as a delimiter marking the end of options<sup class="cite">[<a href="#ref-4">4</a>]</sup>. GNU tools follow it: later arguments are treated as operands even if they begin with <code>-</code><sup class="cite">[<a href="#ref-34">34</a>]</sup>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> A filename is read as an option<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>touch -- -rf important.txt
+rm *            # expands to: rm -rf important.txt</code></pre></figure>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> End options first, or anchor globs<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>pattern=${1:?pattern} file=${2:?file}
+rm -- *         # every name after -- is a file
+rm ./*          # or make every name start with ./
+grep -e "$pattern" -- "$file"     # -e protects a pattern that starts with -</code></pre></figure>
+<p>ShellCheck's SC2035 recommends <code>./*glob*</code> or <code>-- *glob*</code> for exactly this reason<sup class="cite">[<a href="#ref-35">35</a>]</sup>.</p>
+<p>Not every command supports <code>--</code>. The Bash <code>echo</code> builtin prints it literally (<code>echo -- x</code> prints <code>-- x</code>), and <code>echo "$var"</code> prints nothing at all when <code>$var</code> is <code>-n</code>. The POSIX specification notes that <code>echo</code> cannot be used portably for arbitrary data and encourages new applications to use <code>printf</code> instead<sup class="cite">[<a href="#ref-36">36</a>]</sup>. Use <code>printf '%s\n' "$var"</code>: the format string is fixed and the data is an argument, so it cannot be read as an option or a format. For commands that don't accept <code>--</code>, anchor the path with <code>./</code> or make it absolute.</p>
+</section>
+
+<section id="tmp">
+<h2>7. Avoid predictable temporary filenames</h2>
+<p>Shared directories like <code>/tmp</code> are writable by every user. If a script writes to a name another user can guess, such as <code>/tmp/myapp.log</code> or <code>/tmp/myapp.$$</code> (the PID is easy to guess or brute-force), an attacker can create that name first. A symbolic link there can redirect the script's write to any file the script's user can modify, which is how a root-run script ends up overwriting <code>/etc/shadow</code>. MITRE catalogues the weaknesses involved as CWE-59, improper link resolution before file access, and CWE-367, time-of-check time-of-use race condition<sup class="cite">[<a href="#ref-8">8</a>,<a href="#ref-9">9</a>]</sup>. BashFAQ 62 covers the shell side of the problem in detail<sup class="cite">[<a href="#ref-37">37</a>]</sup>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> Predictable and racy<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>tmp=/tmp/report.$$
+[ -e "$tmp" ] &amp;&amp; rm -f "$tmp"      # check, then use: a race window
+sort data.txt &gt; "$tmp"               # follows a planted symlink</code></pre></figure>
+<p>Checking for the file first does not help, because the attacker can create it between the check and the write (a time-of-check to time-of-use race<sup class="cite">[<a href="#ref-9">9</a>]</sup>). The fix is to create the file atomically, with a name nobody can predict, failing if it already exists. That is exactly what <code>mktemp</code> does.</p>
+<p>If you must create a file at a fixed path, Bash's <code>noclobber</code> option (<code>set -C</code>) makes <code>&gt;</code> fail when the target exists as a regular file<sup class="cite">[<a href="#ref-13">13</a>,<a href="#ref-38">38</a>]</sup>. That gives an atomic "create only if absent" for lock files, but it is no replacement for unpredictable names in shared directories.</p>
+</section>
+
+<section id="mktemp">
+<h2>8. Use <code>mktemp</code></h2>
+<p><code>mktemp</code> creates a file (or, with <code>-d</code>, a directory) with a unique random name built from a template ending in <code>XXX…</code>, and prints the name<sup class="cite">[<a href="#ref-39">39</a>]</sup>. GNU <code>mktemp</code> creates files with <code>u+rw</code> and directories with <code>u+rwx</code>, minus umask restrictions, so the result is private to the owner<sup class="cite">[<a href="#ref-39">39</a>]</sup>. The underlying C functions <code>mkstemp</code> and <code>mkdtemp</code>, which POSIX specifies, likewise create the file exclusively (as if with <code>O_EXCL</code>) with owner read and write permission, and the directory with owner-only access<sup class="cite">[<a href="#ref-40">40</a>]</sup>. <code>mktemp</code> as a command is not in POSIX, but it is available on Linux, the BSDs and macOS.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Private temporary directory with automatic cleanup<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/report.XXXXXXXXXX") || exit 1
+trap 'rm -rf -- "$tmpdir"' EXIT
+
+sort -- "${1:?usage: $0 FILE}" &gt; "$tmpdir/sorted"
+uniq -c -- "$tmpdir/sorted"</code></pre></figure>
+<p>Some practical points:</p>
+<ul>
+<li>Prefer one private directory from <code>mktemp -d</code> over many temporary files. Everything inside it is safe to name freely, and one <code>rm -rf</code> removes it all.</li>
+<li>Respect <code>TMPDIR</code>. GNU <code>mktemp</code> uses it with <code>-t</code> or <code>-p</code>/<code>--tmpdir</code><sup class="cite">[<a href="#ref-39">39</a>]</sup>; the explicit <code>"${TMPDIR:-/tmp}/name.XXXXXXXXXX"</code> template above works on GNU and BSD alike.</li>
+<li>Use at least six <code>X</code>s, more for long-lived files. The template's randomness is the only thing protecting the name.</li>
+<li>Always check that <code>mktemp</code> succeeded. If it fails and you carry on with an empty variable, <code>"$tmpdir/sorted"</code> becomes <code>/sorted</code>.</li>
+<li>Register cleanup immediately after creation (see <a href="#signals">section 15</a>).</li>
+</ul>
+</section>
+
+<section id="umask">
+<h2>9. Set restrictive file permissions (<code>umask</code>)</h2>
+<p>The file mode creation mask, or umask, removes permission bits from every file and directory a process creates<sup class="cite">[<a href="#ref-41">41</a>]</sup>. A common default, <code>022</code>, makes new files world-readable. Setting the umask is supported both as a Bash builtin<sup class="cite">[<a href="#ref-3">3</a>]</sup> and as a POSIX utility<sup class="cite">[<a href="#ref-42">42</a>]</sup>. Creating a file with the default umask and tightening it with <code>chmod</code> afterwards leaves a window in which other users can open it, and once they hold an open descriptor, a later <code>chmod</code> does not take it back. CWE-732 and CWE-276 describe the result of getting this wrong<sup class="cite">[<a href="#ref-43">43</a>]</sup>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> World-readable for a moment, or forever<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>pg_dump mydb &gt; /backups/mydb.sql     # created 0644 under umask 022
+chmod 600 /backups/mydb.sql          # too late</code></pre></figure>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Restrict before creating<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code># For the whole script: files 0600, directories 0700
+umask 077
+
+# Or only for one block, in a subshell so the rest of the script is unaffected
+(
+  umask 077
+  pg_dump mydb &gt; /backups/mydb.sql
+)
+stat -c '%a %n' /backups/mydb.sql    # 600 /backups/mydb.sql  (GNU stat)</code></pre></figure>
+<p>The umask only affects newly created files. Overwriting an existing file with <code>&gt;</code> keeps its old permissions, so for sensitive output write to a fresh file in a private directory and <code>mv</code> it into place. A rename within one filesystem replaces the target atomically, and readers never see a half-written file.</p>
+</section>
+
+<section id="secrets">
+<h2>10. Protect credentials and secrets</h2>
+<p>Secrets leak from shell scripts in a handful of predictable ways. CWE-798 covers hard-coded credentials and CWE-214 covers secrets visible in a process's invocation<sup class="cite">[<a href="#ref-44">44</a>,<a href="#ref-45">45</a>]</sup>. OWASP's Secrets Management Cheat Sheet gives the broader organisational guidance<sup class="cite">[<a href="#ref-46">46</a>]</sup>.</p>
+<ul>
+<li><strong>Command-line arguments are public.</strong> On Linux, <code>/proc/[pid]/cmdline</code> holds the complete command line of a process<sup class="cite">[<a href="#ref-47">47</a>]</sup>. Unless <code>/proc</code> is mounted with the <code>hidepid</code> option, every user may access every process's <code>/proc/[pid]</code> directory<sup class="cite">[<a href="#ref-48">48</a>]</sup>, which is how <code>ps</code> shows other users' commands. Never pass a password as an argument to an external program.</li>
+<li><strong>The environment is less exposed but still inherited.</strong> <code>/proc/[pid]/environ</code> is protected by a ptrace access check, so normally only the same user or root can read it<sup class="cite">[<a href="#ref-49">49</a>]</sup>. But every child process inherits exported variables, and many tools log or dump their environment on errors. Don't <code>export</code> a secret unless the specific child needs it, and pass it only to that command: <code>PGPASSWORD=$pw psql …</code>.</li>
+<li><strong>Tracing prints everything.</strong> <code>set -x</code> prints each command and its arguments after expansion<sup class="cite">[<a href="#ref-13">13</a>]</sup>, secrets included, often into CI logs. Turn it off around sensitive code.</li>
+<li><strong>Source code and history.</strong> Hard-coded tokens end up in version control and backups. Load them at run time from a file with mode 0600, a secrets manager, or an injected file such as a CI secret.</li>
+</ul>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Reading and passing a secret safely<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+token_file=${TOKEN_FILE:-$HOME/.config/myapp/token}
+
+# Refuse a secret file that others can read (GNU stat)
+perms=$(stat -c '%a' -- "$token_file")
+if [[ $perms != 600 &amp;&amp; $perms != 400 ]]; then
+  printf 'refusing: %s has mode %s, expected 600\n' "$token_file" "$perms" &gt;&amp;2
+  exit 1
+fi
+
+IFS= read -r token &lt; "$token_file"
+
+# Pass the header to curl on stdin via a config file ("-K -").
+# printf is a builtin, so the token never appears in any process's argv.
+printf 'header = "Authorization: Bearer %s"\n' "$token" |
+  curl --fail --silent --show-error -K - https://api.example.com/v1/me
+
+unset -v token</code></pre></figure>
+<p>The final pipeline works because <code>curl -K</code> reads options from a config file, and <code>-</code> means standard input<sup class="cite">[<a href="#ref-50">50</a>]</sup>. The general pattern is: secrets travel through files with tight permissions, standard input, or a dedicated file descriptor, never through argv. To prompt for a secret interactively, use <code>read -rs</code>, where <code>-s</code> turns off echo<sup class="cite">[<a href="#ref-27">27</a>]</sup>.</p>
+</section>
+
+<section id="filenames">
+<h2>11. Handle filenames containing whitespace and special characters</h2>
+<p>On POSIX systems, a filename may contain any byte except <code>/</code> and NUL. That includes spaces, tabs, newlines, glob characters, quotes, leading dashes and invalid UTF-8. David A. Wheeler's essay on Unix filenames documents how much breakage this causes, and why scripts must cope with it<sup class="cite">[<a href="#ref-51">51</a>]</sup>. Tools like <code>find</code> separate names with newlines by default, which cannot represent a name containing a newline. <code>find -print0</code> uses NUL instead, the one byte that cannot appear in a name<sup class="cite">[<a href="#ref-30">30</a>]</sup>.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Robust loop over find results<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+count=0
+while IFS= read -r -d '' f; do
+  printf 'Processing %q\n' "$f"   # %q shows hidden characters safely
+  count=$((count + 1))
+done &lt; &lt;(find . -type f -name '*.txt' -print0)
+printf '%d files\n' "$count"</code></pre></figure>
+<p>Each part matters. <code>IFS=</code> stops <code>read</code> stripping leading and trailing whitespace. <code>-r</code> stops it treating backslashes as escapes<sup class="cite">[<a href="#ref-27">27</a>]</sup>, the problem ShellCheck reports as SC2162<sup class="cite">[<a href="#ref-52">52</a>]</sup>. <code>-d ''</code> makes NUL the delimiter. And process substitution <code>&lt; &lt;(…)</code> keeps the loop in the current shell, so <code>count</code> survives after it, which a pipeline into <code>while</code> would not. BashFAQ 20 discusses these choices in depth<sup class="cite">[<a href="#ref-53">53</a>]</sup>.</p>
+<p>To collect names into an array instead, use <code>mapfile -d '' -t files &lt; &lt;(find … -print0)</code> (Bash 4.4 and later). For files in a single directory, a glob is simpler and fully safe:</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Globs are safe; enable nullglob for the empty case<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>shopt -s nullglob
+files=(./*.txt)
+if (( ${#files[@]} == 0 )); then
+  echo 'no .txt files' &gt;&amp;2
+  exit 0
+fi
+for f in "${files[@]}"; do
+  wc -l -- "$f"
+done</code></pre></figure>
+<p>Without <code>nullglob</code>, a pattern that matches nothing is left unchanged, so the loop would run once with the literal string <code>./*.txt</code>. With <code>nullglob</code> the word is removed<sup class="cite">[<a href="#ref-2">2</a>]</sup>. Print names you don't control with <code>printf '%q'</code> or <code>${f@Q}</code>, so that a name containing terminal escape sequences cannot rewrite your screen or your logs.</p>
+</section>
+
+<section id="ls">
+<h2>12. Avoid parsing <code>ls</code> output</h2>
+<p><code>ls</code> is designed for people, not programs. Its output is newline-separated, may replace unprintable characters with <code>?</code>, and its format varies between systems and locales. Parsing it breaks on the filenames described in section 11<sup class="cite">[<a href="#ref-54">54</a>]</sup>. It is pitfall number one on the Wooledge BashPitfalls page<sup class="cite">[<a href="#ref-55">55</a>]</sup>, and ShellCheck flags it as SC2045 (iterating over <code>ls</code>) and SC2012 (use <code>find</code> instead of <code>ls</code>)<sup class="cite">[<a href="#ref-56">56</a>,<a href="#ref-57">57</a>]</sup>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> Word splitting plus globbing on ls output<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>for f in $(ls); do      # 'a b' becomes two words; a file named * expands
+  echo "$f"
+done</code></pre></figure>
+<p>In a test directory holding four files named <code>a b</code>, <code>-dash</code>, <code>*</code> and one containing a newline, this loop ran eleven times, because the <code>*</code> name was expanded to the contents of the current directory. Use the shell's own tools instead:</p>
+<table>
+<thead><tr><th>Want</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>Files in a directory</td><td><code>for f in ./*</code> (with <code>nullglob</code>)</td></tr>
+<tr><td>Recursive listing</td><td><code>find … -print0</code> with <code>read -d ''</code>, or <code>shopt -s globstar; for f in ./**</code></td></tr>
+<tr><td>Size, owner, mtime</td><td><code>stat</code> (format flags differ between GNU and BSD) or <code>find -printf</code> (GNU)</td></tr>
+<tr><td>Newest file</td><td>Loop with <code>[[ $f -nt $newest ]]</code>, or GNU <code>find -printf '%T@ %p\0'</code> and sort with <code>sort -z</code></td></tr>
+<tr><td>Is the directory empty?</td><td><code>shopt -s nullglob dotglob; files=(dir/*); (( ${#files[@]} == 0 ))</code></td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="arrays">
+<h2>13. Prefer arrays for command arguments</h2>
+<p>A string variable cannot hold a list of arguments safely. If you store <code>opts="--name 'My File'"</code> and run <code>cmd $opts</code>, the quotes are not syntax any more. They are ordinary characters, and the value is split on spaces into <code>--name</code>, <code>'My</code> and <code>File'</code>. BashFAQ 50 explains this in detail and recommends arrays or functions<sup class="cite">[<a href="#ref-26">26</a>]</sup>. An array keeps each argument separate, and <code>"${arr[@]}"</code> expands to exactly those words<sup class="cite">[<a href="#ref-17">17</a>]</sup>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> Arguments in a string<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>opts="--exclude '*.tmp' --exclude 'cache dir'"
+rsync -a $opts src/ dest/        # rsync sees: '*.tmp'  'cache  dir'  (with quotes)</code></pre></figure>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Arguments in an array, built conditionally<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+src=${1:?usage: $0 SRC DEST [--dry-run]}
+dest=${2:?usage: $0 SRC DEST [--dry-run]}
+
+args=(-a --delete --exclude '*.tmp' --exclude 'cache dir')
+[[ ${3:-} == --dry-run ]] &amp;&amp; args+=(--dry-run)
+[[ -n ${VERBOSE:-} ]]    &amp;&amp; args+=(-v)
+
+printf 'Running: rsync'; printf ' %q' "${args[@]}" "$src/" "$dest/"; printf '\n'
+rsync "${args[@]}" -- "$src/" "$dest/"</code></pre></figure>
+<p>The <code>printf ' %q'</code> line shows the exact command in a form you could paste back into a shell, which is far more honest than echoing a string. In POSIX <code>sh</code>, which has no arrays, the positional parameters are the one list you have: build them with <code>set -- "$@" --dry-run</code> and run <code>cmd "$@"</code> (see <a href="#posix">section 18</a>).</p>
+</section>
+
+<section id="deps">
+<h2>14. Validate external commands and dependencies</h2>
+<p>A script depends on every program it calls, and on the <code>PATH</code> that finds them. If a script that runs with privilege searches a directory an attacker can write, the attacker can plant a program named <code>ls</code> or <code>tar</code> there. This is CWE-426, untrusted search path<sup class="cite">[<a href="#ref-58">58</a>]</sup>. Defend in three ways:</p>
+<ol>
+<li><strong>Set <code>PATH</code> explicitly</strong> at the top of scripts that run as another user or from cron, using only root-owned system directories. Never include <code>.</code> or an empty entry, which also means the current directory.</li>
+<li><strong>Check dependencies up front</strong> with <code>command -v</code>, which POSIX specifies and which Bash implements as a builtin<sup class="cite">[<a href="#ref-27">27</a>,<a href="#ref-59">59</a>]</sup>. Unlike <code>which</code>, it is standard and reports functions, builtins and aliases correctly. Fail with a clear message before doing any work.</li>
+<li><strong>Control the environment</strong>. In non-interactive mode, Bash reads the file named in <code>BASH_ENV</code> before running a script<sup class="cite">[<a href="#ref-60">60</a>]</sup>, and Bash can import functions from the environment, the mechanism abused by Shellshock<sup class="cite">[<a href="#ref-10">10</a>]</sup>. For privileged helpers, start from a clean environment: <code>env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin /path/to/helper</code>.</li>
+</ol>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Dependency check at start-up<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+PATH=/usr/local/bin:/usr/bin:/bin
+export PATH
+
+die() { printf '%s: %s\n' "${0##*/}" "$*" &gt;&amp;2; exit 1; }
+
+require() {
+  local c
+  for c in "$@"; do
+    command -v -- "$c" &gt;/dev/null 2&gt;&amp;1 || die "missing required command: $c"
+  done
+}
+
+require jq curl sha256sum
+
+# Check versions when a feature matters
+(( BASH_VERSINFO[0] &gt; 4 || (BASH_VERSINFO[0] == 4 &amp;&amp; BASH_VERSINFO[1] &gt;= 4) )) ||
+  die "bash 4.4 or newer required (found $BASH_VERSION)"</code></pre></figure>
+<p>Validate the things you download, too. Check a downloaded file's checksum or signature before you execute or install it, and avoid piping a URL straight into a shell.</p>
+</section>
+
+<section id="signals">
+<h2>15. Handle signals and cleanup</h2>
+<p>Scripts get interrupted by Ctrl-C (<code>SIGINT</code>), by <code>kill</code> (<code>SIGTERM</code>), by a closed terminal (<code>SIGHUP</code>), or by an error under <code>set -e</code>. Without cleanup they leave behind temporary files that may hold sensitive data, stale lock files that block the next run, and half-written output. The <code>trap</code> builtin runs a command when the shell receives a signal, and a trap on <code>EXIT</code> runs when the shell exits<sup class="cite">[<a href="#ref-3">3</a>]</sup>. The Wooledge SignalTrap page describes the conventions below<sup class="cite">[<a href="#ref-61">61</a>]</sup>.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> cleanup.sh: idempotent cleanup that preserves the signal<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+tmpdir=
+cleanup() {
+  if [[ -n $tmpdir ]]; then rm -rf -- "$tmpdir"; fi
+}
+trap cleanup EXIT
+
+# On a signal: clean up, drop the traps, then re-send the signal to
+# ourselves so the caller sees "killed by SIGTERM" (status 143), not success.
+on_signal() {
+  cleanup
+  trap - "$1" EXIT
+  kill -s "$1" "$$"
+}
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
+trap 'on_signal HUP' HUP
+
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/job.XXXXXXXXXX")
+printf 'working in %s\n' "$tmpdir"
+
+sleep 30 &amp;      # long-running work, in the background...
+wait "$!"       # ...so that a signal interrupts the wait at once</code></pre></figure>
+<p>Why the details matter:</p>
+<ul>
+<li><strong>Cleanup must be safe to run twice and before setup has finished.</strong> The signal trap runs cleanup, then the EXIT trap could run it again; and a signal may arrive before <code>mktemp</code> has assigned <code>tmpdir</code>. Initialising the variable first and testing it handles both.</li>
+<li><strong>Re-raising the signal</strong> tells the parent process the truth. A caller that sees a normal exit status may carry on as if the job had succeeded. In testing, sending <code>SIGTERM</code> to this script removed its directory and gave exit status 143 (128 + 15).</li>
+<li><strong>Traps wait for foreground commands.</strong> If Bash is waiting for a foreground command when a trapped signal arrives, the trap does not run until that command completes<sup class="cite">[<a href="#ref-62">62</a>]</sup>. Running long work in the background and using <code>wait</code>, which returns as soon as a trapped signal arrives, keeps the script responsive.</li>
+<li><strong>Single-quote trap strings.</strong> The trap's command is evaluated when the signal arrives. With single quotes, <code>trap 'rm -rf -- "$tmpdir"' EXIT</code> expands the variable at that moment and quotes it correctly. With double quotes the value is pasted in when the trap is set and then parsed again as code, which breaks on names with spaces or quotes (ShellCheck SC2064). Calling a function, as <code>on_signal</code> does here, avoids the problem entirely.</li>
+</ul>
+<p>To make sure only one copy of a script runs at a time, use <code>flock</code> (util-linux) on a lock file, or <code>mkdir</code> of a lock directory, which is atomic, rather than testing for a file's existence and then creating it.</p>
+</section>
+
+<section id="privilege">
+<h2>16. Minimize privilege</h2>
+<p>The principle of least privilege holds that every program and user should operate with the least set of privileges needed for the job<sup class="cite">[<a href="#ref-12">12</a>]</sup>. Running a whole script as root because one line needs it turns every bug in the other lines into a root bug. CWE-250 describes this weakness<sup class="cite">[<a href="#ref-63">63</a>]</sup>.</p>
+<ul>
+<li><strong>Elevate only the step that needs it.</strong> Run the script as an ordinary user and use <code>sudo</code> for the single command, with a <code>sudoers</code> rule that names the exact program and arguments. Keep <code>env_reset</code> and <code>secure_path</code> on: they give sudo'd commands a minimal environment and a fixed <code>PATH</code><sup class="cite">[<a href="#ref-64">64</a>]</sup>.</li>
+<li><strong>Drop privilege when root is not needed.</strong> A root-run maintenance script can do its unprivileged work as a service account: <code>sudo -u appuser -- "$helper" "$arg"</code> or <code>runuser -u appuser -- …</code>.</li>
+<li><strong>Don't write set-user-ID shell scripts.</strong> Linux ignores the set-user-ID and set-group-ID bits on interpreted scripts<sup class="cite">[<a href="#ref-65">65</a>]</sup>, and on systems that honour them, scripts are notoriously hard to make safe. Bash by default resets the effective user ID to the real one when they differ, unless started with <code>-p</code>, and in privileged mode it skips <code>BASH_ENV</code>, <code>ENV</code> and imported functions<sup class="cite">[<a href="#ref-13">13</a>]</sup>. Use a small compiled helper or a <code>sudo</code> rule instead.</li>
+<li><strong>Check who you are.</strong> Fail early if a script is (or isn't) running as root, rather than half-working.</li>
+<li><strong>Restricted shell is not a sandbox.</strong> <code>rbash</code> disables some features, such as changing directory or setting <code>PATH</code><sup class="cite">[<a href="#ref-66">66</a>]</sup>, but it is easy to escape through any program that can run commands. Use OS mechanisms such as separate accounts, containers, or systemd sandboxing.</li>
+</ul>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Privilege checks<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>require_root() {
+  (( EUID == 0 )) || { echo 'this step must run as root' &gt;&amp;2; exit 1; }
+}
+refuse_root() {
+  (( EUID != 0 )) || { echo 'do not run this as root' &gt;&amp;2; exit 1; }
+}
+
+refuse_root
+make -s release                                 # unprivileged work
+sudo -- /usr/bin/install -m 0755 -- ./mytool /usr/local/bin/mytool   # one privileged step</code></pre></figure>
+<p>A matching <code>sudoers</code> line, edited with <code>visudo</code>, could be <code>deploy ALL=(root) /usr/bin/install -m 0755 -- ./mytool /usr/local/bin/mytool</code>, which permits that command and nothing else.</p>
+</section>
+
+<section id="shellcheck">
+<h2>17. Use ShellCheck</h2>
+<p>ShellCheck is a static analysis tool that gives warnings and suggestions for Bash and <code>sh</code> scripts. Its stated goals are to point out beginner's syntax issues, intermediate-level semantic problems, and subtle caveats, corner cases and pitfalls<sup class="cite">[<a href="#ref-67">67</a>]</sup>. Options let you follow sourced files (<code>-x</code>), choose the shell dialect (<code>-s</code>) and set a minimum severity (<code>-S</code>)<sup class="cite">[<a href="#ref-68">68</a>]</sup>. Most of the mistakes in this article have a ShellCheck code, and each code has a wiki page explaining the problem and the fix<sup class="cite">[<a href="#ref-18">18</a>]</sup>.</p>
+<table>
+<thead><tr><th>Code</th><th>What it catches</th><th>Section</th></tr></thead>
+<tbody>
+<tr><td>SC2086</td><td>Unquoted expansion, open to globbing and word splitting<sup class="cite">[<a href="#ref-18">18</a>]</sup></td><td><a href="#quote">2</a></td></tr>
+<tr><td>SC2068</td><td>Unquoted array expansion<sup class="cite">[<a href="#ref-19">19</a>]</sup></td><td><a href="#quote">2</a></td></tr>
+<tr><td>SC2115</td><td>Use <code>"${var:?}"</code> so a path never expands to <code>/*</code><sup class="cite">[<a href="#ref-23">23</a>]</sup></td><td><a href="#quote">2</a></td></tr>
+<tr><td>SC2294</td><td><code>eval</code> negates the benefit of arrays<sup class="cite">[<a href="#ref-28">28</a>]</sup></td><td><a href="#eval">4</a></td></tr>
+<tr><td>SC2035</td><td>Glob that may expand to names starting with a dash<sup class="cite">[<a href="#ref-35">35</a>]</sup></td><td><a href="#dashdash">6</a></td></tr>
+<tr><td>SC2162</td><td><code>read</code> without <code>-r</code> mangles backslashes<sup class="cite">[<a href="#ref-52">52</a>]</sup></td><td><a href="#filenames">11</a></td></tr>
+<tr><td>SC2045, SC2012</td><td>Iterating over or parsing <code>ls</code> output<sup class="cite">[<a href="#ref-56">56</a>,<a href="#ref-57">57</a>]</sup></td><td><a href="#ls">12</a></td></tr>
+<tr><td>SC2164</td><td><code>cd</code> without a failure check<sup class="cite">[<a href="#ref-69">69</a>]</sup></td><td><a href="#template">19</a></td></tr>
+</tbody>
+</table>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> Running ShellCheck<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code># Install: apt install shellcheck | dnf install ShellCheck | brew install shellcheck
+shellcheck myscript.sh
+shellcheck -x myscript.sh             # follow files pulled in with 'source'
+shellcheck -s sh myscript.sh          # check against POSIX sh rules
+shellcheck -S warning ./*.sh          # report warnings and errors only
+
+# In CI, fail the build on findings
+find . -name '*.sh' -type f -exec shellcheck -x -- {} +</code></pre></figure>
+<p>When a warning is a deliberate choice, silence that one line with a directive and a comment explaining why, rather than switching the check off globally<sup class="cite">[<a href="#ref-70">70</a>]</sup>:</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> A justified directive<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code># Word splitting is intended: $CFLAGS is a space-separated list set by the build system.
+# shellcheck disable=SC2086
+gcc $CFLAGS -o app app.c</code></pre></figure>
+<p>ShellCheck cannot know your intent. It will not tell you that a validation regex is too loose or that a script should not run as root, so it complements review rather than replacing it.</p>
+</section>
+
+<section id="posix">
+<h2>18. Follow POSIX portability requirements when needed</h2>
+<p>If a script will run under <code>/bin/sh</code> (on Debian and Ubuntu that is <code>dash</code>; on Alpine it is BusyBox <code>ash</code>), in a minimal container, or on several Unix systems, write to the POSIX Shell Command Language<sup class="cite">[<a href="#ref-71">71</a>]</sup> and declare it with <code>#!/bin/sh</code>. If you rely on Bash features, say so with <code>#!/usr/bin/env bash</code> or <code>#!/bin/bash</code>. A mismatched shebang is a bug that often hides until the script reaches a different system.</p>
+<table>
+<thead><tr><th>Bash feature</th><th>POSIX <code>sh</code> alternative</th></tr></thead>
+<tbody>
+<tr><td>Arrays <code>arr=(…)</code>, <code>"${arr[@]}"</code></td><td>Positional parameters: <code>set -- a "b c"</code>, <code>"$@"</code><sup class="cite">[<a href="#ref-72">72</a>]</sup></td></tr>
+<tr><td><code>[[ … ]]</code>, <code>=~</code></td><td><code>[ … ]</code> with quoted operands; <code>case</code> for patterns</td></tr>
+<tr><td><code>local</code></td><td>Not in POSIX (though dash and BusyBox support it); use a subshell function body <code>f() ( … )</code></td></tr>
+<tr><td><code>echo -e</code>, <code>echo -n</code></td><td><code>printf</code><sup class="cite">[<a href="#ref-36">36</a>]</sup></td></tr>
+<tr><td><code>read -d ''</code>, <code>mapfile</code></td><td><code>find … -exec cmd {} +</code> (<code>read -d</code> is in POSIX.1-2024, but older shells lack it)</td></tr>
+<tr><td><code>&lt;(…)</code> process substitution</td><td>A named pipe from <code>mkfifo</code> in a <code>mktemp -d</code> directory, or a temporary file</td></tr>
+<tr><td><code>$RANDOM</code>, <code>$EUID</code></td><td><code>id -u</code>; for random names use <code>mktemp</code></td></tr>
+<tr><td><code>function f { … }</code></td><td><code>f() { … }</code></td></tr>
+</tbody>
+</table>
+<p>The 2024 edition of POSIX (IEEE Std 1003.1-2024, Issue 8) standardised several features that used to be extensions, including <code>$'…'</code> quoting, <code>find -print0</code>, <code>xargs -0</code> and <code>read -d</code>, where an empty delimiter means the null byte<sup class="cite">[<a href="#ref-32">32</a>,<a href="#ref-33">33</a>,<a href="#ref-71">71</a>,<a href="#ref-73">73</a>,<a href="#ref-74">74</a>]</sup>. Older shells still in service may lack them, so check what your target systems actually ship.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> safe_rm_old.sh: POSIX sh, no Bash features<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/bin/sh
+# Delete *.log files older than N days below DIR. POSIX sh only.
+set -eu
+
+usage() { printf 'usage: %s DIR DAYS\n' "${0##*/}" &gt;&amp;2; exit 2; }
+[ "$#" -eq 2 ] || usage
+
+dir=$1 days=$2
+case $days in
+  ''|*[!0-9]*) usage ;;
+esac
+[ -d "$dir" ] || { printf '%s: not a directory: %s\n' "$0" "$dir" &gt;&amp;2; exit 1; }
+
+command -v find &gt;/dev/null 2&gt;&amp;1 || { echo 'find is required' &gt;&amp;2; exit 1; }
+
+# Build the argument list in "$@" instead of an array
+set -- "$dir" -type f -name '*.log' -mtime "+$days"
+[ -n "${DRY_RUN:-}" ] || set -- "$@" -exec rm -f -- {} +
+[ -z "${DRY_RUN:-}" ] || set -- "$@" -print
+
+find "$@"</code></pre></figure>
+<p>Test portable scripts the way they will run: <code>dash script.sh</code>, <code>busybox sh script.sh</code>, and <code>shellcheck -s sh</code>, which reports Bash-only syntax as SC3xxx warnings<sup class="cite">[<a href="#ref-72">72</a>]</sup>. Running Bash with <code>--posix</code> or <code>set -o posix</code> changes Bash's behaviour where it differs from the standard<sup class="cite">[<a href="#ref-75">75</a>]</sup>, but it does not disable Bash extensions, so it is not a portability test on its own.</p>
+</section>
+
+<section id="template">
+<h2>19. Putting it together: a hardened script template</h2>
+<p>The template below combines the practices from this article. It passes ShellCheck with no warnings.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> template.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+# template.sh - copy files matching a pattern into a dated, private archive.
+# Usage: template.sh [-n] SOURCE_DIR DEST_DIR
+set -euo pipefail
+shopt -s nullglob
+umask 077
+PATH=/usr/local/bin:/usr/bin:/bin
+export PATH
+
+readonly prog=${0##*/}
+die()   { printf '%s: error: %s\n' "$prog" "$*" &gt;&amp;2; exit 1; }
+warn()  { printf '%s: %s\n' "$prog" "$*" &gt;&amp;2; }
+usage() { printf 'usage: %s [-n] SOURCE_DIR DEST_DIR\n' "$prog" &gt;&amp;2; exit 2; }
+
+# --- dependencies -------------------------------------------------------
+for c in tar gzip date realpath; do
+  command -v -- "$c" &gt;/dev/null 2&gt;&amp;1 || die "missing command: $c"
+done
+
+# --- options ------------------------------------------------------------
+dry_run=0
+while getopts ':n' opt; do
+  case $opt in
+    n) dry_run=1 ;;
+    *) usage ;;
+  esac
+done
+shift "$((OPTIND - 1))"
+(( $# == 2 )) || usage
+
+src=$1 dest=$2
+[[ -d $src ]]  || die "not a directory: ${src@Q}"
+[[ -d $dest &amp;&amp; -w $dest ]] || die "not a writable directory: ${dest@Q}"
+(( EUID != 0 )) || die 'refusing to run as root'
+dest=$(realpath -- "$dest")    # absolute, because we cd below
+
+# --- temporary workspace and cleanup ------------------------------------
+workdir=
+cleanup() { if [[ -n $workdir ]]; then rm -rf -- "$workdir"; fi; }
+on_signal() { cleanup; trap - "$1" EXIT; kill -s "$1" "$$"; }
+trap cleanup EXIT
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
+trap 'on_signal HUP' HUP
+workdir=$(mktemp -d "${TMPDIR:-/tmp}/$prog.XXXXXXXXXX")
+
+# --- main work ----------------------------------------------------------
+cd -- "$src" || die "cannot enter ${src@Q}"
+files=(./*)
+(( ${#files[@]} &gt; 0 )) || { warn 'nothing to archive'; exit 0; }
+
+stamp=$(date +%Y%m%d-%H%M%S)
+archive="$workdir/backup-$stamp.tar.gz"
+tar_args=(-czf "$archive")
+(( dry_run )) &amp;&amp; tar_args=(-czvf /dev/null)
+
+tar "${tar_args[@]}" -- "${files[@]}"
+
+if (( dry_run )); then
+  warn "dry run: ${#files[@]} entries would be archived"
+else
+  mv -- "$archive" "$dest/"
+  printf 'wrote %s\n' "$dest/${archive##*/}"
+fi</code></pre></figure>
+</section>
+
+<section id="exercises">
+<h2>20. Exercises with solutions</h2>
+<p>Try each exercise before opening the solution. All solutions run in Bash 5 and pass ShellCheck.</p>
+
+<div class="exercise">
+<h3>Exercise 1: Find the bugs</h3>
+<p>List every problem in this script, then rewrite it.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> exercise1.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/bin/bash
+dir=$1
+cd $dir
+for f in $(ls *.jpg); do
+  convert $f -resize 50% small_$f
+done
+rm -rf $TMPDIR/thumbs/*</code></pre></figure>
+<details><summary>Show solution</summary>
+<p>Problems: <code>$1</code> is not checked; <code>cd</code> is unquoted and its failure is ignored (SC2164), so the rest runs in the wrong directory; <code>$(ls *.jpg)</code> parses <code>ls</code> (SC2045) and splits names on spaces; <code>$f</code> is unquoted (SC2086); a file named <code>-something.jpg</code> would be read as an option; with no matches the loop runs on the literal pattern; and if <code>TMPDIR</code> is unset, the last line becomes <code>rm -rf /thumbs/*</code> (SC2115).</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise1-fixed.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+dir=${1:?usage: $0 DIR}
+cd -- "$dir" || exit 1
+
+for f in ./*.jpg; do
+  name=${f#./}
+  convert "$f" -resize 50% "./small_$name"
+done
+
+rm -rf -- "${TMPDIR:?TMPDIR is not set}/thumbs/"*</code></pre></figure>
+<p><code>convert</code> (ImageMagick) does not document <code>--</code>, so the <code>./</code> prefix is what stops a name starting with a dash being read as an option.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 2: Remove the <code>eval</code></h3>
+<p>This function sets a configuration variable named by the caller. Rewrite it without <code>eval</code>, and make it reject invalid names.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> exercise2.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>setconf() { eval "CONF_$1='$2'"; }
+setconf color "blue"
+setconf x "'; touch /tmp/pwned; '"    # runs touch</code></pre></figure>
+<details><summary>Show solution</summary>
+<p>The better design avoids dynamic variable names entirely and uses an associative array. If separate variables are required, validate the name and use <code>printf -v</code>.</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise2-fixed.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+# Option A: an associative array (preferred)
+declare -A CONF=()
+setconf() { CONF[$1]=$2; }
+setconf color blue
+setconf x "'; touch /tmp/pwned; '"
+printf '%s=%s\n' color "${CONF[color]}" x "${CONF[x]}"
+
+# Option B: validated dynamic name
+setconf_var() {
+  [[ $1 =~ ^[A-Za-z][A-Za-z0-9_]*$ ]] || { echo "bad key: ${1@Q}" &gt;&amp;2; return 1; }
+  printf -v "CONF_$1" '%s' "$2"
+}
+setconf_var color blue
+printf '%s\n' "${CONF_color:?}"</code></pre></figure>
+<p>Keys of an associative array are plain strings, so even a hostile key cannot run code when you use it as <code>CONF[$1]</code>.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 3: Secure temporary file</h3>
+<p>Rewrite this so the temporary data is unpredictable, private, and always removed, even on Ctrl-C.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> exercise3.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/bin/bash
+curl -s "$1" &gt; /tmp/download.$$
+sha256sum /tmp/download.$$
+rm /tmp/download.$$</code></pre></figure>
+<details><summary>Show solution</summary>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise3-fixed.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+url=${1:?usage: $0 URL}
+[[ $url == https://* ]] || { echo 'only https:// URLs are allowed' &gt;&amp;2; exit 2; }
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/download.XXXXXXXXXX")
+trap 'rm -f -- "$tmp"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+curl --fail --silent --show-error --location --proto '=https' -o "$tmp" -- "$url"
+sha256sum -- "$tmp"</code></pre></figure>
+<p>Exiting with 128 plus the signal number from the INT and TERM traps makes the EXIT trap run and reports the interruption to the caller. <code>--fail</code> makes curl return an error on HTTP failures instead of saving an error page, and <code>--proto '=https'</code> stops redirects to other protocols.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 4: Validate a numeric argument</h3>
+<p>Write <code>is_percent</code>, which succeeds only for whole numbers 0 to 100. It must not be fooled by <code>'a[$(id)]'</code>, <code>' 5'</code>, <code>'08'</code>, <code>'1e2'</code> or <code>''</code>, and must not execute anything. Decide whether <code>08</code> should be accepted and justify it.</p>
+<details><summary>Show solution</summary>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise4.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -u
+
+is_percent() {
+  [[ $1 =~ ^(0|[1-9][0-9]?|100)$ ]]
+}
+
+# shellcheck disable=SC2016  # 'a[$(id)]' is a literal attack string
+for v in 0 7 42 100 101 08 ' 5' '' 1e2 '-1' 'a[$(id)]'; do
+  if is_percent "$v"; then r=yes; else r=no; fi
+  printf '%-10s %s\n' "${v@Q}" "$r"
+done</code></pre></figure>
+<p>The regex alone decides, so no arithmetic ever sees the raw value. This version rejects <code>08</code>, because leading zeros are ambiguous (Bash arithmetic reads <code>08</code> as an invalid octal number). If you want to accept leading zeros, match <code>^[0-9]{1,3}$</code> and then compare <code>(( 10#$1 &lt;= 100 ))</code>, which is safe because the regex has already guaranteed digits only.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 5: Count files safely</h3>
+<p>Write a script that counts regular files below a directory and prints the largest one. It must handle names with spaces, newlines and leading dashes. Do not use <code>ls</code>.</p>
+<details><summary>Show solution</summary>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise5.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+dir=${1:-.}
+count=0 max_size=-1 max_name=
+
+while IFS= read -r -d '' f; do
+  size=$(stat -c %s -- "$f")       # GNU stat; use 'stat -f %z' on BSD/macOS
+  count=$((count + 1))
+  if (( size &gt; max_size )); then
+    max_size=$size max_name=$f
+  fi
+done &lt; &lt;(find "$dir" -type f -print0)
+
+printf 'files: %d\n' "$count"
+(( count )) &amp;&amp; printf 'largest: %q (%d bytes)\n' "$max_name" "$max_size"</code></pre></figure>
+<p>On GNU systems a faster variant avoids one <code>stat</code> process per file: <code>find "$dir" -type f -printf '%s %p\0'</code>, then split each record with <code>read -r -d '' size name</code>. If <code>$dir</code> may start with a dash, prefix it with <code>./</code>, because <code>find</code> treats leading-dash arguments as options or expressions.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 6: Pass a secret without exposing it</h3>
+<p>A colleague's script runs <code>mysql -u app -p"$DB_PASS" -e 'SELECT 1'</code>. Explain the exposure and fix it.</p>
+<details><summary>Show solution</summary>
+<p>The password is part of <code>mysql</code>'s argv, so any local user can see it in <code>ps</code> output or <code>/proc/[pid]/cmdline</code> while the command runs<sup class="cite">[<a href="#ref-47">47</a>]</sup>. (The MySQL client tries to overwrite it in memory, but there is a window before it does.) Use an option file with mode 0600 that is passed by name:</p>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise6.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+: "${DB_PASS:?DB_PASS must be set}"
+cnfdir=$(mktemp -d)
+trap 'rm -rf -- "$cnfdir"' EXIT
+
+printf '[client]\nuser=%s\npassword=%s\n' app "$DB_PASS" &gt; "$cnfdir/my.cnf"
+unset -v DB_PASS
+
+mysql --defaults-extra-file="$cnfdir/my.cnf" -e 'SELECT 1'</code></pre></figure>
+<p>The file is created under <code>umask 077</code> inside a private directory and removed on exit. Only the file's <em>path</em> appears in argv. Better still, keep a permanent <code>~/.my.cnf</code> with mode 0600, or use your platform's secret store.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 7: Port to POSIX sh</h3>
+<p>Convert this Bash function to POSIX <code>sh</code> and test it with <code>dash</code>.</p>
+<figure class="code bad"><figcaption><span class="tag">Avoid</span> exercise7.sh (Bash only)<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>backup() {
+  local -a opts=(-a)
+  [[ $VERBOSE == 1 ]] &amp;&amp; opts+=(-v)
+  echo -e "Backing up $1\t-&gt; $2"
+  cp "${opts[@]}" -- "$1" "$2"
+}</code></pre></figure>
+<details><summary>Show solution</summary>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise7-posix.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/bin/sh
+set -eu
+
+backup() (
+  # A subshell body keeps 'set --' and variables local to the function.
+  src=$1 dst=$2
+  set -- -a
+  [ "${VERBOSE:-0}" = 1 ] &amp;&amp; set -- "$@" -v
+  printf 'Backing up %s\t-&gt; %s\n' "$src" "$dst"
+  cp "$@" -- "$src" "$dst"
+)
+
+backup "$1" "$2"</code></pre></figure>
+<p>Changes: the array becomes the positional parameters, <code>local</code> becomes a subshell function body, <code>[[ ]]</code> becomes <code>[ ]</code> with quoted operands and a default for an unset variable, and <code>echo -e</code> becomes <code>printf</code>. Note that <code>cp -a</code> is a GNU and BSD extension; strictly POSIX code would use <code>cp -pR</code>. Check with <code>shellcheck -s sh exercise7-posix.sh</code> and run with <code>dash exercise7-posix.sh src dst</code>.</p>
+</details>
+</div>
+
+<div class="exercise">
+<h3>Exercise 8: Quote for a remote shell</h3>
+<p>Write <code>remote_rm HOST PATH</code>, which deletes one file on a remote host over SSH. A path like <code>/tmp/a b; reboot</code> must delete the file with that literal name and nothing else.</p>
+<details><summary>Show solution</summary>
+<figure class="code good"><figcaption><span class="tag">Recommended</span> exercise8.sh<button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+remote_rm() {
+  local host=$1 path=$2
+  [[ $host =~ ^[A-Za-z0-9._@-]+$ &amp;&amp; $host != -* ]] || { echo 'bad host' &gt;&amp;2; return 2; }
+  [[ $path == /* ]] || { echo 'path must be absolute' &gt;&amp;2; return 2; }
+  # ssh joins its arguments into one string for the remote shell, so quote it.
+  ssh -- "$host" "rm -f -- ${path@Q}"
+}
+
+remote_rm "${1:?host}" "${2:?path}"</code></pre></figure>
+<p><code>${path@Q}</code> (Bash 4.4+) quotes the value for reuse as shell input, like <code>printf %q</code>. The host check stops a value such as <code>-oProxyCommand=…</code> being read as an <code>ssh</code> option, and <code>ssh --</code> ends option parsing as a second guard. This assumes the remote login shell is Bash or another POSIX shell that accepts the quoting style.</p>
+</details>
+</div>
+</section>
+
+<section id="checklist">
+<h2>21. Review checklist</h2>
+<ul class="check">
+<li>Every expansion is double-quoted unless splitting is intended and commented.</li>
+<li>All external input is validated against an allow-list before use, and before any arithmetic.</li>
+<li>No <code>eval</code>, <code>sh -c "…$var…"</code>, or SSH command built from unquoted data.</li>
+<li>Option-taking commands get <code>--</code> before operands; globs start with <code>./</code>.</li>
+<li><code>printf '%s\n'</code> instead of <code>echo</code> for arbitrary data.</li>
+<li>Temporary files and directories come from <code>mktemp</code>, and the result is checked.</li>
+<li><code>umask 077</code> (or a subshell with it) wherever sensitive files are created.</li>
+<li>No secrets in argv, source code, <code>set -x</code> output, or needlessly exported variables.</li>
+<li>Filename loops use globs with <code>nullglob</code>, or <code>find -print0</code> with <code>read -r -d ''</code>.</li>
+<li>No parsing of <code>ls</code> output.</li>
+<li>Argument lists are arrays (or <code>"$@"</code> in <code>sh</code>).</li>
+<li><code>PATH</code> set explicitly for privileged or scheduled scripts; dependencies checked with <code>command -v</code>.</li>
+<li><code>trap … EXIT</code> cleans up; signal handlers re-raise the signal.</li>
+<li>The script runs with the least privilege it needs; <code>sudo</code> rules are narrow.</li>
+<li>ShellCheck runs clean in CI; every directive has a comment.</li>
+<li>The shebang matches the features used; portable scripts are tested with <code>dash</code>.</li>
+</ul>
+</section>
+
+<section id="references">
+<h2>References</h2>
+<p class="meta">Vancouver style. Web sources were accessed on 16 November 2026.</p>
+<ol class="refs">
+<li id="ref-1">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.5.7, Word splitting; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Word-Splitting">https://www.gnu.org/software/bash/manual/bash.html#Word-Splitting</a></li>
+<li id="ref-2">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.5.8, Filename expansion; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Filename-Expansion.html">https://www.gnu.org/software/bash/manual/html_node/Filename-Expansion.html</a></li>
+<li id="ref-3">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 4.1, Bourne shell builtins (eval, trap, umask); [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Bourne-Shell-Builtins">https://www.gnu.org/software/bash/manual/bash.html#Bourne-Shell-Builtins</a></li>
+<li id="ref-4">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 1, Base Definitions, Chapter 12: Utility conventions, Section 12.2: Utility syntax guidelines. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html">https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html</a></li>
+<li id="ref-5">MITRE Corporation. CWE-78: Improper neutralization of special elements used in an OS command ('OS command injection'). Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/78.html">https://cwe.mitre.org/data/definitions/78.html</a></li>
+<li id="ref-6">MITRE Corporation. CWE-88: Improper neutralization of argument delimiters in a command ('argument injection'). Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/88.html">https://cwe.mitre.org/data/definitions/88.html</a></li>
+<li id="ref-7">MITRE Corporation. CWE-95: Improper neutralization of directives in dynamically evaluated code ('eval injection'). Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/95.html">https://cwe.mitre.org/data/definitions/95.html</a></li>
+<li id="ref-8">MITRE Corporation. CWE-59: Improper link resolution before file access ('link following'). Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/59.html">https://cwe.mitre.org/data/definitions/59.html</a></li>
+<li id="ref-9">MITRE Corporation. CWE-367: Time-of-check time-of-use (TOCTOU) race condition. Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/367.html">https://cwe.mitre.org/data/definitions/367.html</a></li>
+<li id="ref-10">MITRE Corporation. CVE-2014-6271 [Internet]. CVE Program; 2014 Sep 24 [cited 2026 Nov 16]. Available from: <a href="https://www.cve.org/CVERecord?id=CVE-2014-6271">https://www.cve.org/CVERecord?id=CVE-2014-6271</a></li>
+<li id="ref-11">OWASP Foundation. Input validation cheat sheet [Internet]. OWASP Cheat Sheet Series; [cited 2026 Nov 16]. Available from: <a href="https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html">https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html</a></li>
+<li id="ref-12">Saltzer JH, Schroeder MD. The protection of information in computer systems. Proc IEEE. 1975;63(9):1278-1308. doi:10.1109/PROC.1975.9939</li>
+<li id="ref-13">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 4.3.1, The set builtin; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html">https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html</a></li>
+<li id="ref-14">Wooledge G, et al. BashFAQ/105: Why doesn't set -e (or set -o errexit, or trap ERR) do what I expected? [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/BashFAQ/105">https://mywiki.wooledge.org/BashFAQ/105</a></li>
+<li id="ref-15">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.5, Shell expansions; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Shell-Expansions.html">https://www.gnu.org/software/bash/manual/html_node/Shell-Expansions.html</a></li>
+<li id="ref-16">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.1.2.3, Double quotes; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Double-Quotes">https://www.gnu.org/software/bash/manual/bash.html#Double-Quotes</a></li>
+<li id="ref-17">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 6.7, Arrays; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Arrays">https://www.gnu.org/software/bash/manual/bash.html#Arrays</a></li>
+<li id="ref-18">ShellCheck wiki. SC2086: Double quote to prevent globbing and word splitting [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2086">https://www.shellcheck.net/wiki/SC2086</a></li>
+<li id="ref-19">ShellCheck wiki. SC2068: Double quote array expansions to avoid re-splitting elements [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2068">https://www.shellcheck.net/wiki/SC2068</a></li>
+<li id="ref-20">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.2.5.2, Conditional constructs; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Conditional-Constructs.html">https://www.gnu.org/software/bash/manual/html_node/Conditional-Constructs.html</a></li>
+<li id="ref-21">Wooledge G, et al. Quotes [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/Quotes">https://mywiki.wooledge.org/Quotes</a></li>
+<li id="ref-22">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.5.3, Shell parameter expansion; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Shell-Parameter-Expansion">https://www.gnu.org/software/bash/manual/bash.html#Shell-Parameter-Expansion</a></li>
+<li id="ref-23">ShellCheck wiki. SC2115: Use "${var:?}" to ensure this never expands to /* [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2115">https://www.shellcheck.net/wiki/SC2115</a></li>
+<li id="ref-24">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 6.5, Shell arithmetic; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Shell-Arithmetic">https://www.gnu.org/software/bash/manual/bash.html#Shell-Arithmetic</a></li>
+<li id="ref-25">Wooledge G, et al. BashFAQ/048: Eval command and security issues [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/BashFAQ/048">https://mywiki.wooledge.org/BashFAQ/048</a></li>
+<li id="ref-26">Wooledge G, et al. BashFAQ/050: I'm trying to put a command in a variable, but the complex cases always fail! [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/BashFAQ/050">https://mywiki.wooledge.org/BashFAQ/050</a></li>
+<li id="ref-27">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 4.2, Bash builtin commands; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html">https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html</a></li>
+<li id="ref-28">ShellCheck wiki. SC2294: eval negates the benefit of arrays [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2294">https://www.shellcheck.net/wiki/SC2294</a></li>
+<li id="ref-29">OWASP Foundation. OS command injection defense cheat sheet [Internet]. OWASP Cheat Sheet Series; [cited 2026 Nov 16]. Available from: <a href="https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html">https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html</a></li>
+<li id="ref-30">Kerrisk M, editor. find(1): search for files in a directory hierarchy. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man1/find.1.html">https://man7.org/linux/man-pages/man1/find.1.html</a></li>
+<li id="ref-31">Kerrisk M, editor. ssh(1): OpenSSH remote login client. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man1/ssh.1.html">https://man7.org/linux/man-pages/man1/ssh.1.html</a></li>
+<li id="ref-32">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities: find. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/find.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/find.html</a></li>
+<li id="ref-33">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities: xargs. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/xargs.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/xargs.html</a></li>
+<li id="ref-34">Free Software Foundation. GNU Coreutils manual [Internet]. Boston (MA): Free Software Foundation. Section 2, Common options [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/coreutils/manual/html_node/Common-options.html">https://www.gnu.org/software/coreutils/manual/html_node/Common-options.html</a></li>
+<li id="ref-35">ShellCheck wiki. SC2035: Use ./*glob* or -- *glob* so names with dashes won't become options [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2035">https://www.shellcheck.net/wiki/SC2035</a></li>
+<li id="ref-36">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities: echo. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/echo.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/echo.html</a></li>
+<li id="ref-37">Wooledge G, et al. BashFAQ/062: How do I create a temporary file in a secure manner? [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/BashFAQ/062">https://mywiki.wooledge.org/BashFAQ/062</a></li>
+<li id="ref-38">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.6, Redirections; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Redirections.html">https://www.gnu.org/software/bash/manual/html_node/Redirections.html</a></li>
+<li id="ref-39">Kerrisk M, editor. mktemp(1): create a temporary file or directory. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man1/mktemp.1.html">https://man7.org/linux/man-pages/man1/mktemp.1.html</a></li>
+<li id="ref-40">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 2, System Interfaces: mkdtemp, mkostemp, mkstemp. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/mkdtemp.html">https://pubs.opengroup.org/onlinepubs/9799919799/functions/mkdtemp.html</a></li>
+<li id="ref-41">Kerrisk M, editor. umask(2): set file mode creation mask. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man2/umask.2.html">https://man7.org/linux/man-pages/man2/umask.2.html</a></li>
+<li id="ref-42">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities: umask. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/umask.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/umask.html</a></li>
+<li id="ref-43">MITRE Corporation. CWE-732: Incorrect permission assignment for critical resource. Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/732.html">https://cwe.mitre.org/data/definitions/732.html</a></li>
+<li id="ref-44">MITRE Corporation. CWE-798: Use of hard-coded credentials. Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/798.html">https://cwe.mitre.org/data/definitions/798.html</a></li>
+<li id="ref-45">MITRE Corporation. CWE-214: Invocation of process using visible sensitive information. Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/214.html">https://cwe.mitre.org/data/definitions/214.html</a></li>
+<li id="ref-46">OWASP Foundation. Secrets management cheat sheet [Internet]. OWASP Cheat Sheet Series; [cited 2026 Nov 16]. Available from: <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html">https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html</a></li>
+<li id="ref-47">Kerrisk M, editor. proc_pid_cmdline(5): command line of a process. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man5/proc_pid_cmdline.5.html">https://man7.org/linux/man-pages/man5/proc_pid_cmdline.5.html</a></li>
+<li id="ref-48">Kerrisk M, editor. proc(5): process information, system information, and sysctl pseudo-filesystem. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man5/proc.5.html">https://man7.org/linux/man-pages/man5/proc.5.html</a></li>
+<li id="ref-49">Kerrisk M, editor. proc_pid_environ(5): initial environment. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man5/proc_pid_environ.5.html">https://man7.org/linux/man-pages/man5/proc_pid_environ.5.html</a></li>
+<li id="ref-50">Stenberg D, et al. curl man page [Internet]. curl project; [cited 2026 Nov 16]. Option -K, --config. Available from: <a href="https://curl.se/docs/manpage.html">https://curl.se/docs/manpage.html</a></li>
+<li id="ref-51">Wheeler DA. Fixing Unix/Linux/POSIX filenames: control characters (such as newline), leading dashes, and other problems [Internet]. 2009 Mar 24 [updated 2024 Jul 19; cited 2026 Nov 16]. Available from: <a href="https://dwheeler.com/essays/fixing-unix-linux-filenames.html">https://dwheeler.com/essays/fixing-unix-linux-filenames.html</a></li>
+<li id="ref-52">ShellCheck wiki. SC2162: read without -r will mangle backslashes [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2162">https://www.shellcheck.net/wiki/SC2162</a></li>
+<li id="ref-53">Wooledge G, et al. BashFAQ/020: How can I find and safely handle file names containing newlines, spaces or both? [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/BashFAQ/020">https://mywiki.wooledge.org/BashFAQ/020</a></li>
+<li id="ref-54">Wooledge G, et al. ParsingLs: Why you shouldn't parse the output of ls(1) [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/ParsingLs">https://mywiki.wooledge.org/ParsingLs</a></li>
+<li id="ref-55">Wooledge G, et al. BashPitfalls [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/BashPitfalls">https://mywiki.wooledge.org/BashPitfalls</a></li>
+<li id="ref-56">ShellCheck wiki. SC2045: Iterating over ls output is fragile. Use globs [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2045">https://www.shellcheck.net/wiki/SC2045</a></li>
+<li id="ref-57">ShellCheck wiki. SC2012: Use find instead of ls to better handle non-alphanumeric filenames [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2012">https://www.shellcheck.net/wiki/SC2012</a></li>
+<li id="ref-58">MITRE Corporation. CWE-426: Untrusted search path. Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/426.html">https://cwe.mitre.org/data/definitions/426.html</a></li>
+<li id="ref-59">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities: command. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/command.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/command.html</a></li>
+<li id="ref-60">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 5.2, Bash variables; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html">https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html</a></li>
+<li id="ref-61">Wooledge G, et al. SignalTrap: Sending and trapping signals [Internet]. Greg's Wiki; [cited 2026 Nov 16]. Available from: <a href="https://mywiki.wooledge.org/SignalTrap">https://mywiki.wooledge.org/SignalTrap</a></li>
+<li id="ref-62">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 3.7.6, Signals; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/Signals.html">https://www.gnu.org/software/bash/manual/html_node/Signals.html</a></li>
+<li id="ref-63">MITRE Corporation. CWE-250: Execution with unnecessary privileges. Common Weakness Enumeration [Internet]. Bedford (MA): MITRE; [cited 2026 Nov 16]. Available from: <a href="https://cwe.mitre.org/data/definitions/250.html">https://cwe.mitre.org/data/definitions/250.html</a></li>
+<li id="ref-64">Kerrisk M, editor. sudoers(5): default sudo security policy plugin. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man5/sudoers.5.html">https://man7.org/linux/man-pages/man5/sudoers.5.html</a></li>
+<li id="ref-65">Kerrisk M, editor. execve(2): execute program. Linux man-pages project [Internet]. man7.org; [cited 2026 Nov 16]. Available from: <a href="https://man7.org/linux/man-pages/man2/execve.2.html">https://man7.org/linux/man-pages/man2/execve.2.html</a></li>
+<li id="ref-66">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 6.10, The restricted shell; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/html_node/The-Restricted-Shell.html">https://www.gnu.org/software/bash/manual/html_node/The-Restricted-Shell.html</a></li>
+<li id="ref-67">Holen V. ShellCheck: a static analysis tool for shell scripts [Internet]. GitHub; [cited 2026 Nov 16]. Available from: <a href="https://github.com/koalaman/shellcheck">https://github.com/koalaman/shellcheck</a></li>
+<li id="ref-68">Holen V. shellcheck(1) manual page [Internet]. GitHub; [cited 2026 Nov 16]. Available from: <a href="https://github.com/koalaman/shellcheck/blob/master/shellcheck.1.md">https://github.com/koalaman/shellcheck/blob/master/shellcheck.1.md</a></li>
+<li id="ref-69">ShellCheck wiki. SC2164: Use cd ... || exit in case cd fails [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC2164">https://www.shellcheck.net/wiki/SC2164</a></li>
+<li id="ref-70">ShellCheck wiki. Directive [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/Directive">https://www.shellcheck.net/wiki/Directive</a></li>
+<li id="ref-71">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities, Chapter 2: Shell command language. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html</a></li>
+<li id="ref-72">ShellCheck wiki. SC3030: In POSIX sh, arrays are undefined [Internet]. ShellCheck project; [cited 2026 Nov 16]. Available from: <a href="https://www.shellcheck.net/wiki/SC3030">https://www.shellcheck.net/wiki/SC3030</a></li>
+<li id="ref-73">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet].  San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/">https://pubs.opengroup.org/onlinepubs/9799919799/</a></li>
+<li id="ref-74">The Open Group; IEEE. The Open Group Base Specifications Issue 8: IEEE Std 1003.1-2024 (POSIX.1-2024) [Internet]. Volume 3, Shell and Utilities: read. San Francisco (CA): The Open Group; 2024 [cited 2026 Nov 16]. Available from: <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html">https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html</a></li>
+<li id="ref-75">Free Software Foundation. GNU Bash reference manual, version 5.3 [Internet]. Boston (MA): Free Software Foundation; 2025 May 18. Section 6.11.2, Bash POSIX mode; [cited 2026 Nov 16]. Available from: <a href="https://www.gnu.org/software/bash/manual/bash.html#Bash-POSIX-Mode">https://www.gnu.org/software/bash/manual/bash.html#Bash-POSIX-Mode</a></li>
+</ol>
+</section>
+<footer>
+<p>Code examples are provided for teaching purposes. Test them in your own environment before relying on them in production. Commands such as <code>stat -c</code> and <code>find -printf</code> are GNU-specific where noted.</p>
+</footer>
+</main>
+<script>
+(function () {
+  document.querySelectorAll('main table').forEach(function (t) {
+    var w = document.createElement('div'); w.className = 'table-wrap';
+    t.parentNode.insertBefore(w, t); w.appendChild(t);
+  });
+  document.querySelectorAll('.copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var code = b.closest('figure').querySelector('code').innerText;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done, function () {});
+      }
+    });
+  });
+  var root = document.documentElement, btn = document.getElementById('theme');
+  try { var saved = localStorage.getItem('theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  btn.addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

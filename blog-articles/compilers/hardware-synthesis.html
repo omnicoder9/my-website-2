@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware Synthesis</title>
+<meta name="description" content="A technical article on hardware synthesis: HDLs, elaboration, Boolean optimisation, technology mapping, timing, FPGA and ASIC flows, and tools such as Yosys, ABC, Vivado and Design Compiler, with examples, exercises, trivia and Vancouver-style references.">
+<style>
+:root{
+  --bg:#fbfaf7; --fg:#1d1d1f; --muted:#5b5b63; --card:#ffffff; --line:#e3e1db;
+  --accent:#2f5bd3; --accent2:#b4501e; --code-bg:#f3f1ec; --code-fg:#24292f;
+  --ok:#1f7a4d; --box1:#e8eefc; --box2:#fcefe6; --box3:#e8f5ee; --box4:#f3eafb;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a; --fg:#e7e7ea; --muted:#a2a2ad; --card:#1d1f25; --line:#30323a;
+    --accent:#8aa8ff; --accent2:#f0a070; --code-bg:#0f1014; --code-fg:#d8dee9;
+    --ok:#6fd3a0; --box1:#1f2a44; --box2:#3a2a20; --box3:#1d3329; --box4:#2e2340;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a; --fg:#e7e7ea; --muted:#a2a2ad; --card:#1d1f25; --line:#30323a;
+  --accent:#8aa8ff; --accent2:#f0a070; --code-bg:#0f1014; --code-fg:#d8dee9;
+  --ok:#6fd3a0; --box1:#1f2a44; --box2:#3a2a20; --box3:#1d3329; --box4:#2e2340;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.65 Georgia,"Iowan Old Style","Palatino Linotype",serif}
+main{max-width:860px;margin:0 auto;padding:40px 16px 80px}
+h1,h2,h3,h4{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.25}
+h1{font-size:2.1rem;margin:.2em 0 .3em}
+h2{font-size:1.5rem;margin-top:2.4em;padding-top:.6em;border-top:1px solid var(--line)}
+h3{font-size:1.17rem;margin-top:1.8em}
+a{color:var(--accent)}
+.lede{color:var(--muted);font-size:1.08rem}
+.meta{font:14px/1.4 system-ui,sans-serif;color:var(--muted)}
+sup.c{font:600 .72em system-ui,sans-serif}
+sup.c a{text-decoration:none}
+pre{background:var(--code-bg);color:var(--code-fg);padding:14px 16px;border-radius:8px;overflow-x:auto;font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border:1px solid var(--line)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em}
+:not(pre)>code{background:var(--code-bg);padding:1px 5px;border-radius:4px}
+.cap{font:13px/1.4 system-ui,sans-serif;color:var(--muted);margin:-6px 0 18px}
+table{border-collapse:collapse;width:100%;font:15px/1.45 system-ui,sans-serif;margin:1em 0}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--code-bg)}
+.tablewrap{overflow-x:auto}
+figure{margin:1.6em 0}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font:13.5px/1.45 system-ui,sans-serif;color:var(--muted);margin-top:8px}
+.note{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);padding:12px 16px;border-radius:6px;font-size:.96rem}
+details{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:10px 0}
+summary{cursor:pointer;font:600 15px/1.4 system-ui,sans-serif}
+details[open] summary{margin-bottom:8px}
+.sol{border-top:1px dashed var(--line);padding-top:8px}
+.sol::before{content:"Solution";display:block;font:700 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--ok);margin-bottom:4px}
+nav.toc{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 18px;font:15px/1.6 system-ui,sans-serif}
+nav.toc ol{margin:6px 0;padding-left:20px}
+ol.refs{font-size:14.5px;line-height:1.55;padding-left:2.2em}
+ol.refs li{margin-bottom:6px;word-break:break-word}
+.toolhead{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.tag{font:12px/1 system-ui,sans-serif;padding:4px 8px;border-radius:999px;background:var(--code-bg);border:1px solid var(--line);color:var(--muted)}
+/* SVG theming */
+.s-fg{fill:var(--fg)} .s-muted{fill:var(--muted)}
+.s-line{stroke:var(--muted);fill:none}
+.b1{fill:var(--box1)} .b2{fill:var(--box2)} .b3{fill:var(--box3)} .b4{fill:var(--box4)}
+.bstroke{stroke:var(--line)}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+</style>
+</head>
+<body>
+<main>
+
+<p class="meta">Technical article · Compilers · References current as of 17 November 2026</p>
+<h1>Hardware Synthesis: Compiling Descriptions into Circuits</h1>
+<p class="lede">Hardware synthesis is the compiler problem in silicon. A synthesis tool reads a hardware description, optimises it, and emits a netlist of real gates, flip-flops or FPGA lookup tables. This article walks through the whole flow, from HDL source to a mapped netlist, with worked examples, runnable source code, the main open-source and commercial tools, exercises and trivia. Every factual claim is backed by a numbered reference.</p>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>Synthesis level</th><th>Input</th><th>Output</th><th>Typical tools</th></tr></thead>
+<tbody>
+<tr><td>High-level synthesis (HLS)</td><td>C, C++ or SystemC algorithm</td><td>RTL (Verilog/VHDL)</td><td>Vitis HLS, Bambu <sup class="c"><a href="#r1">1</a>,<a href="#r2">2</a>,<a href="#r3">3</a></sup></td></tr>
+<tr><td>RTL synthesis</td><td>Verilog, SystemVerilog, VHDL</td><td>Generic gate/register netlist</td><td>Yosys, Vivado, Design Compiler, Genus <sup class="c"><a href="#r4">4</a>,<a href="#r5">5</a>,<a href="#r6">6</a>,<a href="#r7">7</a></sup></td></tr>
+<tr><td>Logic optimisation</td><td>Boolean network (e.g. AIG)</td><td>Smaller or faster Boolean network</td><td>ABC, SIS, Espresso <sup class="c"><a href="#r8">8</a>,<a href="#r9">9</a>,<a href="#r10">10</a></sup></td></tr>
+<tr><td>Technology mapping</td><td>Optimised Boolean network</td><td>Standard cells or K-input LUTs</td><td>ABC, Vivado, Design Compiler <sup class="c"><a href="#r11">11</a>,<a href="#r12">12</a>,<a href="#r13">13</a></sup></td></tr>
+</tbody>
+</table>
+</div>
+
+<nav class="toc" aria-label="Contents">
+<strong>Contents</strong>
+<ol>
+<li><a href="#concepts">Core concepts: synthesis as compilation</a></li>
+<li><a href="#hdl">Hardware description languages and RTL</a></li>
+<li><a href="#elab">Elaboration and inference</a></li>
+<li><a href="#boolean">Boolean optimisation</a></li>
+<li><a href="#mapping">Technology mapping</a></li>
+<li><a href="#seq">Sequential and timing-driven synthesis</a></li>
+<li><a href="#flows">FPGA and ASIC flows</a></li>
+<li><a href="#tools">Tools and software</a></li>
+<li><a href="#hls">A short note on high-level synthesis</a></li>
+<li><a href="#hcl">Beyond HDLs: hardware construction languages and MLIR</a></li>
+<li><a href="#exercises">Exercises with solutions</a></li>
+<li><a href="#trivia">Trivia with answers</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="concepts">1. Core concepts: synthesis as compilation</h2>
+
+<p>De Micheli defines circuit synthesis as the process of producing a detailed structural representation of a circuit from a more abstract model, while optimising figures of merit such as area, delay and power <sup class="c"><a href="#r14">14</a></sup>. That is the same contract a software compiler keeps: translate a program into a lower-level form, preserve its meaning, and make the result better along some cost model <sup class="c"><a href="#r15">15</a></sup>. The differences lie in the target. A software compiler emits instructions that execute one after another. A synthesis tool emits a graph of hardware that all operates at the same time, so "meaning" includes cycle-by-cycle behaviour at the registers.</p>
+
+<p>Synthesis is usually divided into levels of abstraction <sup class="c"><a href="#r14">14</a></sup>:</p>
+<ul>
+<li><strong>Architectural or high-level synthesis</strong> turns an algorithm into a register-transfer design by deciding which operations happen in which clock cycle (scheduling) and on which hardware unit (allocation and binding) <sup class="c"><a href="#r1">1</a></sup>.</li>
+<li><strong>RTL (logic-level) synthesis</strong> turns a register-transfer description, where registers and the combinational logic between them are explicit, into a network of logic gates and storage elements <sup class="c"><a href="#r14">14</a>,<a href="#r16">16</a></sup>.</li>
+<li><strong>Logic optimisation</strong> rewrites the Boolean network to reduce cost <sup class="c"><a href="#r17">17</a></sup>.</li>
+<li><strong>Technology mapping</strong> covers the optimised network with the cells actually available: a standard-cell library for an ASIC, or lookup tables (LUTs) and flip-flops for an FPGA <sup class="c"><a href="#r13">13</a>,<a href="#r18">18</a></sup>.</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 820 330" role="img" aria-labelledby="f1t">
+<title id="f1t">The RTL synthesis flow from HDL source to mapped netlist</title>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-muted"/></marker></defs>
+<!-- main row -->
+<rect x="10" y="110" width="110" height="64" rx="8" class="b4 bstroke"/>
+<text x="65" y="137" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">HDL source</text>
+<text x="65" y="156" text-anchor="middle" class="s-muted" font-size="12">Verilog / VHDL</text>
+<line x1="120" y1="142" x2="146" y2="142" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="148" y="110" width="118" height="64" rx="8" class="b1 bstroke"/>
+<text x="207" y="137" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">Parse &amp;</text>
+<text x="207" y="156" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">elaborate</text>
+<line x1="266" y1="142" x2="292" y2="142" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="294" y="110" width="118" height="64" rx="8" class="b1 bstroke"/>
+<text x="353" y="137" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">RTL opt.</text>
+<text x="353" y="156" text-anchor="middle" class="s-muted" font-size="12">FSM, memory, arith.</text>
+<line x1="412" y1="142" x2="438" y2="142" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="440" y="110" width="118" height="64" rx="8" class="b3 bstroke"/>
+<text x="499" y="137" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">Logic opt.</text>
+<text x="499" y="156" text-anchor="middle" class="s-muted" font-size="12">AIG rewriting</text>
+<line x1="558" y1="142" x2="584" y2="142" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="586" y="110" width="110" height="64" rx="8" class="b3 bstroke"/>
+<text x="641" y="137" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">Tech</text>
+<text x="641" y="156" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">mapping</text>
+<line x1="696" y1="142" x2="722" y2="142" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="724" y="110" width="88" height="64" rx="8" class="b2 bstroke"/>
+<text x="768" y="137" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">Netlist</text>
+<text x="768" y="156" text-anchor="middle" class="s-muted" font-size="12">cells + wires</text>
+<!-- IR labels -->
+<text x="207" y="196" text-anchor="middle" class="s-muted" font-size="12">AST → RTL IR</text>
+<text x="353" y="196" text-anchor="middle" class="s-muted" font-size="12">word-level cells</text>
+<text x="499" y="196" text-anchor="middle" class="s-muted" font-size="12">bit-level gates</text>
+<text x="641" y="196" text-anchor="middle" class="s-muted" font-size="12">LUTs / std cells</text>
+<!-- side inputs -->
+<rect x="440" y="18" width="256" height="50" rx="8" class="b2 bstroke"/>
+<text x="568" y="40" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">Constraints (SDC / XDC)</text>
+<text x="568" y="57" text-anchor="middle" class="s-muted" font-size="12">clock period, I/O delays</text>
+<line x1="499" y1="68" x2="499" y2="106" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<line x1="641" y1="68" x2="641" y2="106" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="520" y="240" width="242" height="54" rx="8" class="b2 bstroke"/>
+<text x="641" y="262" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">Target library</text>
+<text x="641" y="280" text-anchor="middle" class="s-muted" font-size="12">Liberty cells or FPGA architecture</text>
+<line x1="641" y1="240" x2="641" y2="206" class="s-line" stroke-width="1.5" marker-end="url(#ar)"/>
+<!-- after -->
+<text x="768" y="230" text-anchor="middle" class="s-muted" font-size="12">→ place</text>
+<text x="768" y="246" text-anchor="middle" class="s-muted" font-size="12">&amp; route</text>
+<text x="10" y="315" class="s-muted" font-size="12">Blue: front end and word-level passes · Green: bit-level optimisation and mapping · Orange: external inputs</text>
+</svg>
+<figcaption>Figure 1. A typical RTL synthesis flow. Each stage lowers the design to a less abstract representation, much as a software compiler lowers source to IR and then to machine code. Stage names follow the Yosys <code>synth</code> script and De Micheli's taxonomy <sup class="c"><a href="#r14">14</a>,<a href="#r19">19</a></sup>.</figcaption>
+</figure>
+
+<h3>The compiler analogy, stage by stage</h3>
+<p>The analogy is close enough to be useful but not exact. The table below pairs each synthesis stage with the software-compiler stage that plays a similar role.</p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Software compiler <sup class="c"><a href="#r15">15</a></sup></th><th>Hardware synthesis</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Lexing and parsing</td><td>HDL parsing</td><td>Verilog, SystemVerilog and VHDL each have a formal grammar in their IEEE standard <sup class="c"><a href="#r20">20</a>,<a href="#r21">21</a>,<a href="#r22">22</a></sup>.</td></tr>
+<tr><td>Semantic analysis</td><td>Elaboration</td><td>Resolves parameters, generate blocks and the module hierarchy <sup class="c"><a href="#r21">21</a></sup>.</td></tr>
+<tr><td>Intermediate representation</td><td>RTL IR, then AIG</td><td>Yosys uses its RTLIL representation; ABC uses and-inverter graphs <sup class="c"><a href="#r4">4</a>,<a href="#r8">8</a></sup>.</td></tr>
+<tr><td>Common-subexpression elimination</td><td>Structural hashing</td><td>Two AND nodes with the same inputs are merged as they are created <sup class="c"><a href="#r23">23</a></sup>.</td></tr>
+<tr><td>Peephole and algebraic optimisation</td><td>AIG rewriting, refactoring, balancing</td><td>Local rewrites of small subgraphs that preserve function <sup class="c"><a href="#r24">24</a></sup>.</td></tr>
+<tr><td>Instruction selection</td><td>Technology mapping</td><td>DAGON adapted tree-pattern matching from code generation to cell libraries <sup class="c"><a href="#r13">13</a></sup>.</td></tr>
+<tr><td>Scheduling and register allocation</td><td>Retiming, placement and routing</td><td>A loose analogy: hardware places operations in space and moves registers rather than spilling them <sup class="c"><a href="#r25">25</a>,<a href="#r26">26</a></sup>.</td></tr>
+<tr><td>Object code</td><td>Gate-level netlist or FPGA bitstream</td><td>The netlist is still pre-layout; physical design follows <sup class="c"><a href="#r26">26</a></sup>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="hdl">2. Hardware description languages and RTL</h2>
+
+<p>The two dominant HDLs are Verilog and VHDL. Verilog was designed at Gateway Design Automation in the mid-1980s and was first standardised as IEEE 1364-1995 <sup class="c"><a href="#r20">20</a>,<a href="#r27">27</a></sup>. VHDL came out of the United States Department of Defense VHSIC programme and was first standardised as IEEE 1076-1987 <sup class="c"><a href="#r22">22</a></sup>. SystemVerilog (IEEE 1800) added verification and design features, and since the 2009 revision it includes Verilog as a subset <sup class="c"><a href="#r21">21</a></sup>.</p>
+
+<p>Both languages describe far more than hardware can build: delays such as <code>#5</code>, file I/O and most of the testbench constructs simulate but cannot be synthesised. IEEE 1364.1 defines the synthesisable subset of Verilog and how each construct should map to hardware <sup class="c"><a href="#r16">16</a></sup>. Designers therefore write at the <em>register-transfer level</em> (RTL): explicit registers, updated on clock edges, with combinational logic between them <sup class="c"><a href="#r14">14</a></sup>.</p>
+
+<h3>Listing 1. A 4-bit counter in Verilog</h3>
+<pre><code>// counter4.v : 4-bit up counter with synchronous reset and enable
+module counter4 (
+    input  wire       clk,
+    input  wire       rst,     // synchronous, active high
+    input  wire       en,
+    output reg  [3:0] q
+);
+    always @(posedge clk) begin
+        if (rst)
+            q &lt;= 4'd0;
+        else if (en)
+            q &lt;= q + 4'd1;
+    end
+endmodule</code></pre>
+
+<h3>Listing 2. The same counter in VHDL</h3>
+<pre><code>-- counter4.vhd
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity counter4 is
+  port (clk, rst, en : in  std_logic;
+        q            : out unsigned(3 downto 0));
+end entity;
+
+architecture rtl of counter4 is
+  signal cnt : unsigned(3 downto 0) := (others =&gt; '0');
+begin
+  process (clk) begin
+    if rising_edge(clk) then
+      if rst = '1' then
+        cnt &lt;= (others =&gt; '0');
+      elsif en = '1' then
+        cnt &lt;= cnt + 1;
+      end if;
+    end if;
+  end process;
+  q &lt;= cnt;
+end architecture;</code></pre>
+<p class="cap">Both listings describe the same hardware: four D flip-flops, a 4-bit incrementer, and multiplexing for reset and enable. The edge-triggered process is what tells the tool to infer flip-flops <sup class="c"><a href="#r16">16</a>,<a href="#r22">22</a></sup>.</p>
+
+<h3>Blocking and non-blocking assignment</h3>
+<p>Verilog has two assignment operators inside <code>always</code> blocks. A blocking assignment (<code>=</code>) updates its target immediately; a non-blocking assignment (<code>&lt;=</code>) schedules the update for the end of the time step <sup class="c"><a href="#r20">20</a></sup>. Cummings' widely cited guideline is to use non-blocking assignments for sequential logic and blocking assignments for combinational logic, because mixing them up makes simulation disagree with the synthesised hardware <sup class="c"><a href="#r28">28</a></sup>.</p>
+
+<pre><code>// Intended: a 3-stage shift register
+always @(posedge clk) begin   // correct: non-blocking
+    s1 &lt;= d;  s2 &lt;= s1;  s3 &lt;= s2;
+end
+
+always @(posedge clk) begin   // wrong: blocking
+    s1 = d;   s2 = s1;   s3 = s2;   // all three get d in one cycle
+end</code></pre>
+<p class="cap">With blocking assignments each statement sees the value just written by the previous one, so the "shift register" collapses into one stage. Synthesis then builds a single register driving three outputs <sup class="c"><a href="#r28">28</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="elab">3. Elaboration and inference</h2>
+
+<p>After parsing, the tool <em>elaborates</em> the design: it binds parameters, unrolls <code>generate</code> loops, and builds the module hierarchy <sup class="c"><a href="#r21">21</a></sup>. It then <em>infers</em> hardware from behavioural code. The IEEE 1364.1 standard gives the rules: an assignment inside an edge-sensitive process becomes a flip-flop; a variable that a level-sensitive process does not assign on every path becomes a latch; an <code>if</code> or <code>case</code> becomes a multiplexer <sup class="c"><a href="#r16">16</a></sup>.</p>
+
+<p>Yosys makes these steps visible as separate passes. <code>hierarchy</code> resolves the module tree, <code>proc</code> converts processes into multiplexers and flip-flop cells, <code>fsm</code> extracts and re-encodes state machines, <code>memory</code> infers RAMs, and <code>opt</code> removes redundant cells <sup class="c"><a href="#r19">19</a></sup>. Its internal representation, RTLIL, keeps word-level cells such as <code>$add</code> and <code>$mux</code> until later passes lower them to single-bit gates <sup class="c"><a href="#r4">4</a>,<a href="#r29">29</a></sup>.</p>
+
+<h3>Listing 3. An accidental latch, and the fix</h3>
+<pre><code>// BAD: y is not assigned when sel == 2'b11, so a latch is inferred
+always @(*) begin
+    case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+    endcase
+end
+
+// GOOD: a default assignment makes the block purely combinational
+always @(*) begin
+    y = 1'b0;
+    case (sel)
+        2'b00: y = a;
+        2'b01: y = b;
+        2'b10: y = c;
+    endcase
+end</code></pre>
+<p class="cap">In the first block <code>y</code> must "remember" its old value when <code>sel</code> is 3, which is exactly what a latch does <sup class="c"><a href="#r16">16</a></sup>. Most tools warn about inferred latches; Vivado's synthesis guide lists them among coding issues to check <sup class="c"><a href="#r5">5</a></sup>.</p>
+
+<h3>Finite-state machines</h3>
+<p>Finite-state machines (FSMs) are the sequential-logic equivalent of a control-flow graph. Huffman's 1954 paper laid out a systematic method for synthesising sequential switching circuits, including state reduction <sup class="c"><a href="#r30">30</a></sup>. Modern tools detect FSMs in RTL and may re-encode them: binary encoding uses ⌈log<sub>2</sub>&nbsp;n⌉ flip-flops for n states, while one-hot uses n flip-flops but simpler next-state logic <sup class="c"><a href="#r14">14</a></sup>. Vivado exposes the choice through the <code>fsm_encoding</code> attribute, with values such as <code>one_hot</code>, <code>sequential</code>, <code>gray</code> and <code>johnson</code> <sup class="c"><a href="#r5">5</a></sup>, and Yosys provides <code>fsm_recode</code> <sup class="c"><a href="#r19">19</a></sup>.</p>
+
+<figure>
+<svg viewBox="0 0 820 260" role="img" aria-labelledby="f2t">
+<title id="f2t">Moore state machine that detects the bit sequence 1 0 1</title>
+<defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-muted"/></marker></defs>
+<!-- states -->
+<circle cx="110" cy="130" r="42" class="b1 bstroke" stroke-width="1.5"/>
+<text x="110" y="126" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">S0</text>
+<text x="110" y="145" text-anchor="middle" class="s-muted" font-size="12">idle / 0</text>
+<circle cx="310" cy="130" r="42" class="b1 bstroke" stroke-width="1.5"/>
+<text x="310" y="126" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">S1</text>
+<text x="310" y="145" text-anchor="middle" class="s-muted" font-size="12">"1" / 0</text>
+<circle cx="510" cy="130" r="42" class="b1 bstroke" stroke-width="1.5"/>
+<text x="510" y="126" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">S2</text>
+<text x="510" y="145" text-anchor="middle" class="s-muted" font-size="12">"10" / 0</text>
+<circle cx="710" cy="130" r="42" class="b3 bstroke" stroke-width="1.5"/>
+<circle cx="710" cy="130" r="36" fill="none" class="bstroke" stroke-width="1.5"/>
+<text x="710" y="126" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">S3</text>
+<text x="710" y="145" text-anchor="middle" class="s-muted" font-size="12">"101" / 1</text>
+<!-- forward edges -->
+<line x1="152" y1="122" x2="266" y2="122" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="209" y="114" text-anchor="middle" class="s-fg" font-size="13">1</text>
+<line x1="352" y1="122" x2="466" y2="122" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="409" y="114" text-anchor="middle" class="s-fg" font-size="13">0</text>
+<line x1="552" y1="122" x2="666" y2="122" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="609" y="114" text-anchor="middle" class="s-fg" font-size="13">1</text>
+<!-- S2 -0-> S0 (bottom arc) -->
+<path d="M492,168 C440,240 180,240 128,168" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="310" y="236" text-anchor="middle" class="s-fg" font-size="13">0</text>
+<!-- S3 -0-> S2 -->
+<path d="M686,165 C660,200 560,200 534,165" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="610" y="206" text-anchor="middle" class="s-fg" font-size="13">0</text>
+<!-- S3 -1-> S1 (top arc) -->
+<path d="M690,93 C620,10 400,10 330,93" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="510" y="22" text-anchor="middle" class="s-fg" font-size="13">1</text>
+<!-- self loops -->
+<path d="M90,93 C70,50 150,50 130,93" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="110" y="52" text-anchor="middle" class="s-fg" font-size="13">0</text>
+<path d="M290,93 C270,50 350,50 330,93" class="s-line" stroke-width="1.5" marker-end="url(#ar2)"/>
+<text x="310" y="52" text-anchor="middle" class="s-fg" font-size="13">1</text>
+</svg>
+<figcaption>Figure 2. A Moore machine that raises its output for one cycle after seeing 1, 0, 1 on its input, with overlapping matches allowed. The label inside each state is the history it represents and its output; edge labels are the input bit. Listing 4 implements it.</figcaption>
+</figure>
+
+<h3>Listing 4. The "101" detector in Verilog</h3>
+<pre><code>module seq101 (
+    input  wire clk, rst, din,
+    output wire hit
+);
+    localparam S0 = 2'd0, S1 = 2'd1, S2 = 2'd2, S3 = 2'd3;
+    reg [1:0] state, next;
+
+    always @(posedge clk)            // state register
+        state &lt;= rst ? S0 : next;
+
+    always @(*) begin                 // next-state logic
+        next = state;                 // default avoids a latch
+        case (state)
+            S0: next = din ? S1 : S0;
+            S1: next = din ? S1 : S2;
+            S2: next = din ? S3 : S0;
+            S3: next = din ? S1 : S2;
+        endcase
+    end
+
+    assign hit = (state == S3);       // Moore output
+endmodule</code></pre>
+<p class="cap">The two-process style (one clocked block, one combinational block) is the pattern FSM extractors look for <sup class="c"><a href="#r5">5</a>,<a href="#r19">19</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="boolean">4. Boolean optimisation</h2>
+
+<p>Once the design is a network of gates, synthesis becomes a problem in Boolean algebra. Shannon's 1938 paper showed that relay switching circuits could be analysed and simplified with Boolean algebra, which is the foundation for everything in this section <sup class="c"><a href="#r31">31</a></sup>.</p>
+
+<h3>Two-level minimisation</h3>
+<p>A two-level circuit is a sum of products (SOP): an OR of AND terms. Minimising one means finding the fewest, smallest product terms that cover all the function's ones. Karnaugh's 1953 map method arranges the truth table in Gray-code order so that adjacent cells differ in one variable, letting people spot groupings by eye <sup class="c"><a href="#r32">32</a></sup>. Quine and McCluskey turned the same idea into an algorithm: generate every <em>prime implicant</em> by repeatedly merging terms that differ in one bit, then choose a minimum set that covers all minterms <sup class="c"><a href="#r33">33</a>,<a href="#r34">34</a></sup>. The covering step is NP-hard in general, so industrial tools use heuristics; Espresso, developed at IBM and Berkeley, became the standard heuristic two-level minimiser <sup class="c"><a href="#r10">10</a>,<a href="#r35">35</a></sup>.</p>
+
+<figure>
+<svg viewBox="0 0 820 300" role="img" aria-labelledby="f3t">
+<title id="f3t">Karnaugh map showing that the function equals b XNOR d</title>
+<g transform="translate(150,40)">
+<text x="-60" y="-14" class="s-muted" font-size="13">ab \ cd</text>
+<text x="40" y="-10" text-anchor="middle" class="s-fg" font-size="14">00</text>
+<text x="100" y="-10" text-anchor="middle" class="s-fg" font-size="14">01</text>
+<text x="160" y="-10" text-anchor="middle" class="s-fg" font-size="14">11</text>
+<text x="220" y="-10" text-anchor="middle" class="s-fg" font-size="14">10</text>
+<text x="-20" y="35" text-anchor="middle" class="s-fg" font-size="14">00</text>
+<text x="-20" y="95" text-anchor="middle" class="s-fg" font-size="14">01</text>
+<text x="-20" y="155" text-anchor="middle" class="s-fg" font-size="14">11</text>
+<text x="-20" y="215" text-anchor="middle" class="s-fg" font-size="14">10</text>
+<rect x="10" y="0" width="240" height="240" fill="none" class="bstroke" stroke-width="1.5"/>
+<line x1="70" y1="0" x2="70" y2="240" class="bstroke"/><line x1="130" y1="0" x2="130" y2="240" class="bstroke"/><line x1="190" y1="0" x2="190" y2="240" class="bstroke"/>
+<line x1="10" y1="60" x2="250" y2="60" class="bstroke"/><line x1="10" y1="120" x2="250" y2="120" class="bstroke"/><line x1="10" y1="180" x2="250" y2="180" class="bstroke"/>
+<!-- centre group bd -->
+<rect x="76" y="66" width="108" height="108" rx="14" class="b3" opacity="0.85"/>
+<!-- corner group b'd' -->
+<rect x="14" y="4" width="52" height="52" rx="12" class="b2" opacity="0.9"/>
+<rect x="194" y="4" width="52" height="52" rx="12" class="b2" opacity="0.9"/>
+<rect x="14" y="184" width="52" height="52" rx="12" class="b2" opacity="0.9"/>
+<rect x="194" y="184" width="52" height="52" rx="12" class="b2" opacity="0.9"/>
+<!-- values row 00: m0 m1 m3 m2 -->
+<text x="40" y="36" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<text x="100" y="36" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<text x="160" y="36" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<text x="220" y="36" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<!-- row 01: m4 m5 m7 m6 -->
+<text x="40" y="96" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<text x="100" y="96" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<text x="160" y="96" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<text x="220" y="96" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<!-- row 11: m12 m13 m15 m14 -->
+<text x="40" y="156" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<text x="100" y="156" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<text x="160" y="156" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<text x="220" y="156" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<!-- row 10: m8 m9 m11 m10 -->
+<text x="40" y="216" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+<text x="100" y="216" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<text x="160" y="216" text-anchor="middle" class="s-muted" font-size="16">0</text>
+<text x="220" y="216" text-anchor="middle" class="s-fg" font-size="16" font-weight="700">1</text>
+</g>
+<g transform="translate(450,70)">
+<rect x="0" y="0" width="22" height="16" rx="4" class="b3"/>
+<text x="32" y="13" class="s-fg" font-size="14">b·d covers m5, m7, m13, m15</text>
+<rect x="0" y="34" width="22" height="16" rx="4" class="b2"/>
+<text x="32" y="47" class="s-fg" font-size="14">b′·d′ covers m0, m2, m8, m10</text>
+<text x="0" y="98" class="s-fg" font-size="15" font-weight="600">f = b′d′ + bd = b ⊙ d</text>
+<text x="0" y="122" class="s-muted" font-size="13">The four corners are adjacent because the</text>
+<text x="0" y="140" class="s-muted" font-size="13">map wraps around like a torus.</text>
+<text x="0" y="170" class="s-muted" font-size="13">8 minterms with 4 literals each → 2 terms</text>
+<text x="0" y="188" class="s-muted" font-size="13">with 2 literals each.</text>
+</g>
+</svg>
+<figcaption>Figure 3. Karnaugh map for f(a,b,c,d) = Σm(0, 2, 5, 7, 8, 10, 13, 15). Rows and columns are in Gray-code order, so neighbouring cells differ in one variable <sup class="c"><a href="#r32">32</a></sup>. The function does not depend on a or c at all.</figcaption>
+</figure>
+
+<h3>Listing 5. Quine–McCluskey prime implicants in Python</h3>
+<p>This short program implements the first, prime-generating half of the Quine–McCluskey method <sup class="c"><a href="#r33">33</a>,<a href="#r34">34</a></sup>. Running it on the function in Figure 3 prints the two prime implicants <code>-0-0 b'd'</code> and <code>-1-1 bd</code>.</p>
+<pre><code>from itertools import combinations
+
+def combine(a, b):
+    """Merge two implicants (strings over 0/1/-) that differ in one bit."""
+    diff = [i for i in range(len(a)) if a[i] != b[i]]
+    if len(diff) == 1 and '-' not in (a[diff[0]], b[diff[0]]):
+        i = diff[0]
+        return a[:i] + '-' + a[i+1:]
+    return None
+
+def prime_implicants(minterms, n):
+    terms = {format(m, f'0{n}b') for m in minterms}
+    primes = set()
+    while terms:
+        used, nxt = set(), set()
+        for a, b in combinations(sorted(terms), 2):
+            c = combine(a, b)
+            if c:
+                nxt.add(c); used.update((a, b))
+        primes |= terms - used
+        terms = nxt
+    return primes
+
+def covers(imp, m, n):
+    bits = format(m, f'0{n}b')
+    return all(p in ('-', q) for p, q in zip(imp, bits))
+
+def to_expr(imp, names):
+    lits = [v if b == '1' else v + "'" for v, b in zip(names, imp) if b != '-']
+    return ''.join(lits) or '1'
+
+if __name__ == '__main__':
+    names, ms = 'abcd', [0, 2, 5, 7, 8, 10, 13, 15]
+    for p in sorted(prime_implicants(ms, 4)):
+        print(p, to_expr(p, names), [m for m in ms if covers(p, m, 4)])</code></pre>
+<p class="cap">Implicants are strings over <code>0</code>, <code>1</code> and <code>-</code> (don't care). Two implicants merge when they differ in exactly one fixed bit; an implicant that never merges is prime. Tested with Python 3.</p>
+
+<h3>Multi-level logic and and-inverter graphs</h3>
+<p>Real circuits are rarely two-level. Multi-level synthesis factors common subexpressions so that logic is shared, trading depth for area. Berkeley's MIS and SIS systems made this style of optimisation standard in the late 1980s and early 1990s <sup class="c"><a href="#r9">9</a>,<a href="#r17">17</a></sup>. Their successor in wide use today is ABC, which represents logic as an <em>and-inverter graph</em> (AIG): every node is a two-input AND, and edges may carry an inversion <sup class="c"><a href="#r8">8</a></sup>. Because AND and NOT form a complete basis, any Boolean function can be expressed this way, and the uniform structure makes rewriting fast <sup class="c"><a href="#r8">8</a>,<a href="#r23">23</a></sup>.</p>
+
+<p>Three ABC passes do most of the work. <code>rewrite</code> replaces small subgraphs, typically 4-input cuts, with precomputed smaller equivalents; <code>refactor</code> collapses a larger cone and re-factors it; and <code>balance</code> reduces depth by rebalancing chains of ANDs <sup class="c"><a href="#r11">11</a>,<a href="#r24">24</a></sup>. Mishchenko, Chatterjee and Brayton's DAG-aware rewriting accounts for logic sharing, so a rewrite is accepted only if the whole graph shrinks <sup class="c"><a href="#r24">24</a></sup>.</p>
+
+<figure>
+<svg viewBox="0 0 820 290" role="img" aria-labelledby="f4t">
+<title id="f4t">And-inverter graph of the majority function using four AND nodes</title>
+<defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-muted"/></marker></defs>
+<!-- inputs -->
+<rect x="150" y="240" width="40" height="30" rx="6" class="b4 bstroke"/><text x="170" y="260" text-anchor="middle" class="s-fg" font-size="14">a</text>
+<rect x="280" y="240" width="40" height="30" rx="6" class="b4 bstroke"/><text x="300" y="260" text-anchor="middle" class="s-fg" font-size="14">b</text>
+<rect x="430" y="240" width="40" height="30" rx="6" class="b4 bstroke"/><text x="450" y="260" text-anchor="middle" class="s-fg" font-size="14">c</text>
+<!-- n1 = a&b -->
+<circle cx="170" cy="170" r="22" class="b1 bstroke" stroke-width="1.5"/><text x="170" y="175" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">n1</text>
+<!-- n2 = !a & !b -->
+<circle cx="320" cy="170" r="22" class="b1 bstroke" stroke-width="1.5"/><text x="320" y="175" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">n2</text>
+<!-- n3 = c & !n2 -->
+<circle cx="400" cy="100" r="22" class="b1 bstroke" stroke-width="1.5"/><text x="400" y="105" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">n3</text>
+<!-- n4 = !n1 & !n3 ; out = !n4 -->
+<circle cx="280" cy="40" r="22" class="b1 bstroke" stroke-width="1.5"/><text x="280" y="45" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">n4</text>
+<!-- edges: solid = plain, dashed = complemented -->
+<line x1="170" y1="240" x2="170" y2="194" class="s-line" stroke-width="1.5" marker-end="url(#ar3)"/>
+<line x1="295" y1="240" x2="180" y2="190" class="s-line" stroke-width="1.5" marker-end="url(#ar3)"/>
+<line x1="185" y1="245" x2="305" y2="188" class="s-line" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar3)"/>
+<line x1="305" y1="240" x2="318" y2="194" class="s-line" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar3)"/>
+<line x1="450" y1="240" x2="410" y2="122" class="s-line" stroke-width="1.5" marker-end="url(#ar3)"/>
+<line x1="333" y1="152" x2="383" y2="116" class="s-line" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar3)"/>
+<line x1="178" y1="149" x2="263" y2="56" class="s-line" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar3)"/>
+<line x1="382" y1="86" x2="300" y2="50" class="s-line" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar3)"/>
+<line x1="280" y1="18" x2="280" y2="2" class="s-line" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="292" y="12" class="s-fg" font-size="13">maj = ¬n4</text>
+<!-- legend / equations -->
+<g transform="translate(520,40)">
+<text x="0" y="0" class="s-fg" font-size="14" font-weight="600">maj(a,b,c) = ab + ac + bc</text>
+<text x="0" y="22" class="s-muted" font-size="13">factored: ab + c(a + b)</text>
+<text x="0" y="56" class="s-fg" font-size="13">n1 = a ∧ b</text>
+<text x="0" y="76" class="s-fg" font-size="13">n2 = ¬a ∧ ¬b   (so ¬n2 = a + b)</text>
+<text x="0" y="96" class="s-fg" font-size="13">n3 = c ∧ ¬n2</text>
+<text x="0" y="116" class="s-fg" font-size="13">n4 = ¬n1 ∧ ¬n3  (so ¬n4 = n1 + n3)</text>
+<line x1="0" y1="150" x2="40" y2="150" class="s-line" stroke-width="1.5"/><text x="50" y="154" class="s-muted" font-size="13">plain edge</text>
+<line x1="0" y1="172" x2="40" y2="172" class="s-line" stroke-width="1.5" stroke-dasharray="5 4"/><text x="50" y="176" class="s-muted" font-size="13">complemented edge</text>
+<text x="0" y="210" class="s-muted" font-size="13">4 AND nodes, depth 3</text>
+</g>
+</svg>
+<figcaption>Figure 4. The 3-input majority function as an AIG. ORs become ANDs with complemented inputs and output (De Morgan), and factoring c out of ac + bc saves a node compared with a direct translation of the sum of products <sup class="c"><a href="#r8">8</a>,<a href="#r23">23</a></sup>.</figcaption>
+</figure>
+
+<h3>Binary decision diagrams</h3>
+<p>Bryant's reduced ordered binary decision diagrams (BDDs) give a canonical form for a Boolean function once the variable order is fixed: two functions are equal exactly when their BDDs are the same graph <sup class="c"><a href="#r36">36</a></sup>. That makes BDDs powerful for equivalence checking and some optimisations, but their size depends heavily on the variable order and some functions, such as multiplication, have no small BDD under any order <sup class="c"><a href="#r36">36</a></sup>. Modern equivalence checkers therefore combine AIGs with SAT solving and use BDDs only where they stay small <sup class="c"><a href="#r23">23</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="mapping">5. Technology mapping</h2>
+
+<p>Technology mapping is synthesis's instruction selection. The optimised network is expressed in a technology-independent form, and the mapper chooses which available cells cover it at lowest cost <sup class="c"><a href="#r14">14</a></sup>. Keutzer's DAGON split the subject graph into trees and applied tree-pattern matching borrowed from compiler code generators, which gives an optimal cover for each tree <sup class="c"><a href="#r13">13</a></sup>.</p>
+
+<p>The two main targets need different mappers:</p>
+<ul>
+<li><strong>ASIC standard cells.</strong> The library is a fixed set of gates (NAND2, NOR3, AOI21, flip-flops, and so on), each with area, delay and power characterised in a Liberty (<code>.lib</code>) file <sup class="c"><a href="#r37">37</a>,<a href="#r38">38</a></sup>. The mapper matches library patterns against the subject graph and picks the cheapest cover.</li>
+<li><strong>FPGA lookup tables.</strong> A K-input LUT is a small memory that can implement <em>any</em> function of K inputs, so matching is replaced by finding <em>cuts</em>: sets of at most K signals that separate a node from the primary inputs <sup class="c"><a href="#r12">12</a>,<a href="#r18">18</a></sup>. Cong and Ding's FlowMap computes a depth-optimal K-LUT mapping in polynomial time <sup class="c"><a href="#r18">18</a></sup>, and ABC's priority-cut mapper adds area recovery <sup class="c"><a href="#r12">12</a></sup>.</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 820 260" role="img" aria-labelledby="f5t">
+<title id="f5t">The same full-adder carry mapped to standard cells and to one FPGA lookup table</title>
+<!-- left: ASIC -->
+<text x="200" y="24" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">ASIC: standard-cell cover</text>
+<rect x="40" y="60" width="90" height="44" rx="6" class="b1 bstroke"/><text x="85" y="87" text-anchor="middle" class="s-fg" font-size="13">NAND2 (a,b)</text>
+<rect x="40" y="130" width="90" height="44" rx="6" class="b1 bstroke"/><text x="85" y="157" text-anchor="middle" class="s-fg" font-size="13">OR2 (a,b)</text>
+<rect x="175" y="130" width="90" height="44" rx="6" class="b1 bstroke"/><text x="220" y="157" text-anchor="middle" class="s-fg" font-size="13">NAND2 (·,c)</text>
+<rect x="290" y="90" width="90" height="44" rx="6" class="b1 bstroke"/><text x="335" y="117" text-anchor="middle" class="s-fg" font-size="13">NAND2</text>
+<line x1="130" y1="82" x2="290" y2="104" class="s-line" stroke-width="1.5"/>
+<line x1="130" y1="152" x2="175" y2="152" class="s-line" stroke-width="1.5"/>
+<line x1="265" y1="152" x2="290" y2="122" class="s-line" stroke-width="1.5"/>
+<line x1="380" y1="112" x2="400" y2="112" class="s-line" stroke-width="1.5"/>
+<text x="398" y="100" class="s-fg" font-size="13">cout</text>
+<text x="40" y="214" class="s-muted" font-size="13">cout = ¬(¬(ab) · ¬(c(a+b))) = ab + c(a+b)</text>
+<text x="40" y="234" class="s-muted" font-size="13">Cost = sum of cell areas from the Liberty file</text>
+<!-- divider -->
+<line x1="440" y1="20" x2="440" y2="240" class="bstroke" stroke-width="1.5"/>
+<!-- right: FPGA -->
+<text x="630" y="24" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">FPGA: one 3-input cut</text>
+<rect x="560" y="70" width="140" height="100" rx="8" class="b3 bstroke" stroke-width="1.5"/>
+<text x="630" y="105" text-anchor="middle" class="s-fg" font-size="15" font-weight="600">LUT3</text>
+<text x="630" y="127" text-anchor="middle" class="s-muted" font-size="12">INIT = 8'hE8</text>
+<text x="630" y="146" text-anchor="middle" class="s-muted" font-size="12">(truth table of maj)</text>
+<line x1="500" y1="90" x2="560" y2="90" class="s-line" stroke-width="1.5"/><text x="490" y="95" text-anchor="end" class="s-fg" font-size="13">a</text>
+<line x1="500" y1="120" x2="560" y2="120" class="s-line" stroke-width="1.5"/><text x="490" y="125" text-anchor="end" class="s-fg" font-size="13">b</text>
+<line x1="500" y1="150" x2="560" y2="150" class="s-line" stroke-width="1.5"/><text x="490" y="155" text-anchor="end" class="s-fg" font-size="13">c</text>
+<line x1="700" y1="120" x2="740" y2="120" class="s-line" stroke-width="1.5"/><text x="746" y="125" class="s-fg" font-size="13">cout</text>
+<text x="470" y="214" class="s-muted" font-size="13">Any function of ≤ K inputs fits in one K-LUT, so the</text>
+<text x="470" y="234" class="s-muted" font-size="13">mapper looks for K-feasible cuts, not gate patterns.</text>
+</svg>
+<figcaption>Figure 5. The carry output of a full adder (the majority function from Figure 4) mapped two ways. With inputs ordered c, b, a from most to least significant index bit, the eight-entry truth table of majority is 1110&nbsp;1000 in binary, or <code>8'hE8</code>, which is how LUT contents are commonly written <sup class="c"><a href="#r18">18</a>,<a href="#r39">39</a></sup>.</figcaption>
+</figure>
+
+<p>The LUT size is a property of the device. AMD (Xilinx) 7-series FPGAs have six-input LUTs, four per slice, and each can also act as two five-input LUTs that share inputs <sup class="c"><a href="#r39">39</a></sup>. Lattice iCE40 devices use four-input LUTs, each paired with a flip-flop and carry logic in a logic cell <sup class="c"><a href="#r40">40</a></sup>. Arithmetic is usually not mapped into LUTs alone: synthesis tools infer the dedicated carry chains and DSP blocks the fabric provides <sup class="c"><a href="#r5">5</a>,<a href="#r39">39</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="seq">6. Sequential and timing-driven synthesis</h2>
+
+<p>Area is not the only cost. Most designs must meet a clock frequency, so synthesis is guided by <em>static timing analysis</em> (STA). STA computes, for every path from a launching register to a capturing register, the arrival time of the data and compares it with the required time set by the clock period and the capturing flip-flop's setup time. The difference is the <em>slack</em>; a negative slack is a timing violation <sup class="c"><a href="#r38">38</a></sup>. Constraints are written in SDC (Synopsys Design Constraints), a Tcl-based format that commercial and open-source tools accept; Vivado's XDC is based on it <sup class="c"><a href="#r5">5</a>,<a href="#r38">38</a></sup>.</p>
+
+<figure>
+<svg viewBox="0 0 820 250" role="img" aria-labelledby="f6t">
+<title id="f6t">A register-to-register timing path with arrival and required times</title>
+<defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-muted"/></marker></defs>
+<rect x="40" y="50" width="80" height="80" rx="6" class="b4 bstroke" stroke-width="1.5"/>
+<text x="80" y="88" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">FF1</text>
+<text x="80" y="108" text-anchor="middle" class="s-muted" font-size="12">launch</text>
+<path d="M210,50 h260 l30,40 l-30,40 h-260 l30,-40 z" class="b1 bstroke" stroke-width="1.5"/>
+<text x="355" y="86" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">Combinational logic</text>
+<text x="355" y="106" text-anchor="middle" class="s-muted" font-size="12">t_logic = 3.9 ns (critical path)</text>
+<rect x="590" y="50" width="80" height="80" rx="6" class="b4 bstroke" stroke-width="1.5"/>
+<text x="630" y="88" text-anchor="middle" class="s-fg" font-size="14" font-weight="600">FF2</text>
+<text x="630" y="108" text-anchor="middle" class="s-muted" font-size="12">capture</text>
+<line x1="120" y1="90" x2="236" y2="90" class="s-line" stroke-width="1.5" marker-end="url(#ar4)"/>
+<text x="178" y="80" text-anchor="middle" class="s-muted" font-size="12">t_cq = 0.3</text>
+<line x1="500" y1="90" x2="588" y2="90" class="s-line" stroke-width="1.5" marker-end="url(#ar4)"/>
+<!-- clock -->
+<line x1="20" y1="170" x2="700" y2="170" class="s-line" stroke-width="1"/>
+<line x1="80" y1="170" x2="80" y2="132" class="s-line" stroke-width="1.5" marker-end="url(#ar4)"/>
+<line x1="630" y1="170" x2="630" y2="132" class="s-line" stroke-width="1.5" marker-end="url(#ar4)"/>
+<text x="706" y="174" class="s-muted" font-size="12">clk (T = 5 ns)</text>
+<!-- timeline -->
+<g transform="translate(40,200)">
+<rect x="0" y="0" width="34" height="18" class="b2"/><text x="17" y="13" text-anchor="middle" class="s-fg" font-size="11">cq</text>
+<rect x="34" y="0" width="442" height="18" class="b1"/><text x="255" y="13" text-anchor="middle" class="s-fg" font-size="11">logic 3.9</text>
+<rect x="476" y="0" width="68" height="18" class="b3"/><text x="510" y="13" text-anchor="middle" class="s-fg" font-size="11">slack +0.6</text>
+<rect x="544" y="0" width="22" height="18" class="b4"/><text x="555" y="13" text-anchor="middle" class="s-fg" font-size="10">su</text>
+<text x="0" y="36" class="s-muted" font-size="12">arrival = 0.3 + 3.9 = 4.2 ns · required = 5.0 − 0.2 (setup) = 4.8 ns · slack = 4.8 − 4.2 = +0.6 ns</text>
+</g>
+</svg>
+<figcaption>Figure 6. A single register-to-register path. With a 5&nbsp;ns clock, 0.3&nbsp;ns clock-to-Q, 3.9&nbsp;ns of logic and 0.2&nbsp;ns setup, slack is +0.6&nbsp;ns, so the path meets timing with margin. Clock skew and uncertainty are ignored here for simplicity <sup class="c"><a href="#r38">38</a></sup>.</figcaption>
+</figure>
+
+<h3>Retiming</h3>
+<p>Leiserson and Saxe showed that registers can be moved across combinational logic without changing a circuit's input-output behaviour, and gave graph algorithms that find the register placement minimising clock period <sup class="c"><a href="#r25">25</a></sup>. Retiming is the hardware counterpart of software pipelining: it rebalances the work between pipeline stages. Vivado can apply it during synthesis with <code>synth_design -retiming</code> <sup class="c"><a href="#r5">5</a>,<a href="#r41">41</a></sup>, and ABC provides sequential commands such as <code>retime</code> <sup class="c"><a href="#r11">11</a></sup>.</p>
+
+<h3>Formal equivalence checking</h3>
+<p>A compiler bug in software produces a wrong program; a synthesis bug produces a wrong chip, which is far more expensive. Teams therefore check that the netlist is functionally equivalent to the RTL. Combinational equivalence checking builds a <em>miter</em>, which XORs the outputs of the two designs, and proves that the miter output can never be 1, using AIGs, SAT and BDDs together <sup class="c"><a href="#r23">23</a></sup>. ABC's <code>cec</code> command does this for combinational logic <sup class="c"><a href="#r8">8</a></sup>, Yosys offers an <code>equiv_*</code> family of passes <sup class="c"><a href="#r19">19</a></sup>, and SymbiYosys drives formal property checking on top of Yosys <sup class="c"><a href="#r42">42</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="flows">7. FPGA and ASIC flows</h2>
+
+<p>Logic synthesis is one step in a longer flow. The front half is similar for both targets; the back half is not.</p>
+
+<figure>
+<svg viewBox="0 0 820 260" role="img" aria-labelledby="f7t">
+<title id="f7t">FPGA and ASIC implementation flows side by side</title>
+<defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-muted"/></marker></defs>
+<rect x="10" y="100" width="100" height="56" rx="8" class="b4 bstroke"/><text x="60" y="125" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">RTL +</text><text x="60" y="143" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">constraints</text>
+<rect x="140" y="100" width="100" height="56" rx="8" class="b1 bstroke"/><text x="190" y="125" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">Simulate &amp;</text><text x="190" y="143" text-anchor="middle" class="s-fg" font-size="13" font-weight="600">verify</text>
+<line x1="110" y1="128" x2="138" y2="128" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<line x1="240" y1="128" x2="270" y2="60" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<line x1="240" y1="128" x2="270" y2="196" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<!-- FPGA lane -->
+<text x="272" y="24" class="s-fg" font-size="13" font-weight="700">FPGA</text>
+<rect x="272" y="34" width="110" height="50" rx="8" class="b3 bstroke"/><text x="327" y="56" text-anchor="middle" class="s-fg" font-size="13">Synthesis</text><text x="327" y="73" text-anchor="middle" class="s-muted" font-size="10">LUTs, FFs, DSP, BRAM</text>
+<rect x="408" y="34" width="110" height="50" rx="8" class="b3 bstroke"/><text x="463" y="56" text-anchor="middle" class="s-fg" font-size="13">Pack &amp; place</text><text x="463" y="73" text-anchor="middle" class="s-muted" font-size="11">fixed fabric sites</text>
+<rect x="544" y="34" width="110" height="50" rx="8" class="b3 bstroke"/><text x="599" y="56" text-anchor="middle" class="s-fg" font-size="13">Route</text><text x="599" y="73" text-anchor="middle" class="s-muted" font-size="11">programmable wires</text>
+<rect x="680" y="34" width="130" height="50" rx="8" class="b2 bstroke"/><text x="745" y="56" text-anchor="middle" class="s-fg" font-size="13">Bitstream</text><text x="745" y="73" text-anchor="middle" class="s-muted" font-size="11">configures the device</text>
+<line x1="382" y1="59" x2="406" y2="59" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<line x1="518" y1="59" x2="542" y2="59" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<line x1="654" y1="59" x2="678" y2="59" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<!-- ASIC lane -->
+<text x="272" y="160" class="s-fg" font-size="13" font-weight="700">ASIC</text>
+<rect x="272" y="170" width="110" height="50" rx="8" class="b1 bstroke"/><text x="327" y="192" text-anchor="middle" class="s-fg" font-size="13">Synthesis</text><text x="327" y="209" text-anchor="middle" class="s-muted" font-size="11">Liberty std cells</text>
+<rect x="408" y="170" width="110" height="50" rx="8" class="b1 bstroke"/><text x="463" y="192" text-anchor="middle" class="s-fg" font-size="13">Floorplan, place</text><text x="463" y="209" text-anchor="middle" class="s-muted" font-size="11">clock tree synthesis</text>
+<rect x="544" y="170" width="110" height="50" rx="8" class="b1 bstroke"/><text x="599" y="192" text-anchor="middle" class="s-fg" font-size="13">Route &amp; signoff</text><text x="599" y="209" text-anchor="middle" class="s-muted" font-size="11">STA, DRC, LVS</text>
+<rect x="680" y="170" width="130" height="50" rx="8" class="b2 bstroke"/><text x="745" y="192" text-anchor="middle" class="s-fg" font-size="13">GDSII layout</text><text x="745" y="209" text-anchor="middle" class="s-muted" font-size="11">masks, fabrication</text>
+<line x1="382" y1="195" x2="406" y2="195" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<line x1="518" y1="195" x2="542" y2="195" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<line x1="654" y1="195" x2="678" y2="195" class="s-line" stroke-width="1.5" marker-end="url(#ar5)"/>
+<text x="10" y="250" class="s-muted" font-size="12">Open-source examples: Yosys → nextpnr → IceStorm (FPGA); Yosys → OpenROAD → SKY130 GDSII (ASIC)</text>
+</svg>
+<figcaption>Figure 7. FPGA and ASIC flows share a front end and diverge after synthesis. Stage names follow Kahng et al. for physical design and the Yosys+nextpnr and OpenROAD papers for the open-source examples <sup class="c"><a href="#r26">26</a>,<a href="#r43">43</a>,<a href="#r44">44</a></sup>.</figcaption>
+</figure>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>Aspect</th><th>FPGA</th><th>ASIC</th></tr></thead>
+<tbody>
+<tr><td>Mapping target</td><td>K-input LUTs, flip-flops, carry chains, DSP and block RAM <sup class="c"><a href="#r39">39</a>,<a href="#r40">40</a></sup></td><td>Standard-cell library described in Liberty <sup class="c"><a href="#r37">37</a></sup></td></tr>
+<tr><td>Output of the flow</td><td>Configuration bitstream <sup class="c"><a href="#r43">43</a></sup></td><td>GDSII layout for mask making <sup class="c"><a href="#r26">26</a></sup></td></tr>
+<tr><td>Cost of a mistake</td><td>Re-synthesise and reload</td><td>New masks and a new fabrication run <sup class="c"><a href="#r26">26</a></sup></td></tr>
+<tr><td>Efficiency gap</td><td colspan="2">Kuon and Rose measured soft FPGA logic at about 35 times the area, 3.4 to 4.6 times the critical-path delay and about 14 times the dynamic power of a standard-cell ASIC in the same 90&nbsp;nm process; hard blocks such as DSPs and RAMs narrow the area gap <sup class="c"><a href="#r45">45</a></sup>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="tools">8. Tools and software</h2>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>Tool</th><th>Role</th><th>Licence</th></tr></thead>
+<tbody>
+<tr><td>Yosys</td><td>Open-source RTL synthesis framework</td><td>ISC <sup class="c"><a href="#r46">46</a></sup></td></tr>
+<tr><td>ABC</td><td>Logic optimisation, mapping and verification</td><td>Permissive Berkeley licence <sup class="c"><a href="#r11">11</a></sup></td></tr>
+<tr><td>AMD Vivado</td><td>FPGA synthesis and implementation for AMD devices</td><td>Proprietary <sup class="c"><a href="#r5">5</a></sup></td></tr>
+<tr><td>Altera Quartus Prime</td><td>FPGA synthesis and implementation for Altera devices</td><td>Proprietary <sup class="c"><a href="#r47">47</a></sup></td></tr>
+<tr><td>Synopsys Design Compiler</td><td>ASIC RTL synthesis</td><td>Proprietary <sup class="c"><a href="#r6">6</a></sup></td></tr>
+<tr><td>Cadence Genus</td><td>ASIC RTL synthesis</td><td>Proprietary <sup class="c"><a href="#r7">7</a></sup></td></tr>
+<tr><td>nextpnr</td><td>FPGA place and route</td><td>ISC <sup class="c"><a href="#r48">48</a></sup></td></tr>
+<tr><td>VTR (Verilog to Routing)</td><td>Academic FPGA CAD flow and architecture exploration</td><td>Open source <sup class="c"><a href="#r49">49</a></sup></td></tr>
+<tr><td>OpenROAD</td><td>Open-source RTL-to-GDSII ASIC flow</td><td>BSD-3-Clause <sup class="c"><a href="#r44">44</a></sup></td></tr>
+<tr><td>Verilator, Icarus Verilog</td><td>Simulation before and after synthesis</td><td>Open source <sup class="c"><a href="#r50">50</a>,<a href="#r51">51</a></sup></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="yosys"><span class="toolhead">Yosys <span class="tag">open-source RTL synthesis</span></span></h3>
+<p>Yosys (Yosys Open SYnthesis Suite) was created by Claire Wolf and first presented in 2013 <sup class="c"><a href="#r29">29</a></sup>. It parses Verilog-2005 with a useful subset of SystemVerilog, converts it to its RTLIL intermediate representation, and runs a script of passes <sup class="c"><a href="#r4">4</a></sup>. The generic <code>synth</code> command chains the coarse-grained passes (<code>proc</code>, <code>opt</code>, <code>fsm</code>, <code>memory</code>, <code>alumacc</code>, <code>share</code>) with fine-grained lowering (<code>techmap</code>) and calls ABC for logic optimisation and mapping <sup class="c"><a href="#r19">19</a></sup>. Target-specific scripts such as <code>synth_ice40</code>, <code>synth_ecp5</code> and <code>synth_xilinx</code> map to particular FPGA families <sup class="c"><a href="#r19">19</a></sup>.</p>
+
+<h4>Listing 6. A Yosys script for a generic ASIC library</h4>
+<pre><code># asic.ys : run with  yosys -s asic.ys
+read_verilog counter4.v
+hierarchy -check -top counter4
+synth -top counter4          # generic coarse + fine synthesis
+dfflibmap -liberty cells.lib # map flip-flops to library cells
+abc -liberty cells.lib       # optimise and map combinational logic
+opt_clean
+stat -liberty cells.lib      # area report from library data
+write_verilog -noattr counter4_netlist.v</code></pre>
+<p class="cap"><code>dfflibmap</code> and <code>abc -liberty</code> are the documented way to target a standard-cell library in Yosys <sup class="c"><a href="#r19">19</a></sup>. <code>cells.lib</code> stands for any Liberty file, for example one from the SKY130 open PDK <sup class="c"><a href="#r52">52</a></sup>.</p>
+
+<h4>Listing 7. Verilog to bitstream on a Lattice iCE40</h4>
+<pre><code># 1. synthesise to iCE40 primitives (SB_LUT4, SB_CARRY, SB_DFF*)
+yosys -p "synth_ice40 -top counter4 -json counter4.json" counter4.v
+
+# 2. place and route; pins come from a .pcf constraints file
+nextpnr-ice40 --hx8k --package ct256 --json counter4.json \
+              --pcf counter4.pcf --asc counter4.asc
+
+# 3. pack the ASCII configuration into a binary bitstream
+icepack counter4.asc counter4.bin</code></pre>
+<p class="cap">This fully open flow was described by Shah et al. and builds on the reverse-engineered bitstream documentation of Project IceStorm <sup class="c"><a href="#r43">43</a>,<a href="#r53">53</a></sup>.</p>
+
+<h3 id="abc"><span class="toolhead">ABC <span class="tag">logic synthesis and verification</span></span></h3>
+<p>ABC, from the Berkeley Logic Synthesis and Verification Group, combines AIG-based combinational and sequential optimisation, technology mapping for standard cells and LUTs, and equivalence and model checking in one program <sup class="c"><a href="#r8">8</a>,<a href="#r11">11</a></sup>. Yosys, VTR and OpenROAD-based flows all call it for the bit-level part of synthesis <sup class="c"><a href="#r19">19</a>,<a href="#r44">44</a>,<a href="#r49">49</a></sup>.</p>
+
+<h4>Listing 8. An ABC session that optimises and maps to 4-LUTs</h4>
+<pre><code>read_blif design.blif
+strash                    # build a structurally hashed AIG
+print_stats
+# the "resyn2" recipe written out in full:
+balance; rewrite; refactor; balance; rewrite; rewrite -z
+balance; refactor -z; rewrite -z; balance
+print_stats
+if -K 4                   # cut-based mapping to 4-input LUTs
+print_stats
+write_blif design_mapped.blif</code></pre>
+<p class="cap"><code>strash</code>, <code>rewrite</code>, <code>refactor</code>, <code>balance</code> and <code>if</code> are documented ABC commands; the <code>-z</code> flag also accepts zero-gain rewrites, which can open up later improvements <sup class="c"><a href="#r11">11</a>,<a href="#r12">12</a>,<a href="#r24">24</a></sup>.</p>
+
+<h3 id="vivado"><span class="toolhead">AMD Vivado <span class="tag">FPGA synthesis and implementation</span></span></h3>
+<p>Vivado synthesises Verilog, SystemVerilog and VHDL for AMD (formerly Xilinx) FPGAs and controls inference with HDL attributes such as <code>fsm_encoding</code>, <code>ram_style</code> and <code>use_dsp</code> <sup class="c"><a href="#r5">5</a></sup>. Its Tcl interface supports a "non-project" mode in which a script drives each step explicitly <sup class="c"><a href="#r41">41</a></sup>.</p>
+<h4>Listing 9. Vivado non-project Tcl flow</h4>
+<pre><code># build.tcl : vivado -mode batch -source build.tcl
+read_verilog counter4.v
+read_xdc     counter4.xdc
+synth_design -top counter4 -part xc7a35tcpg236-1
+opt_design
+place_design
+route_design
+report_utilization    -file util.rpt
+report_timing_summary -file timing.rpt
+write_bitstream -force counter4.bit</code></pre>
+<p class="cap">Every command in Listing 9 is documented in the Vivado Tcl reference <sup class="c"><a href="#r41">41</a></sup>. The part number is an Artix-7 device used on common teaching boards.</p>
+
+<h3 id="dc"><span class="toolhead">Synopsys Design Compiler <span class="tag">ASIC RTL synthesis</span></span></h3>
+<p>Design Compiler is Synopsys's long-standing ASIC synthesis tool; the product family now sits within Synopsys's RTL synthesis portfolio <sup class="c"><a href="#r6">6</a></sup>. It reads RTL, maps it to the standard cells in the target library, and optimises against SDC timing constraints <sup class="c"><a href="#r6">6</a>,<a href="#r38">38</a></sup>. Cadence Genus fills the same role in the Cadence flow <sup class="c"><a href="#r7">7</a></sup>.</p>
+<h4>Listing 10. A Design Compiler script with SDC constraints</h4>
+<pre><code># dc.tcl : dc_shell -f dc.tcl
+set_app_var target_library "stdcells_tt.db"
+set_app_var link_library   "* stdcells_tt.db"
+
+analyze -format sverilog counter4.v
+elaborate counter4
+link
+
+# --- SDC timing constraints ---
+create_clock -name clk -period 2.0 [get_ports clk]
+set_input_delay  0.3 -clock clk [remove_from_collection [all_inputs] [get_ports clk]]
+set_output_delay 0.3 -clock clk [all_outputs]
+
+compile_ultra
+report_qor
+report_timing -max_paths 5
+write -format verilog -hierarchy -output counter4_netlist.v
+write_sdc counter4_out.sdc</code></pre>
+<p class="cap"><code>create_clock</code>, <code>set_input_delay</code> and <code>set_output_delay</code> are standard SDC commands, which Bhasker and Chadha describe in detail <sup class="c"><a href="#r38">38</a></sup>. The library name is a placeholder for a vendor's compiled Liberty file.</p>
+
+<h3 id="others"><span class="toolhead">Other tools <span class="tag">place and route, simulation, research</span></span></h3>
+<ul>
+<li><strong>nextpnr</strong> is a portable, timing-driven FPGA place-and-route tool that supports Lattice iCE40 and ECP5 among other architectures <sup class="c"><a href="#r43">43</a>,<a href="#r48">48</a></sup>.</li>
+<li><strong>VTR</strong> (Verilog to Routing) is an academic flow that combines a Verilog front end, ABC and the VPR placer and router, and lets researchers describe hypothetical FPGA architectures <sup class="c"><a href="#r49">49</a></sup>.</li>
+<li><strong>OpenROAD</strong> is an open-source RTL-to-GDSII flow that uses Yosys for synthesis and aims at layout without human intervention <sup class="c"><a href="#r44">44</a></sup>. Combined with the SkyWater SKY130 open process design kit it can produce manufacturable layouts <sup class="c"><a href="#r52">52</a></sup>.</li>
+<li><strong>Verilator</strong> compiles synthesisable Verilog into a fast cycle-based C++ model, and <strong>Icarus Verilog</strong> is an event-driven simulator; both are used to check designs before and after synthesis <sup class="c"><a href="#r50">50</a>,<a href="#r51">51</a></sup>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="hls">9. A short note on high-level synthesis</h2>
+<div class="note"><p>High-level synthesis is covered in depth in a separate article in this series. This section only places it in the overall flow.</p></div>
+<p>High-level synthesis (HLS) sits one level above RTL synthesis. It takes an untimed algorithm, usually C or C++, and produces RTL by performing three core tasks: <em>scheduling</em> (assigning operations to clock cycles), <em>allocation</em> (choosing how many functional units of each kind to build) and <em>binding</em> (assigning each operation to a unit and each value to a register) <sup class="c"><a href="#r1">1</a></sup>. The RTL it produces then goes through the logic synthesis flow described above. Examples include AMD Vitis HLS, which accepts C and C++ with pragmas for pipelining and interfaces <sup class="c"><a href="#r2">2</a></sup>, and the open-source Bambu framework <sup class="c"><a href="#r3">3</a></sup>. Nane et al. compared academic and commercial HLS tools and found that results vary widely with the tool and the optimisations applied <sup class="c"><a href="#r54">54</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="hcl">10. Beyond HDLs: hardware construction languages and MLIR</h2>
+<p>Hardware construction languages embed hardware description inside a general-purpose language so that generators, not hand-written modules, produce the RTL. Chisel is embedded in Scala <sup class="c"><a href="#r55">55</a></sup>, and its compiler lowers designs through the FIRRTL intermediate representation, which applies compiler-style transformation passes to circuits <sup class="c"><a href="#r56">56</a></sup>. Amaranth embeds hardware description in Python <sup class="c"><a href="#r57">57</a></sup>. CIRCT, an LLVM project, applies the MLIR compiler infrastructure to hardware, providing dialects for FIRRTL, RTL structure and SystemVerilog emission <sup class="c"><a href="#r58">58</a></sup>. These projects make the link between hardware synthesis and compiler construction explicit: they reuse IR design, pass managers and rewriting frameworks from software compilers.</p>
+
+<h4>Listing 11. The 4-bit counter in Chisel</h4>
+<pre><code>import chisel3._
+
+class Counter4 extends Module {
+  val io = IO(new Bundle {
+    val en = Input(Bool())
+    val q  = Output(UInt(4.W))
+  })
+  val cnt = RegInit(0.U(4.W))      // implicit clock and synchronous reset
+  when (io.en) { cnt := cnt + 1.U }
+  io.q := cnt
+}</code></pre>
+<p class="cap">Chisel modules have an implicit clock and reset, and <code>RegInit</code> creates a register with a reset value <sup class="c"><a href="#r55">55</a></sup>. The generated Verilog is equivalent to Listing 1.</p>
+
+<!-- ============================================================ -->
+<h2 id="exercises">11. Exercises with solutions</h2>
+<p>Try each exercise before opening its solution.</p>
+
+<details><summary>Exercise 1 · Spot the latch</summary>
+<p>Which of these combinational blocks infers a latch, and why?</p>
+<pre><code>// (A)
+always @(*) if (en) y = d;
+// (B)
+always @(*) begin y = 1'b0; if (en) y = d; end
+// (C)
+always @(*) y = en ? d : 1'b0;</code></pre>
+<div class="sol"><p>Only (A). When <code>en</code> is 0, <code>y</code> is not assigned, so it must hold its previous value, which is the behaviour of a level-sensitive latch <sup class="c"><a href="#r16">16</a></sup>. (B) assigns a default first, and (C) assigns on both branches of the conditional, so both are purely combinational AND gates.</p></div>
+</details>
+
+<details><summary>Exercise 2 · Quine–McCluskey by hand</summary>
+<p>Find all prime implicants of f(a,b,c) = Σm(0, 1, 2, 5, 6, 7), then give a minimum sum of products.</p>
+<div class="sol"><p>The prime implicants are a′b′ (m0, m1), a′c′ (m0, m2), b′c (m1, m5), bc′ (m2, m6), ac (m5, m7) and ab (m6, m7). Every minterm is covered by exactly two primes, so there are no essential primes; this is a <em>cyclic</em> covering problem <sup class="c"><a href="#r34">34</a></sup>. Two minimum covers each use three terms: <strong>f = a′b′ + bc′ + ac</strong>, or <strong>f = a′c′ + b′c + ab</strong>. Running Listing 5 with <code>prime_implicants([0,1,2,5,6,7], 3)</code> prints the same six primes.</p></div>
+</details>
+
+<details><summary>Exercise 3 · Count the AIG nodes</summary>
+<p>How many two-input AND nodes does a direct AIG translation of the unfactored sum of products ab + ac + bc need, and how many does the factored form in Figure 4 need?</p>
+<div class="sol"><p>Unfactored: three ANDs for the product terms, then a three-input OR, which in an AIG is two ANDs with complemented inputs and output (De Morgan). That totals <strong>5</strong> nodes. Factored ab + c(a + b): one AND for ab, one for a + b (as ¬(¬a ∧ ¬b)), one for c ∧ (a + b), and one for the final OR, totalling <strong>4</strong> <sup class="c"><a href="#r23">23</a></sup>. Rewriting passes such as ABC's <code>rewrite</code> find this kind of saving automatically <sup class="c"><a href="#r24">24</a></sup>.</p></div>
+</details>
+
+<details><summary>Exercise 4 · LUT counting</summary>
+<p>An 8-input AND gate must be mapped to (a) 4-input LUTs and (b) 6-input LUTs. What is the minimum number of LUTs and the logic depth in each case?</p>
+<div class="sol"><p>(a) A 4-LUT can absorb at most four inputs, so the first level needs two LUTs (inputs 1 to 4 and 5 to 8), and a third LUT ANDs their outputs: <strong>3 LUTs, depth 2</strong>. (b) One 6-LUT takes six inputs; a second LUT combines its output with the remaining two inputs (three inputs in total): <strong>2 LUTs, depth 2</strong>. One LUT is impossible in both cases because the function depends on eight inputs, more than K. This illustrates why depth-optimal mapping such as FlowMap reasons about K-feasible cuts <sup class="c"><a href="#r18">18</a></sup>.</p></div>
+</details>
+
+<details><summary>Exercise 5 · Slack and maximum frequency</summary>
+<p>Using Figure 6 (t<sub>cq</sub> = 0.3&nbsp;ns, t<sub>logic</sub> = 3.9&nbsp;ns, t<sub>setup</sub> = 0.2&nbsp;ns), what is the highest clock frequency this path supports? If the clock is tightened to 4&nbsp;ns, what is the slack?</p>
+<div class="sol"><p>The minimum period is t<sub>cq</sub> + t<sub>logic</sub> + t<sub>setup</sub> = 4.4&nbsp;ns, so f<sub>max</sub> = 1 / 4.4&nbsp;ns ≈ <strong>227&nbsp;MHz</strong>. At a 4&nbsp;ns period, required time is 4.0 − 0.2 = 3.8&nbsp;ns and arrival is 4.2&nbsp;ns, so slack is <strong>−0.4&nbsp;ns</strong>, a violation <sup class="c"><a href="#r38">38</a></sup>. Synthesis would respond by restructuring or upsizing logic on this path, or retiming could move a register into the logic <sup class="c"><a href="#r25">25</a></sup>.</p></div>
+</details>
+
+<details><summary>Exercise 6 · FSM encoding</summary>
+<p>A controller has 10 states. How many flip-flops does it need with binary, Gray and one-hot encoding? Why might an FPGA tool still prefer one-hot?</p>
+<div class="sol"><p>Binary and Gray both need ⌈log<sub>2</sub>&nbsp;10⌉ = <strong>4</strong> flip-flops; one-hot needs <strong>10</strong>. FPGAs have a flip-flop next to every LUT, so the extra registers are almost free, while one-hot next-state and output logic depends on few signals and maps into small, shallow LUT networks <sup class="c"><a href="#r14">14</a>,<a href="#r39">39</a></sup>. Vivado lets you choose with the <code>fsm_encoding</code> attribute <sup class="c"><a href="#r5">5</a></sup>.</p></div>
+</details>
+
+<details><summary>Exercise 7 · Write the LUT INIT value</summary>
+<p>Write the 8-bit INIT value for a LUT3 that computes the full-adder sum s = a ⊕ b ⊕ c, with address bit 0 = a, bit 1 = b, bit 2 = c.</p>
+<div class="sol"><p>Sum is 1 when an odd number of inputs are 1, that is at addresses 1, 2, 4 and 7. Setting those bits gives binary 1001&nbsp;0110, which is <strong>8'h96</strong>. (For comparison, the carry in Figure 5 is 8'hE8, with ones at addresses 3, 5, 6 and 7.) A full adder therefore needs two LUT3s, or one fractured LUT6 on a 7-series device <sup class="c"><a href="#r39">39</a></sup>.</p></div>
+</details>
+
+<details><summary>Exercise 8 · Blocking versus non-blocking</summary>
+<p>A designer writes a two-stage synchroniser as <code>always @(posedge clk) begin q1 = d; q2 = q1; end</code>. How many flip-flops will synthesis build, and how do you fix it?</p>
+<div class="sol"><p>Because <code>q1 = d</code> takes effect immediately, <code>q2</code> receives <code>d</code> in the same cycle, so the circuit has one stage of delay instead of two; the tool may build a single flip-flop feeding both names. Using non-blocking assignments, <code>q1 &lt;= d; q2 &lt;= q1;</code>, gives the intended two flip-flops in series <sup class="c"><a href="#r20">20</a>,<a href="#r28">28</a></sup>.</p></div>
+</details>
+
+<!-- ============================================================ -->
+<h2 id="trivia">12. Trivia with answers</h2>
+
+<details><summary>1. Whose 1938 paper first applied Boolean algebra to switching circuits?</summary><div class="sol"><p>Claude Shannon, in "A symbolic analysis of relay and switching circuits", based on his MIT master's thesis <sup class="c"><a href="#r31">31</a></sup>.</p></div></details>
+<details><summary>2. Where was Maurice Karnaugh working when he published the map method?</summary><div class="sol"><p>At Bell Telephone Laboratories; the 1953 paper refined Veitch's earlier chart into the Karnaugh map <sup class="c"><a href="#r32">32</a></sup>.</p></div></details>
+<details><summary>3. What does the name "Yosys" stand for?</summary><div class="sol"><p>It is a recursive acronym: Yosys Open SYnthesis Suite <sup class="c"><a href="#r4">4</a>,<a href="#r29">29</a></sup>.</p></div></details>
+<details><summary>4. How many distinct Boolean functions can a single 4-input LUT implement?</summary><div class="sol"><p>A 4-LUT stores 2<sup>4</sup> = 16 configuration bits, so it can implement 2<sup>16</sup> = 65,536 functions, which is every possible 4-input function <sup class="c"><a href="#r18">18</a></sup>.</p></div></details>
+<details><summary>5. Which software-compiler technique did DAGON borrow for technology mapping?</summary><div class="sol"><p>Tree-pattern matching from code generators, the approach used for instruction selection <sup class="c"><a href="#r13">13</a>,<a href="#r15">15</a></sup>.</p></div></details>
+<details><summary>6. What is special about a reduced ordered BDD?</summary><div class="sol"><p>For a fixed variable order it is canonical: equal functions have identical graphs, so equivalence is a pointer comparison <sup class="c"><a href="#r36">36</a></sup>.</p></div></details>
+<details><summary>7. Roughly how much larger was soft FPGA logic than a standard-cell ASIC in Kuon and Rose's 90 nm study?</summary><div class="sol"><p>About 35 times the area for logic-only designs <sup class="c"><a href="#r45">45</a></sup>.</p></div></details>
+<details><summary>8. Which organisation's programme gave rise to VHDL?</summary><div class="sol"><p>The United States Department of Defense, through its Very High Speed Integrated Circuits (VHSIC) programme; the "V" in VHDL stands for VHSIC <sup class="c"><a href="#r22">22</a></sup>.</p></div></details>
+<details><summary>9. What is a "miter" in equivalence checking?</summary><div class="sol"><p>A circuit that feeds the same inputs to two designs and XORs (then ORs) their outputs. The designs are equivalent if and only if the miter output is constant 0 <sup class="c"><a href="#r23">23</a></sup>.</p></div></details>
+<details><summary>10. Which IEEE standard defines the synthesisable subset of Verilog?</summary><div class="sol"><p>IEEE 1364.1, the standard for Verilog register-transfer-level synthesis <sup class="c"><a href="#r16">16</a></sup>.</p></div></details>
+
+<div class="note"><p><strong>Further reading.</strong> De Micheli's textbook remains the standard reference for synthesis algorithms <sup class="c"><a href="#r14">14</a></sup>, Hachtel and Somenzi cover logic synthesis and verification in depth <sup class="c"><a href="#r17">17</a></sup>, and Mano and Ciletti give an accessible introduction to digital design with HDLs <sup class="c"><a href="#r59">59</a></sup>. Mead and Conway's text is the classic account of the structured VLSI design style that made automated synthesis practical <sup class="c"><a href="#r60">60</a></sup>.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="refs">13. References</h2>
+<p class="meta">Vancouver style, numbered in order of first citation. Web sources were cited on 17 November 2026.</p>
+<ol class="refs">
+<li id="r1">Coussy P, Gajski DD, Meredith M, Takach A. An introduction to high-level synthesis. IEEE Des Test Comput. 2009;26(4):8–17. doi:10.1109/MDT.2009.69</li>
+<li id="r2">Advanced Micro Devices. Vitis high-level synthesis user guide (UG1399) [Internet]. Santa Clara (CA): AMD; [cited 2026 Nov 17]. Available from: <a href="https://docs.amd.com/r/en-US/ug1399-vitis-hls">https://docs.amd.com/r/en-US/ug1399-vitis-hls</a></li>
+<li id="r3">Ferrandi F, Castellana VG, Curzel S, Fezzardi P, Fiorito M, Lattuada M, et al. Bambu: an open-source research framework for the high-level synthesis of complex applications. In: 2021 58th ACM/IEEE Design Automation Conference (DAC); 2021 Dec 5–9; San Francisco (CA). Piscataway (NJ): IEEE; 2021. p. 1327–1330. doi:10.1109/DAC18074.2021.9586110</li>
+<li id="r4">YosysHQ. Yosys Open SYnthesis Suite documentation [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://yosyshq.readthedocs.io/projects/yosys/en/latest/">https://yosyshq.readthedocs.io/projects/yosys/en/latest/</a>; project site: <a href="https://yosyshq.net/yosys/">https://yosyshq.net/yosys/</a></li>
+<li id="r5">Advanced Micro Devices. Vivado Design Suite user guide: synthesis (UG901) [Internet]. Santa Clara (CA): AMD; [cited 2026 Nov 17]. Available from: <a href="https://docs.amd.com/r/en-US/ug901-vivado-synthesis">https://docs.amd.com/r/en-US/ug901-vivado-synthesis</a></li>
+<li id="r6">Synopsys. RTL synthesis and test: Design Compiler product family [Internet]. Sunnyvale (CA): Synopsys; [cited 2026 Nov 17]. Available from: <a href="https://www.synopsys.com/implementation-and-signoff/rtl-synthesis-test.html">https://www.synopsys.com/implementation-and-signoff/rtl-synthesis-test.html</a></li>
+<li id="r7">Cadence Design Systems. Genus Synthesis Solution [Internet]. San Jose (CA): Cadence; [cited 2026 Nov 17]. Available from: <a href="https://www.cadence.com/en_US/home/tools/digital-design-and-signoff/synthesis/genus-synthesis-solution.html">https://www.cadence.com/en_US/home/tools/digital-design-and-signoff/synthesis/genus-synthesis-solution.html</a></li>
+<li id="r8">Brayton R, Mishchenko A. ABC: an academic industrial-strength verification tool. In: Touili T, Cook B, Jackson P, editors. Computer aided verification (CAV 2010). Lecture Notes in Computer Science, vol 6174. Berlin: Springer; 2010. p. 24–40. doi:10.1007/978-3-642-14295-6_5</li>
+<li id="r9">Sentovich EM, Singh KJ, Lavagno L, Moon C, Murgai R, Saldanha A, et al. SIS: a system for sequential circuit synthesis. Technical Report UCB/ERL M92/41. Berkeley (CA): Electronics Research Laboratory, University of California, Berkeley; 1992.</li>
+<li id="r10">Brayton RK, Hachtel GD, McMullen CT, Sangiovanni-Vincentelli AL. Logic minimization algorithms for VLSI synthesis. Boston (MA): Kluwer Academic Publishers; 1984. doi:10.1007/978-1-4613-2821-6</li>
+<li id="r11">Berkeley Logic Synthesis and Verification Group. ABC: a system for sequential synthesis and verification [Internet]. Berkeley (CA): University of California, Berkeley; [cited 2026 Nov 17]. Available from: <a href="https://people.eecs.berkeley.edu/~alanmi/abc/">https://people.eecs.berkeley.edu/~alanmi/abc/</a>; source: <a href="https://github.com/berkeley-abc/abc">https://github.com/berkeley-abc/abc</a></li>
+<li id="r12">Mishchenko A, Chatterjee S, Brayton RK. Improvements to technology mapping for LUT-based FPGAs. IEEE Trans Comput Aided Des Integr Circuits Syst. 2007;26(2):240–253. doi:10.1109/TCAD.2006.887925</li>
+<li id="r13">Keutzer K. DAGON: technology binding and local optimization by DAG matching. In: Proceedings of the 24th ACM/IEEE Design Automation Conference (DAC); 1987 Jun 28–Jul 1; Miami Beach (FL). New York: ACM; 1987. p. 341–347. doi:10.1145/37888.37939</li>
+<li id="r14">De Micheli G. Synthesis and optimization of digital circuits. New York: McGraw-Hill; 1994.</li>
+<li id="r15">Aho AV, Lam MS, Sethi R, Ullman JD. Compilers: principles, techniques, and tools. 2nd ed. Boston (MA): Addison-Wesley; 2006.</li>
+<li id="r16">IEEE Standard for Verilog register transfer level synthesis. IEEE Std 1364.1-2002. New York: IEEE; 2002. doi:10.1109/IEEESTD.2002.94220</li>
+<li id="r17">Hachtel GD, Somenzi F. Logic synthesis and verification algorithms. Boston (MA): Kluwer Academic Publishers; 1996.</li>
+<li id="r18">Cong J, Ding Y. FlowMap: an optimal technology mapping algorithm for delay optimization in lookup-table based FPGA designs. IEEE Trans Comput Aided Des Integr Circuits Syst. 1994;13(1):1–12. doi:10.1109/43.273754</li>
+<li id="r19">YosysHQ. Yosys command reference manual [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://yosyshq.readthedocs.io/projects/yosys/en/latest/cmd_ref.html">https://yosyshq.readthedocs.io/projects/yosys/en/latest/cmd_ref.html</a></li>
+<li id="r20">IEEE Standard for Verilog hardware description language. IEEE Std 1364-2005. New York: IEEE; 2006. doi:10.1109/IEEESTD.2006.99495</li>
+<li id="r21">IEEE Standard for SystemVerilog: unified hardware design, specification, and verification language. IEEE Std 1800-2023. New York: IEEE; 2024. doi:10.1109/IEEESTD.2024.10458102</li>
+<li id="r22">IEEE Standard for VHDL language reference manual. IEEE Std 1076-2019. New York: IEEE; 2019. doi:10.1109/IEEESTD.2019.8938196</li>
+<li id="r23">Kuehlmann A, Paruthi V, Krohm F, Ganai MK. Robust Boolean reasoning for equivalence checking and functional property verification. IEEE Trans Comput Aided Des Integr Circuits Syst. 2002;21(12):1377–1394. doi:10.1109/TCAD.2002.804386</li>
+<li id="r24">Mishchenko A, Chatterjee S, Brayton R. DAG-aware AIG rewriting: a fresh look at combinational logic synthesis. In: Proceedings of the 43rd Design Automation Conference (DAC); 2006 Jul 24–28; San Francisco (CA). New York: ACM; 2006. p. 532–535. doi:10.1145/1146909.1147048</li>
+<li id="r25">Leiserson CE, Saxe JB. Retiming synchronous circuitry. Algorithmica. 1991;6(1):5–35. doi:10.1007/BF01759032</li>
+<li id="r26">Kahng AB, Lienig J, Markov IL, Hu J. VLSI physical design: from graph partitioning to timing closure. Dordrecht: Springer; 2011. doi:10.1007/978-90-481-9591-6</li>
+<li id="r27">Thomas DE, Moorby PR. The Verilog hardware description language. 5th ed. Boston (MA): Kluwer Academic Publishers; 2002.</li>
+<li id="r28">Cummings CE. Nonblocking assignments in Verilog synthesis, coding styles that kill! In: Synopsys Users Group Conference (SNUG); 2000 Mar; San Jose (CA). Available from: <a href="http://www.sunburst-design.com/papers/CummingsSNUG2000SJ_NBA.pdf">http://www.sunburst-design.com/papers/CummingsSNUG2000SJ_NBA.pdf</a></li>
+<li id="r29">Wolf C, Glaser J, Kepler J. Yosys: a free Verilog synthesis suite. In: Proceedings of the 21st Austrian Workshop on Microelectronics (Austrochip); 2013 Oct; Linz, Austria. Available from: <a href="https://yosyshq.net/yosys/files/yosys-austrochip2013.pdf">https://yosyshq.net/yosys/files/yosys-austrochip2013.pdf</a></li>
+<li id="r30">Huffman DA. The synthesis of sequential switching circuits. J Franklin Inst. 1954;257(3):161–190. doi:10.1016/0016-0032(54)90574-8</li>
+<li id="r31">Shannon CE. A symbolic analysis of relay and switching circuits. Trans Am Inst Electr Eng. 1938;57(12):713–723. doi:10.1109/T-AIEE.1938.5057767</li>
+<li id="r32">Karnaugh M. The map method for synthesis of combinational logic circuits. Trans Am Inst Electr Eng, Part I: Commun Electron. 1953;72(5):593–599. doi:10.1109/TCE.1953.6371932</li>
+<li id="r33">Quine WV. The problem of simplifying truth functions. Am Math Mon. 1952;59(8):521–531. doi:10.2307/2308219</li>
+<li id="r34">McCluskey EJ. Minimization of Boolean functions. Bell Syst Tech J. 1956;35(6):1417–1444. doi:10.1002/j.1538-7305.1956.tb03835.x</li>
+<li id="r35">Rudell RL. Logic synthesis for VLSI design [PhD thesis]. Berkeley (CA): University of California, Berkeley; 1989. Technical Report UCB/ERL M89/49.</li>
+<li id="r36">Bryant RE. Graph-based algorithms for Boolean function manipulation. IEEE Trans Comput. 1986;C-35(8):677–691. doi:10.1109/TC.1986.1676819</li>
+<li id="r37">Synopsys. Liberty library modeling [Internet]. Open Source Liberty; [cited 2026 Nov 17]. Available from: <a href="https://www.opensourceliberty.org/">https://www.opensourceliberty.org/</a></li>
+<li id="r38">Bhasker J, Chadha R. Static timing analysis for nanometer designs: a practical approach. New York: Springer; 2009. doi:10.1007/978-0-387-93820-2</li>
+<li id="r39">Xilinx. 7 Series FPGAs configurable logic block user guide (UG474) [Internet]. San Jose (CA): Xilinx; 2016 [cited 2026 Nov 17]. Available from: <a href="https://docs.amd.com/v/u/en-US/ug474_7Series_CLB">https://docs.amd.com/v/u/en-US/ug474_7Series_CLB</a></li>
+<li id="r40">Lattice Semiconductor. iCE40 LP/HX family data sheet (FPGA-DS-02029) [Internet]. Hillsboro (OR): Lattice Semiconductor; [cited 2026 Nov 17]. Available from: <a href="https://www.latticesemi.com/view_document?document_id=49312">https://www.latticesemi.com/view_document?document_id=49312</a></li>
+<li id="r41">Advanced Micro Devices. Vivado Design Suite Tcl command reference guide (UG835) [Internet]. Santa Clara (CA): AMD; [cited 2026 Nov 17]. Available from: <a href="https://docs.amd.com/r/en-US/ug835-vivado-tcl-commands">https://docs.amd.com/r/en-US/ug835-vivado-tcl-commands</a></li>
+<li id="r42">YosysHQ. SymbiYosys (sby) documentation [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://yosyshq.readthedocs.io/projects/sby/en/latest/">https://yosyshq.readthedocs.io/projects/sby/en/latest/</a></li>
+<li id="r43">Shah D, Hung E, Wolf C, Bazanski S, Gisselquist D, Milanovic M. Yosys+nextpnr: an open source framework from Verilog to bitstream for commercial FPGAs. In: 2019 IEEE 27th Annual International Symposium on Field-Programmable Custom Computing Machines (FCCM); 2019 Apr 28–May 1; San Diego (CA). Piscataway (NJ): IEEE; 2019. p. 1–4. doi:10.1109/FCCM.2019.00010</li>
+<li id="r44">Ajayi T, Chhabria VA, Fogaça M, Hashemi S, Hosny A, Kahng AB, et al. Toward an open-source digital flow: first learnings from the OpenROAD project. In: Proceedings of the 56th Annual Design Automation Conference (DAC); 2019 Jun 2–6; Las Vegas (NV). New York: ACM; 2019. Article 76. doi:10.1145/3316781.3326334</li>
+<li id="r45">Kuon I, Rose J. Measuring the gap between FPGAs and ASICs. IEEE Trans Comput Aided Des Integr Circuits Syst. 2007;26(2):203–215. doi:10.1109/TCAD.2006.884574</li>
+<li id="r46">YosysHQ. yosys: Yosys Open SYnthesis Suite, source repository and licence [Internet]. GitHub; [cited 2026 Nov 17]. Available from: <a href="https://github.com/YosysHQ/yosys">https://github.com/YosysHQ/yosys</a></li>
+<li id="r47">Altera. Quartus Prime design software [Internet]. San Jose (CA): Altera; [cited 2026 Nov 17]. Available from: <a href="https://www.intel.com/content/www/us/en/products/details/fpga/development-tools/quartus-prime.html">https://www.intel.com/content/www/us/en/products/details/fpga/development-tools/quartus-prime.html</a></li>
+<li id="r48">YosysHQ. nextpnr: portable FPGA place and route tool [Internet]. GitHub; [cited 2026 Nov 17]. Available from: <a href="https://github.com/YosysHQ/nextpnr">https://github.com/YosysHQ/nextpnr</a></li>
+<li id="r49">Murray KE, Petelin O, Zhong S, Wang JM, Eldafrawy M, Legault JP, et al. VTR 8: high-performance CAD and customizable FPGA architecture modelling. ACM Trans Reconfigurable Technol Syst. 2020;13(2):9:1–9:55. doi:10.1145/3388617</li>
+<li id="r50">Snyder W, et al. Verilator [Internet]. Veripool; [cited 2026 Nov 17]. Available from: <a href="https://verilator.org/guide/latest/">https://verilator.org/guide/latest/</a></li>
+<li id="r51">Williams S. Icarus Verilog [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://steveicarus.github.io/iverilog/">https://steveicarus.github.io/iverilog/</a></li>
+<li id="r52">Google, SkyWater Technology. SkyWater SKY130 open source process design kit [Internet]. GitHub; [cited 2026 Nov 17]. Available from: <a href="https://github.com/google/skywater-pdk">https://github.com/google/skywater-pdk</a></li>
+<li id="r53">Wolf C, Lasser M. Project IceStorm [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://clifford.at/icestorm/">https://clifford.at/icestorm/</a></li>
+<li id="r54">Nane R, Sima VM, Pilato C, Choi J, Fort B, Canis A, et al. A survey and evaluation of FPGA high-level synthesis tools. IEEE Trans Comput Aided Des Integr Circuits Syst. 2016;35(10):1591–1604. doi:10.1109/TCAD.2015.2513673</li>
+<li id="r55">Bachrach J, Vo H, Richards B, Lee Y, Waterman A, Avižienis R, et al. Chisel: constructing hardware in a Scala embedded language. In: Proceedings of the 49th Annual Design Automation Conference (DAC); 2012 Jun 3–7; San Francisco (CA). New York: ACM; 2012. p. 1216–1225. doi:10.1145/2228360.2228584</li>
+<li id="r56">Izraelevitz A, Koenig J, Li P, Lin R, Wang A, Magyar A, et al. Reusability is FIRRTL ground: hardware construction languages, compiler frameworks, and transformations. In: 2017 IEEE/ACM International Conference on Computer-Aided Design (ICCAD); 2017 Nov 13–16; Irvine (CA). Piscataway (NJ): IEEE; 2017. p. 209–216. doi:10.1109/ICCAD.2017.8203780</li>
+<li id="r57">Amaranth HDL contributors. Amaranth HDL documentation [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://amaranth-lang.org/docs/amaranth/latest/">https://amaranth-lang.org/docs/amaranth/latest/</a></li>
+<li id="r58">LLVM Project. CIRCT: circuit IR compilers and tools [Internet]. [cited 2026 Nov 17]. Available from: <a href="https://circt.llvm.org/">https://circt.llvm.org/</a></li>
+<li id="r59">Mano MM, Ciletti MD. Digital design: with an introduction to the Verilog HDL, VHDL, and SystemVerilog. 6th ed. Boston (MA): Pearson; 2018.</li>
+<li id="r60">Mead C, Conway L. Introduction to VLSI systems. Reading (MA): Addison-Wesley; 1980.</li>
+</ol>
+
+</main>
+</body>
+</html>

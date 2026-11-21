@@ -10,22 +10,32 @@ const blogCategoryLabels = [
   "Android",
   "Angular",
   "Appliances",
+  "Applied Physics and Engineering Physics",
   "Architecture",
+  "Astrophysics",
   "Automotive Engineering",
+  "Atomic Molecular and Optical Physics",
   "AWS",
   "Azure",
+  "Bash",
   "Biology",
+  "Biophysics",
   "Business",
   "C++",
   "Calculus",
   "Chemistry",
+  "Classical Mechanics",
   "Cloud",
+  "Compilers",
+  "Computational Physics",
   "Computer Graphics",
   "Computer Vision",
   "Competitive Programming",
+  "Condensed Matter Physics",
   "Construction",
   "Control Theory & Engineering",
   "Cosmology",
+  "Cryptography",
   "Cyber-Physical Systems",
   "Data Engineering",
   "Dev(Sec)Ops",
@@ -33,23 +43,29 @@ const blogCategoryLabels = [
   "Django",
   "Docker",
   "Earth Sciences",
+  "Electricity and Magnetism",
   "Electronic Warfare",
   "Electronics",
   "Engineering",
   "Ethics",
+  "Experimental Physics and Instrumentation",
   "Firearms Engineering",
   "FinTech",
   "Finance",
   "Fluid Mechanics",
+  "Foundations",
   "Futurism",
   "Game Theory",
   "GCP",
   "Generative AI",
+  "General Relativity and Gravitation",
+  "Geophysics and Atmospheric Physics",
   "Gin",
   "Git",
   "Go",
   "Hardware",
   "High-Performance Computing",
+  "HTML",
   "Human Biology",
   "ICS/OT",
   "IT Roles",
@@ -68,18 +84,29 @@ const blogCategoryLabels = [
   "Mobile App Development",
   "Networks",
   "Network Security",
+  "Nonlinear Dynamics and Chaos",
   "Nmap",
+  "Nuclear Physics",
   "Operating Systems",
+  "Optics and Photonics",
+  "Particle Physics",
   "Pentesting",
   "Physical AI",
   "Physics",
   "Philosophy",
+  "Plasma Physics",
   "Privacy",
   "PostgreSQL",
   "Power Engineering",
+  "PowerShell",
   "Programming & Software",
   "Programming Languages",
   "Python",
+  "Quantum Computing",
+  "Quantum Field Theory",
+  "Quantum Information Science",
+  "Quantum Mechanics",
+  "React",
   "Redis",
   "Robotics",
   "Security",
@@ -90,11 +117,16 @@ const blogCategoryLabels = [
   "Software Design & Architecture",
   "Software Design Patterns",
   "Software Security",
+  "Special Relativity",
   "Spring",
+  "Statistical Mechanics",
   "Statistics",
   "Stylometry",
   "Technical Writing",
+  "Thermodynamics",
   "Veganism",
+  "Vue.js",
+  "Waves and Acoustics",
   "Web & UI",
   "Writing"
 ] as const;
@@ -135,6 +167,37 @@ const blogCategoryGroups: readonly BlogCategoryGroup[] = [
   {
     parent: "Math",
     children: ["Calculus", "Linear Algebra", "Statistics"]
+  },
+  {
+    parent: "Physics",
+    children: [
+      "Foundations",
+      "Classical Mechanics",
+      "Fluid Mechanics",
+      "Thermodynamics",
+      "Statistical Mechanics",
+      "Waves and Acoustics",
+      "Electricity and Magnetism",
+      "Optics and Photonics",
+      "Special Relativity",
+      "General Relativity and Gravitation",
+      "Quantum Mechanics",
+      "Atomic Molecular and Optical Physics",
+      "Condensed Matter Physics",
+      "Nuclear Physics",
+      "Particle Physics",
+      "Quantum Field Theory",
+      "Plasma Physics",
+      "Astrophysics",
+      "Cosmology",
+      "Geophysics and Atmospheric Physics",
+      "Biophysics",
+      "Nonlinear Dynamics and Chaos",
+      "Computational Physics",
+      "Experimental Physics and Instrumentation",
+      "Applied Physics and Engineering Physics",
+      "Quantum Information Science"
+    ]
   },
   {
     parent: "Programming Languages",
@@ -202,6 +265,516 @@ type BlogDirectoryViewState = {
 };
 
 const blogPosts: BlogDirectoryPost[] = [
+  {
+    path: "blog-articles/ai/who-is-ai.html",
+    publishedAt: "2026-11-21",
+    summary: "Brief, fully referenced profiles of 48 key people in artificial intelligence—founders, researchers, engineers and leaders—across seven traditions, with a recognition-lag analysis and roles current to November 2026.",
+    title: "Who is AI? Forty-eight people behind artificial intelligence"
+  },
+  {
+    path: "blog-articles/bash/bash-cybersecurity-applications.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on defensive cybersecurity applications of Bash: reconnaissance of your own hosts, log analysis, integrity monitoring, auditing, hardening checks, incident response and secure scripting, with runnable code, exercises and Vancouver-style references.",
+    title: "Defensive Bash for Security"
+  },
+  {
+    path: "blog-articles/bash/bash-security-best-practices.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical guide to secure Bash scripting: quoting, input validation, eval, command construction, temporary files, permissions, secrets, filenames, arrays, dependencies, signals, privilege, ShellCheck and POSIX portability, with exercises and Vancouver-style references.",
+    title: "Bash Security and Best Practices"
+  },
+  {
+    path: "blog-articles/bash/bash-testing-and-qa.html",
+    publishedAt: "2026-11-21",
+    summary: "A practical, referenced guide to ShellCheck, shfmt, Bats, unit and integration testing, mocking, fixtures, isolation, regression testing, static analysis, code review and CI for Bash scripts.",
+    title: "Testing and Quality Assurance for Bash"
+  },
+  {
+    path: "blog-articles/compilers/compiler-assisted-ai-inference-optimization.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on how ML compilers (TVM, XLA, MLIR, IREE, Triton, TensorRT, torch.compile, ONNX Runtime) speed up AI inference, with diagrams, code, exercises, trivia and Vancouver-style references.",
+    title: "Compiler-Assisted Inference Optimization"
+  },
+  {
+    path: "blog-articles/compilers/compiler-auto-tuning.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on compiler auto-tuning: search spaces, search strategies, cost models, measurement, ATLAS, FFTW, OpenTuner, TVM, Halide, Triton and MLGO, with code, diagrams, an interactive playground, exercises and trivia.",
+    title: "Compiler Auto-Tuning"
+  },
+  {
+    path: "blog-articles/compilers/compiler-tools-ecosystem.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on compiler development tools: LLVM, GCC, Clang, ANTLR, Flex, Bison, MLIR, Cranelift, QBE and Jasmin, with examples, exercises, trivia and Vancouver-style references.",
+    title: "Compiler Tools Ecosystem"
+  },
+  {
+    path: "blog-articles/compilers/differentiable-programming.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on automatic differentiation as a compiler transformation: forward and reverse mode, tracing versus source transformation, JAX/XLA, Enzyme, Zygote, Swift, PyTorch, with code, diagrams, exercises and trivia.",
+    title: "Differentiable Programming for Compilers"
+  },
+  {
+    path: "blog-articles/compilers/hardware-synthesis.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on hardware synthesis: HDLs, elaboration, Boolean optimisation, technology mapping, timing, FPGA and ASIC flows, and tools such as Yosys, ABC, Vivado and Design Compiler, with examples, exercises, trivia and Vancouver-style references.",
+    title: "Hardware Synthesis"
+  },
+  {
+    path: "blog-articles/compilers/high-level-synthesis.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on high-level synthesis (HLS) as a compiler problem: CDFGs, scheduling (ASAP, ALAP, list, force-directed, ILP, SDC), allocation and binding, FSMD generation, loop pipelining, memory partitioning, bit widths, Vitis HLS, Bambu, Catapult, CIRCT and more, with code, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "High-Level Synthesis"
+  },
+  {
+    path: "blog-articles/compilers/quantum-circuit-compilers.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on quantum circuit compilers: gate synthesis, qubit mapping and routing, peephole and ZX-calculus optimisation, scheduling, fault-tolerant compilation and verification, with code, diagrams, an interactive optimiser, exercises and trivia.",
+    title: "Quantum Circuit Compilers"
+  },
+  {
+    path: "blog-articles/compilers/tensor-compilers.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on tensor compilers: index notation, algorithm/schedule separation, loop transformations, the polyhedral model, tensor IRs (XLA HLO, TVM TensorIR, MLIR linalg, Triton) and sparse tensor compilation (TACO, MLIR sparse_tensor), with diagrams, code, exercises, trivia and Vancouver-style references.",
+    title: "Tensor Compilers"
+  },
+  {
+    path: "blog-articles/cryptography/classical-cryptography.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical guide to classical ciphers and classical cryptanalysis, with worked examples, Python code, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "Classical Cryptography"
+  },
+  {
+    path: "blog-articles/cryptography/cryptanalysis.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on cryptanalysis: attack models and complexity, time-memory trade-offs, brute force, frequency analysis, differential, linear, integral, impossible-differential, meet-in-the-middle, algebraic and related-key attacks; hash collisions, length extension and multicollisions; factoring, the number field sieve, discrete logarithms, small-subgroup, invalid-curve, lattice and Coppersmith attacks; protocol attacks; and timing, cache, power, EM, acoustic, fault and speculative-execution side channels. With diagrams, tested Python, exercises, trivia and Vancouver-style references.",
+    title: "Cryptanalysis"
+  },
+  {
+    path: "blog-articles/cryptography/cryptographic-hash-functions.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on cryptographic hash functions: security properties, Merkle-Damgård and sponge constructions, MD4 to BLAKE3, Merkle trees and commitments, and password hashing with PBKDF2, bcrypt, scrypt and Argon2id.",
+    title: "Cryptographic Hash Functions"
+  },
+  {
+    path: "blog-articles/cryptography/cryptographic-protocols.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on cryptographic protocols: protocol design, handshakes, replay protection, state machines, downgrade resistance and channel binding; SSL, TLS 1.2 and 1.3, DTLS and QUIC; IPsec, IKEv2, WireGuard, OpenVPN, SSH, DNSSEC, DoT and DoH; Signal, X3DH, the Double Ratchet, MLS and post-quantum ratcheting; OpenPGP, S/MIME, age and update signing; Kerberos, SRP, SPAKE2, OPAQUE and Noise. With diagrams, tested code, exercises and Vancouver-style references.",
+    title: "Cryptographic Protocols"
+  },
+  {
+    path: "blog-articles/cryptography/cryptographic-security-theory.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on security models, attack models, formal definitions, proof techniques and hardness assumptions in modern cryptography, with games, code, exercises and Vancouver-style references.",
+    title: "Cryptographic Security Theory"
+  },
+  {
+    path: "blog-articles/cryptography/cryptography-fundamentals.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical introduction to the fundamentals of cryptography: definitions, security objectives, terminology, types of cryptography and historical development, with diagrams, runnable code, exercises, trivia and Vancouver-style references.",
+    title: "Fundamentals of Cryptography"
+  },
+  {
+    path: "blog-articles/cryptography/digital-signatures-and-pki.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on digital signatures and public-key infrastructure: RSA, DSA, ECDSA, EdDSA and Schnorr signatures, X.509 certificates, CAs, revocation, Certificate Transparency, challenge-response, PAKEs, WebAuthn, FIDO2 and passkeys, with diagrams, tested code, exercises and Vancouver-style references.",
+    title: "Digital Signatures and PKI"
+  },
+  {
+    path: "blog-articles/cryptography/homomorphic-encryption.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on homomorphic encryption: homomorphic properties, partially, somewhat, leveled and fully homomorphic encryption, noise growth, bootstrapping, and the BFV, BGV, CKKS and TFHE schemes, with diagrams, tested Python code, exercises, trivia and Vancouver-style references.",
+    title: "Homomorphic Encryption"
+  },
+  {
+    path: "blog-articles/cryptography/key-management.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on cryptographic key management: the key lifecycle, key types, key management architectures (hierarchies, wrapping, envelope encryption, derivation trees, HSMs, TPMs, cloud KMS, secrets managers) and key security (entropy, strength, compromise, separation, storage, deletion, escrow, split knowledge, dual control, threshold schemes), with diagrams, tested Python, an in-browser lab, exercises, trivia and Vancouver-style references.",
+    title: "Cryptographic Key Management"
+  },
+  {
+    path: "blog-articles/cryptography/mathematical-foundations-of-cryptography.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the discrete mathematics, number theory, algebra, linear algebra, probability, information theory and complexity theory that underpin modern cryptography, with worked examples, exercises, code and references.",
+    title: "Mathematical Foundations of Cryptography"
+  },
+  {
+    path: "blog-articles/cryptography/message-authentication-and-key-derivation.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on message authentication codes (HMAC, CBC-MAC, CMAC, GMAC, Poly1305, keyed BLAKE2), pseudorandom functions and permutations, key derivation functions (HKDF, PBKDF2, SP 800-108) and random number generation, with diagrams, tested Python, exercises, trivia and Vancouver-style references.",
+    title: "Message Authentication and Key Derivation"
+  },
+  {
+    path: "blog-articles/cryptography/public-key-cryptography.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on public-key cryptography: key pairs, encryption, signatures, key agreement and KEMs; RSA, Diffie-Hellman, ElGamal and elliptic-curve cryptography; and hybrid cryptosystems including HPKE, with diagrams, runnable code, exercises and Vancouver-style references.",
+    title: "Public-Key Cryptography"
+  },
+  {
+    path: "blog-articles/cryptography/secure-multiparty-computation.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on secure multiparty computation: additive and Shamir secret sharing, oblivious transfer and OT extension, Yao garbled circuits, Beaver triples and arithmetic MPC, semi-honest versus malicious security, threshold signatures (FROST, threshold ECDSA) and distributed key generation, with diagrams, tested Python, exercises, trivia and Vancouver-style references.",
+    title: "Secure Multiparty Computation"
+  },
+  {
+    path: "blog-articles/cryptography/symmetric-key-cryptography.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on symmetric-key cryptography: block and stream ciphers, AES, DES, modes of operation, and authenticated encryption, with diagrams, runnable code, exercises and Vancouver-style references.",
+    title: "Symmetric-Key Cryptography"
+  },
+  {
+    path: "blog-articles/cryptography/zero-knowledge-proofs.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on zero-knowledge proofs: interactive proofs, completeness, soundness, zero knowledge, proofs of knowledge, Sigma protocols, Fiat-Shamir, NIZK, arithmetization, polynomial commitments, zk-SNARKs, zk-STARKs, Bulletproofs and trusted setup, with diagrams, tested code, exercises and Vancouver-style references.",
+    title: "Zero-Knowledge Proofs"
+  },
+  {
+    path: "blog-articles/electronics/quantum-semiconductor-devices.html",
+    publishedAt: "2026-11-21",
+    summary: "Electronics Megaseries: quantum wells, wires and dots, tunnel diodes, RTDs, TFETs, HEMTs, quantum-cascade lasers, single-electron transistors and semiconductor spin qubits, with worked examples, exercises, trivia, Python code and Vancouver-style references.",
+    title: "Quantum Semiconductor Devices"
+  },
+  {
+    path: "blog-articles/electronics/wide-bandgap-semiconductors.html",
+    publishedAt: "2026-11-21",
+    summary: "Electronics Megaseries: a technical article on wide-bandgap and ultra-wide-bandgap semiconductors (SiC, GaN, Ga2O3, diamond, AlN): figures of merit, devices, substrates, applications, reliability and gate drive, with worked examples, exercises, trivia, source code and Vancouver-style references.",
+    title: "Wide-Bandgap Semiconductors"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/electrohydrodynamics.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on electrohydrodynamics: electric-field-driven flow, charge transport, dielectric fluids and EHD instabilities, with worked examples, exercises, trivia, Python code and Vancouver-style references.",
+    title: "Electrohydrodynamics"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/fluid-structure-interaction.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on fluid–structure interaction: coupled fluid–solid motion, aeroelasticity, hydroelasticity, vortex-induced vibration, flutter, sloshing and structural deformation, with worked examples, exercises, trivia, Python code and Vancouver-style references.",
+    title: "Fluid–Structure Interaction"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/hydraulic-machinery-and-fluid-systems.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on pumps, turbines, compressors and fans, turbomachinery theory and hydraulic system dynamics, with worked examples, exercises, trivia, Python code and Vancouver-style references.",
+    title: "Hydraulic Machinery and Fluid Systems"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/magnetohydrodynamics.html",
+    publishedAt: "2026-11-21",
+    summary: "Technical article on magnetohydrodynamics: conducting fluids, Lorentz forces, the induction equation, magnetic Reynolds number, MHD waves and plasma flow, with worked examples, Python code, exercises and trivia.",
+    title: "Magnetohydrodynamics: A Technical Primer"
+  },
+  {
+    path: "blog-articles/fluid-mechanics/porous-media-flow.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on porous-media flow: Darcy's law, permeability, porosity, hydraulic conductivity, the Darcy–Forchheimer equation, groundwater flow and multiphase flow, with worked examples, exercises, trivia, Python code and Vancouver-style references.",
+    title: "Porous-Media Flow"
+  },
+  {
+    path: "blog-articles/iot/embedded-systems-firmware.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on embedded systems architecture, firmware development, embedded programming languages and embedded operating systems for the Internet of Things, with code, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "Embedded Systems and Firmware"
+  },
+  {
+    path: "blog-articles/iot/industrial-iot.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on the Industrial Internet of Things: automation, industrial communication protocols and applications, with diagrams, source code, exercises and trivia.",
+    title: "Industrial IoT"
+  },
+  {
+    path: "blog-articles/iot/iot-application-domains.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on IoT application domains: smart homes, smart cities, agriculture, healthcare, transportation, energy, logistics and aerospace, with diagrams, tested code, exercises and trivia.",
+    title: "IoT Application Domains"
+  },
+  {
+    path: "blog-articles/iot/iot-backend-software-engineering.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on IoT backend and software engineering: APIs, authentication, provisioning, messaging (MQTT, Kafka, RabbitMQ), storage, and real-time frontends, with code, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "IoT Backend and Software Engineering"
+  },
+  {
+    path: "blog-articles/iot/iot-cloud-platforms.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on IoT cloud platforms and infrastructure: AWS IoT, Azure IoT, ThingsBoard, EMQX, Google Cloud partners, Kubernetes, Docker, serverless, Kafka, Redis, Prometheus, Grafana, Elasticsearch, Terraform and Ansible, with diagrams, code, exercises and trivia.",
+    title: "IoT Cloud Platforms"
+  },
+  {
+    path: "blog-articles/iot/iot-data-engineering-analytics.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on IoT data acquisition, processing, analysis, and AI/ML, with code, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "IoT Data Engineering and Analytics"
+  },
+  {
+    path: "blog-articles/iot/iot-device-fleet-management.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on IoT device and fleet management: registration, provisioning, discovery, authentication, configuration, monitoring, firmware and OTA updates, diagnostics, fault management, decommissioning, asset tracking and lifecycle management, with diagrams, source code, exercises and trivia.",
+    title: "IoT Device and Fleet Management"
+  },
+  {
+    path: "blog-articles/iot/iot-emerging-technologies.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on emerging and advanced IoT: AIoT, Edge AI, TinyML, 5G/6G, satellite IoT, digital twins, autonomous and self-healing systems, swarms, federated learning, semantic interoperability, decentralised identity, cognitive IoT, physical AI, IoRT and quantum sensing, with diagrams, code, exercises, trivia and Vancouver references.",
+    title: "Emerging IoT Technologies"
+  },
+  {
+    path: "blog-articles/iot/iot-fundamentals.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on Internet of Things fundamentals and core concepts, with diagrams, source code, exercises and trivia.",
+    title: "IoT Fundamentals"
+  },
+  {
+    path: "blog-articles/iot/iot-hardware-and-electronics.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical guide to IoT processing hardware, sensors, actuators and supporting electronics, with code, diagrams, exercises and trivia.",
+    title: "IoT Hardware and Electronics"
+  },
+  {
+    path: "blog-articles/iot/iot-networking-and-communication.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on IoT networking and communication: link technologies, network and messaging protocols, architectures, tools, code, exercises and trivia, with Vancouver-style references.",
+    title: "IoT Networking and Communication"
+  },
+  {
+    path: "blog-articles/iot/iot-security.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on Internet of Things security: device security, network security, identity and access management, common threats, and the main standards and frameworks, with diagrams, defensive code, exercises, trivia and Vancouver-style references.",
+    title: "IoT Security"
+  },
+  {
+    path: "blog-articles/iot/iot-standards-governance.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on IoT standards (IEEE 802.15.4, 802.11, IETF, 3GPP, MQTT, OPC UA, Matter, Thread, LoRaWAN, oneM2M, W3C WoT, ISO/IEC), interoperability and governance (data ownership, privacy, retention, regulation, safety), with diagrams, code, exercises and trivia.",
+    title: "IoT Standards and Governance"
+  },
+  {
+    path: "blog-articles/iot/iot-system-architecture.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on Internet of Things system architecture: device, connectivity, edge, platform/cloud and application layers, with diagrams, code, exercises, trivia and Vancouver-style references.",
+    title: "IoT System Architecture"
+  },
+  {
+    path: "blog-articles/iot/iot-testing-reliability-operations.html",
+    publishedAt: "2026-11-21",
+    summary: "A referenced technical article on IoT testing, reliability and operations: SIL and HIL testing, firmware, integration and protocol conformance testing, network simulation, load, power and environmental testing, fault injection, resilience and OTA testing, observability, logging, tracing, metrics, alerting, high availability and disaster recovery, with diagrams, tested code, exercises and trivia.",
+    title: "IoT Testing, Reliability and Operations"
+  },
+  {
+    path: "blog-articles/philosophy/concepts-everyone-should-know.html",
+    publishedAt: "2026-11-21",
+    summary: "Most famous misunderstandings are not ignorance. They are compressions: a precise idea is carried around in a shorter form, and the shorter form has quietly discarded one specific thing. This article catalogues thirty-one such concepts across reasoning, statistics, science, economics, law and language, shows who has been caught by each, and argues that the discarded thing is almost always one of six.",
+    title: "What Did the Shortcut Throw Away?"
+  },
+  {
+    path: "blog-articles/physics/foundations_physics/01-nature-and-scope-of-physics.html",
+    publishedAt: "2026-11-21",
+    summary: "Physics Megaseries, Part 1 (Foundations of Physics): the nature and scope of physics, with concepts, worked examples, exercises, trivia, code, diagrams and Vancouver-style references.",
+    title: "Nature and Scope of Physics"
+  },
+  {
+    path: "blog-articles/physics/foundations_physics/02-scientific-method-and-physical-reasoning.html",
+    publishedAt: "2026-11-21",
+    summary: "Physics Megaseries, Part 2 (Foundations of Physics): the scientific method and physical reasoning, with examples, exercises, trivia, code, diagrams and Vancouver-style references.",
+    title: "Scientific Method and Physical Reasoning"
+  },
+  {
+    path: "blog-articles/physics/foundations_physics/03-units-dimensions-measurement.html",
+    publishedAt: "2026-11-21",
+    summary: "Physics Megaseries, Part 3 (Foundations of Physics): a technical article on the SI, dimensions, dimensional analysis, unit conversion, significant figures, accuracy and precision, errors, uncertainty propagation, estimation, physical constants and natural/Planck units, with exercises, trivia, code and Vancouver-style references.",
+    title: "Units, Dimensions, Measurement"
+  },
+  {
+    path: "blog-articles/physics/foundations_physics/04-mathematical-foundations.html",
+    publishedAt: "2026-11-21",
+    summary: "Physics Megaseries, Part 4: the mathematical toolkit of physics, from algebra to group theory and numerical methods, with examples, exercises, trivia, code and Vancouver-style references.",
+    title: "Mathematical Foundations of Physics"
+  },
+  {
+    path: "blog-articles/powershell/PowerShell-for-Cloud-and-DevOps.html",
+    publishedAt: "2026-11-21",
+    summary: "Technical article: PowerShell for infrastructure automation, Azure, Microsoft 365 and DevOps pipelines, with examples, exercises and Vancouver-style references.",
+    title: "PowerShell for Cloud and DevOps"
+  },
+  {
+    path: "blog-articles/powershell/powershell-dotnet-advanced-programming.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on .NET integration, object-oriented programming, custom objects and advanced runtime concepts in PowerShell, with examples, exercises, solutions and Vancouver-style references.",
+    title: "PowerShell .NET Integration and Advanced Programming"
+  },
+  {
+    path: "blog-articles/powershell/powershell-testing-debugging-quality.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on debugging, testing with Pester, and code quality with PSScriptAnalyzer in PowerShell, with examples, exercises, solutions and Vancouver-style references.",
+    title: "PowerShell Testing and Quality"
+  },
+  {
+    path: "blog-articles/privacy/privacy-in-the-age-of-mass-surveillance.html",
+    publishedAt: "2026-11-21",
+    summary: "Privacy in the age of mass surveillance, and the feasibility of privacy by default with targeted identification when authorised",
+    title: "What Would It Take to Look? Privacy in the age of mass surveillance"
+  },
+  {
+    path: "blog-articles/web-ui/html/accessibility.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML accessibility: WCAG principles and POUR, semantic markup, keyboard navigation, screen reader compatibility, alternative text, accessible forms and focus management; WAI-ARIA roles, states and properties including aria-label, aria-labelledby, aria-describedby, aria-hidden, aria-expanded, aria-live, aria-controls and aria-current, and native HTML versus ARIA; and accessibility testing with keyboards, screen readers, browser accessibility trees, automated tools and contrast checks, with diagrams, live demos, exercises, trivia and Vancouver-style references.",
+    title: "HTML Accessibility"
+  },
+  {
+    path: "blog-articles/web-ui/html/browser-rendering-pipeline.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the browser rendering pipeline: from DOM and CSSOM through style calculation, the layout tree, layout and reflow, paint, layers, rasterization and compositing, to the event loop, requestAnimationFrame and frame timing, invalidation, layout thrashing, performance metrics and the architecture of Blink, Gecko and WebKit, with diagrams, live demos, exercises, trivia and Vancouver-style references.",
+    title: "The Browser Rendering Pipeline"
+  },
+  {
+    path: "blog-articles/web-ui/html/critical-rendering-path.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the critical rendering path: render-blocking and parser-blocking resources, critical resources, bytes and path length, async, defer and module scripts, critical CSS, media queries, fonts, the LCP image, resource hints, and measuring FCP, LCP and Core Web Vitals with DevTools and Lighthouse, with a measured before/after case study, diagrams, a CRP lab, exercises, trivia and Vancouver-style references.",
+    title: "The Critical Rendering Path"
+  },
+  {
+    path: "blog-articles/web-ui/html/forms-and-user-input.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML forms and user input: form, fieldset, legend, label, input, textarea, select, option, optgroup, button, datalist and output; all 22 input types; form and control attributes; GET and POST, URL-encoded and multipart data, file uploads, client- and server-side validation, REST APIs, CSRF, sanitization and output encoding, with diagrams, exercises, trivia and Vancouver-style references.",
+    title: "Forms and User Input"
+  },
+  {
+    path: "blog-articles/web-ui/html/html-apis-and-browser-integration.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML APIs and browser integration: the DOM tree, nodes, element relationships, parsing, selection, manipulation, attributes and properties, events and propagation; Web Storage, History, Geolocation, Drag and Drop, Clipboard, Fullscreen, Web Workers, custom elements and shadow DOM; and inline, external, async, defer and module scripts, event handlers, dynamic content and form handling, with diagrams, live demos, exercises, trivia and Vancouver-style references.",
+    title: "HTML APIs and Browser Integration"
+  },
+  {
+    path: "blog-articles/web-ui/html/html-dom-construction.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML DOM construction: the node tree and node types, how parser output becomes the DOM, the document lifecycle, readyState and DOMContentLoaded, scripts and their effect on construction, the DOM versus the render tree, building trees with DOM APIs, innerHTML, templates and shadow DOM, and inspecting the tree, with diagrams, live demos, exercises, trivia and Vancouver-style references.",
+    title: "HTML DOM Construction"
+  },
+  {
+    path: "blog-articles/web-ui/html/html-integration.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on how HTML integrates with CSS frameworks (Bootstrap, Tailwind CSS, Foundation), JavaScript frameworks (React, Angular, Vue), template engines (Thymeleaf, Jinja2, EJS, Handlebars), server-side rendering, REST and GraphQL APIs, and testing tools (Selenium, Playwright, Cypress), with live demos on the real libraries, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "HTML Integration with Other Technologies"
+  },
+  {
+    path: "blog-articles/web-ui/html/html-parsing-algorithms.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the WHATWG HTML parsing algorithm: encoding sniffing, the tokenizer state machine, tree construction insertion modes, the stack of open elements, active formatting elements, the adoption agency algorithm, foster parenting, error recovery, scripts and document.write, speculative parsing and fragment parsing, with a step-through teaching parser, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "HTML Parsing Algorithms"
+  },
+  {
+    path: "blog-articles/web-ui/html/html-security.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML security: cross-site scripting, HTML injection, untrusted HTML rendering, safe DOM manipulation, URL validation, user-generated content, Content Security Policy, iframe sandboxing, rel=noopener and noreferrer, mixed content, clickjacking, CORS and form security, with diagrams, live demos, exercises, trivia and Vancouver-style references.",
+    title: "HTML Security"
+  },
+  {
+    path: "blog-articles/web-ui/html/images-audio-video.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML images, audio and video: img, picture, source, srcset, sizes and alt; image formats, dimensions, lazy loading and optimisation; audio, video, track, captions and autoplay; and iframe, embed, object, canvas and svg with cross-origin rules, with diagrams, real sample media, exercises, trivia and Vancouver-style references.",
+    title: "Images, Audio, and Video"
+  },
+  {
+    path: "blog-articles/web-ui/html/metadata-and-seo.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML metadata and SEO: meta charset, viewport, description, author, robots, theme-color and language declarations; page titles, meta descriptions, heading hierarchy, semantic HTML, canonical URLs, crawlability, indexability, internal linking, Open Graph and X cards; and structured data with schema.org, JSON-LD, Microdata, RDFa and rich results. With diagrams, live demos, exercises, trivia and Vancouver-style references.",
+    title: "HTML Metadata and SEO"
+  },
+  {
+    path: "blog-articles/web-ui/html/resource-hints.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML resource hints: dns-prefetch, preconnect, preload (as, crossorigin, fonts, responsive images), modulepreload, fetchpriority, prefetch, the history of prerender, the Speculation Rules API, Link headers and 103 Early Hints, pitfalls, measurement and browser support, with diagrams, a measured experiment, exercises, trivia, a hint checker and Vancouver-style references.",
+    title: "Resource Hints"
+  },
+  {
+    path: "blog-articles/web-ui/html/semantic-html.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on semantic HTML: header, nav, main, section, article, aside, footer, figure, figcaption, details, summary and dialog; semantic elements versus div and span; heading hierarchy and the document outline; content grouping; and the benefits for search engines, accessibility and maintainability, with diagrams, exercises, trivia and Vancouver-style references.",
+    title: "Semantic HTML"
+  },
+  {
+    path: "blog-articles/web-ui/html/tables.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML tables: the table, caption, thead, tbody, tfoot, tr, th, td, colgroup and col elements, the colspan, rowspan, scope and headers attributes, table headers, row and column grouping, accessible data tables and responsive tables, with diagrams, exercises, trivia and Vancouver-style references.",
+    title: "HTML Tables"
+  },
+  {
+    path: "blog-articles/web-ui/html/validation-testing-tooling.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on HTML validation, testing and tooling: the W3C Markup Validation Service and Nu Html Checker, conformance checking, invalid nesting, missing attributes, obsolete elements and browser compatibility; Chrome and Firefox DevTools, VS Code, HTML language servers, Emmet, Prettier, HTMLHint, Lighthouse and axe DevTools; and accessibility, responsive, cross-browser, integration, visual regression and performance testing, with real tool output, diagrams, exercises, trivia and Vancouver-style references.",
+    title: "HTML Validation, Testing, and Tooling"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-api-integration.html",
+    publishedAt: "2026-11-21",
+    summary: "Technical article on API communication and backend integration in React: Fetch, Axios, REST, GraphQL, WebSockets, SSE, gRPC-Web, with backend examples, exercises and Vancouver-style references.",
+    title: "React API Integration"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-deployment-production-infrastructure.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on deploying React applications to production: hosting platforms, containers, orchestration, CI/CD pipelines and monitoring, with source code, exercises, solutions and Vancouver-style references.",
+    title: "React Deployment Infrastructure"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-ecosystem.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the React ecosystem: concepts, working source code, exercises with solutions, and five reference technology stacks, with Vancouver-style references.",
+    title: "The React Ecosystem"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-fundamentals.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the fundamentals of React: concepts, JSX, components, hooks, rendering internals and application architecture, with examples, exercises and Vancouver-style references.",
+    title: "React Fundamentals"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-routing-and-navigation.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on routing and navigation in React: client- and server-side routing, React Router, TanStack Router, Wouter, the Next.js App Router and Reach Router, with examples, exercises and Vancouver-style references.",
+    title: "Routing and Navigation in React"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-security-article.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on authentication, authorization and web security for React applications, with code, exercises, solutions and Vancouver-style references.",
+    title: "Securing React Applications"
+  },
+  {
+    path: "blog-articles/web-ui/react/react-state-management.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on React state management: built-in state, Redux, Redux Toolkit, Zustand, MobX, Jotai, Recoil, XState, Valtio, and server-state libraries, with exercises and Vancouver-style references.",
+    title: "State Management in React"
+  },
+  {
+    path: "blog-articles/web-ui/vue/enterprise-vuejs-development.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical guide to building large-scale Vue 3 applications: component libraries, design systems, monorepos, composables, state, API layers, security, multi-tenancy, i18n, accessibility, observability, testing, CI/CD and release management, with exercises and Vancouver-style references.",
+    title: "Enterprise Vue.js Development"
+  },
+  {
+    path: "blog-articles/web-ui/vue/vue-application-architectures.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on Vue-based application architectures: SPA, MPA, SSR, SSG, PWA, micro-frontends, component-driven, modular and domain-driven design, headless CMS, BFF and microservices integration, with code, exercises and Vancouver-style references.",
+    title: "Vue Application Architectures"
+  },
+  {
+    path: "blog-articles/web-ui/vue/vue-build-deployment-devops.html",
+    publishedAt: "2026-11-21",
+    summary: "A long-form technical guide to building, deploying and operating Vue.js applications: Vite, environment variables, asset optimisation, Nginx, Docker, CI/CD, cloud deployment, CDNs, monitoring, logging, error tracking and source maps.",
+    title: "Vue Build and DevOps"
+  },
+  {
+    path: "blog-articles/web-ui/vue/vue-ecosystem-article.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical article on the Vue 3 ecosystem: Vue Router, Pinia, Vite, Vue DevTools, Vue Test Utils, Vitest, Nuxt, Vuetify, Quasar, PrimeVue, Element Plus, VueUse, Vue I18n, Storybook and TypeScript, with code, exercises, solutions and Vancouver-style references.",
+    title: "The Vue Ecosystem and Related Technologies"
+  },
+  {
+    path: "blog-articles/web-ui/vue/vue-security-article.html",
+    publishedAt: "2026-11-21",
+    summary: "A technical guide to security for Vue 3 applications: XSS, CSRF, CSP, input validation, output encoding, safe HTML, v-html, authentication, token storage, API security, secrets and npm dependency auditing, with code, exercises and Vancouver-style references.",
+    title: "Securing Vue.js Applications"
+  },
   {
     path: "blog-articles/computer-graphics/color-science-human-vision.html",
     publishedAt: "2026-11-04",
@@ -4309,6 +4882,91 @@ const blogPosts: BlogDirectoryPost[] = [
 ];
 
 const blogPostCategoriesByPath: Record<string, BlogCategory[]> = {
+  "blog-articles/ai/who-is-ai.html": ["Artificial Intelligence","AI Strategy","Machine Learning"],
+  "blog-articles/bash/bash-cybersecurity-applications.html": ["Bash","Programming Languages","Programming & Software","Security","Software Security","Dev(Sec)Ops"],
+  "blog-articles/bash/bash-security-best-practices.html": ["Bash","Programming Languages","Programming & Software","Security","Software Security","Dev(Sec)Ops"],
+  "blog-articles/bash/bash-testing-and-qa.html": ["Bash","Programming Languages","Programming & Software","SDLC","Dev(Sec)Ops"],
+  "blog-articles/compilers/compiler-assisted-ai-inference-optimization.html": ["Compilers","Programming Languages","Programming & Software","Machine Learning","High-Performance Computing"],
+  "blog-articles/compilers/compiler-auto-tuning.html": ["Compilers","Programming Languages","Programming & Software","Algorithms","High-Performance Computing"],
+  "blog-articles/compilers/compiler-tools-ecosystem.html": ["Compilers","Programming Languages","Programming & Software"],
+  "blog-articles/compilers/differentiable-programming.html": ["Compilers","Programming Languages","Programming & Software","Machine Learning","High-Performance Computing"],
+  "blog-articles/compilers/hardware-synthesis.html": ["Compilers","Programming Languages","Programming & Software","Hardware","Electronics","Engineering"],
+  "blog-articles/compilers/high-level-synthesis.html": ["Compilers","Programming Languages","Programming & Software","Hardware","Electronics","Engineering"],
+  "blog-articles/compilers/quantum-circuit-compilers.html": ["Compilers","Programming Languages","Programming & Software","Quantum Computing","Algorithms"],
+  "blog-articles/compilers/tensor-compilers.html": ["Compilers","Programming Languages","Programming & Software","Machine Learning","High-Performance Computing"],
+  "blog-articles/cryptography/classical-cryptography.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/cryptanalysis.html": ["Cryptography","Security","Side-Channel Attacks","Math"],
+  "blog-articles/cryptography/cryptographic-hash-functions.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/cryptographic-protocols.html": ["Cryptography","Security","Networks","Software Security"],
+  "blog-articles/cryptography/cryptographic-security-theory.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/cryptography-fundamentals.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/digital-signatures-and-pki.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/homomorphic-encryption.html": ["Cryptography","Security","Privacy","Math"],
+  "blog-articles/cryptography/key-management.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/mathematical-foundations-of-cryptography.html": ["Cryptography","Security","Math","Algorithms"],
+  "blog-articles/cryptography/message-authentication-and-key-derivation.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/public-key-cryptography.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/secure-multiparty-computation.html": ["Cryptography","Security","Privacy","Math"],
+  "blog-articles/cryptography/symmetric-key-cryptography.html": ["Cryptography","Security","Software Security"],
+  "blog-articles/cryptography/zero-knowledge-proofs.html": ["Cryptography","Security","Privacy","Math"],
+  "blog-articles/electronics/quantum-semiconductor-devices.html": ["Electronics","Hardware","Physics","Engineering","Quantum Computing"],
+  "blog-articles/electronics/wide-bandgap-semiconductors.html": ["Electronics","Hardware","Physics","Engineering"],
+  "blog-articles/fluid-mechanics/electrohydrodynamics.html": ["Fluid Mechanics","Physics","Engineering"],
+  "blog-articles/fluid-mechanics/fluid-structure-interaction.html": ["Fluid Mechanics","Physics","Engineering"],
+  "blog-articles/fluid-mechanics/hydraulic-machinery-and-fluid-systems.html": ["Fluid Mechanics","Physics","Engineering"],
+  "blog-articles/fluid-mechanics/magnetohydrodynamics.html": ["Fluid Mechanics","Physics","Engineering"],
+  "blog-articles/fluid-mechanics/porous-media-flow.html": ["Fluid Mechanics","Physics","Engineering"],
+  "blog-articles/iot/embedded-systems-firmware.html": ["IoT","Cyber-Physical Systems","Engineering","Hardware","Electronics","Programming & Software"],
+  "blog-articles/iot/industrial-iot.html": ["IoT","Cyber-Physical Systems","Engineering","ICS/OT","Networks"],
+  "blog-articles/iot/iot-application-domains.html": ["IoT","Cyber-Physical Systems","Engineering"],
+  "blog-articles/iot/iot-backend-software-engineering.html": ["IoT","Cyber-Physical Systems","Engineering","Programming & Software","Data Engineering","Networks"],
+  "blog-articles/iot/iot-cloud-platforms.html": ["IoT","Cyber-Physical Systems","Engineering","Cloud","Dev(Sec)Ops","Data Engineering"],
+  "blog-articles/iot/iot-data-engineering-analytics.html": ["IoT","Cyber-Physical Systems","Engineering","Data Engineering","Machine Learning"],
+  "blog-articles/iot/iot-device-fleet-management.html": ["IoT","Cyber-Physical Systems","Engineering"],
+  "blog-articles/iot/iot-emerging-technologies.html": ["IoT","Cyber-Physical Systems","Engineering"],
+  "blog-articles/iot/iot-fundamentals.html": ["IoT","Cyber-Physical Systems","Engineering"],
+  "blog-articles/iot/iot-hardware-and-electronics.html": ["IoT","Cyber-Physical Systems","Engineering","Hardware","Electronics"],
+  "blog-articles/iot/iot-networking-and-communication.html": ["IoT","Cyber-Physical Systems","Engineering","Networks"],
+  "blog-articles/iot/iot-security.html": ["IoT","Cyber-Physical Systems","Engineering","Security","Network Security","Software Security"],
+  "blog-articles/iot/iot-standards-governance.html": ["IoT","Cyber-Physical Systems","Engineering","Networks","Privacy","Law"],
+  "blog-articles/iot/iot-system-architecture.html": ["IoT","Cyber-Physical Systems","Engineering"],
+  "blog-articles/iot/iot-testing-reliability-operations.html": ["IoT","Cyber-Physical Systems","Engineering","Dev(Sec)Ops","SDLC"],
+  "blog-articles/philosophy/concepts-everyone-should-know.html": ["Philosophy","Learning","Math","Society & Civics"],
+  "blog-articles/physics/foundations_physics/01-nature-and-scope-of-physics.html": ["Foundations","Physics","Math","Learning"],
+  "blog-articles/physics/foundations_physics/02-scientific-method-and-physical-reasoning.html": ["Foundations","Physics","Math","Learning"],
+  "blog-articles/physics/foundations_physics/03-units-dimensions-measurement.html": ["Foundations","Physics","Math","Learning"],
+  "blog-articles/physics/foundations_physics/04-mathematical-foundations.html": ["Foundations","Physics","Math","Learning"],
+  "blog-articles/powershell/PowerShell-for-Cloud-and-DevOps.html": ["PowerShell","Programming Languages","Programming & Software","Cloud","Azure","Dev(Sec)Ops"],
+  "blog-articles/powershell/powershell-dotnet-advanced-programming.html": ["PowerShell","Programming Languages","Programming & Software","Software Design & Architecture"],
+  "blog-articles/powershell/powershell-testing-debugging-quality.html": ["PowerShell","Programming Languages","Programming & Software","SDLC","Dev(Sec)Ops"],
+  "blog-articles/privacy/privacy-in-the-age-of-mass-surveillance.html": ["Privacy","Security","Law","Society & Technology"],
+  "blog-articles/web-ui/html/accessibility.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/browser-rendering-pipeline.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/critical-rendering-path.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/forms-and-user-input.html": ["HTML","Web & UI","Programming & Software","Software Security"],
+  "blog-articles/web-ui/html/html-apis-and-browser-integration.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/html-dom-construction.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/html-integration.html": ["HTML","Web & UI","Programming & Software","React","Vue.js","Angular"],
+  "blog-articles/web-ui/html/html-parsing-algorithms.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/html-security.html": ["HTML","Web & UI","Programming & Software","Security","Software Security"],
+  "blog-articles/web-ui/html/images-audio-video.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/metadata-and-seo.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/resource-hints.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/semantic-html.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/tables.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/html/validation-testing-tooling.html": ["HTML","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/react/react-api-integration.html": ["React","Web & UI","Programming & Software","Networks","Software Design & Architecture"],
+  "blog-articles/web-ui/react/react-deployment-production-infrastructure.html": ["React","Web & UI","Programming & Software","Dev(Sec)Ops","SDLC"],
+  "blog-articles/web-ui/react/react-ecosystem.html": ["React","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/react/react-fundamentals.html": ["React","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/react/react-routing-and-navigation.html": ["React","Web & UI","Programming & Software","Software Design & Architecture"],
+  "blog-articles/web-ui/react/react-security-article.html": ["React","Web & UI","Programming & Software","Security","Software Security"],
+  "blog-articles/web-ui/react/react-state-management.html": ["React","Web & UI","Programming & Software","Software Design & Architecture"],
+  "blog-articles/web-ui/vue/enterprise-vuejs-development.html": ["Vue.js","Web & UI","Programming & Software","Software Design & Architecture","SDLC"],
+  "blog-articles/web-ui/vue/vue-application-architectures.html": ["Vue.js","Web & UI","Programming & Software","Software Design & Architecture","SDLC"],
+  "blog-articles/web-ui/vue/vue-build-deployment-devops.html": ["Vue.js","Web & UI","Programming & Software","Dev(Sec)Ops","SDLC"],
+  "blog-articles/web-ui/vue/vue-ecosystem-article.html": ["Vue.js","Web & UI","Programming & Software"],
+  "blog-articles/web-ui/vue/vue-security-article.html": ["Vue.js","Web & UI","Programming & Software","Security","Software Security"],
   "blog-articles/computer-graphics/color-science-human-vision.html": ["Computer Graphics", "Human Biology", "Physics"],
   "blog-articles/swe/sdlc/ai-native-sdlc.html": ["SDLC", "Generative AI", "AI Agents", "AI Strategy", "Programming & Software"],
   "blog-articles/biology/human-biology/human-aging.html": ["Human Biology","Biology"],

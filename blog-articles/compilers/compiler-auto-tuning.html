@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compiler Auto-Tuning</title>
+<meta name="description" content="A technical article on compiler auto-tuning: search spaces, search strategies, cost models, measurement, ATLAS, FFTW, OpenTuner, TVM, Halide, Triton and MLGO, with code, diagrams, an interactive playground, exercises and trivia.">
+<style>
+:root{
+  --bg:#fbfaf7; --surface:#ffffff; --surface-2:#f2f0ea; --text:#1d1d1f; --muted:#5d5d63;
+  --border:#dedad0; --accent:#2f5bd3; --accent-soft:#e6ecfb; --accent-2:#c2410c; --accent-2-soft:#fbe9df;
+  --ok:#15803d; --code-bg:#f4f2ec; --code-text:#24292f; --kw:#8250df; --str:#0a7a4b; --com:#6e7781; --num:#b35900;
+  --shadow:0 1px 2px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121316; --surface:#1a1b1f; --surface-2:#22242a; --text:#e8e8ea; --muted:#a0a1a8;
+    --border:#33353d; --accent:#7ea2ff; --accent-soft:#1f2a47; --accent-2:#ff9a62; --accent-2-soft:#3a2418;
+    --ok:#4ade80; --code-bg:#1e2026; --code-text:#e2e4ea; --kw:#c4a5ff; --str:#7ee2a8; --com:#8b929c; --num:#ffb86b;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121316; --surface:#1a1b1f; --surface-2:#22242a; --text:#e8e8ea; --muted:#a0a1a8;
+  --border:#33353d; --accent:#7ea2ff; --accent-soft:#1f2a47; --accent-2:#ff9a62; --accent-2-soft:#3a2418;
+  --ok:#4ade80; --code-bg:#1e2026; --code-text:#e2e4ea; --kw:#c4a5ff; --str:#7ee2a8; --com:#8b929c; --num:#ffb86b;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.65 Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:860px;margin:0 auto;padding:32px 16px 80px}
+header.hero{border-bottom:1px solid var(--border);padding-bottom:24px;margin-bottom:28px}
+.kicker{font:600 13px/1.2 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(30px,5vw,44px)/1.12 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin:10px 0 12px;letter-spacing:-.02em}
+h2{font:700 26px/1.25 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin:56px 0 12px;letter-spacing:-.01em;scroll-margin-top:16px}
+h3{font:650 19px/1.3 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin:30px 0 8px}
+h2 .n{color:var(--muted);font-weight:500;margin-right:8px}
+.lede{font-size:19px;color:var(--muted);margin:0}
+.meta{font:14px/1.5 ui-sans-serif,system-ui,sans-serif;color:var(--muted);margin-top:14px}
+a{color:var(--accent);text-underline-offset:2px}
+p,li{hyphens:auto}
+sup.c a{text-decoration:none;font:600 12px ui-sans-serif,system-ui,sans-serif}
+code,pre,kbd{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace}
+:not(pre)>code{background:var(--code-bg);padding:.1em .35em;border-radius:4px;font-size:.88em}
+pre{background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:14px;line-height:1.55;margin:14px 0}
+pre .k{color:var(--kw)} pre .s{color:var(--str)} pre .c{color:var(--com);font-style:italic} pre .m{color:var(--num)}
+.codehead{font:600 12px/1 ui-sans-serif,system-ui,sans-serif;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 -8px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:var(--shadow);font:15px/1.6 ui-sans-serif,system-ui,sans-serif}
+nav.toc ol{margin:6px 0 0;padding-left:22px;columns:2;column-gap:28px}
+@media (max-width:620px){nav.toc ol{columns:1}}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:18px 0}
+.callout.warn{border-color:var(--accent-2);background:var(--accent-2-soft)}
+.callout strong:first-child{font-family:ui-sans-serif,system-ui,sans-serif}
+figure{margin:24px 0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font:14px/1.5 ui-sans-serif,system-ui,sans-serif;color:var(--muted);margin-top:10px}
+.math{font-family:"Cambria Math","STIX Two Math","Latin Modern Math",Cambria,serif;font-style:italic}
+.eq{display:block;text-align:center;margin:14px 0;font-size:1.08em;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font:14.5px/1.45 ui-sans-serif,system-ui,sans-serif;margin:14px 0}
+th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:650}
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.tablewrap table{margin:0}
+details{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:10px 0}
+details summary{cursor:pointer;font:600 15px/1.4 ui-sans-serif,system-ui,sans-serif;color:var(--accent)}
+details[open] summary{margin-bottom:8px}
+.ex{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin:18px 0;box-shadow:var(--shadow)}
+.ex h3{margin-top:4px}
+.tag{display:inline-block;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;padding:4px 7px;border-radius:999px;background:var(--surface-2);color:var(--muted);margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:.05em}
+ol.refs{font-size:14.5px;line-height:1.55;padding-left:30px}
+ol.refs li{margin:6px 0;word-break:break-word}
+ol.refs li:target{background:var(--accent-soft);border-radius:6px}
+.play{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;font:15px/1.5 ui-sans-serif,system-ui,sans-serif}
+.play label{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.play input[type=range]{flex:1;min-width:180px;accent-color:var(--accent)}
+.play select{font:inherit;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.play output{font-family:ui-monospace,Menlo,monospace}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}
+.stat{background:var(--surface-2);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.themebtn{position:fixed;top:12px;right:12px;font:600 13px ui-sans-serif,system-ui,sans-serif;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:999px;padding:6px 12px;cursor:pointer;z-index:5}
+svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.svg-node{fill:var(--surface-2);stroke:var(--border);stroke-width:1.5}
+.svg-in{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.svg-out{fill:var(--accent-2-soft);stroke:var(--accent-2);stroke-width:1.5}
+.svg-t{fill:var(--text);font-size:14px}
+.svg-s{fill:var(--muted);font-size:12px}
+.svg-edge{stroke:var(--muted);stroke-width:1.6;fill:none}
+.svg-fwd{stroke:var(--accent);stroke-width:2.2;fill:none}
+.svg-rev{stroke:var(--accent-2);stroke-width:2.2;fill:none;stroke-dasharray:6 4}
+.svg-fwd-t{fill:var(--accent);font-size:12.5px;font-weight:600}
+.svg-rev-t{fill:var(--accent-2);font-size:12.5px;font-weight:600}
+@media print{.themebtn{display:none} details{break-inside:avoid} details:not([open]) > *:not(summary){display:block}}
+.play output{font-weight:600}
+#heat rect{shape-rendering:crispEdges}
+</style>
+</head>
+<body>
+<button class="themebtn" id="themebtn" type="button" aria-label="Toggle colour theme">◐ Theme</button>
+<div class="wrap">
+<header class="hero">
+  <div class="kicker">Compilers · Performance engineering</div>
+  <h1>Compiler Auto-Tuning: Letting the Machine Search for the Fastest Program</h1>
+  <p class="lede">How compilers and libraries find good tile sizes, flag settings, pass orders and kernel schedules by generating many variants, measuring them, and learning from the results, from PHiPAC, ATLAS and FFTW to OpenTuner, TVM, Halide, Triton and MLGO.</p>
+  <div class="meta">Technical article with worked examples, source code, diagrams, an interactive search playground, exercises and trivia. References use the Vancouver (numbered) style. Facts were checked against the cited papers and official documentation as of November 2026. The tuning run in section 10 was measured on a 4-core cloud container with GCC 13.3.</div>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#intro">What is auto-tuning?</a></li>
+    <li><a href="#why">Why compilers cannot just "know"</a></li>
+    <li><a href="#anatomy">Anatomy of an auto-tuner</a></li>
+    <li><a href="#space">The search space</a></li>
+    <li><a href="#search">Search strategies</a></li>
+    <li><a href="#models">Empirical, model-driven and learned</a></li>
+    <li><a href="#measure">Measuring performance honestly</a></li>
+    <li><a href="#when">When does tuning happen?</a></li>
+    <li><a href="#systems">Systems tour</a></li>
+    <li><a href="#example">Worked example: tuning a tiled matrix multiply</a></li>
+    <li><a href="#apis">Auto-tuning APIs in practice</a></li>
+    <li><a href="#pgo">Auto-tuning versus profile-guided optimisation</a></li>
+    <li><a href="#hard">Hard problems</a></li>
+    <li><a href="#history">A short history</a></li>
+    <li><a href="#tools">Tools and software</a></li>
+    <li><a href="#exercises">Exercises with solutions</a></li>
+    <li><a href="#trivia">Trivia questions</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#refs">References</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="intro"><span class="n">1</span>What is auto-tuning?</h2>
+<p><strong>Auto-tuning</strong> (also <em>autotuning</em>, <em>iterative compilation</em> or <em>empirical optimisation</em>) is the automatic search for the values of performance-relevant parameters of a program, a library or a compiler, by generating candidate variants and evaluating them, usually by running them on the target machine<sup class="c"><a href="#r1">1</a>,<wbr><a href="#r2">2</a></sup>. Instead of trusting one fixed heuristic, the tool treats "which variant is fastest?" as an optimisation problem and solves it with search, measurement and, increasingly, machine learning<sup class="c"><a href="#r3">3</a>,<wbr><a href="#r2">2</a></sup>.</p>
+<p>The things being tuned vary widely. Library generators tune block sizes and unroll depths for dense linear algebra<sup class="c"><a href="#r4">4</a>,<wbr><a href="#r5">5</a></sup> and pick factorisations for fast Fourier transforms<sup class="c"><a href="#r6">6</a>,<wbr><a href="#r7">7</a></sup>. Compiler auto-tuners choose which optimisation flags to enable and in what order to run passes<sup class="c"><a href="#r8">8</a>,<wbr><a href="#r2">2</a></sup>. Tensor and image-processing compilers search over <em>schedules</em> (tilings, loop orders, vectorisation and parallelisation choices) for each kernel<sup class="c"><a href="#r9">9</a>,<wbr><a href="#r10">10</a>,<wbr><a href="#r11">11</a></sup>. GPU auto-tuners pick thread-block shapes, work per thread and pipeline depths<sup class="c"><a href="#r12">12</a>,<wbr><a href="#r13">13</a>,<wbr><a href="#r14">14</a></sup>.</p>
+<div class="callout"><strong>One-sentence definition.</strong> An auto-tuner closes the loop between <em>code generation</em> and <em>measurement</em>: it proposes a configuration, builds the corresponding program, measures it, and uses that feedback to propose better configurations<sup class="c"><a href="#r15">15</a>,<wbr><a href="#r1">1</a></sup>.</div>
+
+<!-- ============================================================ -->
+<h2 id="why"><span class="n">2</span>Why compilers cannot just "know"</h2>
+<p>Optimising compilers make thousands of decisions using hand-written heuristics and analytical cost models. These are tuned by compiler developers for "typical" code on "typical" hardware, and they are necessarily approximate<sup class="c"><a href="#r3">3</a>,<wbr><a href="#r16">16</a></sup>. Three facts make exact prediction hard:</p>
+<ul>
+  <li><strong>Hardware is complex and diverse.</strong> Performance depends on cache sizes and associativity, prefetchers, TLBs, vector widths, out-of-order windows and memory bandwidth, and these differ between processor generations. This was the original motivation for PHiPAC and ATLAS, which generate many variants of matrix multiply at install time instead of shipping one hand-tuned version per processor<sup class="c"><a href="#r4">4</a>,<wbr><a href="#r17">17</a></sup>.</li>
+  <li><strong>Optimisations interact.</strong> One transformation can enable or destroy the opportunity for another, so the order in which passes run matters. In general, the phase-ordering problem has been shown to be undecidable when sequences are unbounded<sup class="c"><a href="#r18">18</a></sup>, and even practical exhaustive exploration of phase orders is expensive<sup class="c"><a href="#r19">19</a></sup>.</li>
+  <li><strong>The landscape is rugged.</strong> Runtime as a function of tile sizes or unroll factors is non-smooth and has many local minima, which is why early iterative-compilation work described the space as a "non-linear optimisation space"<sup class="c"><a href="#r20">20</a>,<wbr><a href="#r21">21</a></sup>.</li>
+</ul>
+<p>The payoff from getting these decisions right is large. Leiserson et al. took a 4096×4096 matrix multiply from a naive Python program to a parallel, cache-blocked, vectorised C version using AVX intrinsics and measured a 62,806× speedup, yet the final version still reached only about 41% of the machine's peak<sup class="c"><a href="#r22">22</a></sup>. Much of that path consists of choosing parameters, such as block sizes, that an auto-tuner can search for.</p>
+
+<figure>
+<svg viewBox="0 0 720 300" role="img" aria-labelledby="lt ld">
+  <title id="lt">Speedup of successive matrix-multiply versions, log scale</title>
+  <desc id="ld">Horizontal bars on a logarithmic axis. Python 1x, Java 11x, C 47x, parallel loops 366x, parallel divide and conquer 6,727x, plus vectorisation 23,224x, plus AVX intrinsics 62,806x.</desc>
+  <g id="lchart"></g>
+</svg>
+<figcaption><strong>Figure 1.</strong> Speedup over Python for successive versions of a 4096×4096 double-precision matrix multiply (logarithmic scale; hover a bar for its running time). Data from Table 1 of Leiserson et al.<sup class="c"><a href="#r22">22</a></sup></figcaption>
+</figure>
+<details><summary>Table view of Figure 1</summary>
+<div class="tablewrap"><table>
+<thead><tr><th>Version</th><th>Running time (s)</th><th>GFLOPS</th><th>Speedup vs Python</th><th>Fraction of peak</th></tr></thead>
+<tbody>
+<tr><td>1 Python</td><td>25,552.48</td><td>0.005</td><td>1</td><td>0.00%</td></tr>
+<tr><td>2 Java</td><td>2,372.68</td><td>0.058</td><td>11</td><td>0.01%</td></tr>
+<tr><td>3 C</td><td>542.67</td><td>0.253</td><td>47</td><td>0.03%</td></tr>
+<tr><td>4 Parallel loops</td><td>69.80</td><td>1.969</td><td>366</td><td>0.24%</td></tr>
+<tr><td>5 Parallel divide and conquer</td><td>3.80</td><td>36.180</td><td>6,727</td><td>4.33%</td></tr>
+<tr><td>6 plus vectorisation</td><td>1.10</td><td>124.914</td><td>23,224</td><td>14.96%</td></tr>
+<tr><td>7 plus AVX intrinsics</td><td>0.41</td><td>337.812</td><td>62,806</td><td>40.45%</td></tr>
+</tbody></table></div>
+<p>Source: Leiserson et al.<sup class="c"><a href="#r22">22</a></sup></p>
+</details>
+
+<!-- ============================================================ -->
+<h2 id="anatomy"><span class="n">3</span>Anatomy of an auto-tuner</h2>
+<p>Almost every auto-tuner, from ATLAS to TVM, has the same four parts<sup class="c"><a href="#r1">1</a>,<wbr><a href="#r15">15</a>,<wbr><a href="#r10">10</a></sup>:</p>
+<ol>
+  <li><strong>A parameterised program or code generator</strong> that turns a configuration into concrete code (for example, C with <code>-DTILE=32</code>, a Halide schedule, or a Triton kernel with a given <code>BLOCK_SIZE</code>).</li>
+  <li><strong>A search space</strong>: the parameters, their legal values and the constraints between them.</li>
+  <li><strong>A search strategy</strong> that decides which configuration to try next, possibly guided by a <em>cost model</em>.</li>
+  <li><strong>An evaluator</strong> that compiles, runs and measures, then feeds the result back and records the best configuration found.</li>
+</ol>
+
+<figure>
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="f2t f2d">
+  <title id="f2t">The auto-tuning feedback loop</title>
+  <desc id="f2d">A search space feeds a search strategy, which proposes a configuration to the code generator and compiler; the resulting binary is run and measured on the target machine; the measurement feeds back to the search strategy and optionally trains a cost model that screens candidates; every result is recorded in a database that keeps the best configuration.</desc>
+  <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+  <rect class="svg-in" x="20" y="40" width="150" height="70" rx="10"/><text class="svg-t" x="95" y="70" text-anchor="middle">Search space</text><text class="svg-s" x="95" y="90" text-anchor="middle">params + constraints</text>
+  <rect class="svg-node" x="240" y="40" width="170" height="70" rx="10"/><text class="svg-t" x="325" y="70" text-anchor="middle">Search strategy</text><text class="svg-s" x="325" y="90" text-anchor="middle">random · annealing · BO</text>
+  <rect class="svg-node" x="480" y="40" width="220" height="70" rx="10"/><text class="svg-t" x="590" y="70" text-anchor="middle">Code generator + compiler</text><text class="svg-s" x="590" y="90" text-anchor="middle">config → variant binary</text>
+  <rect class="svg-node" x="480" y="200" width="220" height="70" rx="10"/><text class="svg-t" x="590" y="230" text-anchor="middle">Run &amp; measure</text><text class="svg-s" x="590" y="250" text-anchor="middle">on the target machine</text>
+  <rect class="svg-node" x="240" y="200" width="170" height="70" rx="10" style="stroke-dasharray:5 4"/><text class="svg-t" x="325" y="230" text-anchor="middle">Cost model</text><text class="svg-s" x="325" y="250" text-anchor="middle">optional, learned</text>
+  <rect class="svg-out" x="20" y="200" width="150" height="70" rx="10"/><text class="svg-t" x="95" y="230" text-anchor="middle">Results DB</text><text class="svg-s" x="95" y="250" text-anchor="middle">best config, history</text>
+  <path class="svg-edge" d="M170,75 L238,75" marker-end="url(#ah2)"/>
+  <path class="svg-fwd" d="M410,75 L478,75" marker-end="url(#ah2)"/>
+  <text class="svg-fwd-t" x="444" y="64" text-anchor="middle">config</text>
+  <path class="svg-fwd" d="M590,110 L590,198" marker-end="url(#ah2)"/>
+  <text class="svg-fwd-t" x="600" y="160">binary</text>
+  <path class="svg-rev" d="M480,250 L412,250" marker-end="url(#ah2)"/>
+  <path class="svg-rev" d="M520,200 C470,160 400,150 360,112" marker-end="url(#ah2)"/>
+  <text class="svg-rev-t" x="470" y="150" text-anchor="middle">runtime</text>
+  <path class="svg-edge" d="M300,200 L300,112" marker-end="url(#ah2)" style="stroke-dasharray:5 4"/>
+  <text class="svg-s" x="232" y="160" text-anchor="end">screens candidates</text>
+  <path class="svg-rev" d="M590,270 C590,300 95,300 95,272" marker-end="url(#ah2)"/>
+  <text class="svg-rev-t" x="340" y="306" text-anchor="middle">record result</text>
+  <text class="svg-s" x="20" y="326">Solid blue: forward path from configuration to measurement. Dashed orange: feedback that steers the next proposal.</text>
+</svg>
+<figcaption><strong>Figure 2.</strong> The generic auto-tuning loop. Classic empirical tuners such as ATLAS and OpenTuner measure every candidate<sup class="c"><a href="#r17">17</a>,<wbr><a href="#r15">15</a></sup>; AutoTVM, Ansor and the learned Halide autoscheduler add a learned cost model so that only promising candidates are compiled and measured<sup class="c"><a href="#r23">23</a>,<wbr><a href="#r11">11</a>,<wbr><a href="#r24">24</a></sup>.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="space"><span class="n">4</span>The search space</h2>
+<h3>Kinds of parameters</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Kind</th><th>Examples</th><th>Typical type</th></tr></thead>
+<tbody>
+<tr><td>Loop transformation parameters</td><td>Tile (block) sizes, unroll factors, loop order, register blocking</td><td>Ordinal integers, permutations<sup class="c"><a href="#r21">21</a>,<wbr><a href="#r4">4</a>,<wbr><a href="#r25">25</a></sup></td></tr>
+<tr><td>Compiler flags and pass parameters</td><td><code>-funroll-loops</code>, <code>-O2</code> vs <code>-O3</code>, GCC <code>--param</code> thresholds</td><td>Booleans, categoricals, integers<sup class="c"><a href="#r26">26</a>,<wbr><a href="#r15">15</a></sup></td></tr>
+<tr><td>Phase (pass) ordering</td><td>Which passes to run, and in what order</td><td>Sequences<sup class="c"><a href="#r8">8</a>,<wbr><a href="#r19">19</a></sup></td></tr>
+<tr><td>Algorithm or variant choice</td><td>FFT factorisation, convolution algorithm, sparse format</td><td>Categorical, recursive<sup class="c"><a href="#r27">27</a>,<wbr><a href="#r7">7</a>,<wbr><a href="#r28">28</a></sup></td></tr>
+<tr><td>Schedules for DSL or tensor compilers</td><td>Halide <code>split</code>/<code>reorder</code>/<code>vectorize</code>, TVM tiling and binding</td><td>Structured trees of decisions<sup class="c"><a href="#r9">9</a>,<wbr><a href="#r10">10</a>,<wbr><a href="#r11">11</a></sup></td></tr>
+<tr><td>GPU launch and kernel parameters</td><td>Threads per block, work per thread, <code>num_warps</code>, <code>num_stages</code></td><td>Integers with constraints<sup class="c"><a href="#r12">12</a>,<wbr><a href="#r13">13</a>,<wbr><a href="#r14">14</a></sup></td></tr>
+</tbody></table></div>
+
+<h3>Example: loop tiling</h3>
+<p>Tiling (blocking) splits an iteration space into blocks so that the data a block touches stays in cache while it is reused. Wolf and Lam formalised tiling as a data-locality transformation<sup class="c"><a href="#r29">29</a></sup>, and high-performance GEMM implementations block for each level of the memory hierarchy<sup class="c"><a href="#r30">30</a></sup>. The best tile size depends on cache capacities, the data layout and the rest of the generated code, which is why it is a classic auto-tuning target<sup class="c"><a href="#r21">21</a>,<wbr><a href="#r31">31</a></sup>.</p>
+<figure>
+<svg viewBox="0 0 720 270" role="img" aria-labelledby="f3t f3d">
+  <title id="f3t">Tiled matrix multiplication C += A × B</title>
+  <desc id="f3d">Three 8 by 8 grids labelled C, A and B. In C a TI by TJ block is highlighted; in A the matching TI by TK block; in B the matching TK by TJ block. The three highlighted tiles together should fit in cache.</desc>
+  <g id="tilefig"></g>
+</svg>
+<figcaption><strong>Figure 3.</strong> In a tiled matrix multiply, a TI×TJ block of C is updated from a TI×TK block of A and a TK×TJ block of B. The tile sizes TI, TJ and TK are the parameters tuned in section 10. After Wolf and Lam<sup class="c"><a href="#r29">29</a></sup> and Goto and van de Geijn<sup class="c"><a href="#r30">30</a></sup>.</figcaption>
+</figure>
+
+<h3>How big is the space?</h3>
+<p>Spaces grow combinatorially. The GCC manual documents hundreds of optimisation options and tunable <code>--param</code> values<sup class="c"><a href="#r26">26</a></sup>; in the GCC 13.3 build used for this article, <code>gcc --help=optimizers</code> listed 260 <code>-f</code> options and <code>gcc --help=params</code> listed 283 parameters. Treating just the 260 options as on/off switches gives 2<sup>260</sup> ≈ 1.9×10<sup>78</sup> combinations. Phase ordering is worse, because sequences can repeat passes and vary in length<sup class="c"><a href="#r18">18</a>,<wbr><a href="#r19">19</a></sup>. Tensor compilers face spaces of "billions of possible program variants" for a single operator<sup class="c"><a href="#r23">23</a></sup>. Exhaustive search is therefore possible only for tiny sub-spaces, and the main design question is how to search cleverly.</p>
+<div class="callout warn"><strong>Constraints matter.</strong> Many configurations are invalid: a GPU block can exceed the hardware's thread limit, a tile can exceed shared memory, or a pass sequence can crash the compiler. Good tuners let you declare restrictions (Kernel Tuner and CLTune both support constraints on parameter combinations<sup class="c"><a href="#r13">13</a>,<wbr><a href="#r12">12</a></sup>) or treat failures as infinitely slow (OpenTuner reports them as an error state<sup class="c"><a href="#r15">15</a></sup>).</div>
+
+<!-- ============================================================ -->
+<h2 id="search"><span class="n">5</span>Search strategies</h2>
+<p>No single search algorithm is best on every problem; the "no free lunch" theorems show that, averaged over all possible objective functions, all black-box optimisers perform equally<sup class="c"><a href="#r32">32</a></sup>. In practice auto-tuning spaces have structure, and the following strategies are used most:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Strategy</th><th>Idea</th><th>Used by (examples)</th></tr></thead>
+<tbody>
+<tr><td>Exhaustive / grid</td><td>Try every point of a (coarsened) grid</td><td>Small spaces; ATLAS searches its parameters largely one at a time over bounded ranges (an orthogonal line search)<sup class="c"><a href="#r17">17</a>,<wbr><a href="#r31">31</a></sup></td></tr>
+<tr><td>Random search</td><td>Sample uniformly; surprisingly strong when only a few parameters matter<sup class="c"><a href="#r33">33</a></sup></td><td>Baselines in most tuners<sup class="c"><a href="#r15">15</a>,<wbr><a href="#r13">13</a></sup></td></tr>
+<tr><td>Hill climbing / local search</td><td>Move to a better neighbour until none exists; restart randomly</td><td>Kernel Tuner strategies; OpenTuner techniques<sup class="c"><a href="#r13">13</a>,<wbr><a href="#r15">15</a></sup></td></tr>
+<tr><td>Simulated annealing</td><td>Accept worse moves with probability e<sup>−Δ/T</sup>, cooling T over time<sup class="c"><a href="#r34">34</a></sup></td><td>AutoTVM's explorer over its cost model<sup class="c"><a href="#r23">23</a></sup></td></tr>
+<tr><td>Genetic / evolutionary algorithms</td><td>Mutate and recombine a population of configurations<sup class="c"><a href="#r35">35</a></sup></td><td>Pass sequences for code size<sup class="c"><a href="#r8">8</a></sup>; Ansor's evolutionary search<sup class="c"><a href="#r11">11</a></sup></td></tr>
+<tr><td>Ensembles with bandits</td><td>Run many techniques and give more trials to those that are finding improvements</td><td>OpenTuner's AUC Bandit meta-technique<sup class="c"><a href="#r15">15</a></sup></td></tr>
+<tr><td>Bayesian optimisation</td><td>Fit a probabilistic surrogate model and pick the next point by an acquisition function<sup class="c"><a href="#r36">36</a></sup></td><td>SMAC<sup class="c"><a href="#r37">37</a></sup>, BaCO<sup class="c"><a href="#r38">38</a></sup>, Optuna-style tuners<sup class="c"><a href="#r39">39</a></sup></td></tr>
+<tr><td>Learned cost model + search</td><td>Train a model to predict performance, search the model, measure only the top candidates</td><td>AutoTVM, Ansor, Halide autoscheduler<sup class="c"><a href="#r23">23</a>,<wbr><a href="#r11">11</a>,<wbr><a href="#r24">24</a></sup></td></tr>
+</tbody></table></div>
+<p>Bergstra and Bengio explain why random search often beats grid search: when only a few parameters really matter (low <em>effective dimensionality</em>), a grid wastes most of its trials repeating the same values of the important parameters, whereas random samples try a new value each time<sup class="c"><a href="#r33">33</a></sup>.</p>
+
+<h3>Interactive playground</h3>
+<p>The playground below uses a synthetic two-parameter landscape (think "tile size × unroll factor") with several local minima and measurement noise. Choose a strategy and a budget; the dots show configurations that were measured and the star is the best one found. The "100 seeds" table compares strategies statistically, which is how tuning strategies should be compared<sup class="c"><a href="#r40">40</a></sup>.</p>
+<div class="play" id="play">
+  <label>Strategy <select id="strat">
+    <option value="grid">Grid (coarse)</option>
+    <option value="random" selected>Random search</option>
+    <option value="hill">Hill climbing + restarts</option>
+    <option value="sa">Simulated annealing</option>
+  </select>
+  Budget <input type="range" id="budget" min="8" max="200" step="1" value="40"><output id="bout">40</output></label>
+  <label style="margin-top:8px">Seed <input type="range" id="seed" min="1" max="50" step="1" value="7"><output id="sout">7</output></label>
+  <svg id="heat" viewBox="0 0 640 360" role="img" aria-label="Search landscape heatmap with measured configurations" style="width:100%;height:auto;display:block;margin-top:10px"></svg>
+  <div class="grid2">
+    <div class="stat"><b>Best runtime found</b><output id="pbest">–</output></div>
+    <div class="stat"><b>True optimum</b><output id="popt">–</output></div>
+    <div class="stat"><b>Gap to optimum</b><output id="pgap">–</output></div>
+    <div class="stat"><b>Distinct configs measured</b><output id="pcount">–</output></div>
+  </div>
+  <div class="tablewrap" style="margin-top:12px"><table id="cmp"><thead><tr><th>Strategy (100 seeds, same budget)</th><th>Median gap</th><th>Runs within 2% of optimum</th></tr></thead><tbody></tbody></table></div>
+</div>
+<p class="meta">Figure 4. Cells fade toward the background colour as runtime falls, so the fastest regions are the faintest. The landscape is invented for teaching; it is not a measurement of real hardware.</p>
+
+<!-- ============================================================ -->
+<h2 id="models"><span class="n">6</span>Empirical, model-driven and learned</h2>
+<p>There are three ways to decide which variant is fastest:</p>
+<ul>
+  <li><strong>Empirical search</strong> measures real runs. ATLAS, PHiPAC and FFTW popularised this approach<sup class="c"><a href="#r17">17</a>,<wbr><a href="#r4">4</a>,<wbr><a href="#r6">6</a></sup>. It is accurate on the machine where it runs but costs time.</li>
+  <li><strong>Model-driven optimisation</strong> computes parameters from an analytical model of the hardware, such as choosing a tile so that the working set fits in cache. Yotov et al. replaced ATLAS's empirical search with a model and found that the model-driven code generator could produce code with performance comparable to the empirically tuned one<sup class="c"><a href="#r31">31</a></sup>. Mullapudi et al.'s original Halide autoscheduler likewise used an analytical approach<sup class="c"><a href="#r41">41</a></sup>.</li>
+  <li><strong>Learned cost models</strong> sit in between. They are trained on measurements and then used to rank many candidates cheaply. AutoTVM learns statistical cost models over "billions of possible program variants"<sup class="c"><a href="#r23">23</a></sup>; Ansor samples programs from a hierarchical search space and fine-tunes them with evolutionary search and a learned cost model<sup class="c"><a href="#r11">11</a></sup>; Adams et al. combine tree search with a cost model trained on randomly generated Halide programs<sup class="c"><a href="#r24">24</a></sup>. Earlier, Stephenson et al. used genetic programming to evolve compiler heuristics<sup class="c"><a href="#r16">16</a></sup>, Agakov et al. used models to focus iterative search<sup class="c"><a href="#r42">42</a></sup>, and Cummins et al. learned heuristics directly from source code with deep learning<sup class="c"><a href="#r43">43</a></sup>.</li>
+</ul>
+<figure>
+<svg viewBox="0 0 720 240" role="img" aria-labelledby="f5t f5d">
+  <title id="f5t">Three ways to choose a variant</title>
+  <desc id="f5d">Three lanes. Empirical: generate N variants, measure all N, pick the best. Model-driven: compute parameters from a hardware model, generate one variant. Learned: generate many candidates, rank them with a cost model, measure the top k, and retrain the model with the new measurements.</desc>
+  <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+  <text class="svg-t" x="16" y="42" font-weight="600">Empirical</text>
+  <rect class="svg-node" x="130" y="20" width="160" height="36" rx="8"/><text class="svg-s" x="210" y="43" text-anchor="middle">generate N variants</text>
+  <rect class="svg-node" x="330" y="20" width="160" height="36" rx="8"/><text class="svg-s" x="410" y="43" text-anchor="middle">measure all N</text>
+  <rect class="svg-out" x="530" y="20" width="160" height="36" rx="8"/><text class="svg-s" x="610" y="43" text-anchor="middle">pick fastest</text>
+  <path class="svg-edge" d="M290,38 L328,38" marker-end="url(#ah3)"/><path class="svg-edge" d="M490,38 L528,38" marker-end="url(#ah3)"/>
+  <text class="svg-t" x="16" y="112" font-weight="600">Model-driven</text>
+  <rect class="svg-in" x="130" y="90" width="160" height="36" rx="8"/><text class="svg-s" x="210" y="113" text-anchor="middle">hardware model</text>
+  <rect class="svg-node" x="330" y="90" width="160" height="36" rx="8"/><text class="svg-s" x="410" y="113" text-anchor="middle">compute parameters</text>
+  <rect class="svg-out" x="530" y="90" width="160" height="36" rx="8"/><text class="svg-s" x="610" y="113" text-anchor="middle">generate 1 variant</text>
+  <path class="svg-edge" d="M290,108 L328,108" marker-end="url(#ah3)"/><path class="svg-edge" d="M490,108 L528,108" marker-end="url(#ah3)"/>
+  <text class="svg-t" x="16" y="182" font-weight="600">Learned</text>
+  <rect class="svg-node" x="130" y="160" width="160" height="36" rx="8"/><text class="svg-s" x="210" y="183" text-anchor="middle">sample many candidates</text>
+  <rect class="svg-in" x="330" y="160" width="160" height="36" rx="8"/><text class="svg-s" x="410" y="183" text-anchor="middle">rank by cost model</text>
+  <rect class="svg-out" x="530" y="160" width="160" height="36" rx="8"/><text class="svg-s" x="610" y="183" text-anchor="middle">measure top k</text>
+  <path class="svg-edge" d="M290,178 L328,178" marker-end="url(#ah3)"/><path class="svg-edge" d="M490,178 L528,178" marker-end="url(#ah3)"/>
+  <path class="svg-rev" d="M610,196 C610,232 410,232 410,198" marker-end="url(#ah3)"/>
+  <text class="svg-rev-t" x="510" y="234" text-anchor="middle">retrain on new measurements</text>
+</svg>
+<figcaption><strong>Figure 5.</strong> Empirical, model-driven and learned approaches. The learned approach is the one used by AutoTVM, Ansor and the learned Halide autoscheduler<sup class="c"><a href="#r23">23</a>,<wbr><a href="#r11">11</a>,<wbr><a href="#r24">24</a></sup>; Yotov et al. compare the first two directly<sup class="c"><a href="#r31">31</a></sup>.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="measure"><span class="n">7</span>Measuring performance honestly</h2>
+<p>An auto-tuner is only as good as its measurements. If noise is larger than the difference between two configurations, the search ends up optimising noise. Mytkowicz et al. showed that seemingly harmless details, such as the size of the UNIX environment or the link order of object files, can bias measurements enough to reverse conclusions about an optimisation<sup class="c"><a href="#r44">44</a></sup>. Hoefler and Belli give rules for reporting parallel performance, including reporting the variation across repeated runs and using appropriate summary statistics<sup class="c"><a href="#r40">40</a></sup>.</p>
+<p>Practical rules used by real tuners:</p>
+<ul>
+  <li>Repeat each measurement and summarise with a robust statistic such as the median or minimum; Kernel Tuner, for example, runs each configuration several times by default and reports the average<sup class="c"><a href="#r13">13</a></sup>.</li>
+  <li>Warm up caches, JITs and GPU clocks before timing. FFTW's <code>FFTW_MEASURE</code> mode actually runs candidate plans, and the manual warns that it overwrites the input and output arrays during planning<sup class="c"><a href="#r45">45</a></sup>.</li>
+  <li>Check correctness for each variant: a fast wrong answer is worthless. CLTune can verify each kernel's output against a reference<sup class="c"><a href="#r12">12</a></sup>.</li>
+  <li>Tune on representative inputs. OSKI chooses sparse register-block sizes at run time because the best choice depends on the specific matrix<sup class="c"><a href="#r46">46</a></sup>.</li>
+  <li>Cap runaway candidates with a time limit. OpenTuner passes a <code>limit</code> to every run so that very slow configurations can be cut off<sup class="c"><a href="#r15">15</a></sup>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="when"><span class="n">8</span>When does tuning happen?</h2>
+<figure>
+<svg viewBox="0 0 720 210" role="img" aria-labelledby="f6t f6d">
+  <title id="f6t">Points in a program's life cycle where tuning can occur</title>
+  <desc id="f6d">An arrow from left to right through five stages: library install time (ATLAS, PHiPAC), compile time (OpenTuner flags, TVM, Halide), first call or plan time (FFTW planner, Triton autotune, cuDNN benchmark mode), run time (OSKI), and offline profiling across a fleet (PGO, AutoFDO, MLGO training).</desc>
+  <defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+  <path class="svg-fwd" d="M20,60 L700,60" marker-end="url(#ah4)"/>
+  <g id="lifecycle"></g>
+</svg>
+<figcaption><strong>Figure 6.</strong> Tuning at different stages. Earlier tuning is cheaper at run time but knows less about the actual input and machine. Sources: ATLAS and PHiPAC<sup class="c"><a href="#r17">17</a>,<wbr><a href="#r4">4</a></sup>, OpenTuner<sup class="c"><a href="#r15">15</a></sup>, TVM<sup class="c"><a href="#r10">10</a></sup>, FFTW<sup class="c"><a href="#r27">27</a></sup>, Triton<sup class="c"><a href="#r14">14</a></sup>, PyTorch cuDNN benchmark mode<sup class="c"><a href="#r47">47</a></sup>, OSKI<sup class="c"><a href="#r46">46</a></sup>, AutoFDO<sup class="c"><a href="#r48">48</a></sup>, MLGO<sup class="c"><a href="#r49">49</a></sup>.</figcaption>
+</figure>
+<p>The trade-off is between <strong>tuning cost</strong> and <strong>specialisation</strong>. ATLAS pays its search cost once when the library is installed<sup class="c"><a href="#r17">17</a></sup>. FFTW pays it when a plan is created; it offers flags ranging from <code>FFTW_ESTIMATE</code> (no measurement, a heuristic plan) through <code>FFTW_MEASURE</code> and <code>FFTW_PATIENT</code> to <code>FFTW_EXHAUSTIVE</code>, and the result can be saved and reloaded as <em>wisdom</em><sup class="c"><a href="#r45">45</a>,<wbr><a href="#r50">50</a></sup>. PyTorch's <code>torch.backends.cudnn.benchmark</code> makes cuDNN benchmark several convolution algorithms and select the fastest<sup class="c"><a href="#r47">47</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="systems"><span class="n">9</span>Systems tour</h2>
+<h3>9.1 Self-tuning libraries</h3>
+<p><strong>PHiPAC</strong> (Portable High Performance ANSI C, 1997) introduced a methodology for writing portable C matrix-multiply code generators whose parameters are searched on each machine<sup class="c"><a href="#r4">4</a></sup>. <strong>ATLAS</strong> (Automatically Tuned Linear Algebra Software) applied "automated empirical optimisation of software" to the BLAS<sup class="c"><a href="#r5">5</a>,<wbr><a href="#r17">17</a></sup>. <strong>FFTW</strong> composes FFT algorithms from <em>codelets</em> generated by a special-purpose compiler, <code>genfft</code>, and a planner measures alternatives at run time<sup class="c"><a href="#r6">6</a>,<wbr><a href="#r51">51</a>,<wbr><a href="#r27">27</a></sup>. <strong>SPIRAL</strong> represents signal-processing transforms as formulas, rewrites them into many alternative algorithms, and searches among them<sup class="c"><a href="#r7">7</a></sup>. <strong>OSKI</strong> tunes sparse matrix kernels to the matrix it is given<sup class="c"><a href="#r46">46</a></sup>. Auto-tuning was also applied to stencil codes on multicore processors<sup class="c"><a href="#r52">52</a></sup>.</p>
+
+<h3>9.2 Flag selection and phase ordering</h3>
+<p>Cooper, Schielke and Subramanian used a genetic algorithm to find optimisation sequences that reduce code size<sup class="c"><a href="#r8">8</a></sup>. Bodin, Kisuki, Knijnenburg, O'Boyle and Rohou studied <em>iterative compilation</em> in a non-linear optimisation space<sup class="c"><a href="#r20">20</a></sup>, and Kisuki et al. searched tile sizes and unroll factors together<sup class="c"><a href="#r21">21</a></sup>. <strong>Milepost GCC</strong> extracted program features inside GCC and used machine learning to predict good optimisations for new programs, so that less search was needed<sup class="c"><a href="#r53">53</a></sup>. Ashouri et al. survey this area and divide it into the <em>optimisation selection</em> problem and the <em>phase-ordering</em> problem<sup class="c"><a href="#r2">2</a></sup>.</p>
+
+<h3>9.3 General-purpose tuning frameworks</h3>
+<p><strong>OpenTuner</strong> provides a Python framework where users define a search space and a <code>run</code> method; it then runs an ensemble of search techniques coordinated by an AUC Bandit meta-technique. Its authors evaluated it on seven projects, including GCC/G++ flags, Halide, HPL and PetaBricks, and reported speedups of up to 2.8× over those projects' prior techniques<sup class="c"><a href="#r15">15</a></sup>. <strong>Active Harmony</strong> combined with the <strong>CHiLL</strong> loop-transformation framework tuned compiler transformation parameters at scale<sup class="c"><a href="#r25">25</a></sup>. <strong>BaCO</strong> uses Bayesian optimisation specialised for compiler parameter types such as permutations, ordinals and categoricals, with known constraints<sup class="c"><a href="#r38">38</a></sup>.</p>
+
+<h3>9.4 DSL and tensor compilers</h3>
+<p><strong>Halide</strong> separates an image-processing <em>algorithm</em> from its <em>schedule</em> (how loops are split, ordered, vectorised, parallelised and fused), and its original paper already used stochastic search to find schedules<sup class="c"><a href="#r9">9</a></sup>. Later autoschedulers used analytic heuristics<sup class="c"><a href="#r41">41</a></sup> and then learned cost models with tree search<sup class="c"><a href="#r24">24</a></sup>. <strong>TVM</strong> brought the same idea to deep learning<sup class="c"><a href="#r10">10</a></sup>: AutoTVM tunes templates written by developers with learned cost models<sup class="c"><a href="#r23">23</a></sup>; Ansor generates the search space automatically and reported up to 3.8×, 2.6× and 1.7× speedups over the state of the art on Intel CPUs, ARM CPUs and NVIDIA GPUs<sup class="c"><a href="#r11">11</a></sup>; MetaSchedule unifies these approaches as probabilistic programs<sup class="c"><a href="#r54">54</a></sup>.</p>
+
+<h3>9.5 GPU kernels</h3>
+<p><strong>CLTune</strong> tunes OpenCL kernels<sup class="c"><a href="#r12">12</a></sup> and <strong>Kernel Tuner</strong> tunes CUDA, OpenCL and C kernels from Python, with many search strategies<sup class="c"><a href="#r13">13</a></sup>. <strong>Triton</strong>, a language and compiler for tiled GPU kernels<sup class="c"><a href="#r55">55</a></sup>, has a built-in <code>@triton.autotune</code> decorator that benchmarks a list of configurations and re-tunes whenever the values of selected arguments change<sup class="c"><a href="#r14">14</a></sup>. PyTorch's <code>torch.compile</code> has a <code>"max-autotune"</code> mode that, according to its documentation, leverages Triton- or template-based matrix multiplications on supported devices and Triton-based convolutions on GPU, at the price of longer compilation<sup class="c"><a href="#r56">56</a></sup>.</p>
+
+<h3>9.6 Learning the compiler's own heuristics</h3>
+<p>A newer direction trains models that replace heuristics inside a production compiler. <strong>MLGO</strong> replaced LLVM's inlining-for-size heuristic with learned models and reported up to 7% size reduction compared with LLVM <code>-Oz</code><sup class="c"><a href="#r49">49</a></sup>; its training infrastructure is open source<sup class="c"><a href="#r57">57</a></sup>. <strong>CompilerGym</strong> exposes compiler optimisation problems, such as LLVM phase ordering, as reinforcement-learning environments<sup class="c"><a href="#r58">58</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="example"><span class="n">10</span>Worked example: tuning a tiled matrix multiply</h2>
+<p>This example is small enough to run on a laptop but has the same structure as real tuners. The C kernel takes its tile sizes as preprocessor macros, so every configuration is a separate compilation.</p>
+<div class="codehead">mm.c</div>
+<pre><span class="c">/* mm.c - tiled matrix multiply; tile sizes are compile-time parameters */</span>
+<span class="k">#include</span> &lt;stdio.h&gt;
+<span class="k">#include</span> &lt;stdlib.h&gt;
+<span class="k">#include</span> &lt;time.h&gt;
+<span class="k">#ifndef</span> N
+<span class="k">#define</span> N 512
+<span class="k">#endif</span>
+<span class="k">#ifndef</span> TI
+<span class="k">#define</span> TI 32
+<span class="k">#endif</span>
+<span class="k">#ifndef</span> TJ
+<span class="k">#define</span> TJ 32
+<span class="k">#endif</span>
+<span class="k">#ifndef</span> TK
+<span class="k">#define</span> TK 32
+<span class="k">#endif</span>
+<span class="k">#define</span> MIN(a,b) ((a)&lt;(b)?(a):(b))
+static double A[N][N], B[N][N], C[N][N];
+
+int main(void) {
+  for (int i = 0; i &lt; N; i++)
+    for (int j = 0; j &lt; N; j++) { A[i][j] = (i + j) % 7; B[i][j] = (i * j) % 5; }
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &amp;t0);
+  for (int ii = 0; ii &lt; N; ii += TI)
+    for (int kk = 0; kk &lt; N; kk += TK)
+      for (int jj = 0; jj &lt; N; jj += TJ)
+        for (int i = ii; i &lt; MIN(ii + TI, N); i++)
+          for (int k = kk; k &lt; MIN(kk + TK, N); k++) {
+            double a = A[i][k];
+            for (int j = jj; j &lt; MIN(jj + TJ, N); j++)
+              C[i][j] += a * B[k][j];
+          }
+  clock_gettime(CLOCK_MONOTONIC, &amp;t1);
+  double s = (t1.tv_sec - t0.tv_sec) + 1e-9 * (t1.tv_nsec - t0.tv_nsec);
+  printf(&quot;%.6f %g\n&quot;, s, C[N/2][N/3]);   <span class="c">/* print a result so work is not removed */</span>
+  return 0;
+}</pre>
+<p>The tuner uses a two-phase strategy common in practice: global random sampling to find a good region<sup class="c"><a href="#r33">33</a></sup>, then hill climbing on neighbouring configurations<sup class="c"><a href="#r13">13</a></sup>. It caches results so no configuration is measured twice, and it uses the median of three runs to resist noise<sup class="c"><a href="#r40">40</a></sup>.</p>
+<div class="codehead">tune.py</div>
+<pre><span class="s">&quot;&quot;&quot;tune.py - a minimal empirical auto-tuner: random search, then hill climbing.
+Usage: python3 tune.py [budget]&quot;&quot;&quot;</span>
+<span class="k">import</span> random, subprocess, sys, statistics, os, tempfile
+
+SPACE = {                       <span class="c"># the search space: parameter -&gt; legal values</span>
+    &quot;TI&quot;:  [4, 8, 16, 32, 64, 128, 256, 512],
+    &quot;TJ&quot;:  [8, 16, 32, 64, 128, 256, 512],
+    &quot;TK&quot;:  [4, 8, 16, 32, 64, 128, 256, 512],
+    &quot;OPT&quot;: [&quot;-O2&quot;, &quot;-O3&quot;],
+    &quot;UNROLL&quot;: [&quot;&quot;, &quot;-funroll-loops&quot;],
+}
+CACHE = {}                      <span class="c"># memoise: never measure a configuration twice</span>
+TMP = tempfile.mkdtemp()
+
+<span class="k">def</span> measure(cfg, reps=3):
+    <span class="s">&quot;&quot;&quot;Compile with the configuration, run it `reps` times, return the median time.&quot;&quot;&quot;</span>
+    key = tuple(sorted(cfg.items()))
+    <span class="k">if</span> key in CACHE:
+        <span class="k">return</span> CACHE[key]
+    exe = os.path.join(TMP, &quot;mm&quot;)
+    cmd = [&quot;gcc&quot;, cfg[&quot;OPT&quot;], &quot;-march=native&quot;, f&quot;-DTI={cfg[&#x27;TI&#x27;]}&quot;, f&quot;-DTJ={cfg[&#x27;TJ&#x27;]}&quot;,
+           f&quot;-DTK={cfg[&#x27;TK&#x27;]}&quot;, &quot;-DN=1024&quot;, &quot;mm.c&quot;, &quot;-o&quot;, exe] + ([cfg[&quot;UNROLL&quot;]] if cfg[&quot;UNROLL&quot;] else [])
+    subprocess.run(cmd, check=True)
+    times = [float(subprocess.run([exe], capture_output=True, text=True).stdout.split()[0])
+             <span class="k">for</span> _ in range(reps)]
+    CACHE[key] = statistics.median(times)     <span class="c"># median resists outliers from noise</span>
+    <span class="k">return</span> CACHE[key]
+
+<span class="k">def</span> random_cfg():
+    <span class="k">return</span> {p: random.choice(v) for p, v in SPACE.items()}
+
+<span class="k">def</span> neighbours(cfg):
+    <span class="s">&quot;&quot;&quot;Configurations that differ in one parameter by one step.&quot;&quot;&quot;</span>
+    <span class="k">for</span> p, vals in SPACE.items():
+        i = vals.index(cfg[p])
+        <span class="k">for</span> j in (i - 1, i + 1):
+            <span class="k">if</span> 0 &lt;= j &lt; len(vals):
+                yield {**cfg, p: vals[j]}
+
+<span class="k">def</span> tune(budget=40, seed=1):
+    random.seed(seed)
+    best = {&quot;TI&quot;: 512, &quot;TJ&quot;: 512, &quot;TK&quot;: 512, &quot;OPT&quot;: &quot;-O2&quot;, &quot;UNROLL&quot;: &quot;&quot;}  <span class="c"># untiled baseline</span>
+    base = best_t = measure(best)
+    print(f&quot;baseline (untiled, -O2): {base:.4f} s&quot;)
+    <span class="k">for</span> _ in range(budget // 2):                       <span class="c"># phase 1: global random sampling</span>
+        c = random_cfg(); t = measure(c)
+        <span class="k">if</span> t &lt; best_t: best, best_t = c, t
+    improved = True
+    <span class="k">while</span> improved and len(CACHE) &lt; budget:            <span class="c"># phase 2: local hill climbing</span>
+        improved = False
+        <span class="k">for</span> c in neighbours(best):
+            t = measure(c)
+            <span class="k">if</span> t &lt; best_t:
+                best, best_t, improved = c, t, True
+                break
+    print(f&quot;evaluated {len(CACHE)} configurations&quot;)
+    print(f&quot;best: {best}  {best_t:.4f} s  speedup {base / best_t:.2f}x&quot;)
+
+<span class="k">if</span> __name__ == &quot;__main__&quot;:
+    tune(int(sys.argv[1]) if len(sys.argv) &gt; 1 else 40)</pre>
+<p>Output of <code>python3 tune.py 40</code> on the 4-core cloud container used to write this article (GCC 13.3, N = 1024):</p>
+<pre>$ python3 tune.py 40
+baseline (untiled, -O2): 0.3373 s
+evaluated 28 configurations
+best: {&#x27;TI&#x27;: 8, &#x27;TJ&#x27;: 512, &#x27;TK&#x27;: 16, &#x27;OPT&#x27;: &#x27;-O3&#x27;, &#x27;UNROLL&#x27;: &#x27;-funroll-loops&#x27;}  0.1215 s  speedup 2.78x</pre>
+<p>Three points are worth noticing. First, the best configuration is not the "obvious" square tile: it uses a narrow TI with a long TJ, which keeps the inner <code>j</code> loop long enough to vectorise well. Second, the tuner also enabled <code>-funroll-loops</code>, showing that flags and loop parameters interact<sup class="c"><a href="#r21">21</a></sup>. Third, the result is specific to this machine, compiler and problem size; you should expect a different winner on your hardware, which is the reason auto-tuning exists<sup class="c"><a href="#r17">17</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="apis"><span class="n">11</span>Auto-tuning APIs in practice</h2>
+<h3>FFTW: plan-time tuning with saved wisdom</h3>
+<pre><span class="c">/* Planning measures candidate algorithms; wisdom stores the result <sup class="c"><a href="#r45">45</a>,<wbr><a href="#r50">50</a></sup> */</span>
+<span class="k">#include</span> <span class="s">&lt;fftw3.h&gt;</span>
+
+fftw_complex *in  = fftw_malloc(<span class="k">sizeof</span>(fftw_complex) * n);
+fftw_complex *out = fftw_malloc(<span class="k">sizeof</span>(fftw_complex) * n);
+fftw_import_wisdom_from_filename(<span class="s">"app.wisdom"</span>);       <span class="c">/* reuse earlier tuning, if any */</span>
+fftw_plan p = fftw_plan_dft_1d(n, in, out, FFTW_FORWARD, FFTW_MEASURE);
+<span class="c">/* FFTW_MEASURE overwrites in/out while planning: fill the input afterwards */</span>
+fill_input(in, n);
+fftw_execute(p);
+fftw_export_wisdom_to_filename(<span class="s">"app.wisdom"</span>);       <span class="c">/* save tuning for next time */</span>
+fftw_destroy_plan(p);</pre>
+
+<h3>OpenTuner: the same matrix multiply, with a framework</h3>
+<pre><span class="k">import</span> opentuner
+<span class="k">from</span> opentuner <span class="k">import</span> ConfigurationManipulator, IntegerParameter, EnumParameter
+<span class="k">from</span> opentuner <span class="k">import</span> MeasurementInterface, Result
+
+<span class="k">class</span> MatMulTuner(MeasurementInterface):
+    <span class="k">def</span> manipulator(self):
+        m = ConfigurationManipulator()
+        <span class="k">for</span> p <span class="k">in</span> (<span class="s">"TI"</span>, <span class="s">"TJ"</span>, <span class="s">"TK"</span>):
+            m.add_parameter(IntegerParameter(p, <span class="m">4</span>, <span class="m">512</span>))
+        m.add_parameter(EnumParameter(<span class="s">"OPT"</span>, [<span class="s">"-O2"</span>, <span class="s">"-O3"</span>]))
+        <span class="k">return</span> m
+
+    <span class="k">def</span> run(self, desired_result, input, limit):
+        cfg = desired_result.configuration.data
+        build = self.call_program(
+            <span class="s">"gcc {OPT} -march=native -DN=1024 -DTI={TI} -DTJ={TJ} -DTK={TK} mm.c -o ./mm"</span>.format(**cfg))
+        <span class="k">if</span> build[<span class="s">"returncode"</span>] != <span class="m">0</span>:
+            <span class="k">return</span> Result(state=<span class="s">"ERROR"</span>, time=float(<span class="s">"inf"</span>))
+        <span class="k">return</span> Result(time=self.call_program(<span class="s">"./mm"</span>)[<span class="s">"time"</span>])
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    MatMulTuner.main(opentuner.default_argparser().parse_args())</pre>
+<p>OpenTuner chooses among its search techniques automatically and stores results in a database<sup class="c"><a href="#r15">15</a>,<wbr><a href="#r59">59</a></sup>. Run it with, for example, <code>python3 mmtuner.py --test-limit=200</code>.</p>
+
+<h3>Kernel Tuner: GPU thread-block size</h3>
+<pre><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">import</span> kernel_tuner
+
+kernel_string = <span class="s">"""
+__global__ void vector_add(float *c, float *a, float *b, int n) {
+    int i = blockIdx.x * block_size_x + threadIdx.x;
+    if (i &lt; n) c[i] = a[i] + b[i];
+}"""</span>
+n = np.int32(<span class="m">10_000_000</span>)
+a = np.random.randn(n).astype(np.float32)
+b = np.random.randn(n).astype(np.float32)
+c = np.zeros_like(b)
+tune_params = {<span class="s">"block_size_x"</span>: [<span class="m">32</span>, <span class="m">64</span>, <span class="m">128</span>, <span class="m">256</span>, <span class="m">512</span>, <span class="m">1024</span>]}
+results, env = kernel_tuner.tune_kernel(<span class="s">"vector_add"</span>, kernel_string, n, [c, a, b, n], tune_params)</pre>
+<p>Kernel Tuner inserts each value of <code>block_size_x</code> into the kernel as a compile-time constant, launches it, and records the time<sup class="c"><a href="#r13">13</a></sup>.</p>
+
+<h3>Triton: autotuning inside the kernel definition</h3>
+<pre><span class="k">import</span> triton, triton.language <span class="k">as</span> tl
+
+<span class="k">@triton.autotune</span>(
+    configs=[triton.Config({<span class="s">"BLOCK_SIZE"</span>: <span class="m">128</span>},  num_warps=<span class="m">4</span>),
+             triton.Config({<span class="s">"BLOCK_SIZE"</span>: <span class="m">1024</span>}, num_warps=<span class="m">8</span>)],
+    key=[<span class="s">"n_elements"</span>],          <span class="c"># re-tune when this argument's value changes</span>
+)
+<span class="k">@triton.jit</span>
+<span class="k">def</span> add_kernel(x_ptr, y_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+    pid  = tl.program_id(axis=<span class="m">0</span>)
+    offs = pid * BLOCK_SIZE + tl.arange(<span class="m">0</span>, BLOCK_SIZE)
+    mask = offs &lt; n_elements
+    x = tl.load(x_ptr + offs, mask=mask)
+    y = tl.load(y_ptr + offs, mask=mask)
+    tl.store(out_ptr + offs, x + y, mask=mask)</pre>
+<p>The decorator benchmarks every configuration the first time it sees a new value of the <code>key</code> arguments and caches the winner<sup class="c"><a href="#r14">14</a></sup>.</p>
+
+<h3>PyTorch: one line each</h3>
+<pre><span class="k">import</span> torch
+torch.backends.cudnn.benchmark = <span class="k">True</span>                  <span class="c"># cuDNN tries several conv algorithms <sup class="c"><a href="#r47">47</a></sup></span>
+model = torch.compile(model, mode=<span class="s">"max-autotune"</span>)       <span class="c"># Triton/template GEMM autotuning <sup class="c"><a href="#r56">56</a></sup></span></pre>
+
+<!-- ============================================================ -->
+<h2 id="pgo"><span class="n">12</span>Auto-tuning versus profile-guided optimisation</h2>
+<p>Profile-guided optimisation (PGO) also uses runtime feedback, but in a different way. With PGO the program is built with instrumentation (GCC <code>-fprofile-generate</code>, then <code>-fprofile-use</code>; Clang has equivalent options), run on training inputs, and rebuilt with the recorded execution counts to guide inlining, layout and branch decisions<sup class="c"><a href="#r26">26</a>,<wbr><a href="#r60">60</a></sup>. AutoFDO collects profiles with hardware sampling in production instead of instrumentation<sup class="c"><a href="#r48">48</a></sup>.</p>
+<div class="tablewrap"><table>
+<thead><tr><th></th><th>Auto-tuning</th><th>PGO / AutoFDO</th></tr></thead>
+<tbody>
+<tr><td>Feedback</td><td>Measured performance of each variant (an objective value)</td><td>Execution profile of one build (counts, hot paths)</td></tr>
+<tr><td>Builds</td><td>Many: one per candidate configuration</td><td>Typically two: profiling build, optimised build</td></tr>
+<tr><td>What changes</td><td>Explicit parameters and choices</td><td>The compiler's existing heuristics, fed better data</td></tr>
+<tr><td>Reference</td><td><sup class="c"><a href="#r1">1</a>,<wbr><a href="#r2">2</a></sup></td><td><sup class="c"><a href="#r60">60</a>,<wbr><a href="#r48">48</a></sup></td></tr>
+</tbody></table></div>
+<p>They are complementary: one can auto-tune the flags of a PGO build.</p>
+
+<!-- ============================================================ -->
+<h2 id="hard"><span class="n">13</span>Hard problems</h2>
+<ul>
+  <li><strong>Search cost.</strong> Each evaluation costs a compile plus several runs. Learned cost models and transfer learning across tasks reduce the number of real measurements<sup class="c"><a href="#r23">23</a>,<wbr><a href="#r11">11</a></sup>.</li>
+  <li><strong>Noise and bias.</strong> Measurements can be biased by factors unrelated to the configuration<sup class="c"><a href="#r44">44</a></sup>, and small differences need many repetitions to be trusted<sup class="c"><a href="#r40">40</a></sup>.</li>
+  <li><strong>Input sensitivity.</strong> The best configuration can change with problem size or input structure, which is why OSKI tunes at run time and Triton re-tunes when its key arguments change<sup class="c"><a href="#r46">46</a>,<wbr><a href="#r14">14</a></sup>.</li>
+  <li><strong>Portability.</strong> Results tuned on one machine may not carry over to another; libraries such as ATLAS therefore re-tune on each installation<sup class="c"><a href="#r17">17</a></sup>.</li>
+  <li><strong>Huge, structured spaces.</strong> Phase ordering is undecidable in general<sup class="c"><a href="#r18">18</a></sup>, and schedule spaces are trees of dependent decisions rather than flat vectors<sup class="c"><a href="#r11">11</a>,<wbr><a href="#r54">54</a></sup>.</li>
+  <li><strong>Generalisation of learned heuristics.</strong> Models trained on one set of programs must generalise to unseen code; this is a central theme of the ML-in-compilers literature<sup class="c"><a href="#r3">3</a>,<wbr><a href="#r2">2</a></sup>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="history"><span class="n">14</span>A short history</h2>
+<figure>
+<svg viewBox="0 0 720 408" role="img" aria-labelledby="f7t f7d">
+  <title id="f7t">Timeline of auto-tuning, 1976 to 2023</title>
+  <desc id="f7d">A vertical timeline listing milestones: 1976 Rice's algorithm selection problem; 1997 PHiPAC; 1998 ATLAS, FFTW and iterative compilation; 1999 genetic algorithms for pass sequences; 2003 empirical versus model-driven comparison; 2005 FFTW3, SPIRAL, OSKI; 2006 machine learning to focus iterative optimisation; 2011 Milepost GCC; 2013 Halide; 2014 OpenTuner; 2015 CLTune; 2018 TVM and AutoTVM; 2019 learned Halide autoscheduler and Triton; 2020 Ansor; 2021 MLGO; 2022 CompilerGym and MetaSchedule; 2023 BaCO.</desc>
+  <g id="timeline"></g>
+</svg>
+<figcaption><strong>Figure 7.</strong> Milestones in auto-tuning. Dates are the publication years of the papers cited for each system in sections 9 and 14.</figcaption>
+</figure>
+<p>The roots of the idea are older than compilers that tune themselves. Rice's 1976 "algorithm selection problem" framed the choice of the best algorithm for a given input as a problem in its own right<sup class="c"><a href="#r28">28</a></sup>. The late 1990s brought the first widely used self-tuning libraries (PHiPAC, ATLAS, FFTW)<sup class="c"><a href="#r4">4</a>,<wbr><a href="#r5">5</a>,<wbr><a href="#r6">6</a></sup> and the first iterative-compilation studies<sup class="c"><a href="#r20">20</a>,<wbr><a href="#r8">8</a></sup>. The 2000s added machine learning to cut search time<sup class="c"><a href="#r42">42</a>,<wbr><a href="#r53">53</a></sup>, and the 2010s generalised tuning into frameworks and DSL compilers<sup class="c"><a href="#r15">15</a>,<wbr><a href="#r9">9</a>,<wbr><a href="#r10">10</a></sup>. Today auto-tuning is built into everyday ML stacks through Triton and PyTorch<sup class="c"><a href="#r14">14</a>,<wbr><a href="#r56">56</a></sup>, and learned models are replacing heuristics inside LLVM<sup class="c"><a href="#r49">49</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="tools"><span class="n">15</span>Tools and software</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Tool</th><th>Domain</th><th>Technique</th><th>Ref.</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/jansel/opentuner">OpenTuner</a></td><td>Any program (Python framework)</td><td>Ensemble of techniques, AUC Bandit</td><td><sup class="c"><a href="#r15">15</a>,<wbr><a href="#r59">59</a></sup></td></tr>
+<tr><td><a href="https://github.com/KernelTuner/kernel_tuner">Kernel Tuner</a></td><td>CUDA, OpenCL, C, Fortran kernels</td><td>Many strategies incl. random, annealing, genetic</td><td><sup class="c"><a href="#r13">13</a></sup></td></tr>
+<tr><td><a href="https://github.com/CNugteren/CLTune">CLTune</a></td><td>OpenCL kernels</td><td>Full, random, annealing, PSO</td><td><sup class="c"><a href="#r12">12</a></sup></td></tr>
+<tr><td><a href="https://triton-lang.org/">Triton</a></td><td>GPU kernels in Python</td><td><code>@triton.autotune</code> over configs</td><td><sup class="c"><a href="#r55">55</a>,<wbr><a href="#r14">14</a></sup></td></tr>
+<tr><td><a href="https://pytorch.org/">PyTorch <code>torch.compile</code></a></td><td>Deep learning</td><td><code>mode="max-autotune"</code></td><td><sup class="c"><a href="#r56">56</a></sup></td></tr>
+<tr><td><a href="https://tvm.apache.org/">Apache TVM</a></td><td>Tensor programs</td><td>AutoTVM, Ansor, MetaSchedule</td><td><sup class="c"><a href="#r10">10</a>,<wbr><a href="#r23">23</a>,<wbr><a href="#r11">11</a>,<wbr><a href="#r54">54</a></sup></td></tr>
+<tr><td><a href="https://halide-lang.org/">Halide</a></td><td>Image processing, tensors</td><td>Autoschedulers (analytic, learned)</td><td><sup class="c"><a href="#r9">9</a>,<wbr><a href="#r41">41</a>,<wbr><a href="#r24">24</a></sup></td></tr>
+<tr><td><a href="https://www.fftw.org/">FFTW</a></td><td>FFTs</td><td>Planner with measured plans; wisdom</td><td><sup class="c"><a href="#r27">27</a>,<wbr><a href="#r45">45</a></sup></td></tr>
+<tr><td><a href="https://math-atlas.sourceforge.net/">ATLAS</a></td><td>Dense linear algebra (BLAS)</td><td>Install-time empirical search</td><td><sup class="c"><a href="#r17">17</a></sup></td></tr>
+<tr><td><a href="https://www.spiral.net/">SPIRAL</a></td><td>Signal-processing transforms</td><td>Formula rewriting + search</td><td><sup class="c"><a href="#r7">7</a></sup></td></tr>
+<tr><td><a href="https://github.com/google/ml-compiler-opt">MLGO</a></td><td>LLVM heuristics</td><td>Reinforcement learning, evolution strategies</td><td><sup class="c"><a href="#r49">49</a>,<wbr><a href="#r57">57</a></sup></td></tr>
+<tr><td><a href="https://github.com/facebookresearch/CompilerGym">CompilerGym</a></td><td>Research on compiler optimisation</td><td>Gym-style RL environments</td><td><sup class="c"><a href="#r58">58</a></sup></td></tr>
+<tr><td><a href="https://doi.org/10.1145/3623278.3624770">BaCO</a></td><td>Compiler and DSL parameters</td><td>Bayesian optimisation</td><td><sup class="c"><a href="#r38">38</a></sup></td></tr>
+<tr><td><a href="https://optuna.org/">Optuna</a></td><td>General black-box tuning</td><td>Define-by-run TPE / Bayesian search</td><td><sup class="c"><a href="#r39">39</a></sup></td></tr>
+</tbody></table></div>
+
+<!-- ============================================================ -->
+<h2 id="exercises"><span class="n">16</span>Exercises with solutions</h2>
+
+<div class="ex">
+<h3>Exercise 1 · Size of a search space <span class="tag">Warm-up</span></h3>
+<p>How many configurations does the <code>SPACE</code> in <code>tune.py</code> contain? If one evaluation (compile plus three runs) takes about 0.6 s, how long would exhaustive search take?</p>
+<details><summary>Show solution</summary>
+<p>TI has 8 values, TJ 7, TK 8, OPT 2 and UNROLL 2, so 8 × 7 × 8 × 2 × 2 = 1,792 configurations. At 0.6 s each that is about 1,075 s, or roughly 18 minutes. That is feasible, but adding just one more 8-valued parameter makes it about 2.4 hours, which shows why spaces explode<sup class="c"><a href="#r1">1</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 2 · Flags and pass orders <span class="tag">Counting</span></h3>
+<p>(a) How many on/off combinations do 260 independent flags give? (b) How many pass sequences of length 10 can be formed from 50 passes if passes may repeat?</p>
+<details><summary>Show solution</summary>
+<p>(a) 2<sup>260</sup> ≈ 1.85 × 10<sup>78</sup>. (b) 50<sup>10</sup> ≈ 9.8 × 10<sup>16</sup>. Neither can be enumerated, which is why flag selection and phase ordering use heuristic search or learned models<sup class="c"><a href="#r2">2</a>,<wbr><a href="#r19">19</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 3 · Why random search works <span class="tag">Probability</span></h3>
+<p>How many uniform random samples do you need so that, with probability at least 95%, at least one lands in the best 5% of the space?</p>
+<details><summary>Show solution</summary>
+<p>The probability that all <span class="math">n</span> samples miss the top 5% is <span class="math">0.95ⁿ</span>. We need <span class="math">1 − 0.95ⁿ ≥ 0.95</span>, so <span class="math">n ≥ ln 0.05 / ln 0.95 ≈ 58.4</span>, giving <strong>59 samples</strong>, regardless of how large the space is. This size-independence is part of the argument for random search as a strong baseline<sup class="c"><a href="#r33">33</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 4 · A model-driven tile size <span class="tag">Modelling</span></h3>
+<p>Choose a square tile size <span class="math">T</span> (a power of two) so that three <span class="math">T×T</span> tiles of 8-byte doubles fit in a 32 KiB L1 data cache.</p>
+<details><summary>Show solution</summary>
+<p><span class="math">3 · T² · 8 ≤ 32,768</span> gives <span class="math">T ≤ 36.9</span>, so <span class="math">T = 32</span> (24 KiB). This is the kind of reasoning a model-driven optimiser uses<sup class="c"><a href="#r31">31</a>,<wbr><a href="#r29">29</a></sup>. Compare with the tuned result in section 10, which preferred rectangular tiles: real performance also depends on vectorisation, associativity conflicts and prefetching, which a simple capacity model ignores.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 5 · How many repetitions? <span class="tag">Statistics</span></h3>
+<p>Two configurations differ by 2% in true mean runtime. Each run has a coefficient of variation of 3%. Roughly how many runs of each do you need before the difference of means is about two standard errors?</p>
+<details><summary>Show solution</summary>
+<p>The standard error of a difference of two means of <span class="math">n</span> runs each is <span class="math">σ√(2/n)</span> with <span class="math">σ = 3%</span>. We want <span class="math">2 · 3% · √(2/n) ≤ 2%</span>, so <span class="math">√(2/n) ≤ 1/3</span> and <span class="math">n ≥ 18</span>. Noise of this size forces many repetitions, and bias (which repetition cannot remove) is a separate problem<sup class="c"><a href="#r40">40</a>,<wbr><a href="#r44">44</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 6 · Add simulated annealing <span class="tag">Coding</span></h3>
+<p>Replace the hill-climbing phase in <code>tune.py</code> with simulated annealing.</p>
+<details><summary>Show solution</summary>
+<pre><span class="k">import</span> math
+
+<span class="k">def</span> anneal(start, budget, t0=<span class="m">0.2</span>, alpha=<span class="m">0.9</span>):
+    cur, cur_t = start, measure(start)
+    best, best_t, temp = cur, cur_t, t0
+    <span class="k">while</span> len(CACHE) &lt; budget:
+        cand = random.choice(list(neighbours(cur)))
+        t = measure(cand)
+        delta = (t - cur_t) / cur_t                 <span class="c"># relative slowdown</span>
+        <span class="k">if</span> delta &lt; <span class="m">0</span> <span class="k">or</span> random.random() &lt; math.exp(-delta / temp):
+            cur, cur_t = cand, t                    <span class="c"># accept, sometimes uphill</span>
+        <span class="k">if</span> t &lt; best_t:
+            best, best_t = cand, t
+        temp *= alpha                               <span class="c"># cool down</span>
+    <span class="k">return</span> best, best_t</pre>
+<p>Using relative slowdown makes the temperature independent of the absolute runtime. Accepting worse moves with probability <span class="math">e<sup>−Δ/T</sup></span> lets the search escape local minima early and behave like hill climbing as <span class="math">T → 0</span><sup class="c"><a href="#r34">34</a></sup>. Note that a neighbour already in <code>CACHE</code> costs nothing, so a real implementation should also stop after a maximum number of iterations.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 7 · Break-even point <span class="tag">Design</span></h3>
+<p>Tuning a kernel at first call takes 10 s and makes each later call 0.2 ms faster. After how many calls does tuning pay off? When would you instead tune at install time or offline?</p>
+<details><summary>Show solution</summary>
+<p>10 s / 0.2 ms = 50,000 calls. For a short-lived program, tune offline or at install time and store the result, as ATLAS does at installation and FFTW does with wisdom files<sup class="c"><a href="#r17">17</a>,<wbr><a href="#r50">50</a></sup>. For long-running servers or training jobs, run-time tuning amortises easily, which is the setting for cuDNN benchmark mode and Triton's autotuner<sup class="c"><a href="#r47">47</a>,<wbr><a href="#r14">14</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 8 · Over-fitting the tuner <span class="tag">Discussion</span></h3>
+<p>You tuned <code>mm.c</code> for N = 1024 on your laptop. List three reasons the winning configuration might be poor in production.</p>
+<details><summary>Show solution</summary>
+<p>(1) A different problem size changes the working set and how tiles divide the matrix (input sensitivity)<sup class="c"><a href="#r46">46</a></sup>. (2) A different CPU has different caches and vector units, so the optimum moves (portability)<sup class="c"><a href="#r17">17</a></sup>. (3) The tuning run may have been biased, for example by environment size, link order or frequency scaling, so the "winner" may have won by noise<sup class="c"><a href="#r44">44</a></sup>. Remedies: tune over a set of representative sizes, re-tune per machine, and repeat measurements.</p>
+</details>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="trivia"><span class="n">17</span>Trivia questions</h2>
+<details><summary>1. What does ATLAS stand for, and when was it first published?</summary><p>Automatically Tuned Linear Algebra Software, presented by Whaley and Dongarra at Supercomputing 1998<sup class="c"><a href="#r5">5</a></sup>.</p></details>
+<details><summary>2. What does PHiPAC stand for?</summary><p>Portable High Performance ANSI C, a 1997 methodology for generating and searching matrix-multiply code<sup class="c"><a href="#r4">4</a></sup>.</p></details>
+<details><summary>3. Which prize did FFTW's authors receive in 1999?</summary><p>The J. H. Wilkinson Prize for Numerical Software<sup class="c"><a href="#r61">61</a></sup>.</p></details>
+<details><summary>4. In which programming language is FFTW's codelet generator <code>genfft</code> written?</summary><p>Objective Caml (OCaml)<sup class="c"><a href="#r51">51</a></sup>.</p></details>
+<details><summary>5. What does FFTW call a saved set of tuned plans?</summary><p><em>Wisdom</em>, which can be exported and imported between runs<sup class="c"><a href="#r50">50</a></sup>.</p></details>
+<details><summary>6. How much faster than Python was Leiserson et al.'s best matrix multiply, and what fraction of peak did it reach?</summary><p>62,806× faster, at about 40% (40.45%) of the machine's peak<sup class="c"><a href="#r22">22</a></sup>.</p></details>
+<details><summary>7. What is OpenTuner's meta-technique for sharing trials between search techniques?</summary><p>A multi-armed bandit with a sliding window and area-under-the-curve credit assignment, called the AUC Bandit<sup class="c"><a href="#r15">15</a></sup>.</p></details>
+<details><summary>8. Name two innocuous-looking factors that Mytkowicz et al. showed can bias performance measurements.</summary><p>The size of the UNIX environment and the link order of object files<sup class="c"><a href="#r44">44</a></sup>.</p></details>
+<details><summary>9. Is the phase-ordering problem decidable?</summary><p>Not in general: Touati and Barthou showed it is undecidable in its general form, while some restricted versions are decidable<sup class="c"><a href="#r18">18</a></sup>.</p></details>
+<details><summary>10. What speedups did Ansor report over the prior state of the art?</summary><p>Up to 3.8× on Intel CPUs, 2.6× on ARM CPUs and 1.7× on NVIDIA GPUs<sup class="c"><a href="#r11">11</a></sup>.</p></details>
+<details><summary>11. Which LLVM heuristic did MLGO replace first, and with what result?</summary><p>Inlining for size, with up to 7% size reduction compared with <code>-Oz</code><sup class="c"><a href="#r49">49</a></sup>.</p></details>
+<details><summary>12. According to Bergstra and Bengio, why does random search often beat grid search?</summary><p>Because objective functions often have low effective dimensionality: only a few parameters matter, and random sampling explores more distinct values of them than a grid with the same budget<sup class="c"><a href="#r33">33</a></sup>.</p></details>
+<details><summary>13. Did a model-driven approach ever match ATLAS's empirical search?</summary><p>Yes. Yotov et al. built a model-driven version of ATLAS's code generator that produced code with comparable performance<sup class="c"><a href="#r31">31</a></sup>.</p></details>
+<details><summary>14. What did Rice formalise in 1976 that underlies auto-tuning?</summary><p>The algorithm selection problem: choosing the best algorithm for a given problem instance<sup class="c"><a href="#r28">28</a></sup>.</p></details>
+
+<!-- ============================================================ -->
+<h2 id="glossary"><span class="n">18</span>Glossary</h2>
+<dl>
+<dt><strong>Configuration</strong></dt><dd>One assignment of values to all tuning parameters; one point in the search space<sup class="c"><a href="#r15">15</a></sup>.</dd>
+<dt><strong>Search space</strong></dt><dd>The set of legal configurations, including constraints between parameters<sup class="c"><a href="#r1">1</a></sup>.</dd>
+<dt><strong>Iterative compilation</strong></dt><dd>Compiling and measuring many variants of a program to choose the best<sup class="c"><a href="#r20">20</a>,<wbr><a href="#r21">21</a></sup>.</dd>
+<dt><strong>Phase ordering</strong></dt><dd>Choosing the order (and repetition) of compiler passes<sup class="c"><a href="#r19">19</a>,<wbr><a href="#r18">18</a></sup>.</dd>
+<dt><strong>Cost model</strong></dt><dd>A function that predicts the performance of a configuration without running it; analytical or learned<sup class="c"><a href="#r31">31</a>,<wbr><a href="#r23">23</a></sup>.</dd>
+<dt><strong>Schedule</strong></dt><dd>In Halide and TVM, the description of how an algorithm is mapped to loops, tiles, threads and vectors<sup class="c"><a href="#r9">9</a>,<wbr><a href="#r10">10</a></sup>.</dd>
+<dt><strong>Wisdom</strong></dt><dd>FFTW's stored record of tuned plans<sup class="c"><a href="#r50">50</a></sup>.</dd>
+<dt><strong>Surrogate / acquisition function</strong></dt><dd>In Bayesian optimisation, the probabilistic model of the objective and the rule for choosing the next point<sup class="c"><a href="#r36">36</a></sup>.</dd>
+</dl>
+
+<!-- ============================================================ -->
+<h2 id="refs"><span class="n">19</span>References</h2>
+<ol class="refs">
+<li id="r1">Balaprakash P, Dongarra J, Gamblin T, Hall M, Hollingsworth JK, Norris B, et al. Autotuning in high-performance computing applications. Proc IEEE. 2018;106(11):2068–83. doi:10.1109/JPROC.2018.2841200</li>
+<li id="r2">Ashouri AH, Killian W, Cavazos J, Palermo G, Silvano C. A survey on compiler autotuning using machine learning. ACM Comput Surv. 2018;51(5):96:1–42. doi:10.1145/3197978</li>
+<li id="r3">Wang Z, O'Boyle M. Machine learning in compiler optimization. Proc IEEE. 2018;106(11):1879–901. doi:10.1109/JPROC.2018.2817118</li>
+<li id="r4">Bilmes J, Asanović K, Chin CW, Demmel J. Optimizing matrix multiply using PHiPAC: a portable, high-performance, ANSI C coding methodology. In: Proceedings of the 11th International Conference on Supercomputing (ICS '97). New York: ACM; 1997. p. 340–7. doi:10.1145/263580.263662</li>
+<li id="r5">Whaley RC, Dongarra JJ. Automatically tuned linear algebra software. In: Proceedings of the 1998 ACM/IEEE Conference on Supercomputing (SC '98). Washington (DC): IEEE Computer Society; 1998. doi:10.1109/SC.1998.10004</li>
+<li id="r6">Frigo M, Johnson SG. FFTW: an adaptive software architecture for the FFT. In: Proceedings of the 1998 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP '98). Vol. 3. Piscataway (NJ): IEEE; 1998. p. 1381–4. doi:10.1109/ICASSP.1998.681704</li>
+<li id="r7">Püschel M, Moura JMF, Johnson JR, Padua D, Veloso MM, Singer BW, et al. SPIRAL: code generation for DSP transforms. Proc IEEE. 2005;93(2):232–75. doi:10.1109/JPROC.2004.840306</li>
+<li id="r8">Cooper KD, Schielke PJ, Subramanian D. Optimizing for reduced code space using genetic algorithms. In: Proceedings of the ACM SIGPLAN 1999 Workshop on Languages, Compilers, and Tools for Embedded Systems (LCTES '99). New York: ACM; 1999. p. 1–9. doi:10.1145/314403.314414</li>
+<li id="r9">Ragan-Kelley J, Barnes C, Adams A, Paris S, Durand F, Amarasinghe S. Halide: a language and compiler for optimizing parallelism, locality, and recomputation in image processing pipelines. In: Proceedings of the 34th ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI '13). New York: ACM; 2013. p. 519–30. doi:10.1145/2491956.2462176</li>
+<li id="r10">Chen T, Moreau T, Jiang Z, Zheng L, Yan E, Cowan M, et al. TVM: an automated end-to-end optimizing compiler for deep learning. In: Proceedings of the 13th USENIX Symposium on Operating Systems Design and Implementation (OSDI '18). Berkeley (CA): USENIX Association; 2018. p. 578–94. Available from: <a href="https://www.usenix.org/conference/osdi18/presentation/chen">https://www.usenix.org/conference/osdi18/presentation/chen</a></li>
+<li id="r11">Zheng L, Jia C, Sun M, Wu Z, Yu CH, Haj-Ali A, et al. Ansor: generating high-performance tensor programs for deep learning. In: Proceedings of the 14th USENIX Symposium on Operating Systems Design and Implementation (OSDI '20). Berkeley (CA): USENIX Association; 2020. p. 863–79. Available from: <a href="https://arxiv.org/abs/2006.06762">https://arxiv.org/abs/2006.06762</a></li>
+<li id="r12">Nugteren C, Codreanu V. CLTune: a generic auto-tuner for OpenCL kernels. In: Proceedings of the IEEE 9th International Symposium on Embedded Multicore/Many-core Systems-on-Chip (MCSoC 2015). Piscataway (NJ): IEEE; 2015. p. 195–202. doi:10.1109/MCSoC.2015.10</li>
+<li id="r13">van Werkhoven B. Kernel Tuner: a search-optimizing GPU code auto-tuner. Future Gener Comput Syst. 2019;90:347–58. doi:10.1016/j.future.2018.08.004</li>
+<li id="r14">Triton developers. triton.autotune. In: Triton documentation [Internet]. OpenAI; 2025 [cited 2026 Nov 17]. Available from: <a href="https://triton-lang.org/main/python-api/generated/triton.autotune.html">https://triton-lang.org/main/python-api/generated/triton.autotune.html</a></li>
+<li id="r15">Ansel J, Kamil S, Veeramachaneni K, Ragan-Kelley J, Bosboom J, O'Reilly UM, et al. OpenTuner: an extensible framework for program autotuning. In: Proceedings of the 23rd International Conference on Parallel Architectures and Compilation (PACT '14). New York: ACM; 2014. p. 303–16. doi:10.1145/2628071.2628092</li>
+<li id="r16">Stephenson M, Amarasinghe S, Martin M, O'Reilly UM. Meta optimization: improving compiler heuristics with machine learning. In: Proceedings of the ACM SIGPLAN 2003 Conference on Programming Language Design and Implementation (PLDI '03). New York: ACM; 2003. p. 77–90. doi:10.1145/781131.781141</li>
+<li id="r17">Whaley RC, Petitet A, Dongarra JJ. Automated empirical optimizations of software and the ATLAS project. Parallel Comput. 2001;27(1–2):3–35. doi:10.1016/S0167-8191(00)00087-9</li>
+<li id="r18">Touati SAA, Barthou D. On the decidability of phase ordering problem in optimizing compilation. In: Proceedings of the 3rd Conference on Computing Frontiers (CF '06). New York: ACM; 2006. Available from: <a href="https://hal.science/hal-00141063">https://hal.science/hal-00141063</a></li>
+<li id="r19">Kulkarni PA, Whalley DB, Tyson GS, Davidson JW. Practical exhaustive optimization phase order exploration and evaluation. ACM Trans Archit Code Optim. 2009;6(1):1:1–36. doi:10.1145/1509864.1509865</li>
+<li id="r20">Bodin F, Kisuki T, Knijnenburg P, O'Boyle M, Rohou E. Iterative compilation in a non-linear optimisation space. In: Workshop on Profile and Feedback-Directed Compilation, in conjunction with PACT '98; 1998 Oct; Paris, France.</li>
+<li id="r21">Kisuki T, Knijnenburg PMW, O'Boyle MFP. Combined selection of tile sizes and unroll factors using iterative compilation. In: Proceedings of the 2000 International Conference on Parallel Architectures and Compilation Techniques (PACT 2000). Los Alamitos (CA): IEEE Computer Society; 2000. p. 237–46. doi:10.1109/PACT.2000.888343</li>
+<li id="r22">Leiserson CE, Thompson NC, Emer JS, Kuszmaul BC, Lampson BW, Sanchez D, et al. There's plenty of room at the Top: what will drive computer performance after Moore's law? Science. 2020;368(6495):eaam9744. doi:10.1126/science.aam9744</li>
+<li id="r23">Chen T, Zheng L, Yan E, Jiang Z, Moreau T, Ceze L, et al. Learning to optimize tensor programs. In: Advances in Neural Information Processing Systems 31 (NeurIPS 2018). Red Hook (NY): Curran Associates; 2018. p. 3389–400. Available from: <a href="https://arxiv.org/abs/1805.08166">https://arxiv.org/abs/1805.08166</a></li>
+<li id="r24">Adams A, Ma K, Anderson L, Baghdadi R, Li TM, Gharbi M, et al. Learning to optimize Halide with tree search and random programs. ACM Trans Graph. 2019;38(4):121:1–12. doi:10.1145/3306346.3322967</li>
+<li id="r25">Tiwari A, Chen C, Chame J, Hall M, Hollingsworth JK. A scalable auto-tuning framework for compiler optimization. In: Proceedings of the 2009 IEEE International Symposium on Parallel &amp; Distributed Processing (IPDPS 2009). Piscataway (NJ): IEEE; 2009. doi:10.1109/IPDPS.2009.5161054</li>
+<li id="r26">Free Software Foundation. Options that control optimization. In: Using the GNU Compiler Collection (GCC) [Internet]. Boston: Free Software Foundation; 2024 [cited 2026 Nov 17]. Available from: <a href="https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html">https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html</a></li>
+<li id="r27">Frigo M, Johnson SG. The design and implementation of FFTW3. Proc IEEE. 2005;93(2):216–31. doi:10.1109/JPROC.2004.840301</li>
+<li id="r28">Rice JR. The algorithm selection problem. Adv Comput. 1976;15:65–118. doi:10.1016/S0065-2458(08)60520-3</li>
+<li id="r29">Wolf ME, Lam MS. A data locality optimizing algorithm. In: Proceedings of the ACM SIGPLAN 1991 Conference on Programming Language Design and Implementation (PLDI '91). New York: ACM; 1991. p. 30–44. doi:10.1145/113445.113449</li>
+<li id="r30">Goto K, van de Geijn RA. Anatomy of high-performance matrix multiplication. ACM Trans Math Softw. 2008;34(3):12:1–25. doi:10.1145/1356052.1356053</li>
+<li id="r31">Yotov K, Li X, Ren G, Cibulskis M, DeJong G, Garzaran M, et al. A comparison of empirical and model-driven optimization. In: Proceedings of the ACM SIGPLAN 2003 Conference on Programming Language Design and Implementation (PLDI '03). New York: ACM; 2003. p. 63–76. doi:10.1145/781131.781140</li>
+<li id="r32">Wolpert DH, Macready WG. No free lunch theorems for optimization. IEEE Trans Evol Comput. 1997;1(1):67–82. doi:10.1109/4235.585893</li>
+<li id="r33">Bergstra J, Bengio Y. Random search for hyper-parameter optimization. J Mach Learn Res. 2012;13:281–305. Available from: <a href="https://jmlr.org/papers/v13/bergstra12a.html">https://jmlr.org/papers/v13/bergstra12a.html</a></li>
+<li id="r34">Kirkpatrick S, Gelatt CD Jr, Vecchi MP. Optimization by simulated annealing. Science. 1983;220(4598):671–80. doi:10.1126/science.220.4598.671</li>
+<li id="r35">Holland JH. Adaptation in natural and artificial systems. Ann Arbor (MI): University of Michigan Press; 1975.</li>
+<li id="r36">Shahriari B, Swersky K, Wang Z, Adams RP, de Freitas N. Taking the human out of the loop: a review of Bayesian optimization. Proc IEEE. 2016;104(1):148–75. doi:10.1109/JPROC.2015.2494218</li>
+<li id="r37">Hutter F, Hoos HH, Leyton-Brown K. Sequential model-based optimization for general algorithm configuration. In: Coello CAC, editor. Learning and Intelligent Optimization (LION 5). Lecture Notes in Computer Science, vol. 6683. Berlin: Springer; 2011. p. 507–23. doi:10.1007/978-3-642-25566-3_40</li>
+<li id="r38">Hellsten E, Souza A, Lenfers J, Lacouture R, Hsu O, Ejjeh A, et al. BaCO: a fast and portable Bayesian compiler optimization framework. In: Proceedings of the 28th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 4 (ASPLOS '23). New York: ACM; 2024. doi:10.1145/3623278.3624770</li>
+<li id="r39">Akiba T, Sano S, Yanase T, Ohta T, Koyama M. Optuna: a next-generation hyperparameter optimization framework. In: Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery &amp; Data Mining (KDD '19). New York: ACM; 2019. p. 2623–31. doi:10.1145/3292500.3330701</li>
+<li id="r40">Hoefler T, Belli R. Scientific benchmarking of parallel computing systems: twelve ways to tell the masses when reporting performance results. In: Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis (SC '15). New York: ACM; 2015. Article 73. doi:10.1145/2807591.2807644</li>
+<li id="r41">Mullapudi RT, Adams A, Sharlet D, Ragan-Kelley J, Fatahalian K. Automatically scheduling Halide image processing pipelines. ACM Trans Graph. 2016;35(4):83:1–11. doi:10.1145/2897824.2925952</li>
+<li id="r42">Agakov F, Bonilla E, Cavazos J, Franke B, Fursin G, O'Boyle MFP, et al. Using machine learning to focus iterative optimization. In: Proceedings of the International Symposium on Code Generation and Optimization (CGO '06). Washington (DC): IEEE Computer Society; 2006. p. 295–305. doi:10.1109/CGO.2006.37</li>
+<li id="r43">Cummins C, Petoumenos P, Wang Z, Leather H. End-to-end deep learning of optimization heuristics. In: Proceedings of the 26th International Conference on Parallel Architectures and Compilation Techniques (PACT '17). Los Alamitos (CA): IEEE Computer Society; 2017. p. 219–32. doi:10.1109/PACT.2017.24</li>
+<li id="r44">Mytkowicz T, Diwan A, Hauswirth M, Sweeney PF. Producing wrong data without doing anything obviously wrong! In: Proceedings of the 14th International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS XIV). New York: ACM; 2009. p. 265–76. doi:10.1145/1508244.1508275</li>
+<li id="r45">Frigo M, Johnson SG. Planner flags. In: FFTW 3.3.10 manual [Internet]. Cambridge (MA): MIT; 2021 [cited 2026 Nov 17]. Available from: <a href="https://www.fftw.org/fftw3_doc/Planner-Flags.html">https://www.fftw.org/fftw3_doc/Planner-Flags.html</a></li>
+<li id="r46">Vuduc R, Demmel JW, Yelick KA. OSKI: a library of automatically tuned sparse matrix kernels. J Phys Conf Ser. 2005;16:521–30. doi:10.1088/1742-6596/16/1/071</li>
+<li id="r47">PyTorch contributors. torch.backends. In: PyTorch documentation [Internet]. PyTorch Foundation; 2025 [cited 2026 Nov 17]. Available from: <a href="https://docs.pytorch.org/docs/stable/backends.html">https://docs.pytorch.org/docs/stable/backends.html</a></li>
+<li id="r48">Chen D, Li DX, Moseley T. AutoFDO: automatic feedback-directed optimization for warehouse-scale applications. In: Proceedings of the 2016 International Symposium on Code Generation and Optimization (CGO '16). New York: ACM; 2016. p. 12–23. doi:10.1145/2854038.2854044</li>
+<li id="r49">Trofin M, Qian Y, Brevdo E, Lin Z, Choromanski K, Li D. MLGO: a machine learning guided compiler optimizations framework [preprint]. arXiv:2101.04808. 2021. Available from: <a href="https://arxiv.org/abs/2101.04808">https://arxiv.org/abs/2101.04808</a></li>
+<li id="r50">Frigo M, Johnson SG. Words of wisdom: saving plans. In: FFTW 3.3.10 manual [Internet]. Cambridge (MA): MIT; 2021 [cited 2026 Nov 17]. Available from: <a href="https://www.fftw.org/fftw3_doc/Words-of-Wisdom_002dSaving-Plans.html">https://www.fftw.org/fftw3_doc/Words-of-Wisdom_002dSaving-Plans.html</a></li>
+<li id="r51">Frigo M. A fast Fourier transform compiler. In: Proceedings of the ACM SIGPLAN 1999 Conference on Programming Language Design and Implementation (PLDI '99). New York: ACM; 1999. p. 169–80. doi:10.1145/301618.301661</li>
+<li id="r52">Datta K, Murphy M, Volkov V, Williams S, Carter J, Oliker L, et al. Stencil computation optimization and auto-tuning on state-of-the-art multicore architectures. In: Proceedings of the 2008 ACM/IEEE Conference on Supercomputing (SC '08). Piscataway (NJ): IEEE; 2008. doi:10.1109/SC.2008.5222004</li>
+<li id="r53">Fursin G, Kashnikov Y, Memon AW, Chamski Z, Temam O, Namolaru M, et al. Milepost GCC: machine learning enabled self-tuning compiler. Int J Parallel Program. 2011;39(3):296–327. doi:10.1007/s10766-010-0161-2</li>
+<li id="r54">Shao J, Zhou X, Feng S, Hou B, Lai R, Jin H, et al. Tensor program optimization with probabilistic programs. In: Advances in Neural Information Processing Systems 35 (NeurIPS 2022). Red Hook (NY): Curran Associates; 2022. Available from: <a href="https://arxiv.org/abs/2205.13603">https://arxiv.org/abs/2205.13603</a></li>
+<li id="r55">Tillet P, Kung HT, Cox D. Triton: an intermediate language and compiler for tiled neural network computations. In: Proceedings of the 3rd ACM SIGPLAN International Workshop on Machine Learning and Programming Languages (MAPL 2019). New York: ACM; 2019. p. 10–9. doi:10.1145/3315508.3329973</li>
+<li id="r56">PyTorch contributors. torch.compile. In: PyTorch documentation [Internet]. PyTorch Foundation; 2025 [cited 2026 Nov 17]. Available from: <a href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html">https://docs.pytorch.org/docs/stable/generated/torch.compile.html</a></li>
+<li id="r57">Google. ml-compiler-opt: infrastructure for MLGO [software]. GitHub; 2021– [cited 2026 Nov 17]. Available from: <a href="https://github.com/google/ml-compiler-opt">https://github.com/google/ml-compiler-opt</a></li>
+<li id="r58">Cummins C, Wasti B, Guo J, Cui B, Ansel J, Gomez S, et al. CompilerGym: robust, performant compiler optimization environments for AI research. In: Proceedings of the 2022 IEEE/ACM International Symposium on Code Generation and Optimization (CGO '22). Piscataway (NJ): IEEE; 2022. p. 92–105. doi:10.1109/CGO53902.2022.9741258</li>
+<li id="r59">Ansel J, et al. OpenTuner [software]. GitHub; 2013– [cited 2026 Nov 17]. Available from: <a href="https://github.com/jansel/opentuner">https://github.com/jansel/opentuner</a></li>
+<li id="r60">LLVM Project. Profile guided optimization. In: Clang compiler user's manual [Internet]. LLVM Project; 2025 [cited 2026 Nov 17]. Available from: <a href="https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization">https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization</a></li>
+<li id="r61">Frigo M, Johnson SG. FFTW home page [Internet]. Cambridge (MA): MIT; [cited 2026 Nov 17]. Available from: <a href="https://www.fftw.org/">https://www.fftw.org/</a></li>
+</ol>
+
+</div>
+<script>
+(function(){
+  var NS='http://www.w3.org/2000/svg';
+  function el(tag,attrs,parent,text){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);if(text!=null)e.textContent=text;if(parent)parent.appendChild(e);return e;}
+
+  // Theme toggle (preference kept per viewer when storage is available)
+  var root=document.documentElement, btn=document.getElementById('themebtn');
+  try{var s=localStorage.getItem('at-theme'); if(s) root.setAttribute('data-theme',s);}catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme');
+    var dark=cur?cur==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var next=dark?'light':'dark'; root.setAttribute('data-theme',next);
+    try{localStorage.setItem('at-theme',next);}catch(e){}
+  });
+
+  // Figure 1: Leiserson et al. speedups, log scale
+  (function(){
+    var g=document.getElementById('lchart'); if(!g) return;
+    var rows=[['1 Python',1,25552.48],['2 Java',11,2372.68],['3 C',47,542.67],['4 Parallel loops',366,69.80],
+              ['5 Parallel divide & conquer',6727,3.80],['6 + vectorisation',23224,1.10],['7 + AVX intrinsics',62806,0.41]];
+    var x0=215,x1=640,lmax=5,y0=20,h=26,gap=8;
+    function X(v){return x0+(x1-x0)*Math.log10(v)/lmax;}
+    for(var p=0;p<=lmax;p++){
+      var x=X(Math.pow(10,p));
+      el('line',{x1:x,x2:x,y1:y0-6,y2:y0+rows.length*(h+gap),style:'stroke:var(--border);stroke-width:1'},g);
+      el('text',{x:x,y:y0+rows.length*(h+gap)+16,'text-anchor':'middle','class':'svg-s'},g,(p===0?'1':'10'+['','','²','³','⁴','⁵'][p])+'×');
+    }
+    rows.forEach(function(r,i){
+      var y=y0+i*(h+gap), w=Math.max(4,X(r[1])-x0);
+      el('text',{x:x0-10,y:y+h/2+5,'text-anchor':'end','class':'svg-t'},g,r[0]);
+      var b=el('rect',{x:x0,y:y,width:w,height:h,rx:4,style:'fill:var(--accent)'},g);
+      el('title',{},b,r[0]+': '+r[1].toLocaleString('en-US')+'× faster than Python ('+r[2].toLocaleString('en-US')+' s)');
+      el('text',{x:x0+w+6,y:y+h/2+5,'class':'svg-s'},g,r[1].toLocaleString('en-US')+'×');
+    });
+  })();
+
+  // Figure 3: tiling
+  (function(){
+    var g=document.getElementById('tilefig'); if(!g) return;
+    var c=18;
+    function grid(ox,oy,label,r0,r1,c0,c1,sub){
+      for(var i=0;i<8;i++)for(var j=0;j<8;j++){
+        var hl=(i>=r0&&i<=r1&&j>=c0&&j<=c1);
+        el('rect',{x:ox+j*c,y:oy+i*c,width:c-2,height:c-2,rx:2,'class':hl?'svg-out':'svg-node'},g);
+      }
+      el('text',{x:ox+4*c,y:oy-12,'text-anchor':'middle','class':'svg-t','font-weight':'600'},g,label);
+      el('text',{x:ox+4*c,y:oy+8*c+20,'text-anchor':'middle','class':'svg-s'},g,sub);
+    }
+    grid(40,50,'C',2,3,4,6,'TI × TJ block');
+    el('text',{x:226,y:128,'text-anchor':'middle','class':'svg-t','font-size':'22'},g,'+=');
+    grid(270,50,'A',2,3,2,5,'TI × TK block');
+    el('text',{x:456,y:128,'text-anchor':'middle','class':'svg-t','font-size':'22'},g,'×');
+    grid(500,50,'B',2,5,4,6,'TK × TJ block');
+    el('text',{x:360,y:255,'text-anchor':'middle','class':'svg-s'},g,'Goal: the three highlighted tiles stay in cache while they are reused.');
+  })();
+
+  // Figure 6: life cycle
+  (function(){
+    var g=document.getElementById('lifecycle'); if(!g) return;
+    var st=[['Install time','ATLAS, PHiPAC'],['Compile time','OpenTuner flags,','TVM, Halide'],['Plan / first call','FFTW planner, Triton','autotune, cuDNN benchmark'],['Run time','OSKI (per matrix)'],['Offline, fleet-wide','PGO, AutoFDO,','MLGO training']];
+    st.forEach(function(s,i){
+      var x=80+i*140;
+      el('circle',{cx:x,cy:60,r:9,'class':i===4?'svg-out':'svg-in'},g);
+      el('text',{x:x,y:96,'text-anchor':'middle','class':'svg-t','font-weight':'600'},g,s[0]);
+      for(var k=1;k<s.length;k++) el('text',{x:x,y:100+k*18,'text-anchor':'middle','class':'svg-s'},g,s[k]);
+    });
+    el('text',{x:20,y:30,'class':'svg-fwd-t'},g,'program life cycle →');
+    el('text',{x:20,y:195,'class':'svg-s'},g,'Left: cheaper at run time, less specialised.   Right: more knowledge of real inputs and machines.');
+  })();
+
+  // Figure 7: timeline
+  (function(){
+    var g=document.getElementById('timeline'); if(!g) return;
+    var ev=[['1976','Rice formalises the algorithm selection problem'],['1997','PHiPAC: generated, searched matrix multiply'],
+      ['1998','ATLAS; FFTW; iterative compilation (Bodin et al.)'],['1999','Genetic algorithms find pass sequences (Cooper et al.)'],
+      ['2003','Empirical vs model-driven comparison (Yotov et al.)'],['2005','FFTW3, SPIRAL, OSKI'],
+      ['2006','Machine learning focuses iterative search (Agakov et al.)'],['2011','Milepost GCC: ML-enabled self-tuning compiler'],
+      ['2013','Halide separates algorithm from schedule'],['2014','OpenTuner: ensembles + AUC Bandit'],['2015','CLTune for OpenCL kernels'],
+      ['2018','TVM and AutoTVM learned cost models'],['2019','Learned Halide autoscheduler; Triton'],['2020','Ansor: automatic search-space generation'],
+      ['2021','MLGO: learned inlining-for-size in LLVM'],['2022','CompilerGym; MetaSchedule'],['2023','BaCO: Bayesian compiler optimisation']];
+    var y0=24,dy=23;
+    el('line',{x1:110,x2:110,y1:y0-8,y2:y0+(ev.length-1)*dy+8,style:'stroke:var(--border);stroke-width:2'},g);
+    ev.forEach(function(e,i){
+      var y=y0+i*dy;
+      el('text',{x:92,y:y+5,'text-anchor':'end','class':'svg-t','font-weight':'600'},g,e[0]);
+      el('circle',{cx:110,cy:y,r:6,'class':'svg-in'},g);
+      el('text',{x:128,y:y+5,'class':'svg-t'},g,e[1]);
+    });
+  })();
+
+  // Figure 4: search playground
+  (function(){
+    var svg=document.getElementById('heat'); if(!svg) return;
+    var Ng=32;
+    function gw(i,j,ci,cj,d,w){var a=(i-ci)/w,b=(j-cj)/w;return d*Math.exp(-(a*a+b*b));}
+    var F=[],fmin=1e9,fmax=-1e9,opt=null;
+    for(var i=0;i<Ng;i++){F.push([]);for(var j=0;j<Ng;j++){
+      var v=1+0.6*Math.pow((i-16)/32,2)*4+0.5*Math.pow((j-16)/32,2)*4
+        -gw(i,j,23,9,0.62,4.5)-gw(i,j,6,24,0.5,4)-gw(i,j,27,27,0.45,3)-gw(i,j,9,6,0.42,3.5)
+        +0.05*Math.sin(i*0.9)*Math.cos(j*0.7);
+      v*=10; F[i].push(v); if(v<fmin){fmin=v;opt=[i,j];} if(v>fmax)fmax=v;}}
+    function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+    function run(strat,B,seed){
+      var R=rng(seed*7919+strat.length), cache={}, order=[];
+      function gauss(){var u=R()||1e-9,v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+      function m(i,j){var k=i*Ng+j; if(!(k in cache)){cache[k]=F[i][j]*(1+0.01*gauss()); order.push([i,j]);} return cache[k];}
+      function cnt(){return order.length;}
+      function ri(){return Math.floor(R()*Ng);}
+      var guard=0;
+      if(strat==='grid'){
+        var s=Math.max(1,Math.ceil(Ng/Math.sqrt(B))), o=Math.floor(s/2);
+        for(var a=o;a<Ng;a+=s)for(var b=o;b<Ng;b+=s){ if(cnt()<B) m(a,b); }
+      } else if(strat==='random'){
+        while(cnt()<B && guard++<B*50) m(ri(),ri());
+      } else if(strat==='hill'){
+        var ci=ri(),cj=ri(),cv=m(ci,cj);
+        while(cnt()<B && guard++<B*50){
+          var nb=[[ci+1,cj],[ci-1,cj],[ci,cj+1],[ci,cj-1]].filter(function(p){return p[0]>=0&&p[0]<Ng&&p[1]>=0&&p[1]<Ng;});
+          for(var z=nb.length-1;z>0;z--){var w=Math.floor(R()*(z+1)),tmp=nb[z];nb[z]=nb[w];nb[w]=tmp;}
+          var moved=false;
+          for(var q=0;q<nb.length&&cnt()<B;q++){var v=m(nb[q][0],nb[q][1]); if(v<cv){ci=nb[q][0];cj=nb[q][1];cv=v;moved=true;break;}}
+          if(!moved){ci=ri();cj=ri();cv=m(ci,cj);}
+        }
+      } else {
+        var si=ri(),sj=ri(),sv=m(si,sj),T0=0.15,k=0;
+        while(cnt()<B && guard++<B*60){
+          var T=T0*Math.pow(0.02,cnt()/B);
+          var ni=Math.min(Ng-1,Math.max(0,si+Math.round((R()*2-1)*3))), nj=Math.min(Ng-1,Math.max(0,sj+Math.round((R()*2-1)*3)));
+          var nv=m(ni,nj), d=(nv-sv)/sv;
+          if(d<0||R()<Math.exp(-d/T)){si=ni;sj=nj;sv=nv;}
+        }
+      }
+      var best=null,bv=1e9,curve=[];
+      order.forEach(function(p){var v=cache[p[0]*Ng+p[1]]; if(v<bv){bv=v;best=p;} curve.push(F[best[0]][best[1]]/fmin-1);});
+      return {order:order,best:best,trueBest:F[best[0]][best[1]],curve:curve};
+    }
+    var cs=10,ox=20,oy=20;
+    function draw(){
+      var strat=document.getElementById('strat').value,B=+document.getElementById('budget').value,seed=+document.getElementById('seed').value;
+      document.getElementById('bout').textContent=B; document.getElementById('sout').textContent=seed;
+      while(svg.firstChild) svg.removeChild(svg.firstChild);
+      for(var i=0;i<Ng;i++)for(var j=0;j<Ng;j++){
+        var t=(F[i][j]-fmin)/(fmax-fmin);
+        var r=el('rect',{x:ox+j*cs,y:oy+i*cs,width:cs,height:cs,style:'fill:var(--accent);fill-opacity:'+(0.06+0.86*Math.sqrt(t)).toFixed(3)},svg);
+        el('title',{},r,'('+i+', '+j+'): '+F[i][j].toFixed(2)+' ms');
+      }
+      el('text',{x:ox,y:14,'class':'svg-s'},svg,'parameter 1 (rows) × parameter 2 (columns); faster cells fade into the background');
+      var res=run(strat,B,seed);
+      el('circle',{cx:ox+opt[1]*cs+cs/2,cy:oy+opt[0]*cs+cs/2,r:8,style:'fill:none;stroke:var(--ok);stroke-width:2.5'},svg);
+      res.order.forEach(function(p){
+        var c=el('circle',{cx:ox+p[1]*cs+cs/2,cy:oy+p[0]*cs+cs/2,r:3,style:'fill:var(--accent-2);stroke:var(--surface);stroke-width:1'},svg);
+        el('title',{},c,'measured ('+p[0]+', '+p[1]+'): '+F[p[0]][p[1]].toFixed(2)+' ms');
+      });
+      el('text',{x:ox+res.best[1]*cs+cs/2,y:oy+res.best[0]*cs+cs/2+6,'text-anchor':'middle',style:'fill:var(--text);font-size:18px;stroke:var(--surface);stroke-width:3;paint-order:stroke'},svg,'★');
+      el('text',{x:ox,y:356,'class':'svg-s'},svg,'green ring = true optimum · dots = measured · ★ = best found');
+      // convergence chart
+      var cx0=400,cx1=620,cy0=40,cy1=300, ymax=Math.max(0.05,res.curve[0]||0.05);
+      el('text',{x:cx0,y:24,'class':'svg-s'},svg,'gap to optimum of best-so-far');
+      [0,0.5,1].forEach(function(f){var y=cy1-(cy1-cy0)*f; el('line',{x1:cx0,x2:cx1,y1:y,y2:y,style:'stroke:var(--border);stroke-width:1'},svg);
+        el('text',{x:cx0-6,y:y+4,'text-anchor':'end','class':'svg-s'},svg,(ymax*f*100).toFixed(0)+'%');});
+      el('text',{x:(cx0+cx1)/2,y:cy1+20,'text-anchor':'middle','class':'svg-s'},svg,'evaluations (1 – '+res.curve.length+')');
+      var n=res.curve.length,d='';
+      res.curve.forEach(function(v,k){var x=cx0+(cx1-cx0)*(n>1?k/(n-1):0),y=cy1-(cy1-cy0)*Math.min(1,v/ymax); d+=(k?'L':'M')+x.toFixed(1)+','+y.toFixed(1);});
+      el('path',{d:d,style:'fill:none;stroke:var(--accent);stroke-width:2'},svg);
+      document.getElementById('pbest').textContent=res.trueBest.toFixed(3)+' ms';
+      document.getElementById('popt').textContent=fmin.toFixed(3)+' ms';
+      document.getElementById('pgap').textContent=((res.trueBest/fmin-1)*100).toFixed(1)+'%';
+      document.getElementById('pcount').textContent=res.order.length;
+      // comparison over 100 seeds
+      var tb=document.querySelector('#cmp tbody'); tb.innerHTML='';
+      [['grid','Grid (coarse)'],['random','Random search'],['hill','Hill climbing + restarts'],['sa','Simulated annealing']].forEach(function(sn){
+        var gaps=[]; for(var sd=1;sd<=100;sd++){var r2=run(sn[0],B,sd); gaps.push(r2.trueBest/fmin-1);}
+        gaps.sort(function(a,b){return a-b;});
+        var within=gaps.filter(function(g){return g<=0.02;}).length;
+        var tr=document.createElement('tr'); if(sn[0]===strat) tr.style.fontWeight='650';
+        tr.innerHTML='<td>'+sn[1]+'</td><td>'+((gaps[49]+gaps[50])/2*100).toFixed(1)+'%</td><td>'+within+'%</td>';
+        tb.appendChild(tr);
+      });
+    }
+    ['strat','budget','seed'].forEach(function(id){document.getElementById(id).addEventListener('input',draw);});
+    draw();
+  })();
+})();
+
+</script>
+</body>
+</html>

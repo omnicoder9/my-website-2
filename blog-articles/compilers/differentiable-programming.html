@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Differentiable Programming for Compilers</title>
+<meta name="description" content="A technical article on automatic differentiation as a compiler transformation: forward and reverse mode, tracing versus source transformation, JAX/XLA, Enzyme, Zygote, Swift, PyTorch, with code, diagrams, exercises and trivia.">
+<style>
+:root{
+  --bg:#fbfaf7; --surface:#ffffff; --surface-2:#f2f0ea; --text:#1d1d1f; --muted:#5d5d63;
+  --border:#dedad0; --accent:#2f5bd3; --accent-soft:#e6ecfb; --accent-2:#c2410c; --accent-2-soft:#fbe9df;
+  --ok:#15803d; --code-bg:#f4f2ec; --code-text:#24292f; --kw:#8250df; --str:#0a7a4b; --com:#6e7781; --num:#b35900;
+  --shadow:0 1px 2px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121316; --surface:#1a1b1f; --surface-2:#22242a; --text:#e8e8ea; --muted:#a0a1a8;
+    --border:#33353d; --accent:#7ea2ff; --accent-soft:#1f2a47; --accent-2:#ff9a62; --accent-2-soft:#3a2418;
+    --ok:#4ade80; --code-bg:#1e2026; --code-text:#e2e4ea; --kw:#c4a5ff; --str:#7ee2a8; --com:#8b929c; --num:#ffb86b;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121316; --surface:#1a1b1f; --surface-2:#22242a; --text:#e8e8ea; --muted:#a0a1a8;
+  --border:#33353d; --accent:#7ea2ff; --accent-soft:#1f2a47; --accent-2:#ff9a62; --accent-2-soft:#3a2418;
+  --ok:#4ade80; --code-bg:#1e2026; --code-text:#e2e4ea; --kw:#c4a5ff; --str:#7ee2a8; --com:#8b929c; --num:#ffb86b;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.65 Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:860px;margin:0 auto;padding:32px 16px 80px}
+header.hero{border-bottom:1px solid var(--border);padding-bottom:24px;margin-bottom:28px}
+.kicker{font:600 13px/1.2 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(30px,5vw,44px)/1.12 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin:10px 0 12px;letter-spacing:-.02em}
+h2{font:700 26px/1.25 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin:56px 0 12px;letter-spacing:-.01em;scroll-margin-top:16px}
+h3{font:650 19px/1.3 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;margin:30px 0 8px}
+h2 .n{color:var(--muted);font-weight:500;margin-right:8px}
+.lede{font-size:19px;color:var(--muted);margin:0}
+.meta{font:14px/1.5 ui-sans-serif,system-ui,sans-serif;color:var(--muted);margin-top:14px}
+a{color:var(--accent);text-underline-offset:2px}
+p,li{hyphens:auto}
+sup.c a{text-decoration:none;font:600 12px ui-sans-serif,system-ui,sans-serif}
+code,pre,kbd{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace}
+:not(pre)>code{background:var(--code-bg);padding:.1em .35em;border-radius:4px;font-size:.88em}
+pre{background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:14px;line-height:1.55;margin:14px 0}
+pre .k{color:var(--kw)} pre .s{color:var(--str)} pre .c{color:var(--com);font-style:italic} pre .m{color:var(--num)}
+.codehead{font:600 12px/1 ui-sans-serif,system-ui,sans-serif;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 -8px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;box-shadow:var(--shadow);font:15px/1.6 ui-sans-serif,system-ui,sans-serif}
+nav.toc ol{margin:6px 0 0;padding-left:22px;columns:2;column-gap:28px}
+@media (max-width:620px){nav.toc ol{columns:1}}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:18px 0}
+.callout.warn{border-color:var(--accent-2);background:var(--accent-2-soft)}
+.callout strong:first-child{font-family:ui-sans-serif,system-ui,sans-serif}
+figure{margin:24px 0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font:14px/1.5 ui-sans-serif,system-ui,sans-serif;color:var(--muted);margin-top:10px}
+.math{font-family:"Cambria Math","STIX Two Math","Latin Modern Math",Cambria,serif;font-style:italic}
+.eq{display:block;text-align:center;margin:14px 0;font-size:1.08em;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font:14.5px/1.45 ui-sans-serif,system-ui,sans-serif;margin:14px 0}
+th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--surface-2);font-weight:650}
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.tablewrap table{margin:0}
+details{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:10px 0}
+details summary{cursor:pointer;font:600 15px/1.4 ui-sans-serif,system-ui,sans-serif;color:var(--accent)}
+details[open] summary{margin-bottom:8px}
+.ex{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin:18px 0;box-shadow:var(--shadow)}
+.ex h3{margin-top:4px}
+.tag{display:inline-block;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;padding:4px 7px;border-radius:999px;background:var(--surface-2);color:var(--muted);margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:.05em}
+ol.refs{font-size:14.5px;line-height:1.55;padding-left:30px}
+ol.refs li{margin:6px 0;word-break:break-word}
+ol.refs li:target{background:var(--accent-soft);border-radius:6px}
+.play{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;font:15px/1.5 ui-sans-serif,system-ui,sans-serif}
+.play label{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.play input[type=range]{flex:1;min-width:180px;accent-color:var(--accent)}
+.play select{font:inherit;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+.play output{font-family:ui-monospace,Menlo,monospace}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}
+.stat{background:var(--surface-2);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.themebtn{position:fixed;top:12px;right:12px;font:600 13px ui-sans-serif,system-ui,sans-serif;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:999px;padding:6px 12px;cursor:pointer;z-index:5}
+svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.svg-node{fill:var(--surface-2);stroke:var(--border);stroke-width:1.5}
+.svg-in{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.svg-out{fill:var(--accent-2-soft);stroke:var(--accent-2);stroke-width:1.5}
+.svg-t{fill:var(--text);font-size:14px}
+.svg-s{fill:var(--muted);font-size:12px}
+.svg-edge{stroke:var(--muted);stroke-width:1.6;fill:none}
+.svg-fwd{stroke:var(--accent);stroke-width:2.2;fill:none}
+.svg-rev{stroke:var(--accent-2);stroke-width:2.2;fill:none;stroke-dasharray:6 4}
+.svg-fwd-t{fill:var(--accent);font-size:12.5px;font-weight:600}
+.svg-rev-t{fill:var(--accent-2);font-size:12.5px;font-weight:600}
+@media print{.themebtn{display:none} details{break-inside:avoid} details:not([open]) > *:not(summary){display:block}}
+</style>
+</head>
+<body>
+<button class="themebtn" id="themebtn" type="button" aria-label="Toggle colour theme">◐ Theme</button>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Compilers · Program transformation</div>
+  <h1>Differentiable Programming: Automatic Differentiation as a Compiler Transformation</h1>
+  <p class="lede">How compilers turn ordinary programs into programs that compute their own derivatives, from Wengert lists and dual numbers to JAX, Enzyme, Zygote, Swift and PyTorch.</p>
+  <div class="meta">Technical article with worked examples, source code, diagrams, exercises and trivia. References use the Vancouver (numbered) style. Facts were checked against the cited papers and official documentation as of November 2026.</div>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#intro">What is differentiable programming?</a></li>
+    <li><a href="#three">Three ways to get derivatives</a></li>
+    <li><a href="#graph">Programs as computational graphs</a></li>
+    <li><a href="#forward">Forward mode and dual numbers</a></li>
+    <li><a href="#reverse">Reverse mode and the tape</a></li>
+    <li><a href="#cost">Cost model: when to use which mode</a></li>
+    <li><a href="#impl">Implementation strategies</a></li>
+    <li><a href="#ir">Where in the compiler? AD and IRs</a></li>
+    <li><a href="#systems">Systems tour: JAX, PyTorch, Zygote, Enzyme, Swift</a></li>
+    <li><a href="#hard">Hard problems</a></li>
+    <li><a href="#history">A short history</a></li>
+    <li><a href="#tools">Tools and software</a></li>
+    <li><a href="#exercises">Exercises with solutions</a></li>
+    <li><a href="#trivia">Trivia questions</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#refs">References</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="intro"><span class="n">1</span>What is differentiable programming?</h2>
+<p><strong>Differentiable programming</strong> is the practice of writing programs, with loops, branches, function calls, recursion and data structures, whose numerical outputs can be differentiated with respect to their inputs or parameters automatically. The enabling technology is <strong>automatic differentiation (AD)</strong>, also called <em>algorithmic differentiation</em>: a family of techniques that compute exact derivatives (up to floating-point rounding) of functions specified by computer programs, by systematically applying the chain rule to the elementary operations those programs execute<sup class="c"><a href="#r1">1</a>,<a href="#r2">2</a></sup>.</p>
+<p>From a compiler writer's point of view, AD is a <em>program transformation</em>. Given a program <span class="math">P</span> that computes <span class="math">y = f(x)</span>, an AD system produces a new program <span class="math">P′</span> that computes <span class="math">f(x)</span> together with a derivative quantity such as a Jacobian-vector product, a vector-Jacobian product, or a full gradient<sup class="c"><a href="#r2">2</a></sup>. That makes AD a sibling of other classic transformations such as inlining, partial evaluation and continuation-passing-style conversion, and it is subject to the same engineering questions: which intermediate representation (IR) to work on, how to handle control flow and memory, and how it interacts with optimisation<sup class="c"><a href="#r11">11</a>,<a href="#r16">16</a></sup>.</p>
+<p>The phrase "differentiable programming" was popularised in machine learning around 2018, when Yann LeCun argued that the essential idea behind deep learning was assembling networks of parameterised functional blocks and training them with gradient-based optimisation, which is to say writing differentiable programs<sup class="c"><a href="#r41">41</a></sup>. The underlying mathematics and much of the compiler technology are decades older<sup class="c"><a href="#r3">3</a>,<a href="#r4">4</a>,<a href="#r5">5</a>,<a href="#r40">40</a></sup>.</p>
+
+<div class="callout"><strong>Key idea.</strong> Every program, however complicated, executes a finite sequence of elementary operations (+, ×, sin, exp, …) whose derivatives are known. Composing those local derivatives with the chain rule gives the derivative of the whole program, with a cost that is a small constant multiple of the original program's cost<sup class="c"><a href="#r2">2</a></sup>.</div>
+
+<!-- ============================================================ -->
+<h2 id="three"><span class="n">2</span>Three ways to get derivatives</h2>
+<p>There are three common ways to compute derivatives on a computer, and AD is often confused with the other two<sup class="c"><a href="#r1">1</a></sup>.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Method</th><th>How it works</th><th>Accuracy</th><th>Main problem</th></tr></thead>
+<tbody>
+<tr><td><strong>Numerical (finite differences)</strong></td><td>Approximate <span class="math">f′(x) ≈ (f(x+h) − f(x))/h</span></td><td>Truncation error vs. round-off error trade-off in <span class="math">h</span></td><td>Inexact; needs <span class="math">O(n)</span> evaluations for a gradient in <span class="math">n</span> inputs</td></tr>
+<tr><td><strong>Symbolic</strong></td><td>Manipulate expressions with rules (as a computer algebra system does)</td><td>Exact</td><td>"Expression swell"; awkward with control flow and imperative code</td></tr>
+<tr><td><strong>Automatic (algorithmic)</strong></td><td>Apply the chain rule to the operations a program actually executes, propagating numerical values</td><td>Exact to working precision</td><td>Engineering: memory for reverse mode, IR design, aliasing, parallelism</td></tr>
+</tbody></table></div>
+<p>Baydin et al. describe AD as neither numerical nor symbolic differentiation: like symbolic differentiation it uses exact derivative rules, but it works on numerical values and intermediate variables rather than building closed-form expressions, which avoids expression swell and handles arbitrary control flow naturally<sup class="c"><a href="#r1">1</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="graph"><span class="n">3</span>Programs as computational graphs</h2>
+<p>Consider the running example used throughout this article:</p>
+<span class="eq math">f(x₁, x₂) = x₁·x₂ + sin(x₁)</span>
+<p>A compiler can linearise any straight-line evaluation of <span class="math">f</span> into a sequence of single-assignment statements, often called a <strong>Wengert list</strong> or <em>evaluation trace</em> after R. E. Wengert's 1964 paper describing exactly this decomposition for derivative evaluation<sup class="c"><a href="#r3">3</a>,<a href="#r2">2</a></sup>. Note how closely this resembles static single assignment (SSA) form, which is why SSA-based IRs are natural targets for AD<sup class="c"><a href="#r16">16</a></sup>.</p>
+<pre><span class="c">// Wengert list for f(x1, x2) at (2, 3)</span>
+v1 = x1            <span class="c">// 2</span>
+v2 = x2            <span class="c">// 3</span>
+v3 = v1 * v2       <span class="c">// 6</span>
+v4 = sin(v1)       <span class="c">// 0.909297…</span>
+v5 = v3 + v4       <span class="c">// 6.909297…</span>
+y  = v5</pre>
+
+<figure>
+<svg viewBox="0 0 720 322" role="img" aria-labelledby="g1t g1d">
+  <title id="g1t">Computational graph of f(x1,x2) = x1·x2 + sin(x1)</title>
+  <desc id="g1d">Inputs x1 and x2 feed a multiply node v3; x1 also feeds a sine node v4; v3 and v4 feed an add node v5 which is the output y. Solid blue arrows show forward-mode tangents flowing left to right; dashed orange arrows show reverse-mode adjoints flowing right to left.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker>
+  </defs>
+  <!-- edges -->
+  <path class="svg-edge" d="M118,80 L262,80" marker-end="url(#ah)"/>
+  <path class="svg-edge" d="M118,220 L262,100" marker-end="url(#ah)"/>
+  <path class="svg-edge" d="M110,98 L262,200" marker-end="url(#ah)"/>
+  <path class="svg-edge" d="M338,85 L502,140" marker-end="url(#ah)"/>
+  <path class="svg-edge" d="M338,215 L502,160" marker-end="url(#ah)"/>
+  <path class="svg-edge" d="M578,150 L640,150" marker-end="url(#ah)"/>
+  <!-- nodes -->
+  <circle class="svg-in" cx="80" cy="80" r="38"/><text class="svg-t" x="80" y="78" text-anchor="middle">x₁ = v₁</text><text class="svg-s" x="80" y="96" text-anchor="middle">2</text>
+  <circle class="svg-in" cx="80" cy="220" r="38"/><text class="svg-t" x="80" y="218" text-anchor="middle">x₂ = v₂</text><text class="svg-s" x="80" y="236" text-anchor="middle">3</text>
+  <circle class="svg-node" cx="300" cy="80" r="38"/><text class="svg-t" x="300" y="78" text-anchor="middle">v₃ = ×</text><text class="svg-s" x="300" y="96" text-anchor="middle">6</text>
+  <circle class="svg-node" cx="300" cy="220" r="38"/><text class="svg-t" x="300" y="218" text-anchor="middle">v₄ = sin</text><text class="svg-s" x="300" y="236" text-anchor="middle">0.9093</text>
+  <circle class="svg-out" cx="540" cy="150" r="38"/><text class="svg-t" x="540" y="148" text-anchor="middle">v₅ = +</text><text class="svg-s" x="540" y="166" text-anchor="middle">6.9093</text>
+  <text class="svg-t" x="652" y="155">y</text>
+  <!-- annotations -->
+  <text class="svg-fwd-t" x="150" y="40">forward: v̇ᵢ = Σ (∂vᵢ/∂vⱼ) v̇ⱼ  →</text>
+  <text class="svg-rev-t" x="360" y="285">←  reverse: v̄ⱼ = Σ v̄ᵢ (∂vᵢ/∂vⱼ)</text>
+  <text class="svg-s" x="20" y="312">Edge partials: ∂v₃/∂v₁ = v₂ · ∂v₃/∂v₂ = v₁ · ∂v₄/∂v₁ = cos v₁ · ∂v₅/∂v₃ = ∂v₅/∂v₄ = 1</text>
+</svg>
+<figcaption><strong>Figure 1.</strong> The computational graph of the running example. Each edge carries a local partial derivative. Forward mode pushes <em>tangents</em> along the edges in evaluation order; reverse mode pulls <em>adjoints</em> back against it. Based on the presentation in Griewank and Walther<sup class="c"><a href="#r2">2</a></sup> and Baydin et al.<sup class="c"><a href="#r1">1</a></sup></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="forward"><span class="n">4</span>Forward mode and dual numbers</h2>
+<p>In <strong>forward (tangent-linear) mode</strong>, each intermediate value <span class="math">vᵢ</span> is paired with a tangent <span class="math">v̇ᵢ = ∂vᵢ/∂x · ẋ</span>, for a chosen input direction <span class="math">ẋ</span>. Tangents are propagated in the same order as the original computation, so one forward pass computes a <strong>Jacobian-vector product (JVP)</strong> <span class="math">J·ẋ</span><sup class="c"><a href="#r1">1</a>,<a href="#r2">2</a></sup>.</p>
+<p>Seeding <span class="math">ẋ = (1, 0)</span> for our example gives <span class="math">∂f/∂x₁</span>:</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Primal</th><th>Value</th><th>Tangent rule</th><th>Tangent value</th></tr></thead>
+<tbody>
+<tr><td>v₁ = x₁</td><td>2</td><td>v̇₁ = 1</td><td>1</td></tr>
+<tr><td>v₂ = x₂</td><td>3</td><td>v̇₂ = 0</td><td>0</td></tr>
+<tr><td>v₃ = v₁·v₂</td><td>6</td><td>v̇₃ = v̇₁·v₂ + v₁·v̇₂</td><td>3</td></tr>
+<tr><td>v₄ = sin v₁</td><td>0.909297</td><td>v̇₄ = cos(v₁)·v̇₁</td><td>−0.416147</td></tr>
+<tr><td>v₅ = v₃ + v₄</td><td>6.909297</td><td>v̇₅ = v̇₃ + v̇₄</td><td><strong>2.583853</strong></td></tr>
+</tbody></table></div>
+<h3>Dual numbers</h3>
+<p>Forward mode has an elegant algebraic formulation. A <strong>dual number</strong> is <span class="math">a + bε</span> with <span class="math">ε² = 0</span>, an algebra introduced by W. K. Clifford in 1873<sup class="c"><a href="#r25">25</a></sup>. Evaluating any polynomial (and, by extension, any analytic function) on <span class="math">x + 1·ε</span> gives <span class="math">f(x) + f′(x)ε</span>, because the Taylor series truncates after the linear term<sup class="c"><a href="#r1">1</a></sup>. Operator overloading on a dual-number type is therefore a complete forward-mode AD implementation, and it is exactly how libraries such as Julia's ForwardDiff.jl work (ForwardDiff generalises to multiple simultaneous tangent components, or "chunks")<sup class="c"><a href="#r35">35</a></sup>.</p>
+<div class="codehead">Python · forward mode with dual numbers (complete, runnable)</div>
+<pre><span class="k">import</span> math
+
+<span class="k">class</span> Dual:
+    <span class="c">"""a + b·ε with ε² = 0. `val` is the primal, `tan` the tangent."""</span>
+    <span class="k">def</span> __init__(self, val, tan=<span class="m">0.0</span>):
+        self.val, self.tan = val, tan
+    <span class="k">def</span> _lift(o): <span class="k">return</span> o <span class="k">if</span> isinstance(o, Dual) <span class="k">else</span> Dual(o)
+    <span class="k">def</span> __add__(a, b): b = Dual._lift(b); <span class="k">return</span> Dual(a.val + b.val, a.tan + b.tan)
+    <span class="k">def</span> __mul__(a, b): b = Dual._lift(b); <span class="k">return</span> Dual(a.val * b.val, a.tan * b.val + a.val * b.tan)
+    __radd__, __rmul__ = __add__, __mul__
+    <span class="k">def</span> __repr__(self): <span class="k">return</span> <span class="s">f"Dual(</span>{self.val:.6f}<span class="s">, </span>{self.tan:.6f}<span class="s">)"</span>
+
+<span class="k">def</span> sin(x):
+    <span class="k">if</span> isinstance(x, Dual):
+        <span class="k">return</span> Dual(math.sin(x.val), math.cos(x.val) * x.tan)   <span class="c"># chain rule</span>
+    <span class="k">return</span> math.sin(x)
+
+<span class="k">def</span> f(x1, x2):
+    <span class="k">return</span> x1 * x2 + sin(x1)
+
+print(f(Dual(<span class="m">2.0</span>, <span class="m">1.0</span>), Dual(<span class="m">3.0</span>, <span class="m">0.0</span>)))   <span class="c"># Dual(6.909297, 2.583853)  -> df/dx1</span>
+print(f(Dual(<span class="m">2.0</span>, <span class="m">0.0</span>), Dual(<span class="m">3.0</span>, <span class="m">1.0</span>)))   <span class="c"># Dual(6.909297, 2.000000)  -> df/dx2</span></pre>
+
+<h3>Try it: a live forward-mode evaluator</h3>
+<div class="play" id="play">
+  <label>Function
+    <select id="fsel">
+      <option value="0">f(x) = x·sin(x) + x²</option>
+      <option value="1">f(x) = exp(sin(x))</option>
+      <option value="2">f(x) = x³ − 2x</option>
+      <option value="3">f(x) = log(1 + x²)</option>
+    </select>
+  </label>
+  <label style="margin-top:10px">x = <output id="xout">1.00</output>
+    <input id="xr" type="range" min="-3" max="3" step="0.01" value="1">
+  </label>
+  <div class="grid2">
+    <div class="stat"><b>f(x) (primal)</b><output id="o1"></output></div>
+    <div class="stat"><b>f′(x) via dual numbers</b><output id="o2"></output></div>
+    <div class="stat"><b>finite difference, h = 1e-8</b><output id="o3"></output></div>
+    <div class="stat"><b>|AD − FD|</b><output id="o4"></output></div>
+  </div>
+  <p style="margin:10px 0 0;color:var(--muted);font-size:14px">The dual-number result is exact to working precision; the finite-difference estimate carries truncation and cancellation error<sup class="c"><a href="#r1">1</a></sup>.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="reverse"><span class="n">5</span>Reverse mode and the tape</h2>
+<p>In <strong>reverse (adjoint) mode</strong>, the program first runs forward, recording the values it needs; then a backward sweep propagates <strong>adjoints</strong> <span class="math">v̄ᵢ = ∂y/∂vᵢ</span> from the output back to the inputs. One reverse sweep computes a <strong>vector-Jacobian product (VJP)</strong> <span class="math">ȳᵀ·J</span>; for a scalar output with <span class="math">ȳ = 1</span> this is the whole gradient<sup class="c"><a href="#r1">1</a>,<a href="#r2">2</a></sup>. Backpropagation in neural networks, as popularised by Rumelhart, Hinton and Williams<sup class="c"><a href="#r6">6</a></sup>, is a special case of reverse-mode AD<sup class="c"><a href="#r1">1</a></sup>.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Adjoint (reverse order)</th><th>Rule</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>v̄₅</td><td>seed ȳ = 1</td><td>1</td></tr>
+<tr><td>v̄₄</td><td>v̄₅ · ∂v₅/∂v₄ = v̄₅</td><td>1</td></tr>
+<tr><td>v̄₃</td><td>v̄₅ · ∂v₅/∂v₃ = v̄₅</td><td>1</td></tr>
+<tr><td>v̄₂</td><td>v̄₃ · v₁</td><td><strong>2</strong></td></tr>
+<tr><td>v̄₁</td><td>v̄₃ · v₂ + v̄₄ · cos v₁ <em>(two uses ⇒ adjoints add)</em></td><td><strong>2.583853</strong></td></tr>
+</tbody></table></div>
+<p>Two compiler-relevant facts stand out. First, a variable used in several places (here <span class="math">v₁</span>) <em>accumulates</em> adjoint contributions: fan-out in the primal becomes a sum in the adjoint. Second, the backward sweep needs primal values (<span class="math">v₁, v₂</span>) that the forward sweep computed, so they must be stored or recomputed. This storage is the <strong>tape</strong>, and managing it is the central engineering problem of reverse mode<sup class="c"><a href="#r2">2</a>,<a href="#r8">8</a></sup>.</p>
+
+<figure>
+<svg viewBox="0 0 720 230" role="img" aria-labelledby="g2t g2d">
+  <title id="g2t">Forward sweep and reverse sweep with a tape</title>
+  <desc id="g2d">A forward sweep runs operations op1 to op4 left to right, pushing intermediate values onto a tape. A reverse sweep then runs adjoint operations op4-bar to op1-bar right to left, popping values off the tape.</desc>
+  <defs>
+    <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent-2)"/></marker>
+  </defs>
+  <text class="svg-fwd-t" x="20" y="30">Forward (primal) sweep</text>
+  <g>
+    <rect class="svg-in" x="40" y="45" width="110" height="40" rx="8"/><text class="svg-t" x="95" y="70" text-anchor="middle">op₁</text>
+    <rect class="svg-in" x="210" y="45" width="110" height="40" rx="8"/><text class="svg-t" x="265" y="70" text-anchor="middle">op₂</text>
+    <rect class="svg-in" x="380" y="45" width="110" height="40" rx="8"/><text class="svg-t" x="435" y="70" text-anchor="middle">op₃</text>
+    <rect class="svg-in" x="550" y="45" width="110" height="40" rx="8"/><text class="svg-t" x="605" y="70" text-anchor="middle">op₄</text>
+    <path class="svg-fwd" d="M150,65 L205,65" marker-end="url(#af)"/><path class="svg-fwd" d="M320,65 L375,65" marker-end="url(#af)"/><path class="svg-fwd" d="M490,65 L545,65" marker-end="url(#af)"/>
+  </g>
+  <rect class="svg-node" x="40" y="102" width="620" height="28" rx="6"/>
+  <text class="svg-s" x="350" y="121" text-anchor="middle">TAPE (stack of saved intermediates: push on forward, pop on reverse)</text>
+  <g>
+    <path class="svg-edge" d="M95,85 L95,100"/><path class="svg-edge" d="M265,85 L265,100"/><path class="svg-edge" d="M435,85 L435,100"/><path class="svg-edge" d="M605,85 L605,100"/>
+    <path class="svg-edge" d="M95,132 L95,147"/><path class="svg-edge" d="M265,132 L265,147"/><path class="svg-edge" d="M435,132 L435,147"/><path class="svg-edge" d="M605,132 L605,147"/>
+  </g>
+  <g>
+    <rect class="svg-out" x="40" y="148" width="110" height="40" rx="8"/><text class="svg-t" x="95" y="173" text-anchor="middle">op̄₁</text>
+    <rect class="svg-out" x="210" y="148" width="110" height="40" rx="8"/><text class="svg-t" x="265" y="173" text-anchor="middle">op̄₂</text>
+    <rect class="svg-out" x="380" y="148" width="110" height="40" rx="8"/><text class="svg-t" x="435" y="173" text-anchor="middle">op̄₃</text>
+    <rect class="svg-out" x="550" y="148" width="110" height="40" rx="8"/><text class="svg-t" x="605" y="173" text-anchor="middle">op̄₄</text>
+    <path class="svg-rev" d="M548,168 L495,168" marker-end="url(#ar)"/><path class="svg-rev" d="M378,168 L325,168" marker-end="url(#ar)"/><path class="svg-rev" d="M208,168 L155,168" marker-end="url(#ar)"/>
+  </g>
+  <text class="svg-rev-t" x="20" y="215">Reverse (adjoint) sweep, seeded with ȳ = 1 at op̄₄</text>
+</svg>
+<figcaption><strong>Figure 2.</strong> Reverse mode as two sweeps. The tape stores whatever the adjoint operations need. Memory grows with the length of the forward computation unless checkpointing is used<sup class="c"><a href="#r2">2</a>,<a href="#r8">8</a></sup>.</figcaption>
+</figure>
+
+<div class="codehead">Python · a minimal tape-based reverse mode (complete, runnable)</div>
+<pre><span class="k">import</span> math
+
+<span class="k">class</span> Var:
+    <span class="k">def</span> __init__(self, val, parents=()):
+        self.val, self.parents, self.grad = val, parents, <span class="m">0.0</span>   <span class="c"># parents: [(Var, local_partial)]</span>
+    <span class="k">def</span> __add__(a, b): <span class="k">return</span> Var(a.val + b.val, [(a, <span class="m">1.0</span>), (b, <span class="m">1.0</span>)])
+    <span class="k">def</span> __mul__(a, b): <span class="k">return</span> Var(a.val * b.val, [(a, b.val), (b, a.val)])
+
+<span class="k">def</span> sin(a): <span class="k">return</span> Var(math.sin(a.val), [(a, math.cos(a.val))])
+
+<span class="k">def</span> backward(y):
+    <span class="c"># 1. topological order of the recorded graph (this list *is* the tape)</span>
+    order, seen = [], set()
+    <span class="k">def</span> visit(v):
+        <span class="k">if</span> id(v) <span class="k">in</span> seen: <span class="k">return</span>
+        seen.add(id(v))
+        <span class="k">for</span> p, _ <span class="k">in</span> v.parents: visit(p)
+        order.append(v)
+    visit(y)
+    <span class="c"># 2. reverse sweep: v̄_parent += v̄ · ∂v/∂parent</span>
+    y.grad = <span class="m">1.0</span>
+    <span class="k">for</span> v <span class="k">in</span> reversed(order):
+        <span class="k">for</span> p, d <span class="k">in</span> v.parents:
+            p.grad += v.grad * d
+
+x1, x2 = Var(<span class="m">2.0</span>), Var(<span class="m">3.0</span>)
+y = x1 * x2 + sin(x1)
+backward(y)
+print(y.val, x1.grad, x2.grad)   <span class="c"># 6.909297… 2.583853… 2.0</span></pre>
+<p>This is, in miniature, the design of define-by-run systems such as HIPS Autograd and PyTorch's autograd: the graph is recorded dynamically while the program executes, then walked backwards<sup class="c"><a href="#r18">18</a>,<a href="#r38">38</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="cost"><span class="n">6</span>Cost model: when to use which mode</h2>
+<p>For <span class="math">f : ℝⁿ → ℝᵐ</span> with Jacobian <span class="math">J ∈ ℝᵐˣⁿ</span><sup class="c"><a href="#r1">1</a>,<a href="#r2">2</a></sup>:</p>
+<ul>
+<li>One forward-mode pass gives one column-combination <span class="math">J·ẋ</span>; the full Jacobian needs <span class="math">n</span> passes.</li>
+<li>One reverse-mode pass gives one row-combination <span class="math">ȳᵀ·J</span>; the full Jacobian needs <span class="math">m</span> passes.</li>
+<li>For a scalar loss (<span class="math">m = 1</span>), the whole gradient costs one reverse pass. Griewank and Walther show the operation count of a gradient is bounded by a small constant multiple of the cost of evaluating <span class="math">f</span> (no more than about 4 under their complexity model), independent of <span class="math">n</span>: the so-called <em>cheap gradient principle</em><sup class="c"><a href="#r2">2</a></sup>.</li>
+<li>The price of reverse mode is memory: naively, storage proportional to the number of operations executed. Checkpointing trades recomputation for memory; Griewank's binomial checkpointing achieves logarithmic growth in both time and space overhead<sup class="c"><a href="#r8">8</a>,<a href="#r9">9</a></sup>, and a simple <span class="math">√n</span>-segment scheme was popularised for deep networks by Chen et al.<sup class="c"><a href="#r30">30</a></sup></li>
+</ul>
+<figure>
+<svg viewBox="0 0 720 220" role="img" aria-labelledby="g3t g3d">
+  <title id="g3t">Jacobian shape determines the cheaper mode</title>
+  <desc id="g3d">A tall Jacobian with many outputs and few inputs favours forward mode, one pass per column. A wide Jacobian with few outputs and many inputs favours reverse mode, one pass per row; a scalar loss is a single row.</desc>
+  <text class="svg-t" x="120" y="24" text-anchor="middle" style="font-weight:600">Tall J (m ≫ n)</text>
+  <rect class="svg-in" x="90" y="38" width="60" height="150" rx="4"/>
+  <line class="svg-fwd" x1="105" y1="38" x2="105" y2="188"/><line class="svg-fwd" x1="120" y1="38" x2="120" y2="188"/><line class="svg-fwd" x1="135" y1="38" x2="135" y2="188"/>
+  <text class="svg-fwd-t" x="120" y="208" text-anchor="middle">forward: n JVPs</text>
+  <text class="svg-t" x="380" y="24" text-anchor="middle" style="font-weight:600">Wide J (m ≪ n)</text>
+  <rect class="svg-out" x="260" y="80" width="240" height="60" rx="4"/>
+  <line class="svg-rev" x1="260" y1="95" x2="500" y2="95"/><line class="svg-rev" x1="260" y1="110" x2="500" y2="110"/><line class="svg-rev" x1="260" y1="125" x2="500" y2="125"/>
+  <text class="svg-rev-t" x="380" y="208" text-anchor="middle">reverse: m VJPs</text>
+  <text class="svg-t" x="620" y="24" text-anchor="middle" style="font-weight:600">Scalar loss (m = 1)</text>
+  <rect class="svg-out" x="545" y="102" width="150" height="16" rx="3"/>
+  <text class="svg-rev-t" x="620" y="208" text-anchor="middle">gradient: 1 VJP</text>
+</svg>
+<figcaption><strong>Figure 3.</strong> Forward mode builds the Jacobian a column at a time, reverse mode a row at a time. Deep learning lives at the far right: millions of parameters, one scalar loss<sup class="c"><a href="#r1">1</a></sup>.</figcaption>
+</figure>
+<p>Modes compose. Applying forward mode to a reverse-mode gradient ("forward-over-reverse") yields Hessian-vector products at a small constant multiple of the gradient's cost, a technique the JAX documentation recommends for second-order work<sup class="c"><a href="#r31">31</a>,<a href="#r2">2</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="impl"><span class="n">7</span>Implementation strategies</h2>
+<p>AD tools are traditionally classified by <em>how</em> they obtain the derivative program<sup class="c"><a href="#r1">1</a>,<a href="#r2">2</a></sup>.</p>
+<h3>7.1 Operator overloading (tracing at run time)</h3>
+<p>A special numeric type overloads every operation to record it (on a tape) or to propagate tangents. Implementations need no compiler support and handle any host-language control flow, because only the operations actually executed are recorded. Costs include per-operation run-time overhead and the fact that the derivative is rebuilt on every execution, which limits whole-program optimisation. Examples: ADOL-C and CppAD for C++, PyTorch autograd, HIPS Autograd, ForwardDiff.jl<sup class="c"><a href="#r18">18</a>,<a href="#r35">35</a>,<a href="#r38">38</a>,<a href="#r42">42</a></sup>.</p>
+<h3>7.2 Source transformation</h3>
+<p>A compiler pass reads the program (as source or IR) and emits a new program that computes derivatives. Control flow is transformed statically: in reverse mode, loops must be reversed and branch decisions recorded so the adjoint can replay them in reverse order. The output can be optimised like any other code. Classic examples are Tapenade for Fortran and C<sup class="c"><a href="#r10">10</a></sup>; modern compiler-integrated examples include Zygote (Julia SSA IR)<sup class="c"><a href="#r16">16</a></sup>, Swift's differentiation transform (SIL)<sup class="c"><a href="#r20">20</a></sup>, Clad (Clang AST)<sup class="c"><a href="#r27">27</a></sup> and Enzyme (LLVM IR)<sup class="c"><a href="#r11">11</a></sup>.</p>
+<h3>7.3 Staged tracing: the hybrid</h3>
+<p>JAX popularised a middle path. Python functions are executed once with abstract <em>tracer</em> values, which records the primitive operations into a small typed functional IR called a <strong>jaxpr</strong>. Transformations (<code>grad</code>, <code>jvp</code>, <code>vmap</code>, <code>jit</code>) are then interpreters or rewrites over that IR, and <code>jit</code> hands the result to the XLA compiler<sup class="c"><a href="#r13">13</a>,<a href="#r14">14</a>,<a href="#r32">32</a></sup>. Python control flow is "unrolled away" during tracing, so data-dependent control flow must use structured primitives such as <code>lax.cond</code>, <code>lax.while_loop</code> and <code>lax.scan</code><sup class="c"><a href="#r32">32</a></sup>.</p>
+
+<figure>
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="g4t g4d">
+  <title id="g4t">Where different AD systems hook into the compilation pipeline</title>
+  <desc id="g4d">Three pipelines. Tracing: Python program, traced to jaxpr, AD on jaxpr, lowered to StableHLO, compiled by XLA. Source transformation at a high-level IR: Julia or Swift source, SSA or SIL IR, AD transform, then the LLVM backend. Enzyme: C, C++, Rust, Fortran, Julia or Swift, lowered to LLVM IR, optimised, AD on optimised IR, optimised again, machine code.</desc>
+  <defs><marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker></defs>
+  <style>.lbl{font-size:13px;font-weight:600}</style>
+  <!-- row 1 -->
+  <text class="svg-t lbl" x="10" y="28">Staged tracing (JAX)</text>
+  <rect class="svg-node" x="10" y="40" width="120" height="44" rx="8"/><text class="svg-t" x="70" y="67" text-anchor="middle">Python fn</text>
+  <rect class="svg-node" x="155" y="40" width="120" height="44" rx="8"/><text class="svg-t" x="215" y="60" text-anchor="middle">trace →</text><text class="svg-s" x="215" y="76" text-anchor="middle">jaxpr</text>
+  <rect class="svg-out" x="300" y="40" width="120" height="44" rx="8"/><text class="svg-t" x="360" y="60" text-anchor="middle">AD</text><text class="svg-s" x="360" y="76" text-anchor="middle">jvp · transpose</text>
+  <rect class="svg-node" x="445" y="40" width="120" height="44" rx="8"/><text class="svg-t" x="505" y="67" text-anchor="middle">StableHLO</text>
+  <rect class="svg-in" x="590" y="40" width="120" height="44" rx="8"/><text class="svg-t" x="650" y="60" text-anchor="middle">XLA</text><text class="svg-s" x="650" y="76" text-anchor="middle">CPU/GPU/TPU</text>
+  <path class="svg-edge" d="M130,62 L152,62" marker-end="url(#ap)"/><path class="svg-edge" d="M275,62 L297,62" marker-end="url(#ap)"/><path class="svg-edge" d="M420,62 L442,62" marker-end="url(#ap)"/><path class="svg-edge" d="M565,62 L587,62" marker-end="url(#ap)"/>
+  <!-- row 2 -->
+  <text class="svg-t lbl" x="10" y="132">Source transformation on a language IR (Zygote, Swift)</text>
+  <rect class="svg-node" x="10" y="144" width="120" height="44" rx="8"/><text class="svg-t" x="70" y="171" text-anchor="middle">Julia / Swift</text>
+  <rect class="svg-node" x="155" y="144" width="120" height="44" rx="8"/><text class="svg-t" x="215" y="164" text-anchor="middle">SSA IR</text><text class="svg-s" x="215" y="180" text-anchor="middle">Julia IR · SIL</text>
+  <rect class="svg-out" x="300" y="144" width="120" height="44" rx="8"/><text class="svg-t" x="360" y="164" text-anchor="middle">AD</text><text class="svg-s" x="360" y="180" text-anchor="middle">pullbacks</text>
+  <rect class="svg-node" x="445" y="144" width="120" height="44" rx="8"/><text class="svg-t" x="505" y="171" text-anchor="middle">optimise</text>
+  <rect class="svg-in" x="590" y="144" width="120" height="44" rx="8"/><text class="svg-t" x="650" y="171" text-anchor="middle">LLVM → code</text>
+  <path class="svg-edge" d="M130,166 L152,166" marker-end="url(#ap)"/><path class="svg-edge" d="M275,166 L297,166" marker-end="url(#ap)"/><path class="svg-edge" d="M420,166 L442,166" marker-end="url(#ap)"/><path class="svg-edge" d="M565,166 L587,166" marker-end="url(#ap)"/>
+  <!-- row 3 -->
+  <text class="svg-t lbl" x="10" y="236">AD on optimised low-level IR (Enzyme)</text>
+  <rect class="svg-node" x="10" y="248" width="120" height="44" rx="8"/><text class="svg-t" x="70" y="268" text-anchor="middle">C/C++/Rust</text><text class="svg-s" x="70" y="284" text-anchor="middle">Fortran/Julia/Swift</text>
+  <rect class="svg-node" x="155" y="248" width="120" height="44" rx="8"/><text class="svg-t" x="215" y="268" text-anchor="middle">LLVM IR</text><text class="svg-s" x="215" y="284" text-anchor="middle">-O2 passes</text>
+  <rect class="svg-out" x="300" y="248" width="120" height="44" rx="8"/><text class="svg-t" x="360" y="268" text-anchor="middle">Enzyme AD</text><text class="svg-s" x="360" y="284" text-anchor="middle">on optimised IR</text>
+  <rect class="svg-node" x="445" y="248" width="120" height="44" rx="8"/><text class="svg-t" x="505" y="275" text-anchor="middle">optimise again</text>
+  <rect class="svg-in" x="590" y="248" width="120" height="44" rx="8"/><text class="svg-t" x="650" y="275" text-anchor="middle">machine code</text>
+  <path class="svg-edge" d="M130,270 L152,270" marker-end="url(#ap)"/><path class="svg-edge" d="M275,270 L297,270" marker-end="url(#ap)"/><path class="svg-edge" d="M420,270 L442,270" marker-end="url(#ap)"/><path class="svg-edge" d="M565,270 L587,270" marker-end="url(#ap)"/>
+  <text class="svg-s" x="360" y="318" text-anchor="middle">Lower IR ⇒ more languages, more optimisation before AD; higher IR ⇒ more semantic information (types, purity, arrays)</text>
+</svg>
+<figcaption><strong>Figure 4.</strong> The same transformation placed at three different heights in the compiler. Simplified from the system descriptions in references <a href="#r11">11</a>, <a href="#r13">13</a>, <a href="#r16">16</a>, <a href="#r20">20</a> and <a href="#r32">32</a>.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="ir"><span class="n">8</span>Where in the compiler? AD and intermediate representations</h2>
+<h3>8.1 SSA, phi nodes and loops</h3>
+<p>In SSA form, each value is defined once and control-flow merges use φ (phi) nodes. Innes's Zygote paper shows how to differentiate SSA-form programs directly, including loops and branches, without unrolling them: the forward pass records which predecessor block was taken (a small amount of control-flow "path" information plus the stacks of pullbacks), and the generated adjoint code walks the control-flow graph in reverse, with a φ node in the primal becoming a branch in the adjoint<sup class="c"><a href="#r16">16</a></sup>. The paper's title, <em>Don't Unroll Adjoint</em>, is a pun on the earlier <em>Lambda: the ultimate backpropagator</em> line of work<sup class="c"><a href="#r7">7</a>,<a href="#r16">16</a></sup>.</p>
+<h3>8.2 Closures and pullbacks</h3>
+<p>A clean functional view of reverse mode associates each primitive <span class="math">f</span> with a function that returns both the result and a <em>pullback</em> closure <span class="math">ȳ ↦ x̄</span>. Pearlmutter and Siskind showed that reverse-mode AD can be expressed as a first-class, nestable program transformation in a functional language with closures<sup class="c"><a href="#r7">7</a></sup>. Elliott later derived AD compositionally from category theory, showing that forward and reverse mode arise from interpreting the same program in different categories<sup class="c"><a href="#r23">23</a></sup>, and Wang et al. showed that reverse mode can be implemented with delimited continuations (<code>shift</code>/<code>reset</code>) without an explicit tape<sup class="c"><a href="#r24">24</a></sup>.</p>
+<h3>8.3 Linearise, then transpose</h3>
+<p>JAX implements reverse mode not as a separate transformation but as forward mode followed by partial evaluation and <em>transposition</em> of the resulting linear program. Radul et al. formalise this decomposition, "you only linearize once," and show it recovers the efficiency of reverse mode<sup class="c"><a href="#r15">15</a></sup>. A practical consequence is that authors of new primitives need only supply a JVP rule (plus a transpose rule for any new linear primitive) to get both modes<sup class="c"><a href="#r15">15</a>,<a href="#r31">31</a></sup>.</p>
+<h3>8.4 Differentiate before or after optimisation?</h3>
+<p>Enzyme's central claim is that running AD <em>after</em> standard compiler optimisations produces faster gradients than differentiating unoptimised code. Its paper motivates this with a loop that recomputes a vector norm on every iteration: loop-invariant code motion hoists the norm out of the loop in the primal, and differentiating the optimised code inherits that asymptotic improvement, whereas differentiating first leaves an adjoint that is quadratic in the vector length. On a machine-learning benchmark suite that includes Microsoft's ADBench, the authors report that AD on optimised IR achieves a geometric-mean speedup of 4.5× over AD on IR before optimisation<sup class="c"><a href="#r11">11</a></sup>. Working on LLVM IR also means one tool covers every language with an LLVM front end<sup class="c"><a href="#r11">11</a>,<a href="#r22">22</a></sup>. Later work extended Enzyme to GPU kernels<sup class="c"><a href="#r12">12</a></sup> and to parallel programs<sup class="c"><a href="#r37">37</a></sup>.</p>
+<h3>8.5 Activity analysis and other static analyses</h3>
+<p>Source-transformation tools use dataflow analyses to avoid needless work. <strong>Activity analysis</strong> determines which variables both depend on an independent input and influence a dependent output; only "active" variables need derivative storage or code. <strong>To-be-recorded (TBR) analysis</strong> determines which overwritten values must actually be saved for the reverse sweep. Both are described for Tapenade<sup class="c"><a href="#r10">10</a></sup>, and Enzyme performs activity analysis and type analysis on LLVM IR, where it must also infer which bytes of untyped memory hold floating-point data<sup class="c"><a href="#r11">11</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="systems"><span class="n">9</span>Systems tour</h2>
+<p>All examples compute the gradient of the running example <span class="math">f(x₁,x₂) = x₁x₂ + sin x₁</span> at <span class="math">(2, 3)</span> where practical, so the expected answer is <span class="math">(2.583853…, 2)</span>.</p>
+
+<h3>9.1 JAX and XLA</h3>
+<p>JAX grew out of the Autograd project and the SysML 2018 paper by Frostig, Johnson and Leary, which described compiling numerical Python programs by tracing them at a high level and handing the traced program to XLA<sup class="c"><a href="#r13">13</a>,<a href="#r14">14</a></sup>. JAX's transformations are composable: <code>jit(grad(vmap(f)))</code> is meaningful<sup class="c"><a href="#r14">14</a>,<a href="#r31">31</a></sup>. Under <code>jit</code>, JAX lowers jaxprs to StableHLO, which XLA (now developed under the OpenXLA project) compiles for CPU, GPU and TPU<sup class="c"><a href="#r32">32</a>,<a href="#r34">34</a></sup>.</p>
+<div class="codehead">Python · JAX</div>
+<pre><span class="k">import</span> jax, jax.numpy <span class="k">as</span> jnp
+
+<span class="k">def</span> f(x1, x2):
+    <span class="k">return</span> x1 * x2 + jnp.sin(x1)
+
+print(jax.grad(f, argnums=(<span class="m">0</span>, <span class="m">1</span>))(<span class="m">2.0</span>, <span class="m">3.0</span>))       <span class="c"># (2.5838532, 2.0)  reverse mode</span>
+y, t = jax.jvp(f, (<span class="m">2.0</span>, <span class="m">3.0</span>), (<span class="m">1.0</span>, <span class="m">0.0</span>))            <span class="c"># forward mode: t = df/dx1</span>
+y, pullback = jax.vjp(f, <span class="m">2.0</span>, <span class="m">3.0</span>); print(pullback(<span class="m">1.0</span>))  <span class="c"># (2.5838532, 2.0)</span>
+
+print(jax.make_jaxpr(f)(<span class="m">2.0</span>, <span class="m">3.0</span>))                        <span class="c"># inspect the traced IR</span>
+<span class="c"># { lambda ; a:f32[] b:f32[]. let c:f32[] = mul a b; d:f32[] = sin a; e:f32[] = add c d in (e,) }</span>
+<span class="c"># (exact printing varies between JAX versions)</span>
+
+fast_grad = jax.jit(jax.grad(f))                            <span class="c"># differentiate, then compile with XLA</span>
+
+<span class="c"># Hessian-vector product: forward-over-reverse</span>
+<span class="k">def</span> hvp(g, x, v):
+    <span class="k">return</span> jax.jvp(jax.grad(g), (x,), (v,))[<span class="m">1</span>]</pre>
+<div class="codehead">Python · a custom JVP rule (numerically stable log1p(exp(x)))</div>
+<pre><span class="k">@jax.custom_jvp</span>
+<span class="k">def</span> softplus(x):
+    <span class="k">return</span> jnp.logaddexp(x, <span class="m">0.0</span>)
+
+<span class="k">@softplus.defjvp</span>
+<span class="k">def</span> softplus_jvp(primals, tangents):
+    (x,), (xd,) = primals, tangents
+    <span class="k">return</span> softplus(x), jax.nn.sigmoid(x) * xd   <span class="c"># reverse mode is derived by transposition</span></pre>
+
+<h3>9.2 PyTorch autograd</h3>
+<p>PyTorch's autograd is a define-by-run, tape-based reverse-mode system: as tensor operations execute, PyTorch records a directed acyclic graph of <code>Function</code> nodes (visible as <code>grad_fn</code>), and <code>backward()</code> traverses it from the output to the leaves<sup class="c"><a href="#r18">18</a>,<a href="#r33">33</a></sup>. Because the graph is rebuilt on every iteration, arbitrary Python control flow is supported<sup class="c"><a href="#r19">19</a>,<a href="#r33">33</a></sup>. PyTorch 2 added <code>torch.compile</code>, which captures graphs with TorchDynamo by analysing Python bytecode, and uses AOTAutograd to trace the backward pass ahead of time so the joint forward-backward graph can be compiled (by default with TorchInductor)<sup class="c"><a href="#r26">26</a></sup>. The <code>torch.func</code> module provides JAX-style composable <code>grad</code>, <code>jvp</code>, <code>vjp</code> and <code>vmap</code><sup class="c"><a href="#r33">33</a></sup>.</p>
+<div class="codehead">Python · PyTorch</div>
+<pre><span class="k">import</span> torch
+
+x1 = torch.tensor(<span class="m">2.0</span>, requires_grad=<span class="k">True</span>)
+x2 = torch.tensor(<span class="m">3.0</span>, requires_grad=<span class="k">True</span>)
+y = x1 * x2 + torch.sin(x1)
+print(y.grad_fn)          <span class="c"># &lt;AddBackward0 object at …&gt;  the recorded graph</span>
+y.backward()
+print(x1.grad, x2.grad)   <span class="c"># tensor(2.5839) tensor(2.)</span>
+
+<span class="c"># A custom differentiable operation</span>
+<span class="k">class</span> Cube(torch.autograd.Function):
+    <span class="k">@staticmethod</span>
+    <span class="k">def</span> forward(ctx, x):
+        ctx.save_for_backward(x)          <span class="c"># explicit tape entry</span>
+        <span class="k">return</span> x ** <span class="m">3</span>
+    <span class="k">@staticmethod</span>
+    <span class="k">def</span> backward(ctx, grad_out):
+        (x,) = ctx.saved_tensors
+        <span class="k">return</span> grad_out * <span class="m">3</span> * x ** <span class="m">2</span>
+
+<span class="c"># Composable function transforms</span>
+<span class="k">from</span> torch.func <span class="k">import</span> grad
+print(grad(<span class="k">lambda</span> t: (t * t).sum())(torch.tensor([<span class="m">1.</span>, <span class="m">2.</span>])))   <span class="c"># tensor([2., 4.])</span></pre>
+
+<h3>9.3 Zygote.jl (Julia)</h3>
+<p>Zygote is a source-to-source reverse-mode AD for Julia that operates on Julia's SSA-form IR, generating adjoint code through Julia's generated-function mechanism, so differentiated code is compiled and optimised by the normal Julia compiler<sup class="c"><a href="#r16">16</a>,<a href="#r17">17</a></sup>. Derivative rules are supplied through the ChainRules ecosystem, and Zygote supports closures, data structures and user-defined types<sup class="c"><a href="#r17">17</a></sup>.</p>
+<div class="codehead">Julia · Zygote</div>
+<pre><span class="k">using</span> Zygote
+
+f(x1, x2) = x1 * x2 + sin(x1)
+gradient(f, <span class="m">2.0</span>, <span class="m">3.0</span>)                 <span class="c"># (2.5838531634528574, 2.0)</span>
+
+<span class="c"># Control flow and loops are differentiated directly from the IR</span>
+<span class="k">function</span> pow(x, n)
+    r = one(x)
+    <span class="k">for</span> i <span class="k">in</span> <span class="m">1</span>:n
+        r *= x
+    <span class="k">end</span>
+    r
+<span class="k">end</span>
+gradient(x -&gt; pow(x, <span class="m">3</span>), <span class="m">2.0</span>)           <span class="c"># (12.0,)</span>
+
+<span class="c"># Peek at the pullback</span>
+y, back = pullback(f, <span class="m">2.0</span>, <span class="m">3.0</span>)
+back(<span class="m">1.0</span>)                               <span class="c"># (2.5838531634528574, 2.0)</span></pre>
+
+<h3>9.4 Enzyme (LLVM and MLIR)</h3>
+<p>Enzyme is an LLVM plugin that differentiates LLVM IR. User code calls a placeholder such as <code>__enzyme_autodiff</code>, and the pass replaces the call with a synthesised derivative function<sup class="c"><a href="#r11">11</a>,<a href="#r36">36</a></sup>. Arguments are annotated with activity: <code>enzyme_dup</code> passes a value with a "shadow" buffer that receives its derivative, <code>enzyme_const</code> marks an inactive argument, and active scalar arguments return their derivative<sup class="c"><a href="#r36">36</a></sup>. Because it works at the LLVM level, Enzyme is used from C, C++, Fortran, Rust, Julia (Enzyme.jl) and Swift, and the project has an MLIR-based variant for higher-level dialects<sup class="c"><a href="#r11">11</a>,<a href="#r36">36</a></sup>.</p>
+<div class="codehead">C · Enzyme (compile with clang and the Enzyme plugin)</div>
+<pre><span class="k">#include</span> <span class="s">&lt;stdio.h&gt;</span>
+
+<span class="k">double</span> __enzyme_autodiff(<span class="k">void</span>*, ...);
+<span class="k">void</span>   __enzyme_autodiff_v(<span class="k">void</span>*, ...) __asm__(<span class="s">"__enzyme_autodiff"</span>);
+<span class="k">int</span> enzyme_dup, enzyme_const;
+
+<span class="k">double</span> square(<span class="k">double</span> x) { <span class="k">return</span> x * x; }
+
+<span class="k">void</span> sumsq(<span class="k">const double</span> *x, <span class="k">double</span> *out, <span class="k">int</span> n) {
+    <span class="k">double</span> s = <span class="m">0</span>;
+    <span class="k">for</span> (<span class="k">int</span> i = <span class="m">0</span>; i &lt; n; i++) s += x[i] * x[i];
+    *out = s;
+}
+
+<span class="k">int</span> main(<span class="k">void</span>) {
+    printf(<span class="s">"d/dx x^2 at 3 = %f\n"</span>, __enzyme_autodiff((<span class="k">void</span>*)square, <span class="m">3.0</span>));   <span class="c">// 6.0</span>
+
+    <span class="k">double</span> x[<span class="m">3</span>] = {<span class="m">1</span>, <span class="m">2</span>, <span class="m">3</span>}, dx[<span class="m">3</span>] = {<span class="m">0</span>}, out = <span class="m">0</span>, dout = <span class="m">1</span>;   <span class="c">// seed dout = 1</span>
+    __enzyme_autodiff_v((<span class="k">void</span>*)sumsq,
+                        enzyme_dup, x, dx,        <span class="c">// x is active: gradient accumulates into dx</span>
+                        enzyme_dup, &amp;out, &amp;dout,
+                        enzyme_const, <span class="m">3</span>);         <span class="c">// n is inactive</span>
+    printf(<span class="s">"%f %f %f\n"</span>, dx[<span class="m">0</span>], dx[<span class="m">1</span>], dx[<span class="m">2</span>]);              <span class="c">// 2 4 6</span>
+}
+
+<span class="c">// clang sumsq.c -O2 -fplugin=/path/to/ClangEnzyme-&lt;LLVM version&gt;.so -o sumsq</span></pre>
+
+<h3>9.5 Swift: differentiable programming in the language</h3>
+<p>Swift for TensorFlow (S4TF), led at Google, aimed to make differentiation a first-class language feature, with type-checked <code>@differentiable</code> function types and a compiler transform on the Swift Intermediate Language (SIL)<sup class="c"><a href="#r20">20</a>,<a href="#r21">21</a></sup>. The S4TF project was archived in February 2021 (its GitHub repository was later made read-only), but the differentiation work had been upstreamed into the Swift compiler, where it remains available as an experimental feature through the <code>_Differentiation</code> module<sup class="c"><a href="#r20">20</a>,<a href="#r21">21</a></sup>. The design is laid out in the Swift <em>Differentiable Programming Manifesto</em>, which introduces the <code>Differentiable</code> protocol with an associated <code>TangentVector</code> type, <code>@derivative(of:)</code> registration and differentiable function types<sup class="c"><a href="#r20">20</a></sup>.</p>
+<div class="codehead">Swift · experimental differentiation</div>
+<pre><span class="k">import</span> _Differentiation
+
+<span class="k">@differentiable(reverse)</span>
+<span class="k">func</span> g(_ x1: <span class="k">Double</span>, _ x2: <span class="k">Double</span>) -&gt; <span class="k">Double</span> { x1 * x2 + x1 * x1 }
+
+<span class="k">let</span> (d1, d2) = gradient(at: <span class="m">2.0</span>, <span class="m">3.0</span>, of: g)   <span class="c">// (7.0, 2.0)</span>
+
+<span class="c">// Registering a custom derivative (a VJP returning value + pullback)</span>
+<span class="k">func</span> cube(_ x: <span class="k">Double</span>) -&gt; <span class="k">Double</span> { x * x * x }
+
+<span class="k">@derivative(of: cube)</span>
+<span class="k">func</span> cubeVJP(_ x: <span class="k">Double</span>) -&gt; (value: <span class="k">Double</span>, pullback: (<span class="k">Double</span>) -&gt; <span class="k">Double</span>) {
+    (cube(x), { v <span class="k">in</span> v * <span class="m">3</span> * x * x })
+}</pre>
+<p class="callout warn"><strong>Note.</strong> Swift differentiation is experimental; syntax and availability depend on the toolchain. The example uses only arithmetic to avoid platform-specific math-library derivative registrations<sup class="c"><a href="#r20">20</a></sup>.</p>
+
+<h3>9.6 Comparing the designs</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>System</th><th>Approach</th><th>Works on</th><th>Modes</th><th>Control flow</th></tr></thead>
+<tbody>
+<tr><td>PyTorch autograd</td><td>Operator overloading, dynamic tape</td><td>Executed tensor ops</td><td>Reverse (forward via <code>torch.func</code> / forward AD)</td><td>Any Python</td></tr>
+<tr><td>JAX</td><td>Staged tracing + IR transforms</td><td>jaxpr</td><td>Forward, reverse via transposition</td><td>Structured primitives under <code>jit</code></td></tr>
+<tr><td>Zygote.jl</td><td>Source transformation</td><td>Julia SSA IR</td><td>Reverse</td><td>Native loops / branches</td></tr>
+<tr><td>Swift</td><td>Source transformation, type-checked</td><td>SIL</td><td>Reverse</td><td>Native</td></tr>
+<tr><td>Enzyme</td><td>Source transformation after optimisation</td><td>LLVM IR / MLIR</td><td>Forward and reverse</td><td>Native, including parallel</td></tr>
+<tr><td>Tapenade</td><td>Source transformation</td><td>Fortran, C source</td><td>Forward and reverse</td><td>Native</td></tr>
+</tbody></table></div>
+<p style="font-size:14px;color:var(--muted)">Sources: <a href="#r10">10</a>, <a href="#r11">11</a>, <a href="#r15">15</a>, <a href="#r16">16</a>, <a href="#r18">18</a>, <a href="#r20">20</a>, <a href="#r31">31</a>, <a href="#r33">33</a>, <a href="#r36">36</a>.</p>
+
+<!-- ============================================================ -->
+<h2 id="hard"><span class="n">10</span>Hard problems</h2>
+<h3>Memory and checkpointing</h3>
+<p>Reverse mode must make every needed intermediate available in reverse order. Storing everything costs memory proportional to run time; recomputing everything costs time quadratic in run length. Checkpointing stores selected states and recomputes segments between them. Griewank's binomial scheme, implemented as <em>revolve</em>, is optimal for a fixed number of checkpoints over a sequence of steps<sup class="c"><a href="#r8">8</a>,<a href="#r9">9</a></sup>. Deep-learning frameworks expose this as gradient (or activation) checkpointing, for example <code>jax.checkpoint</code> (also called <code>jax.remat</code>) and <code>torch.utils.checkpoint</code><sup class="c"><a href="#r30">30</a>,<a href="#r31">31</a>,<a href="#r33">33</a></sup>.</p>
+<figure>
+<svg viewBox="0 0 720 150" role="img" aria-labelledby="g5t g5d">
+  <title id="g5t">Checkpointing a long loop</title>
+  <desc id="g5d">A sequence of sixteen steps with checkpoints stored every four steps. During the reverse sweep each segment is recomputed from its checkpoint before being differentiated.</desc>
+  <g id="steps"></g>
+  <text class="svg-s" x="20" y="135">● stored checkpoint   ▢ recomputed during the reverse sweep   ⇠ reverse order of segments</text>
+</svg>
+<figcaption><strong>Figure 5.</strong> Storing a checkpoint every <span class="math">k</span> steps reduces tape memory from <span class="math">O(n)</span> to about <span class="math">O(n/k + k)</span> at the cost of roughly one extra forward computation; choosing <span class="math">k ≈ √n</span> gives <span class="math">O(√n)</span> memory<sup class="c"><a href="#r30">30</a></sup>. Binomial checkpointing does better still<sup class="c"><a href="#r8">8</a></sup>.</figcaption>
+</figure>
+<h3>Mutation, aliasing and memory</h3>
+<p>In imperative code, an overwritten value may be needed later by the adjoint, and two pointers may refer to the same memory. Adjoints of reads become accumulating writes into shadow memory, so aliasing must be respected. Enzyme handles this by shadowing memory allocations and by caching overwritten values identified through alias analysis<sup class="c"><a href="#r11">11</a></sup>; Tapenade uses TBR analysis to decide what to push onto its stack<sup class="c"><a href="#r10">10</a></sup>. Functional systems such as JAX sidestep much of the problem by requiring pure functions with immutable arrays<sup class="c"><a href="#r32">32</a></sup>.</p>
+<h3>Parallelism</h3>
+<p>The adjoint of a parallel read (many threads read <span class="math">x</span>) is a parallel accumulation (many threads add to <span class="math">x̄</span>), which introduces races unless atomics or reductions are used. Moses et al. describe how Enzyme differentiates GPU kernels, including handling shared memory and synchronisation, and report gradient performance competitive with the original kernels<sup class="c"><a href="#r12">12</a></sup>.</p>
+<h3>Non-differentiable points and control flow</h3>
+<p>AD differentiates the program path actually taken. For piecewise functions such as <code>relu</code> or <code>abs</code>, systems pick a convention at the kink. Programs can also be differentiable in exact arithmetic yet produce poor derivatives because of how they are written; the classic remedy is a custom derivative rule, as in the <code>softplus</code> example above<sup class="c"><a href="#r1">1</a>,<a href="#r31">31</a></sup>.</p>
+<h3>Perturbation confusion in nested AD</h3>
+<p>Nesting forward mode (derivatives of derivatives) requires tagging each perturbation, or tangents from different levels can be mixed up. Siskind and Pearlmutter call this <em>perturbation confusion</em><sup class="c"><a href="#r28">28</a>,<a href="#r1">1</a></sup>. ForwardDiff.jl prevents it with type-level tags<sup class="c"><a href="#r35">35</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="history"><span class="n">11</span>A short history</h2>
+<div class="tablewrap"><table>
+<thead><tr><th style="width:90px">Year</th><th>Milestone</th></tr></thead>
+<tbody>
+<tr><td>1873</td><td>Clifford introduces dual numbers, later the algebra behind forward mode<sup class="c"><a href="#r25">25</a></sup>.</td></tr>
+<tr><td>1964</td><td>Wengert publishes "A simple automatic derivative evaluation program" in <em>Communications of the ACM</em>, an early forward-mode method<sup class="c"><a href="#r3">3</a></sup>.</td></tr>
+<tr><td>1970</td><td>Linnainmaa's master's thesis describes what is now recognised as reverse-mode accumulation, in the context of rounding-error analysis<sup class="c"><a href="#r4">4</a>,<a href="#r40">40</a></sup>.</td></tr>
+<tr><td>1980</td><td>Speelpenning's PhD thesis, "Compiling fast partial derivatives of functions given by algorithms," describes a reverse-mode source transformer<sup class="c"><a href="#r5">5</a>,<a href="#r40">40</a></sup>.</td></tr>
+<tr><td>1986</td><td>Rumelhart, Hinton and Williams popularise backpropagation for neural networks<sup class="c"><a href="#r6">6</a></sup>.</td></tr>
+<tr><td>1992</td><td>Griewank introduces logarithmic (binomial) checkpointing for reverse mode<sup class="c"><a href="#r8">8</a></sup>.</td></tr>
+<tr><td>2000</td><td><em>Revolve</em> published in ACM TOMS<sup class="c"><a href="#r9">9</a></sup>; first edition of Griewank's <em>Evaluating Derivatives</em> (second edition with Walther, 2008)<sup class="c"><a href="#r2">2</a></sup>.</td></tr>
+<tr><td>2008</td><td>Pearlmutter and Siskind, "Reverse-mode AD in a functional framework: Lambda the ultimate backpropagator"<sup class="c"><a href="#r7">7</a></sup>.</td></tr>
+<tr><td>2013</td><td>Tapenade's principles and specification published in ACM TOMS<sup class="c"><a href="#r10">10</a></sup>.</td></tr>
+<tr><td>2015–2017</td><td>HIPS Autograd<sup class="c"><a href="#r38">38</a></sup>, TensorFlow<sup class="c"><a href="#r29">29</a></sup> and PyTorch autograd<sup class="c"><a href="#r18">18</a></sup> bring AD to mainstream machine learning.</td></tr>
+<tr><td>2018</td><td>JAX/XLA tracing paper at SysML<sup class="c"><a href="#r13">13</a></sup>; Zygote's SSA-form AD<sup class="c"><a href="#r16">16</a></sup>; Swift differentiable programming design<sup class="c"><a href="#r20">20</a></sup>; Baydin et al.'s survey in JMLR<sup class="c"><a href="#r1">1</a></sup>; Elliott's "simple essence"<sup class="c"><a href="#r23">23</a></sup>.</td></tr>
+<tr><td>2020</td><td>Enzyme presented at NeurIPS<sup class="c"><a href="#r11">11</a></sup>.</td></tr>
+<tr><td>2021</td><td>Swift for TensorFlow archived<sup class="c"><a href="#r21">21</a></sup>; Enzyme for GPU kernels at SC21<sup class="c"><a href="#r12">12</a></sup>.</td></tr>
+<tr><td>2023</td><td>"You Only Linearize Once" at POPL formalises JAX's linearise-and-transpose design<sup class="c"><a href="#r15">15</a></sup>.</td></tr>
+<tr><td>2024</td><td>PyTorch 2 paper (TorchDynamo, AOTAutograd, TorchInductor) at ASPLOS<sup class="c"><a href="#r26">26</a></sup>.</td></tr>
+</tbody></table></div>
+
+<!-- ============================================================ -->
+<h2 id="tools"><span class="n">12</span>Tools and software</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Tool</th><th>Language(s)</th><th>Technique</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/jax-ml/jax">JAX</a></td><td>Python</td><td>Tracing to jaxpr; XLA compilation</td><td>Composable <code>grad</code>/<code>jit</code>/<code>vmap</code><sup class="c"><a href="#r14">14</a></sup></td></tr>
+<tr><td><a href="https://pytorch.org/">PyTorch</a></td><td>Python, C++</td><td>Dynamic tape; <code>torch.func</code>; <code>torch.compile</code></td><td><sup class="c"><a href="#r19">19</a>,<a href="#r26">26</a>,<a href="#r33">33</a></sup></td></tr>
+<tr><td><a href="https://www.tensorflow.org/guide/autodiff">TensorFlow</a></td><td>Python</td><td><code>tf.GradientTape</code></td><td><sup class="c"><a href="#r29">29</a></sup></td></tr>
+<tr><td><a href="https://enzyme.mit.edu/">Enzyme</a></td><td>C, C++, Fortran, Rust, Julia, Swift</td><td>LLVM IR / MLIR transformation</td><td><sup class="c"><a href="#r11">11</a>,<a href="#r36">36</a></sup></td></tr>
+<tr><td><a href="https://github.com/FluxML/Zygote.jl">Zygote.jl</a></td><td>Julia</td><td>Source-to-source on SSA IR</td><td><sup class="c"><a href="#r16">16</a></sup></td></tr>
+<tr><td><a href="https://github.com/JuliaDiff/ForwardDiff.jl">ForwardDiff.jl</a></td><td>Julia</td><td>Dual numbers (operator overloading)</td><td><sup class="c"><a href="#r35">35</a></sup></td></tr>
+<tr><td><a href="https://team.inria.fr/ecuador/en/tapenade/">Tapenade</a></td><td>Fortran, C</td><td>Source transformation</td><td><sup class="c"><a href="#r10">10</a></sup></td></tr>
+<tr><td><a href="https://github.com/coin-or/ADOL-C">ADOL-C</a></td><td>C, C++</td><td>Operator overloading with tapes</td><td><sup class="c"><a href="#r42">42</a></sup></td></tr>
+<tr><td><a href="https://github.com/vgvassilev/clad">Clad</a></td><td>C++</td><td>Clang plugin, source transformation on the AST</td><td><sup class="c"><a href="#r27">27</a></sup></td></tr>
+<tr><td><a href="https://github.com/swiftlang/swift/blob/main/docs/DifferentiableProgramming.md">Swift <code>_Differentiation</code></a></td><td>Swift</td><td>Compiler transform on SIL</td><td>Experimental<sup class="c"><a href="#r20">20</a></sup></td></tr>
+<tr><td><a href="https://github.com/HIPS/autograd">Autograd</a></td><td>Python/NumPy</td><td>Operator overloading (tracing)</td><td>Precursor of JAX<sup class="c"><a href="#r38">38</a>,<a href="#r14">14</a></sup></td></tr>
+<tr><td><a href="https://github.com/google-research/dex-lang">Dex</a></td><td>Dex</td><td>Research language with typed index sets and AD</td><td><sup class="c"><a href="#r39">39</a></sup></td></tr>
+<tr><td><a href="https://openxla.org/">OpenXLA / XLA</a></td><td>(compiler)</td><td>Back-end compiler for JAX and others</td><td><sup class="c"><a href="#r34">34</a></sup></td></tr>
+</tbody></table></div>
+<p>Further reading: the community site <a href="https://autodiff.org/">autodiff.org</a> keeps a catalogue of AD tools and literature, and Griewank and Walther's book remains the standard reference<sup class="c"><a href="#r2">2</a></sup>.</p>
+
+<!-- ============================================================ -->
+<h2 id="exercises"><span class="n">13</span>Exercises with solutions</h2>
+
+<div class="ex">
+<h3>Exercise 1 · Hand-differentiate a Wengert list <span class="tag">Warm-up</span></h3>
+<p>For <span class="math">f(x, y) = x²y + y</span> at <span class="math">(3, 2)</span>, write the Wengert list, then compute <span class="math">∇f</span> once with two forward passes and once with a single reverse pass.</p>
+<details><summary>Show solution</summary>
+<pre>v1 = x = 3;  v2 = y = 2;  v3 = v1*v1 = 9;  v4 = v3*v2 = 18;  v5 = v4 + v2 = 20
+
+Forward, seed (1,0): v̇3 = 2·v1·1 = 6; v̇4 = v̇3·v2 + v3·0 = 12; v̇5 = 12      → ∂f/∂x = 12
+Forward, seed (0,1): v̇3 = 0;          v̇4 = 0 + v3·1 = 9;       v̇5 = 9 + 1 = 10 → ∂f/∂y = 10
+
+Reverse: v̄5 = 1; v̄4 = 1; v̄2 = v̄5·1 + v̄4·v3 = 1 + 9 = 10;
+         v̄3 = v̄4·v2 = 2; v̄1 = v̄3·2·v1 = 12</pre>
+<p>Both give <span class="math">∇f = (2xy, x² + 1) = (12, 10)</span>. Note that <span class="math">y</span> is used twice, so its adjoint is a sum.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 2 · Extend the dual-number class <span class="tag">Coding</span></h3>
+<p>Add subtraction, division and <code>exp</code> to the <code>Dual</code> class from section 4, and check that the derivative of <span class="math">eˣ/x</span> at <span class="math">x = 1</span> is 0.</p>
+<details><summary>Show solution</summary>
+<pre><span class="k">def</span> __sub__(a, b): b = Dual._lift(b); <span class="k">return</span> Dual(a.val - b.val, a.tan - b.tan)
+<span class="k">def</span> __rsub__(a, b): <span class="k">return</span> Dual._lift(b) - a
+<span class="k">def</span> __truediv__(a, b):
+    b = Dual._lift(b)
+    <span class="k">return</span> Dual(a.val / b.val, (a.tan * b.val - a.val * b.tan) / (b.val ** <span class="m">2</span>))   <span class="c"># quotient rule</span>
+<span class="k">def</span> __rtruediv__(a, b): <span class="k">return</span> Dual._lift(b) / a
+Dual.__sub__, Dual.__rsub__, Dual.__truediv__, Dual.__rtruediv__ = __sub__, __rsub__, __truediv__, __rtruediv__
+
+<span class="k">def</span> exp(x):
+    e = math.exp(x.val)
+    <span class="k">return</span> Dual(e, e * x.tan)
+
+x = Dual(<span class="m">1.0</span>, <span class="m">1.0</span>)
+print(exp(x) / x)   <span class="c"># Dual(2.718282, 0.000000)  since d/dx eˣ/x = eˣ(x−1)/x² = 0 at x = 1</span></pre>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 3 · Choose the mode <span class="tag">Analysis</span></h3>
+<p>You need the full Jacobian of (a) <span class="math">f : ℝ¹⁰⁰⁰ → ℝ¹⁰</span> and (b) <span class="math">g : ℝ¹⁰ → ℝ¹⁰⁰⁰</span>. How many passes does each mode need, and which would you choose?</p>
+<details><summary>Show solution</summary>
+<p>(a) Forward mode needs 1000 JVPs (one per input), reverse needs 10 VJPs (one per output): use reverse. (b) Forward needs 10 JVPs, reverse needs 1000 VJPs: use forward. JAX packages exactly this choice as <code>jax.jacrev</code> and <code>jax.jacfwd</code><sup class="c"><a href="#r31">31</a></sup>. Reverse mode also pays memory for the tape, which tilts close calls towards forward mode<sup class="c"><a href="#r2">2</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 4 · Hessian-vector products <span class="tag">JAX</span></h3>
+<p>Write a function that computes <span class="math">H(x)·v</span> for a scalar function without forming <span class="math">H</span>, and verify it for <span class="math">f(x) = Σ xᵢ³</span>.</p>
+<details><summary>Show solution</summary>
+<pre><span class="k">import</span> jax, jax.numpy <span class="k">as</span> jnp
+f = <span class="k">lambda</span> x: jnp.sum(x ** <span class="m">3</span>)
+hvp = <span class="k">lambda</span> f, x, v: jax.jvp(jax.grad(f), (x,), (v,))[<span class="m">1</span>]   <span class="c"># forward-over-reverse</span>
+x, v = jnp.array([<span class="m">1.</span>, <span class="m">2.</span>, <span class="m">3.</span>]), jnp.array([<span class="m">1.</span>, <span class="m">0.</span>, <span class="m">1.</span>])
+print(hvp(f, x, v))   <span class="c"># [ 6.  0. 18.]  since H = diag(6x)</span></pre>
+<p>The cost is a small multiple of one gradient evaluation, and memory stays <span class="math">O(n)</span> rather than <span class="math">O(n²)</span><sup class="c"><a href="#r31">31</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 5 · Tracing and control flow <span class="tag">Compilers</span></h3>
+<p>Why does the following fail under <code>jax.jit</code>, and how would you fix it?</p>
+<pre><span class="k">@jax.jit</span>
+<span class="k">def</span> h(x):
+    <span class="k">if</span> x &gt; <span class="m">0</span>:
+        <span class="k">return</span> x ** <span class="m">2</span>
+    <span class="k">return</span> -x</pre>
+<details><summary>Show solution</summary>
+<p>Under <code>jit</code>, <code>x</code> is an abstract tracer with a shape and dtype but no concrete value, so Python cannot decide <code>x &gt; 0</code> at trace time and JAX raises a concretisation error. The trace records a single path and Python's <code>if</code> is invisible to the IR<sup class="c"><a href="#r32">32</a></sup>. Fixes: express the branch inside the IR with <code>jnp.where(x &gt; 0, x**2, -x)</code> (computes both sides) or <code>jax.lax.cond(x &gt; 0, lambda x: x**2, lambda x: -x, x)</code> (a structured conditional that is differentiable). The deeper lesson: tracing systems see only the operations that were traced, while source-transformation systems such as Zygote or Enzyme see the branch itself in the IR<sup class="c"><a href="#r16">16</a>,<a href="#r11">11</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 6 · Checkpoint arithmetic <span class="tag">Analysis</span></h3>
+<p>A time-stepping simulation runs <span class="math">n = 10 000</span> steps and each state is 1 MB. Estimate the reverse-mode memory with no checkpointing and with a checkpoint every 100 steps.</p>
+<details><summary>Show solution</summary>
+<p>No checkpointing: store all 10 000 states, about 10 GB. Every 100 steps: 100 stored checkpoints plus one 100-step segment re-materialised at a time, about 100 + 100 = 200 states, so roughly 200 MB, for about one extra forward simulation of compute. This is the <span class="math">√n</span> scheme<sup class="c"><a href="#r30">30</a></sup>; revolve reduces memory further for a given recomputation budget<sup class="c"><a href="#r9">9</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 7 · Transposition <span class="tag">Theory</span></h3>
+<p>For <span class="math">f(x) = A x</span> with <span class="math">A ∈ ℝᵐˣⁿ</span>, give the JVP and show that transposing it yields the VJP.</p>
+<details><summary>Show solution</summary>
+<p>The JVP is the linear map <span class="math">ẋ ↦ Aẋ</span>. Its transpose is <span class="math">ȳ ↦ Aᵀȳ</span>, which is the VJP <span class="math">ȳᵀA</span> written as a column. In a linear program, every <code>mul</code> by a constant transposes to a <code>mul</code> by the same constant with inputs and outputs swapped, every fan-out transposes to an <code>add</code>, and the statement order reverses. That is precisely JAX's linearise-then-transpose route to reverse mode<sup class="c"><a href="#r15">15</a></sup>.</p>
+</details>
+</div>
+
+<div class="ex">
+<h3>Exercise 8 · Optimise before differentiating <span class="tag">Compilers</span></h3>
+<p>Explain why differentiating this C function before optimisation gives a slow gradient, while Enzyme's approach does not.</p>
+<pre><span class="k">double</span> mag(<span class="k">const double</span> *x, <span class="k">int</span> n);            <span class="c">// O(n), pure</span>
+<span class="k">void</span> normalize(<span class="k">double</span> *out, <span class="k">const double</span> *x, <span class="k">int</span> n) {
+    <span class="k">for</span> (<span class="k">int</span> i = <span class="m">0</span>; i &lt; n; i++) out[i] = x[i] / mag(x, n);
+}</pre>
+<details><summary>Show solution</summary>
+<p>As written, the primal is <span class="math">O(n²)</span> because <code>mag</code> is called on each iteration. An optimiser that knows <code>mag</code> is pure and <code>x</code> is not modified (no aliasing with <code>out</code>, which <code>restrict</code> or alias analysis can establish) hoists it out of the loop, making the primal <span class="math">O(n)</span>. If AD runs first, the adjoint contains <span class="math">n</span> calls to the adjoint of <code>mag</code>, and the resulting adjoint code is harder to optimise, so the gradient stays <span class="math">O(n²)</span>. Running AD on the optimised IR differentiates a single <code>mag</code> call, so the gradient is <span class="math">O(n)</span>. This is the motivating example of the Enzyme paper<sup class="c"><a href="#r11">11</a></sup>.</p>
+</details>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="trivia"><span class="n">14</span>Trivia questions</h2>
+<details><summary>1. Which 1964 paper gave its name to the "Wengert list"?</summary><p>R. E. Wengert, "A simple automatic derivative evaluation program," <em>Communications of the ACM</em> 7(8), 1964<sup class="c"><a href="#r3">3</a></sup>.</p></details>
+<details><summary>2. In what context was reverse-mode accumulation first described, by Seppo Linnainmaa in 1970?</summary><p>In his master's thesis at the University of Helsinki, on representing the cumulative rounding error of an algorithm as a Taylor expansion of local rounding errors<sup class="c"><a href="#r4">4</a>,<a href="#r40">40</a></sup>.</p></details>
+<details><summary>3. What algebraic object satisfies ε² = 0 and gives forward-mode AD for free?</summary><p>The dual numbers, introduced by W. K. Clifford in 1873<sup class="c"><a href="#r25">25</a>,<a href="#r1">1</a></sup>.</p></details>
+<details><summary>4. The title "Lambda the ultimate backpropagator" echoes which famous series of papers?</summary><p>The "Lambda: the ultimate …" MIT AI Lab memos by Guy Steele and Gerald Sussman on Scheme<sup class="c"><a href="#r43">43</a></sup>. Pearlmutter and Siskind's 2008 TOPLAS paper adopted the pattern<sup class="c"><a href="#r7">7</a></sup>, and Wang et al. answered with "the penultimate backpropagator"<sup class="c"><a href="#r24">24</a></sup>.</p></details>
+<details><summary>5. What does Enzyme differentiate, and what speedup did its authors report from differentiating after optimisation?</summary><p>LLVM IR. They reported a 4.5× geometric-mean speedup over differentiating before optimisation on an ML-focused benchmark suite including ADBench<sup class="c"><a href="#r11">11</a></sup>.</p></details>
+<details><summary>6. What is a "jaxpr"?</summary><p>JAX's intermediate representation: a typed, first-order functional program produced by tracing a Python function with abstract values, on which transformations such as <code>grad</code> and <code>vmap</code> operate<sup class="c"><a href="#r32">32</a></sup>.</p></details>
+<details><summary>7. In which month and year was Swift for TensorFlow archived, and what survived?</summary><p>February 2021, according to the project's README. The differentiation feature had been upstreamed into the Swift compiler and remains available experimentally via <code>import _Differentiation</code><sup class="c"><a href="#r21">21</a>,<a href="#r20">20</a></sup>.</p></details>
+<details><summary>8. Which Zygote paper title puns on Pearlmutter and Siskind, and what IR does Zygote differentiate?</summary><p>"Don't Unroll Adjoint: Differentiating SSA-Form Programs" (2018). Zygote differentiates Julia's SSA-form IR<sup class="c"><a href="#r16">16</a></sup>.</p></details>
+<details><summary>9. What does JAX do instead of implementing reverse mode directly?</summary><p>It linearises (forward mode plus partial evaluation) and then transposes the linear program, a design formalised in "You Only Linearize Once" (POPL 2023)<sup class="c"><a href="#r15">15</a></sup>.</p></details>
+<details><summary>10. What is Speelpenning's function, and why is it a favourite AD test case?</summary><p><span class="math">f(x) = ∏ᵢ xᵢ</span>, named after Bert Speelpenning, whose 1980 thesis compiled fast partial derivatives<sup class="c"><a href="#r5">5</a></sup>. Every partial derivative is a product of all the other inputs, so a naive approach costs <span class="math">O(n²)</span> while reverse mode costs <span class="math">O(n)</span>, which demonstrates the cheap gradient principle<sup class="c"><a href="#r2">2</a></sup>.</p></details>
+<details><summary>11. What is "perturbation confusion"?</summary><p>A bug in naive nested forward mode where tangents belonging to different differentiation levels are mixed, giving wrong higher-order derivatives. It is avoided by tagging perturbations<sup class="c"><a href="#r28">28</a>,<a href="#r35">35</a></sup>.</p></details>
+<details><summary>12. Which PyTorch 2 component traces the backward pass ahead of time?</summary><p>AOTAutograd, which works with TorchDynamo (graph capture from Python bytecode) and TorchInductor (code generation)<sup class="c"><a href="#r26">26</a></sup>.</p></details>
+
+<!-- ============================================================ -->
+<h2 id="glossary"><span class="n">15</span>Glossary</h2>
+<dl>
+<dt><strong>Adjoint (v̄)</strong></dt><dd>Sensitivity of the output to an intermediate, <span class="math">∂y/∂v</span>, propagated in reverse mode<sup class="c"><a href="#r2">2</a></sup>.</dd>
+<dt><strong>Tangent (v̇)</strong></dt><dd>Directional derivative of an intermediate, propagated in forward mode<sup class="c"><a href="#r2">2</a></sup>.</dd>
+<dt><strong>JVP / VJP</strong></dt><dd>Jacobian-vector product (forward mode) and vector-Jacobian product (reverse mode)<sup class="c"><a href="#r31">31</a></sup>.</dd>
+<dt><strong>Pullback</strong></dt><dd>A closure mapping an output adjoint to input adjoints, the functional form of a VJP<sup class="c"><a href="#r7">7</a>,<a href="#r16">16</a></sup>.</dd>
+<dt><strong>Tape</strong></dt><dd>Record of operations and saved values needed by the reverse sweep<sup class="c"><a href="#r2">2</a></sup>.</dd>
+<dt><strong>Activity analysis</strong></dt><dd>Static analysis that finds variables that need derivatives<sup class="c"><a href="#r10">10</a>,<a href="#r11">11</a></sup>.</dd>
+<dt><strong>Shadow</strong></dt><dd>A derivative buffer that mirrors a primal memory allocation, as in Enzyme's <code>enzyme_dup</code><sup class="c"><a href="#r11">11</a></sup>.</dd>
+<dt><strong>Checkpointing / rematerialisation</strong></dt><dd>Storing selected states and recomputing the rest during the reverse sweep<sup class="c"><a href="#r8">8</a>,<a href="#r30">30</a></sup>.</dd>
+</dl>
+
+<!-- ============================================================ -->
+<h2 id="refs"><span class="n">16</span>References</h2>
+<ol class="refs">
+<li id="r1">Baydin AG, Pearlmutter BA, Radul AA, Siskind JM. Automatic differentiation in machine learning: a survey. J Mach Learn Res. 2018;18(153):1–43. Available from: <a href="https://jmlr.org/papers/v18/17-468.html">https://jmlr.org/papers/v18/17-468.html</a></li>
+<li id="r2">Griewank A, Walther A. Evaluating derivatives: principles and techniques of algorithmic differentiation. 2nd ed. Philadelphia: Society for Industrial and Applied Mathematics; 2008. doi:10.1137/1.9780898717761</li>
+<li id="r3">Wengert RE. A simple automatic derivative evaluation program. Commun ACM. 1964;7(8):463–4. doi:10.1145/355586.364791</li>
+<li id="r4">Linnainmaa S. Algoritmin kumulatiivinen pyöristysvirhe yksittäisten pyöristysvirheiden Taylor-kehitelmänä [The representation of the cumulative rounding error of an algorithm as a Taylor expansion of the local rounding errors] [master's thesis]. Helsinki: University of Helsinki; 1970.</li>
+<li id="r5">Speelpenning B. Compiling fast partial derivatives of functions given by algorithms [PhD thesis]. Urbana (IL): University of Illinois at Urbana-Champaign; 1980.</li>
+<li id="r6">Rumelhart DE, Hinton GE, Williams RJ. Learning representations by back-propagating errors. Nature. 1986;323(6088):533–6. doi:10.1038/323533a0</li>
+<li id="r7">Pearlmutter BA, Siskind JM. Reverse-mode AD in a functional framework: lambda the ultimate backpropagator. ACM Trans Program Lang Syst. 2008;30(2):7:1–36. doi:10.1145/1330017.1330018</li>
+<li id="r8">Griewank A. Achieving logarithmic growth of temporal and spatial complexity in reverse automatic differentiation. Optim Methods Softw. 1992;1(1):35–54. doi:10.1080/10556789208805505</li>
+<li id="r9">Griewank A, Walther A. Algorithm 799: revolve: an implementation of checkpointing for the reverse or adjoint mode of computational differentiation. ACM Trans Math Softw. 2000;26(1):19–45. doi:10.1145/347837.347846</li>
+<li id="r10">Hascoët L, Pascual V. The Tapenade automatic differentiation tool: principles, model, and specification. ACM Trans Math Softw. 2013;39(3):20:1–43. doi:10.1145/2450153.2450158</li>
+<li id="r11">Moses WS, Churavy V. Instead of rewriting foreign code for machine learning, automatically synthesize fast gradients. In: Larochelle H, Ranzato M, Hadsell R, Balcan MF, Lin H, editors. Advances in Neural Information Processing Systems 33 (NeurIPS 2020). Red Hook (NY): Curran Associates; 2020. Available from: <a href="https://arxiv.org/abs/2010.01709">https://arxiv.org/abs/2010.01709</a></li>
+<li id="r12">Moses WS, Churavy V, Paehler L, Hückelheim J, Narayanan SHK, Schanen M, et al. Reverse-mode automatic differentiation and optimization of GPU kernels via Enzyme. In: Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis (SC '21). New York: ACM; 2021. doi:10.1145/3458817.3476165</li>
+<li id="r13">Frostig R, Johnson MJ, Leary C. Compiling machine learning programs via high-level tracing. In: SysML Conference; 2018 Feb; Stanford (CA). Available from: <a href="https://research.google/pubs/compiling-machine-learning-programs-via-high-level-tracing/">https://research.google/pubs/compiling-machine-learning-programs-via-high-level-tracing/</a></li>
+<li id="r14">Bradbury J, Frostig R, Hawkins P, Johnson MJ, Leary C, Maclaurin D, et al. JAX: composable transformations of Python+NumPy programs [software]. 2018 [cited 2026 Nov 16]. Available from: <a href="https://github.com/jax-ml/jax">https://github.com/jax-ml/jax</a></li>
+<li id="r15">Radul A, Paszke A, Frostig R, Johnson MJ, Maclaurin D. You only linearize once: tangents transpose to gradients. Proc ACM Program Lang. 2023;7(POPL):43. doi:10.1145/3571236. Available from: <a href="https://arxiv.org/abs/2204.10923">https://arxiv.org/abs/2204.10923</a></li>
+<li id="r16">Innes M. Don't unroll adjoint: differentiating SSA-form programs [preprint]. arXiv:1810.07951. 2018. Available from: <a href="https://arxiv.org/abs/1810.07951">https://arxiv.org/abs/1810.07951</a></li>
+<li id="r17">Innes M, Edelman A, Fischer K, Rackauckas C, Saba E, Shah VB, et al. A differentiable programming system to bridge machine learning and scientific computing [preprint]. arXiv:1907.07587. 2019. Available from: <a href="https://arxiv.org/abs/1907.07587">https://arxiv.org/abs/1907.07587</a></li>
+<li id="r18">Paszke A, Gross S, Chintala S, Chanan G, Yang E, DeVito Z, et al. Automatic differentiation in PyTorch. In: NIPS 2017 Workshop on Autodiff; 2017 Dec 9; Long Beach (CA). Available from: <a href="https://openreview.net/forum?id=BJJsrmfCZ">https://openreview.net/forum?id=BJJsrmfCZ</a></li>
+<li id="r19">Paszke A, Gross S, Massa F, Lerer A, Bradbury J, Chanan G, et al. PyTorch: an imperative style, high-performance deep learning library. In: Advances in Neural Information Processing Systems 32 (NeurIPS 2019). Red Hook (NY): Curran Associates; 2019. p. 8024–35.</li>
+<li id="r20">Wei R, Zheng D, Rasi M, Chrzaszcz B. Differentiable programming manifesto [Internet]. The Swift Programming Language repository; 2019 [cited 2026 Nov 16]. Available from: <a href="https://github.com/swiftlang/swift/blob/main/docs/DifferentiableProgramming.md">https://github.com/swiftlang/swift/blob/main/docs/DifferentiableProgramming.md</a></li>
+<li id="r21">TensorFlow. Swift for TensorFlow (archived) [Internet]. GitHub; 2018–2021 [cited 2026 Nov 16]. Available from: <a href="https://github.com/tensorflow/swift">https://github.com/tensorflow/swift</a></li>
+<li id="r22">Lattner C, Adve V. LLVM: a compilation framework for lifelong program analysis &amp; transformation. In: Proceedings of the International Symposium on Code Generation and Optimization (CGO 2004). Washington (DC): IEEE Computer Society; 2004. p. 75–86. doi:10.1109/CGO.2004.1281665</li>
+<li id="r23">Elliott C. The simple essence of automatic differentiation. Proc ACM Program Lang. 2018;2(ICFP):70:1–29. doi:10.1145/3236765</li>
+<li id="r24">Wang F, Zheng D, Decker J, Wu X, Essertel GM, Rompf T. Demystifying differentiable programming: shift/reset the penultimate backpropagator. Proc ACM Program Lang. 2019;3(ICFP):96:1–31. doi:10.1145/3341700</li>
+<li id="r25">Clifford WK. Preliminary sketch of biquaternions. Proc Lond Math Soc. 1873;s1-4(1):381–95. doi:10.1112/plms/s1-4.1.381</li>
+<li id="r26">Ansel J, Yang E, He H, Gimelshein N, Jain A, Voznesensky M, et al. PyTorch 2: faster machine learning through dynamic Python bytecode transformation and graph compilation. In: Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS '24), Volume 2. New York: ACM; 2024. p. 929–47. doi:10.1145/3620665.3640366</li>
+<li id="r27">Vassilev V, Vassilev M, Penev A, Moneta L, Ilieva V. Clad: automatic differentiation using Clang and LLVM. J Phys Conf Ser. 2015;608:012055. doi:10.1088/1742-6596/608/1/012055</li>
+<li id="r28">Siskind JM, Pearlmutter BA. Nesting forward-mode AD in a functional framework. High Order Symb Comput. 2008;21(4):361–76. doi:10.1007/s10990-008-9037-1</li>
+<li id="r29">Abadi M, Barham P, Chen J, Chen Z, Davis A, Dean J, et al. TensorFlow: a system for large-scale machine learning. In: 12th USENIX Symposium on Operating Systems Design and Implementation (OSDI 16). Berkeley (CA): USENIX Association; 2016. p. 265–83.</li>
+<li id="r30">Chen T, Xu B, Zhang C, Guestrin C. Training deep nets with sublinear memory cost [preprint]. arXiv:1604.06174. 2016. Available from: <a href="https://arxiv.org/abs/1604.06174">https://arxiv.org/abs/1604.06174</a></li>
+<li id="r31">JAX authors. The autodiff cookbook [Internet]. JAX documentation; 2024 [cited 2026 Nov 16]. Available from: <a href="https://docs.jax.dev/en/latest/notebooks/autodiff_cookbook.html">https://docs.jax.dev/en/latest/notebooks/autodiff_cookbook.html</a></li>
+<li id="r32">JAX authors. JAX internals: the jaxpr language; and Control flow and logical operators with JIT [Internet]. JAX documentation; 2024 [cited 2026 Nov 16]. Available from: <a href="https://docs.jax.dev/en/latest/jaxpr.html">https://docs.jax.dev/en/latest/jaxpr.html</a> and <a href="https://docs.jax.dev/en/latest/control-flow.html">https://docs.jax.dev/en/latest/control-flow.html</a></li>
+<li id="r33">PyTorch contributors. Autograd mechanics; torch.func; torch.utils.checkpoint [Internet]. PyTorch documentation; 2025 [cited 2026 Nov 16]. Available from: <a href="https://pytorch.org/docs/stable/notes/autograd.html">https://pytorch.org/docs/stable/notes/autograd.html</a></li>
+<li id="r34">OpenXLA project. XLA: an open-source machine learning compiler [Internet]. 2024 [cited 2026 Nov 16]. Available from: <a href="https://openxla.org/xla">https://openxla.org/xla</a></li>
+<li id="r35">Revels J, Lubin M, Papamarkou T. Forward-mode automatic differentiation in Julia [preprint]. arXiv:1607.07892. 2016. Available from: <a href="https://arxiv.org/abs/1607.07892">https://arxiv.org/abs/1607.07892</a></li>
+<li id="r36">Enzyme developers. Enzyme automatic differentiation framework: getting started [Internet]. 2025 [cited 2026 Nov 16]. Available from: <a href="https://enzyme.mit.edu/">https://enzyme.mit.edu/</a></li>
+<li id="r37">Moses WS, Narayanan SHK, Paehler L, Churavy V, Schanen M, Hückelheim J, et al. Scalable automatic differentiation of multiple parallel paradigms through compiler augmentation. In: Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis (SC '22). Dallas (TX): IEEE Press; 2022.</li>
+<li id="r38">Maclaurin D, Duvenaud D, Adams RP. Autograd: effortless gradients in numpy. In: ICML 2015 AutoML Workshop; 2015; Lille, France. Available from: <a href="https://github.com/HIPS/autograd">https://github.com/HIPS/autograd</a></li>
+<li id="r39">Paszke A, Johnson DD, Duvenaud D, Vytiniotis D, Radul A, Johnson MJ, et al. Getting to the point: index sets and parallelism-preserving autodiff for pointful array programming. Proc ACM Program Lang. 2021;5(ICFP):88:1–29. doi:10.1145/3473593</li>
+<li id="r40">Griewank A. Who invented the reverse mode of differentiation? Doc Math. 2012;Extra Volume ISMP:389–400.</li>
+<li id="r41">LeCun Y. Deep Learning est mort. Vive Differentiable Programming! [Internet]. Facebook post; 2018 Jan 5.</li>
+<li id="r42">Walther A, Griewank A. Getting started with ADOL-C. In: Naumann U, Schenk O, editors. Combinatorial scientific computing. Boca Raton (FL): Chapman &amp; Hall/CRC; 2012. p. 181–202.</li>
+<li id="r43">Steele GL Jr, Sussman GJ. Lambda: the ultimate imperative. AI Memo 353. Cambridge (MA): MIT Artificial Intelligence Laboratory; 1976.</li>
+</ol>
+<p style="font-size:13.5px;color:var(--muted)">Citation style: Vancouver (ICMJE/NLM), numbered in order of first appearance as far as practical. DOIs are given where available. Software and documentation pages are dated by access.</p>
+
+</div>
+<script>
+(function(){
+  // Theme toggle (preference kept per viewer when storage is available)
+  var root=document.documentElement, btn=document.getElementById('themebtn');
+  try{var s=localStorage.getItem('dp-theme'); if(s) root.setAttribute('data-theme',s);}catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme');
+    var dark=cur?cur==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var next=dark?'light':'dark'; root.setAttribute('data-theme',next);
+    try{localStorage.setItem('dp-theme',next);}catch(e){}
+  });
+
+  // Forward-mode playground: dual numbers [val, tan]
+  var D={
+    c:function(a){return [a,0]},
+    add:function(a,b){return [a[0]+b[0],a[1]+b[1]]},
+    sub:function(a,b){return [a[0]-b[0],a[1]-b[1]]},
+    mul:function(a,b){return [a[0]*b[0],a[1]*b[0]+a[0]*b[1]]},
+    sin:function(a){return [Math.sin(a[0]),Math.cos(a[0])*a[1]]},
+    exp:function(a){var e=Math.exp(a[0]);return [e,e*a[1]]},
+    log:function(a){return [Math.log(a[0]),a[1]/a[0]]}
+  };
+  var F=[
+    function(x){return D.add(D.mul(x,D.sin(x)),D.mul(x,x))},
+    function(x){return D.exp(D.sin(x))},
+    function(x){return D.sub(D.mul(D.mul(x,x),x),D.mul(D.c(2),x))},
+    function(x){return D.log(D.add(D.c(1),D.mul(x,x)))}
+  ];
+  var sel=document.getElementById('fsel'), xr=document.getElementById('xr');
+  function fmt(v){return (Math.abs(v)<1e-3&&v!==0)?v.toExponential(3):v.toFixed(8)}
+  function upd(){
+    var f=F[+sel.value], x=+xr.value, h=1e-8;
+    var r=f([x,1]), fd=(f([x+h,0])[0]-f([x,0])[0])/h;
+    document.getElementById('xout').textContent=x.toFixed(2);
+    document.getElementById('o1').textContent=fmt(r[0]);
+    document.getElementById('o2').textContent=fmt(r[1]);
+    document.getElementById('o3').textContent=fmt(fd);
+    document.getElementById('o4').textContent=Math.abs(r[1]-fd).toExponential(2);
+  }
+  sel.addEventListener('change',upd); xr.addEventListener('input',upd); upd();
+
+  // Checkpoint diagram (Figure 5)
+  var g=document.getElementById('steps'), ns='http://www.w3.org/2000/svg';
+  for(var i=0;i<16;i++){
+    var x=30+i*42, cp=(i%4===0);
+    var r=document.createElementNS(ns,'rect');
+    r.setAttribute('x',x);r.setAttribute('y',40);r.setAttribute('width',34);r.setAttribute('height',34);r.setAttribute('rx',6);
+    r.setAttribute('class',cp?'svg-in':'svg-node'); g.appendChild(r);
+    var t=document.createElementNS(ns,'text');
+    t.setAttribute('x',x+17);t.setAttribute('y',62);t.setAttribute('text-anchor','middle');t.setAttribute('class','svg-t');
+    t.textContent=cp?'●':(i+1); g.appendChild(t);
+  }
+  for(var s=3;s>=0;s--){
+    var p=document.createElementNS(ns,'path'), x0=30+s*168;
+    p.setAttribute('d','M'+(x0+160)+',95 L'+(x0+6)+',95'); p.setAttribute('class','svg-rev'); g.appendChild(p);
+    var tt=document.createElementNS(ns,'text'); tt.setAttribute('x',x0+83);tt.setAttribute('y',115);tt.setAttribute('text-anchor','middle');tt.setAttribute('class','svg-rev-t');
+    tt.textContent='replay ↺ reverse'; g.appendChild(tt);
+  }
+  var lbl=document.createElementNS(ns,'text'); lbl.setAttribute('x',30);lbl.setAttribute('y',28);lbl.setAttribute('class','svg-fwd-t');
+  lbl.textContent='Forward sweep: store a checkpoint every 4 steps →'; g.appendChild(lbl);
+})();
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Cloud**: AWS, Azure, and GCP.
 - **Engineering**: Automotive Engineering, Control Theory & Engineering, Firearms Engineering, and Power Engineering.
 - **Math**: Calculus, Linear Algebra, and Statistics.
+- **Physics**: Foundations, Classical Mechanics, Fluid Mechanics, Thermodynamics, Statistical Mechanics, Waves and Acoustics, Electricity and Magnetism, Optics and Photonics, Special Relativity, General Relativity and Gravitation, Quantum Mechanics, Atomic Molecular and Optical Physics, Condensed Matter Physics, Nuclear Physics, Particle Physics, Quantum Field Theory, Plasma Physics, Astrophysics, Cosmology, Geophysics and Atmospheric Physics, Biophysics, Nonlinear Dynamics and Chaos, Computational Physics, Experimental Physics and Instrumentation, Applied Physics and Engineering Physics, and Quantum Information Science.
 - **Programming Languages**: C++, Go (with Gin nested beneath Go), Java, and Python.
 - **Writing**: Stylometry and Technical Writing.
 
@@ -27,22 +28,32 @@ The blog filter visually groups related labels while keeping every label indepen
 - **ASP.NET**: Articles focused on ASP.NET or ASP.NET Core application development, architecture, testing, dependency injection, and related server-side .NET practices.
 - **Android**: Native Android platform concepts, app architecture, components, lifecycle behavior, and Android-specific engineering concerns.
 - **Angular**: Angular framework topics, including architecture, performance, testing, animation, internationalization, and application structure.
+- **Applied Physics and Engineering Physics**: Physics applied to engineering design, devices, materials, manufacturing, sensing, energy, and practical technology development.
 - **Architecture**: Building architecture and architectural design, including spatial organization, materials, typologies, building programs, precedents, and the relationship between buildings, people, and sites.
+- **Astrophysics**: The physical behavior of stars, galaxies, compact objects, interstellar matter, radiation, and high-energy phenomena beyond Earth.
+- **Atomic Molecular and Optical Physics**: Atomic and molecular structure, light-matter interaction, spectroscopy, lasers, precision measurement, and quantum optical systems.
 - **Automotive Engineering**: Vehicle systems engineering, including vehicle dynamics, powertrain and chassis control, autonomous driving, in-vehicle networks, safety constraints, and connected-car platforms.
 - **AWS**: Amazon Web Services topics, including AWS architecture, IAM, serverless services, managed infrastructure, cloud security, and provider-specific operational practice.
 - **Azure**: Microsoft Azure topics, including Azure architecture, identity, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
+- **Bash**: Bash shell scripting, command-line automation, pipelines, process control, portability concerns, and operational workflows built around the Bash environment.
 - **Biology**: Living systems, cells, genetics, evolution, organisms, biological complexity, and the relationship between biological mechanisms and engineering.
+- **Biophysics**: Physical principles and quantitative methods applied to biological molecules, cells, tissues, organisms, and living systems.
 - **Business**: Business models, market structure, organizational economics, commercial strategy, cost dynamics, and how technical systems interact with firms and industries.
 - **C++**: C++ language design, standard-library facilities, memory and object models, performance, tooling, and C++-specific engineering practices.
 - **Calculus**: Limits, derivatives, integrals, series, multivariable calculus, and calculus-based analysis of continuous change.
 - **Chemistry**: Atomic and molecular structure, chemical bonding, intermolecular forces, periodic behavior, electronic structure, reactions, and the physical principles that govern matter at chemical scales.
+- **Classical Mechanics**: Newtonian and analytical mechanics, forces, energy, momentum, rotation, oscillation, rigid bodies, and continuum motion at nonrelativistic scales.
 - **Cloud**: Cloud computing architecture, service models, cloud-native operations, managed infrastructure, serverless systems, hyperscaler platforms, and cloud security.
+- **Compilers**: Compiler construction and implementation, including parsing, intermediate representations, optimization, code generation, runtimes, toolchains, and language-processing systems.
+- **Computational Physics**: Numerical modeling, simulation, scientific computing, computational methods, and software used to solve or explore physical systems.
 - **Computer Graphics**: Rendering, visualization, geometry processing, GPU pipelines, shading, image synthesis, and the engineering of interactive or offline visual systems.
 - **Computer Vision**: Image understanding, visual perception, object detection, SLAM, visual sensor fusion, and AI systems that interpret pixels or camera-derived signals.
 - **Competitive Programming**: Algorithmic problem-solving techniques, coding interview-style patterns, data structures, and contest-oriented reasoning.
+- **Condensed Matter Physics**: The collective behavior of solids and liquids, including electronic structure, phases, materials, superconductivity, magnetism, and nanoscale systems.
 - **Construction**: Built-environment topics, including construction methods, project delivery, building systems, site constraints, safety, estimating, and construction-sector engineering practice.
 - **Control Theory & Engineering**: Feedback systems, controller design, stability, sampled-data systems, implementation tradeoffs, and real-world control engineering.
 - **Cosmology**: The origin, structure, evolution, and fate of the universe, including major cosmological theories and debates.
+- **Cryptography**: Cryptographic primitives, protocols, key management, public-key infrastructure, cryptanalysis, implementation security, and privacy-preserving computation.
 - **Cyber-Physical Systems**: Systems that tightly couple software with sensors, actuators, embedded computation, industrial control, or physical processes.
 - **Data Engineering**: Data pipelines, storage and processing architecture, orchestration, governance, quality, observability, and the engineering practices required to move and serve data reliably.
 - **Dev(Sec)Ops**: DevOps and DevSecOps topics, including delivery pipelines, infrastructure, platform engineering, developer workflows, automation, observability, reliability, cloud-native operations, and security integrated into delivery.
@@ -50,23 +61,29 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Django**: Django framework design, scaling, architecture, and Python web engineering specific to Django.
 - **Docker**: Docker images, containers, runtime behavior, persistence, security, and day-two operational practices.
 - **Earth Sciences**: Geology, planetary history, paleontology, and other sciences focused on the Earth and its long-term physical development.
+- **Electricity and Magnetism**: Electric and magnetic fields, circuits, electromagnetic induction, Maxwell's equations, radiation, and electromagnetic interactions.
 - **Electronic Warfare**: Military and defensive applications of the electromagnetic spectrum, including electronic attack, electronic protection, electronic support, signals intelligence, radar interactions, and EW systems engineering.
 - **Electronics**: Circuits, components, analog and digital electronics, signal behavior, embedded electrical design, and practical hardware-level engineering topics.
 - **Engineering**: Broad engineering practice that does not fit a narrower technical category, especially cross-disciplinary systems or design thinking.
 - **Ethics**: Normative analysis of what ought to be done, especially where technology, science, society, or human/animal treatment raises moral questions.
+- **Experimental Physics and Instrumentation**: Experimental design, measurement systems, detectors, sensors, calibration, uncertainty, data acquisition, and laboratory instrumentation.
 - **Firearms Engineering**: Firearms as engineered systems, including mechanisms, materials, ballistics, reliability, safety constraints, manufacturing, and design tradeoffs.
 - **FinTech**: Financial technology products, platforms, architecture, regulation, payments, ledgers, consumer finance, enterprise finance, and emerging technology in financial services.
 - **Finance**: Financial systems, economic institutions, or technology topics centered on money, markets, or financial-sector operations.
 - **Fluid Mechanics**: Fluid flow, turbulence, hydraulics, Reynolds effects, open-channel behavior, and mathematical or engineering analysis of liquids and gases in motion.
+- **Foundations**: Foundational physics concepts, scientific reasoning, measurement, units, dimensions, mathematical tools, and the scope and structure of physical theory.
 - **Futurism**: Evidence-based analysis of future technologies, computing trajectories, long-range engineering trends, and the constraints that shape plausible technological change.
 - **Game Theory**: Strategic interaction, game classification and representation, equilibrium concepts, mathematical methods, applications, limitations, and computational or AI uses of game theory.
 - **GCP**: Google Cloud Platform topics, including Google Cloud architecture, IAM, managed services, Kubernetes offerings, cloud security, and provider-specific operational practice.
 - **Generative AI**: Systems that generate text, code, images, media, plans, or structured outputs, including RAG, conversational AI, foundation-model applications, and production GenAI workflows.
+- **General Relativity and Gravitation**: Spacetime geometry, gravity, Einstein's field equations, black holes, gravitational waves, and relativistic cosmological structure.
+- **Geophysics and Atmospheric Physics**: Physical processes within Earth and its atmosphere, including seismology, geomagnetism, climate dynamics, weather, and planetary fluid systems.
 - **Gin**: The Gin web framework for Go, including routing, middleware, handlers, request binding, validation, and response handling.
 - **Git**: Git version control, branching, repository security, history rewriting, troubleshooting, collaboration workflows, and GitHub-specific repository practices.
 - **Go**: The Go programming language, including its type system, control flow, concurrency model, standard library, architecture patterns, and backend engineering practices.
 - **Hardware**: Physical computing components, diagnostics, installation, devices, and the engineering realities of computer hardware.
 - **High-Performance Computing**: Accelerated, parallel, throughput-oriented, or low-level performance work involving CPUs, GPUs, memory hierarchy, numerical workloads, and performance-focused programming systems.
+- **HTML**: HTML semantics, document structure, forms, accessibility, metadata, browser parsing, and standards-based markup for the web platform.
 - **Human Biology**: Human anatomy, physiology, neuroscience, cognition, development, genetics, health, and disease at the level of the human organism.
 - **ICS/OT**: Industrial control systems and operational technology, including SCADA environments, plant-floor networks, safety implications, and the engineering realities of running cyber-physical infrastructure.
 - **IT Roles**: Information-technology careers and role families, including enterprise applications, infrastructure, governance, service management, support, and systems administration.
@@ -84,18 +101,29 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Mobile App Development**: Cross-cutting mobile engineering topics beyond one platform, including architecture, security, testing, and deployment.
 - **Networks**: Computer networking concepts, protocols, observability, troubleshooting, performance, and networked system design.
 - **Network Security**: Defensive and analytical security work focused on networks, including segmentation, traffic protection, protocol abuse, monitoring, and infrastructure hardening.
+- **Nonlinear Dynamics and Chaos**: Nonlinear systems, bifurcations, attractors, deterministic chaos, sensitivity to initial conditions, and complex dynamical behavior.
 - **Nmap**: Nmap-specific reconnaissance, scanning methods, workflows, and environment-specific usage.
+- **Nuclear Physics**: Atomic nuclei, nuclear structure and reactions, radioactivity, fission, fusion, and nuclear measurement and applications.
 - **Operating Systems**: OS internals, isolation, process boundaries, system behavior, and platform-level computing abstractions.
+- **Optics and Photonics**: Geometrical and physical optics, imaging, interference, diffraction, lasers, optical materials, and photonic devices and systems.
+- **Particle Physics**: Fundamental particles and interactions, the Standard Model, accelerators, detectors, neutrinos, and physics beyond the Standard Model.
 - **Pentesting**: Offensive security assessment methods, attack surface analysis, exploitation workflows, and environment-specific penetration testing practice.
 - **Physical AI**: Embodied intelligent systems that perceive and act in the physical world, including robotics, autonomous vehicles, learned control, sim-to-real transfer, and intelligent machines.
 - **Physics**: Physical theory and scientific topics involving mechanics, electromagnetism, thermodynamics, quantum phenomena, cosmology, and related conceptual debates.
 - **Philosophy**: Conceptual, epistemic, metaphysical, or philosophical analysis not primarily framed as ethics.
+- **Plasma Physics**: Ionized gases, collective electromagnetic behavior, plasma waves and instabilities, confinement, space plasmas, and fusion systems.
 - **Privacy**: Digital privacy, anonymity, surveillance resistance, exposure reduction, and operational privacy practices.
 - **PostgreSQL**: PostgreSQL database topics, including SQL, schema design, indexing, transactions, MVCC, WAL, administration, operations, cloud deployments, extensions, internals, and application integration.
 - **Power Engineering**: Electrical power generation, transmission, distribution, grid analysis, protection, control, planning, and the equipment that carries electrical energy at scale.
+- **PowerShell**: PowerShell language and shell topics, including cmdlets, objects and pipelines, modules, remoting, automation, administration, testing, and cross-platform scripting.
 - **Programming & Software**: General programming-language, software-development, or software-industry topics that are not tied to one framework or language category.
 - **Programming Languages**: Articles centered on one specific programming language as a language, such as its design, ecosystem, runtime model, tradeoffs, and historical role.
 - **Python**: Python language internals, concurrency, ecosystem, idioms, and Python-specific engineering topics beyond Django alone.
+- **Quantum Computing**: Quantum information and computation, including qubits, gates, circuits, algorithms, error correction, hardware architectures, and practical limits of quantum systems.
+- **Quantum Field Theory**: Quantum fields, particles as excitations, symmetries, interactions, perturbation theory, renormalization, and relativistic quantum systems.
+- **Quantum Information Science**: Quantum information, communication, sensing, entanglement, error correction, cryptography, and the theory of quantum technologies.
+- **Quantum Mechanics**: Quantum states, observables, measurement, wavefunctions, operators, uncertainty, spin, entanglement, and nonrelativistic quantum dynamics.
+- **React**: React application development, including components, hooks, state management, rendering, performance, testing, accessibility, and ecosystem architecture.
 - **Redis**: Redis data structures, caching, persistence, messaging, coordination, architecture patterns, operational behavior, and application-framework integration.
 - **Robotics**: Robots, autonomy, sensing, actuation, motion, control, and embodied intelligent systems.
 - **Security**: Defensive security topics that are not narrowly pentesting, side-channel, privacy, or sector-specific attack content.
@@ -105,10 +133,15 @@ The blog filter visually groups related labels while keeping every label indepen
 - **Society & Technology**: How technology interacts with culture, labor, institutions, incentives, and broader social outcomes.
 - **Software Design & Architecture**: System structure, modeling, requirements, design methods, architecture frameworks, and large-scale software organization.
 - **Software Security**: Secure software design, implementation, testing, and hardening work focused on application-level defenses and the security properties of software systems.
+- **Special Relativity**: Lorentz transformations, spacetime, simultaneity, time dilation, length contraction, relativistic energy, and momentum.
 - **Spring**: Spring ecosystem topics, including Spring Boot, caching, testing, and Java application architecture in the Spring stack.
+- **Statistical Mechanics**: Statistical descriptions of many-particle systems, ensembles, entropy, temperature, phase transitions, and microscopic foundations of thermodynamics.
 - **Statistics**: Statistical inference, probability models, estimation, uncertainty, hypothesis testing, Bayesian methods, and data-driven reasoning.
 - **Stylometry**: Quantitative authorship analysis, writing-style measurement, attribution methods, linguistic fingerprints, and computational approaches to textual identity or similarity.
 - **Technical Writing**: Documentation, explanatory writing, developer education, information architecture, reference material, tutorials, API docs, and communication practices for technical subjects.
+- **Thermodynamics**: Heat, work, energy, entropy, temperature, thermodynamic laws, cycles, potentials, and equilibrium processes.
 - **Veganism**: Animal ethics, vegan advocacy, organizing, movement strategy, and analysis of systems built on animal use.
+- **Vue.js**: Vue.js application development, including components, reactivity, Composition API, state management, routing, performance, testing, and ecosystem architecture.
+- **Waves and Acoustics**: Wave propagation, superposition, resonance, dispersion, sound, vibration, acoustical systems, and wave-based measurement.
 - **Web & UI**: Frontend development, interface architecture, browser performance, styling systems, and user-interface engineering.
 - **Writing**: Writing craft, research, evidence, revision, composition workflows, and the tools and technologies writers use.
