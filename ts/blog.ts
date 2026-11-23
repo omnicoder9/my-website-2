@@ -305,7 +305,7 @@ const blogPosts: BlogDirectoryPost[] = [
     path: "blog-articles/ai/genai/ai-agents/nondeterministic-inductive-model.html",
     publishedAt: "2026-11-23",
     summary: "What does the record entitle you to? Trust by induction for AI agents whose competence outruns human verification.",
-    title: "A Nondeterministic Inductive Model of AI-Driven Programs"
+    title: "An Inductive Model of Nondeterministic AI-Driven Programs"
   },
   {
     path: "blog-articles/ai/who-is-ai.html",
